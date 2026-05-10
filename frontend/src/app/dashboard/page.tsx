@@ -425,14 +425,18 @@ export default function DashboardPage() {
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
-                    outerRadius={85}
-                    paddingAngle={2}
+                    outerRadius={90}
                     dataKey="count"
                     nameKey="role"
-                    minAngle={5}
+                    isAnimationActive={false}
                  >
                    {roleDistribution.map((entry, index) => (
-                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                     <Cell 
+                        key={`cell-${index}`} 
+                        fill={COLORS[index % COLORS.length]} 
+                        stroke="#fff"
+                        strokeWidth={2}
+                     />
                    ))}
                  </Pie>
                  <Tooltip 
@@ -523,14 +527,18 @@ export default function DashboardPage() {
                       cx="50%"
                       cy="50%"
                       innerRadius={55} 
-                      outerRadius={80} 
-                      paddingAngle={2} 
+                      outerRadius={85} 
                       dataKey="count" 
                       nameKey="type"
-                      minAngle={5}
+                      isAnimationActive={false}
                     >
                       {leaveDistribution.map((_, index) => (
-                        <Cell key={`leave-${index}`} fill={LEAVE_COLORS[index % LEAVE_COLORS.length]} />
+                        <Cell 
+                          key={`leave-${index}`} 
+                          fill={LEAVE_COLORS[index % LEAVE_COLORS.length]} 
+                          stroke="#fff"
+                          strokeWidth={2}
+                        />
                       ))}
                     </Pie>
                     <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }} />
