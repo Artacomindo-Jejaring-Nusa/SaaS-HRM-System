@@ -422,16 +422,22 @@ export default function DashboardPage() {
                <PieChart>
                  <Pie
                     data={roleDistribution}
-                    innerRadius={65}
-                    outerRadius={90}
-                    paddingAngle={5}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={85}
+                    paddingAngle={2}
                     dataKey="count"
+                    nameKey="role"
+                    minAngle={5}
                  >
                    {roleDistribution.map((entry, index) => (
                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                    ))}
                  </Pie>
-                 <Tooltip />
+                 <Tooltip 
+                   contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }}
+                 />
                </PieChart>
              </ResponsiveContainer>
            </div>
@@ -512,12 +518,22 @@ export default function DashboardPage() {
               <div className="h-[180px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={leaveDistribution} innerRadius={55} outerRadius={80} paddingAngle={4} dataKey="count" nameKey="type">
+                    <Pie 
+                      data={leaveDistribution} 
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55} 
+                      outerRadius={80} 
+                      paddingAngle={2} 
+                      dataKey="count" 
+                      nameKey="type"
+                      minAngle={5}
+                    >
                       {leaveDistribution.map((_, index) => (
                         <Cell key={`leave-${index}`} fill={LEAVE_COLORS[index % LEAVE_COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '0.75rem', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
+                    <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
