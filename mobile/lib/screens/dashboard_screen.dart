@@ -1513,7 +1513,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisCount: 4,
                   mainAxisSpacing: 20,
                   crossAxisSpacing: 10,
-                  childAspectRatio: 0.8,
+                  childAspectRatio: 0.85,
                   children: [
                     ...otherItems.map(
                       (item) => _buildNavIcon(
@@ -1771,9 +1771,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: EdgeInsets.all(12),
+            padding: EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(15),
@@ -1788,7 +1789,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                Icon(icon, color: color, size: 28),
+                Icon(icon, color: color, size: 24),
                 if (label == 'Tugas' && _pendingTaskCount > 0)
                   Positioned(
                     right: -5,
@@ -1805,13 +1806,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          SizedBox(height: 6),
+          SizedBox(height: 4),
           Text(
             label,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.outfit(
-              fontSize: 10,
+              fontSize: 9,
               fontWeight: FontWeight.w500,
               color: Colors.black87,
+              height: 1.1,
             ),
           ),
         ],
