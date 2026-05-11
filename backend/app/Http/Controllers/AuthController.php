@@ -319,4 +319,93 @@ class AuthController extends Controller
 
         return $this->successResponse(null, 'Password berhasil direset. Silakan login dengan password baru Anda.');
     }
+
+    public function loginWithGoogle(Request $request)
+    {
+        $request->validate([
+            'id_token' => 'required|string',
+            'company_name' => 'required|string',
+        ]);
+
+        try {
+            // 1. Verifikasi Google ID Token
+            // Gunakan Client ID dari Google Cloud Console / Firebase Web Config
+            $client = new \Google_Client(['client_id' => env('GOOGLE_CLIENT_ID')]);
+            $payload = $client->verifyIdToken($request->id_token);
+
+            if (!$payload) {
+                return $this->errorResponse('Token Google tidak valid atau sudah kadaluarsa.', 401);
+            }
+
+            $email = $payload['email'];
+
+            // 2. Cari Perusahaan
+            $company = \App\Models\Company::where('name', $request->company_name)
+                ->orWhere('name', 'like', '%' . $request->company_name . '%')
+                ->first();
+
+            if (!$company) {
+                return $this->errorResponse('Perusahaan tidak ditemukan.', 401);
+            }
+
+            // 3. Cari User berdasarkan email di perusahaan tersebut
+            $user = User::where('email', $email)
+                ->where('company_id', $company->id)
+                ->first();
+
+            if (!$user) {
+                return $this->errorResponse("Email $email tidak terdaftar di $company->name. Silakan hubungi Admin.", 401);
+            }
+
+            // 4. Device Binding & FCM Token
+            // Google Login lebih fleksibel: auto-update device_id karena autentikasi
+            // Google sudah aman (MFA, verifikasi 2 langkah, dll)
+            $updateData = [];
+            if ($request->device_id) {
+                $updateData['device_id'] = $request->device_id;
+            }
+            
+            if ($request->fcm_token) {
+                $updateData['fcm_token'] = $request->fcm_token;
+            }
+
+            if (!empty($updateData)) {
+                $user->update($updateData);
+            }
+
+            // 5. Generate Tokens
+            $accessToken = $user->createToken('auth_token', ['*'], now()->addMinutes(self::ACCESS_TOKEN_MINUTES))->plainTextToken;
+
+            if ($request->device_id) {
+                RefreshToken::revokeForDevice($user->id, $request->device_id);
+            }
+
+            $refreshTokenData = RefreshToken::generateFor(
+                $user,
+                $request->device_id,
+                $request->ip(),
+                $request->userAgent(),
+                self::REFRESH_TOKEN_DAYS
+            );
+
+            \App\Models\ActivityLog::create([
+                'company_id' => $user->company_id,
+                'user_id' => $user->id,
+                'action' => 'LOGIN_GOOGLE',
+                'description' => "User {$user->name} berhasil masuk via Google Login.",
+            ]);
+
+            return $this->successResponse([
+                'access_token' => $accessToken,
+                'refresh_token' => $refreshTokenData['plain_token'],
+                'token_type' => 'Bearer',
+                'expires_in' => self::ACCESS_TOKEN_MINUTES * 60,
+                'refresh_expires_in' => self::REFRESH_TOKEN_DAYS * 86400,
+                'user' => $user->load(['role.permissions', 'office'])
+            ], 'Login berhasil');
+
+        } catch (\Exception $e) {
+            return $this->errorResponse('Terjadi kesalahan pada server saat verifikasi Google: ' . $e->getMessage(), 500);
+        }
+    }
 }

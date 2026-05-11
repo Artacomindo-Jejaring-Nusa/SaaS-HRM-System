@@ -9,6 +9,7 @@ import 'services/secure_storage_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'services/fcm_service.dart';
 
 // Global Notifiers
@@ -20,6 +21,8 @@ void main() async {
   
   try {
     await Firebase.initializeApp();
+    // Initialize Google Sign In (required for v7.x)
+    await GoogleSignIn.instance.initialize();
     await FcmService.init();
   } catch (e) {
     print("Firebase initialization error: $e");

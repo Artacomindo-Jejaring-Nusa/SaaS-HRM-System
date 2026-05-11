@@ -130,10 +130,76 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleLogin = () => {
-    // Redirect to backend Google OAuth endpoint
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    window.location.href = `${backendUrl}/auth/google/redirect`;
+  const handleGoogleLogin = async () => {
+    if (!companyName.trim()) {
+      setError("Pilih Perusahaan terlebih dahulu!");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      // 1. Import Firebase secara dynamic (agar tidak memberat initial load)
+      const { auth, googleProvider } = await import("@/lib/firebase");
+      const { signInWithPopup } = await import("firebase/auth");
+
+      // 2. Tampilkan popup Google Sign-In
+      const result = await signInWithPopup(auth, googleProvider);
+      
+      // 3. Ambil Google ID Token dari credential
+      const credential = await import("firebase/auth").then(m => 
+        m.GoogleAuthProvider.credentialFromResult(result)
+      );
+      const googleIdToken = credential?.idToken;
+
+      if (!googleIdToken) {
+        setError("Gagal mendapatkan token dari Google.");
+        setLoading(false);
+        return;
+      }
+
+      // 4. Kirim Google ID Token ke backend
+      const response = await axiosInstance.post("/login-google", {
+        id_token: googleIdToken,
+        company_name: companyName,
+      });
+
+      if (response.data.data && response.data.data.access_token) {
+        const { access_token, refresh_token, expires_in } = response.data.data;
+        const isSecure = window.location.protocol === "https:";
+        const accessExpiryDays = expires_in ? expires_in / 86400 : 1;
+
+        Cookies.set("token", access_token, {
+          expires: keepLoggedIn ? accessExpiryDays : undefined,
+          secure: isSecure,
+          sameSite: "strict",
+        });
+
+        if (refresh_token) {
+          Cookies.set("refresh_token", refresh_token, {
+            expires: 30,
+            secure: isSecure,
+            sameSite: "strict",
+          });
+        }
+
+        router.push("/dashboard");
+      } else {
+        setError(response.data.message || "Gagal login dengan Google.");
+      }
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.message || "Gagal login dengan Google.");
+      } else if (err instanceof Error && err.message.includes("popup-closed")) {
+        // User menutup popup Google — tidak perlu tampilkan error
+        setError("");
+      } else {
+        setError("Gagal login dengan Google. Silakan coba lagi.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

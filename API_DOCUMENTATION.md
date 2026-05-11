@@ -6,8 +6,21 @@ Seluruh request API harus menyertakan header `Accept: application/json`. Untuk e
 | Method | Endpoint | Deskripsi |
 | :--- | :--- | :--- |
 | `POST` | `/api/login` | Login user & mendapatkan token |
+| `POST` | `/api/login-google` | Login via Google Sign-In (kirim `id_token` & `company_name`) |
 | `POST` | `/api/logout` | Logout user & menghapus token |
+| `POST` | `/api/refresh-token` | Refresh access token menggunakan refresh token |
 | `GET` | `/api/user` | Mendapatkan data profil user saat ini |
+| `GET` | `/api/companies/search` | Cari perusahaan berdasarkan nama (`?q=keyword`) |
+
+### Login Google - Request Body
+```json
+{
+  "id_token": "eyJhbGciOiJSUzI1NiIs...",   // Google ID Token dari Firebase/GoogleSignIn
+  "company_name": "Narwasthu Artha Tama",    // Nama perusahaan tenant
+  "device_id": "abc123",                      // (Opsional) Device ID untuk mobile
+  "fcm_token": "dIiYe0tu..."                 // (Opsional) FCM Token untuk push notification
+}
+```
 
 ## 👥 Manajemen Pegawai
 | Method | Endpoint | Deskripsi |

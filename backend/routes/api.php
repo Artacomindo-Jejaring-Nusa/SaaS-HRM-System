@@ -63,6 +63,7 @@ Route::get('/health', function () {
 
 // Auth
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
+Route::post('/login-google', [AuthController::class, 'loginWithGoogle']);
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 Route::get('/companies/search', [AuthController::class, 'searchCompanies']);

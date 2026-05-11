@@ -12,17 +12,17 @@ import '../services/secure_storage_service.dart';
 class ApiService {
   // Toggle between Development and Production
   static const String _prodIp = 'ontime.jelantik.com';
-  static const String _devIp = '10.0.2.2'; // Standard Android Emulator local address
+  static const String _devIp =
+      '2.2.2.3'; // Standard Android Emulator local address
 
   static String get serverIp => kDebugMode ? _devIp : _prodIp;
 
-  static String get baseUrl => kDebugMode 
-    ? 'http://$serverIp:8000/api' 
-    : 'https://$serverIp/api';
+  static String get baseUrl =>
+      kDebugMode ? 'http://$serverIp:8000/api' : 'https://$serverIp/api';
 
-  static String get storageUrl => kDebugMode 
-    ? 'http://$serverIp:8000/storage' 
-    : 'https://$serverIp:8000/storage';
+  static String get storageUrl => kDebugMode
+      ? 'http://$serverIp:8000/storage'
+      : 'https://$serverIp:8000/storage';
 
   /// Fixes URLs that might contain localhost or older IPs to use the current serverIp
   static String fixUrl(String? url) {
@@ -41,7 +41,7 @@ class ApiService {
         .replaceAll('localhost', serverIp)
         .replaceAll('127.0.0.1', serverIp)
         .replaceAll('192.168.1.9', serverIp)
-        .replaceAll('10.0.2.2', serverIp);
+        .replaceAll('2.2.2.3', serverIp);
 
     // Production specific cleanup (Force HTTPS and remove dev port)
     if (!kDebugMode) {
@@ -232,6 +232,57 @@ class ApiService {
       };
     }
   }
+
+  static Future<Map<String, dynamic>> loginWithGoogle({
+    required String idToken,
+    required String companyName,
+  }) async {
+    try {
+      String deviceId = await getDeviceId();
+      final prefs = await SharedPreferences.getInstance();
+      final fcmToken = prefs.getString('fcm_token');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/login-google'),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'id_token': idToken,
+          'company_name': companyName,
+          'device_id': deviceId,
+          'fcm_token': fcmToken,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        final tokenData = data['data'];
+        final secureStorage = await SecureStorageService.getInstance();
+
+        await secureStorage.saveTokens(
+          accessToken: tokenData['access_token'],
+          refreshToken: tokenData['refresh_token'],
+          expiresIn: tokenData['expires_in'] ?? 3600,
+        );
+
+        return {'success': true, 'message': 'Login Berhasil!'};
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Login Google Gagal.',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Koneksi Gagal. Silakan coba lagi.',
+      };
+    }
+  }
+
 
   static Future<List<dynamic>> searchCompanies(String query) async {
     try {

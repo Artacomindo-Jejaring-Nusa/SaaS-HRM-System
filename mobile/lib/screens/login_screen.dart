@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../api/api_service.dart';
 import '../services/fcm_service.dart';
+import '../services/google_auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -115,6 +116,52 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } else {
       _showSnackBar(result['message']);
+    }
+  }
+
+  void _handleGoogleLogin() async {
+    if (_companyController.text.isEmpty) {
+      _showSnackBar("Pilih Perusahaan terlebih dahulu!");
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final googleAuth = GoogleAuthService();
+
+    try {
+      // signInWithGoogle() sekarang mengembalikan Google ID Token langsung
+      final String? idToken = await googleAuth.signInWithGoogle();
+
+      if (idToken == null) {
+        // User membatalkan login
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      // Kirim Google ID Token ke backend Laravel
+      final result = await ApiService.loginWithGoogle(
+        idToken: idToken,
+        companyName: _companyController.text,
+      );
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      if (result['success']) {
+        await FcmService.init();
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/dashboard');
+        }
+      } else {
+        _showSnackBar(result['message']);
+        await googleAuth.signOut();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showSnackBar("Gagal login dengan Google. Silakan coba lagi.");
+      }
     }
   }
 
@@ -438,7 +485,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               SizedBox(height: 35),
-
               SizedBox(
                 width: double.infinity,
                 height: 55,
@@ -464,6 +510,58 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                 ),
               ),
+              SizedBox(height: 25),
+              Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.grey[300])),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                    child: Text(
+                      "Atau masuk dengan",
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: Colors.grey[400],
+                      ),
+                    ),
+                  ),
+                  Expanded(child: Divider(color: Colors.grey[300])),
+                ],
+              ),
+              SizedBox(height: 25),
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: OutlinedButton(
+                  onPressed: _isLoading ? null : _handleGoogleLogin,
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: Colors.grey[300]!),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CustomPaint(
+                          painter: _GoogleLogoPainter(),
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Text(
+                        "Login with Google",
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               SizedBox(height: 40),
               Center(
                 child: Text(
@@ -482,4 +580,74 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+}
+
+/// Custom painter for the official Google "G" logo with 4 brand colors
+class _GoogleLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width;
+    final double h = size.height;
+    final double cx = w / 2;
+    final double cy = h / 2;
+    final double r = w / 2;
+    final double strokeW = w * 0.2;
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeW
+      ..strokeCap = StrokeCap.butt;
+
+    // Blue (right arc: -45° to 45°, i.e. 315° to 45°)
+    paint.color = const Color(0xFF4285F4);
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(cx, cy), radius: r - strokeW / 2),
+      -0.785, // -45 degrees
+      1.57,   // 90 degrees sweep
+      false,
+      paint,
+    );
+
+    // Green (bottom arc: 45° to 135°)
+    paint.color = const Color(0xFF34A853);
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(cx, cy), radius: r - strokeW / 2),
+      0.785,  // 45 degrees
+      1.57,   // 90 degrees sweep
+      false,
+      paint,
+    );
+
+    // Yellow (left arc: 135° to 200°)
+    paint.color = const Color(0xFFFBBC05);
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(cx, cy), radius: r - strokeW / 2),
+      2.356,  // 135 degrees
+      1.13,   // ~65 degrees sweep
+      false,
+      paint,
+    );
+
+    // Red (top-left arc: 200° to 315°)
+    paint.color = const Color(0xFFEA4335);
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(cx, cy), radius: r - strokeW / 2),
+      3.49,   // 200 degrees
+      1.93,   // ~115 degrees sweep
+      false,
+      paint,
+    );
+
+    // Horizontal bar (blue)
+    final barPaint = Paint()
+      ..color = const Color(0xFF4285F4)
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(
+      Rect.fromLTWH(cx - 1, cy - strokeW / 2, r, strokeW),
+      barPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

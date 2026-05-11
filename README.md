@@ -14,8 +14,9 @@ Aplikasi ini mencakup modul-modul inti HRM yang sudah terintegrasi:
 
 - **Authentication & Security**: 
   - **Multi-tenant isolation**: Pemisahan data antar tenant yang sangat ketat.
+  - **Google Sign-In (OAuth 2.0)**: Login dengan akun Google terintegrasi di **Mobile (Flutter)** via `google_sign_in` v7.x dan **Web Dashboard (Next.js)** via Firebase Auth popup. Backend memverifikasi Google ID Token menggunakan `Google_Client`.
   - **Refresh Token System**: Mekanisme rotasi token otomatis (Refresh Token) untuk keamanan sesi backend yang lebih tangguh.
-  - **Device-Bound Security**: Token di aplikasi mobile dikunci (binding) ke hardware ID perangkat unik untuk mencegah pencurian sesi.
+  - **Device-Bound Security**: Token di aplikasi mobile dikunci (binding) ke hardware ID perangkat unik untuk mencegah pencurian sesi. Google Login menggunakan device binding fleksibel (auto-update) karena autentikasi Google sudah aman secara inheren.
   - **Encrypted Storage**: Penyimpanan data sensitif di mobile menggunakan **hardware-based encryption (AES/XOR)** keyed ke fingerprint perangkat.
   - **Secure Cookies**: Implementasi HttpOnly, SameSite=Strict, dan Secure flags pada dashboard web.
   - **RBAC**: Role-based Access Control yang mendalam.
@@ -98,14 +99,24 @@ Gunakan Docker untuk menjalankan seluruh stack (Backend, Frontend, MySQL, Redis,
 1. Masuk ke folder backend: `cd backend`
 2. Install dependensi: `composer install`
 3. Salin file environment: `cp .env.example .env` (Lakukan konfigurasi database)
-4. Jalankan migrasi dan seeder: `php artisan migrate --seed`
-5. Jalankan server: `php artisan serve`
+4. Tambahkan `GOOGLE_CLIENT_ID` ke file `.env` backend untuk fitur Google Login.
+5. Jalankan migrasi dan seeder: `php artisan migrate --seed`
+6. Jalankan server: `php artisan serve`
 
-### Persiapan Mobile
+### Persiapan Frontend (Next.js)
+
+1. Masuk ke folder frontend: `cd frontend`
+2. Install dependensi: `npm install`
+3. Salin file environment: `cp .env.example .env.local`
+4. Konfigurasi variabel `NEXT_PUBLIC_FIREBASE_*` untuk fitur Google Login di web.
+5. Jalankan dev server: `npm run dev`
+
+### Persiapan Mobile (Flutter)
 
 1. Masuk ke folder mobile: `cd mobile`
 2. Install dependensi: `flutter pub get`
-3. Jalankan aplikasi: `flutter run` (Gunakan Emulator atau Device fisik)
+3. Pastikan **Firebase** sudah dikonfigurasi (`google-services.json` untuk Android).
+4. Jalankan aplikasi: `flutter run` (Gunakan Emulator atau Device fisik)
 
 ---
 

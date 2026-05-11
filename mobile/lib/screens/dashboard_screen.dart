@@ -1437,7 +1437,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisCount: 5,
                   mainAxisSpacing: 0,
                   crossAxisSpacing: 8,
-                  childAspectRatio: 0.7,
+                  childAspectRatio: 0.75,
                   children: [
                     ...pinnedItems.map(
                       (item) => _buildQuickAction(

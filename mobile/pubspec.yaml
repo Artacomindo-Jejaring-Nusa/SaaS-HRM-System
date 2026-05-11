@@ -52,10 +52,12 @@ dependencies:
   url_launcher: ^6.2.1
   device_info_plus: ^12.3.0
   google_mlkit_face_detection: ^0.13.2
-  firebase_core: ^3.10.1
+  firebase_core: ^3.15.2
   firebase_messaging: ^15.2.2
   syncfusion_flutter_pdfviewer: ^33.2.4
   webview_flutter: ^4.4.2
+  firebase_auth: ^5.7.0
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:
