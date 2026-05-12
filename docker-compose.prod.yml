@@ -17,10 +17,10 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./backend/storage/app/public:/var/www/html/storage/app/public
-      - ./backend/storage/logs:/var/www/html/storage/logs
+      - backend_storage:/var/www/html/storage/app/public
+      - backend_logs:/var/www/html/storage/logs
     networks:
-      - hrms-prod-network
+      - hrms-network
 
   # ── Reverb Server (WebSockets) ─────────────────────
   reverb:
@@ -44,7 +44,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - hrms-prod-network
+      - hrms-network
     deploy:
       resources:
         limits:
@@ -69,7 +69,7 @@ services:
     depends_on:
       - backend
     networks:
-      - hrms-prod-network
+      - hrms-network
 
   # ── MySQL Master (Writes) ──────────────────────────────────
   mysql-master:
@@ -93,7 +93,7 @@ services:
       - mysql_master_data:/var/lib/mysql
       - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     networks:
-      - hrms-prod-network
+      - hrms-network
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_PASSWORD:-OnTimeNarwastugo2026}"]
       interval: 10s
@@ -123,7 +123,7 @@ services:
       mysql-master:
         condition: service_healthy
     networks:
-      - hrms-prod-network
+      - hrms-network
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_PASSWORD:-OnTimeNarwastugo2026}"]
       interval: 10s
@@ -140,7 +140,7 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - hrms-prod-network
+      - hrms-network
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-OnTimeNarwastugo2026}", "ping"]
       interval: 10s
@@ -160,7 +160,7 @@ services:
       - frontend
       - backend
     networks:
-      - hrms-prod-network
+      - hrms-network
 
   # ── Monitoring Agents (Exporters) ─────────────────
   node-exporter:
@@ -179,7 +179,7 @@ services:
     ports:
       - "9100:9100"
     networks:
-      - hrms-prod-network
+      - hrms-network
 
   mysql-exporter:
     image: prom/mysqld-exporter:v0.16.0
@@ -197,13 +197,26 @@ services:
       mysql-master:
         condition: service_healthy
     networks:
-      - hrms-prod-network
+      - hrms-network
 
 networks:
-  hrms-prod-network:
-    driver: bridge
+  hrms-network:
+    external: true
+    name: hrms-network
 
 volumes:
   mysql_master_data:
+    external: true
+    name: saas-hrm-system_mysql_master_data
   mysql_slave_data:
+    external: true
+    name: saas-hrm-system_mysql_slave_data
   redis_data:
+    external: true
+    name: saas-hrm-system_redis_data
+  backend_storage:
+    external: true
+    name: saas-hrm-system_backend_storage
+  backend_logs:
+    external: true
+    name: saas-hrm-system_backend_logs
