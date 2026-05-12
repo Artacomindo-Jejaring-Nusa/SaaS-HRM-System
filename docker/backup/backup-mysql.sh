@@ -15,7 +15,7 @@ set -euo pipefail
 # ── Configuration ────────────────────────────────────────────
 CONTAINER_NAME="hrms-mysql-master"
 DB_NAME="hrm_saas"
-DB_USER="root"
+DB_USER="hrms_user"
 DB_PASS="OnTimeNarwastugo2026"
 
 # Nextcloud WebDAV Configuration
@@ -60,11 +60,9 @@ if docker exec "$CONTAINER_NAME" mysqldump \
     -u"$DB_USER" \
     -p"$DB_PASS" \
     --single-transaction \
-    --routines \
-    --triggers \
-    --events \
+    --no-tablespaces \
+    --skip-lock-tables \
     --quick \
-    --lock-tables=false \
     "$DB_NAME" 2>/dev/null | gzip > "${BACKUP_DIR}/${FILENAME}"; then
     
     FILESIZE=$(du -h "${BACKUP_DIR}/${FILENAME}" | cut -f1)
