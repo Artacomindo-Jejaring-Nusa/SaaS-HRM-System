@@ -22,6 +22,7 @@ services:
       - "--enforce-gtid-consistency=ON"
       - "--gtid-mode=ON"
       - "--mysql-native-password=ON"
+      - "--bind-address=0.0.0.0"
     ports:
       - "${DB_PORT_EXPOSE:-3306}:3306"
     volumes:
