@@ -29,17 +29,6 @@ class AppServiceProvider extends ServiceProvider
 
         if ($this->app->environment('production')) {
             \Illuminate\Support\Facades\URL::forceScheme('https');
-
-            // CloudFlare Origin Certificates are self-signed by CloudFlare's private CA,
-            // which is not in PHP's default CA trust store. This disables SSL peer
-            // verification so SMTP connections to mail.jelantik.com can succeed.
-            stream_context_set_default([
-                'ssl' => [
-                    'verify_peer' => false,
-                    'verify_peer_name' => false,
-                    'allow_self_signed' => true,
-                ],
-            ]);
         }
 
         // Define Rate Limiters
