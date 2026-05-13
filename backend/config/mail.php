@@ -55,6 +55,14 @@ return [
                     'verify_depth' => 0,
                 ],
             ],
+            'context' => [
+                'ssl' => [
+                    'allow_self_signed' => true,
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'verify_depth' => 0,
+                ],
+            ],
         ],
 
         'ses' => [
