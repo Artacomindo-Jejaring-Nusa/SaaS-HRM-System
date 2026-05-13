@@ -27,6 +27,8 @@ RUN apk add --no-cache \
     nginx \
     supervisor \
     curl \
+    ca-certificates \
+    wget \
     libpng-dev \
     libjpeg-turbo-dev \
     freetype-dev \
@@ -49,6 +51,11 @@ RUN apk add --no-cache \
     opcache \
     pcntl \
     && rm -rf /var/cache/apk/*
+
+# Add CloudFlare Origin CA to trust store (required for mail.jelantik.com)
+RUN wget -qO /usr/local/share/ca-certificates/cloudflare-origin.crt \
+    https://developers.cloudflare.com/ssl/static/origin_ca_rsa_root.pem \
+    && update-ca-certificates
 
 # Install Redis extension
 RUN apk add --no-cache --virtual .build-deps $PHPIZE_DEPS \
