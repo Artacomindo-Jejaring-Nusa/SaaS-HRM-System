@@ -20,9 +20,23 @@ class WhatsAppService
 
         // If company is provided, override with company-specific settings
         if ($company instanceof \App\Models\Company) {
-            $this->apiKey = $company->watzap_api_key ?? $this->apiKey;
-            $this->numberKey = $company->watzap_number_key ?? $this->numberKey;
-            $this->baseUrl = $company->watzap_base_url ?? $this->baseUrl;
+            $companyId = $company->id;
+            Log::info("WhatsAppService initialized for Company ID: {$companyId}");
+            
+            if ($company->watzap_api_key) {
+                $this->apiKey = $company->watzap_api_key;
+                Log::info("Using Database API Key (Masked): " . substr($this->apiKey, 0, 4) . "...");
+            }
+            
+            if ($company->watzap_number_key) {
+                $this->numberKey = $company->watzap_number_key;
+            }
+            
+            if ($company->watzap_base_url) {
+                $this->baseUrl = $company->watzap_base_url;
+            }
+        } else {
+            Log::warning("WhatsAppService initialized WITHOUT Company context. Falling back to .env.");
         }
     }
 
@@ -35,6 +49,11 @@ class WhatsAppService
      */
     public function sendMessage($phone, $message)
     {
+        if (!$this->apiKey || !$this->numberKey) {
+            Log::error("WhatsAppService: API Key or Number Key is MISSING.");
+            return false;
+        }
+
         if (empty($phone)) {
             Log::warning("WhatsAppService: Phone number is empty.");
             return false;
