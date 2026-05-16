@@ -51,13 +51,18 @@ class WhatsAppService
         // Remove '+' if present
         $phone = str_replace('+', '', $phone);
 
+        // Ensure base URL ends with /
+        $url = rtrim($this->baseUrl, '/') . '/send_message';
+
         try {
-            $response = Http::post($this->baseUrl . 'send_message', [
+            $payload = [
                 'api_key' => $this->apiKey,
                 'number_key' => $this->numberKey,
                 'phone_no' => $phone,
                 'message' => $message,
-            ]);
+            ];
+
+            $response = Http::post($url, $payload);
 
             if ($response->successful()) {
                 $data = $response->json();
@@ -66,10 +71,10 @@ class WhatsAppService
                 }
                 Log::error("WatZap API Error: " . json_encode($data));
             } else {
-                Log::error("WatZap Request Failed: " . $response->body());
+                Log::error("WatZap Request Failed to {$url}. Status: " . $response->status() . " Body: " . $response->body());
             }
         } catch (\Exception $e) {
-            Log::error("WhatsAppService Exception: " . $e->getMessage());
+            Log::error("WhatsAppService Exception for phone {$phone}: " . $e->getMessage());
         }
 
         return false;
