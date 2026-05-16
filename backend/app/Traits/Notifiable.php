@@ -49,6 +49,11 @@ trait Notifiable
         // 3. Send WhatsApp message via WatZap
         if ($sendWA && $user->phone) {
             try {
+                // Ensure company relation is loaded
+                if (!$user->relationLoaded('company')) {
+                    $user->load('company');
+                }
+                
                 $waService = new \App\Services\WhatsAppService($user->company);
                 $waMessage = "*{$title}*\n\n{$message}";
                 
