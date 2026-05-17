@@ -15,7 +15,9 @@ class UserNotification extends Mailable implements ShouldQueue
     use Queueable, SerializesModels;
 
     public $user;
+
     public $title;
+
     public $message;
 
     public function __construct(User $user, string $title, string $message)

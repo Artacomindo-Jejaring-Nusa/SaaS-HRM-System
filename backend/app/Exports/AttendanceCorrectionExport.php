@@ -3,17 +3,23 @@
 namespace App\Exports;
 
 use App\Models\AttendanceCorrection;
+use Carbon\Carbon;
 use Maatwebsite\Excel\Concerns\FromQuery;
-use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithMapping;
 
-class AttendanceCorrectionExport implements FromQuery, WithMapping, WithHeadings
+class AttendanceCorrectionExport implements FromQuery, WithHeadings, WithMapping
 {
     protected $companyId;
+
     protected $userId;
+
     protected $status;
+
     protected $startDate;
+
     protected $endDate;
+
     private $rowNumber = 0;
 
     public function __construct($companyId, $userId = null, $status = null, $startDate = null, $endDate = null)
@@ -60,7 +66,7 @@ class AttendanceCorrectionExport implements FromQuery, WithMapping, WithHeadings
             'Waktu Keluar Koreksi',
             'Status',
             'Alasan',
-            'Disetujui Oleh'
+            'Disetujui Oleh',
         ];
     }
 
@@ -72,8 +78,8 @@ class AttendanceCorrectionExport implements FromQuery, WithMapping, WithHeadings
             $correction->reason,
             $correction->user->name ?? 'N/A',
             ucwords($correction->correction_type),
-            $correction->corrected_check_in ? \Carbon\Carbon::parse($correction->corrected_check_in)->format('H:i') : '-',
-            $correction->corrected_check_out ? \Carbon\Carbon::parse($correction->corrected_check_out)->format('H:i') : '-',
+            $correction->corrected_check_in ? Carbon::parse($correction->corrected_check_in)->format('H:i') : '-',
+            $correction->corrected_check_out ? Carbon::parse($correction->corrected_check_out)->format('H:i') : '-',
             ucfirst($correction->status),
             $correction->reason,
             $correction->approver->name ?? 'N/A',

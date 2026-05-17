@@ -2,11 +2,11 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\User;
-use App\Models\Role;
-use App\Models\Permission;
 use App\Models\Company;
+use App\Models\Permission;
+use App\Models\Role;
+use App\Models\User;
+use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
 class RealCompanySeeder extends Seeder
@@ -22,7 +22,7 @@ class RealCompanySeeder extends Seeder
             [
                 'name' => 'Narwasthu Artha Tama',
                 'email' => 'corporate@narwastu-group.com',
-                'address' => 'Gedung Narwastu Lt. 12, Jakarta Selatan'
+                'address' => 'Gedung Narwastu Lt. 12, Jakarta Selatan',
             ]
         );
 
@@ -51,16 +51,16 @@ class RealCompanySeeder extends Seeder
 
         // 3. Define Real World Roles and Permission Mapping
         $rolesData = [
-            'Super Admin' => Permission::all()->pluck('id'), 
+            'Super Admin' => Permission::all()->pluck('id'),
             'CEO / Direktur Utama' => Permission::all()->pluck('id'),
-            
+
             // HRD Manager (Full HR Authority)
             'HRD Manager' => Permission::whereIn('group', ['Pegawai', 'Cuti', 'Perizinan', 'Pengaturan', 'Payroll'])->pluck('id'),
-            
+
             // HRD (Staff level - Can view & entry but limited approval/deletion)
             'HRD' => Permission::whereIn('slug', [
                 'view-employees', 'view-leaves', 'view-permits', 'view-reimbursements', 'view-overtimes',
-                'approve-permits', 'view-vehicle-logs'
+                'approve-permits', 'view-vehicle-logs',
             ])->pluck('id'),
 
             'Finance Manager' => Permission::whereIn('group', ['Reimbursement', 'Payroll'])->pluck('id'),
@@ -85,7 +85,7 @@ class RealCompanySeeder extends Seeder
                 'company_id' => $company->id,
                 'role_id' => $roleObjects['CEO / Direktur Utama']->id,
                 'nik' => 'CEO001',
-                'join_date' => '2020-01-01'
+                'join_date' => '2020-01-01',
             ]
         );
 
@@ -99,7 +99,7 @@ class RealCompanySeeder extends Seeder
                 'role_id' => $roleObjects['HRD Manager']->id,
                 'supervisor_id' => $ceo->id,
                 'nik' => 'HRM001',
-                'join_date' => '2021-02-15'
+                'join_date' => '2021-02-15',
             ]
         );
 
@@ -114,7 +114,7 @@ class RealCompanySeeder extends Seeder
                 'supervisor_id' => $hrManager->id,
                 'nik' => 'STF002',
                 'join_date' => '2022-03-10',
-                'leave_balance' => 12
+                'leave_balance' => 12,
             ]
         );
 
@@ -126,7 +126,7 @@ class RealCompanySeeder extends Seeder
                 'company_id' => $company->id,
                 'role_id' => $roleObjects['Finance Manager']->id,
                 'supervisor_id' => $ceo->id,
-                'nik' => 'FIN001'
+                'nik' => 'FIN001',
             ]
         );
 
@@ -138,7 +138,7 @@ class RealCompanySeeder extends Seeder
                 'company_id' => $company->id,
                 'role_id' => $roleObjects['Supervisor Operational']->id,
                 'supervisor_id' => $ceo->id,
-                'nik' => 'SUP001'
+                'nik' => 'SUP001',
             ]
         );
 
@@ -151,7 +151,7 @@ class RealCompanySeeder extends Seeder
                 'role_id' => $roleObjects['Staff Karyawan']->id,
                 'supervisor_id' => $supervisor->id,
                 'nik' => 'STF001',
-                'leave_balance' => 12
+                'leave_balance' => 12,
             ]
         );
 
@@ -162,7 +162,7 @@ class RealCompanySeeder extends Seeder
                 'password' => Hash::make('password'),
                 'company_id' => $company->id,
                 'role_id' => $roleObjects['Super Admin']->id,
-                'nik' => 'ADMIN01'
+                'nik' => 'ADMIN01',
             ]
         );
     }

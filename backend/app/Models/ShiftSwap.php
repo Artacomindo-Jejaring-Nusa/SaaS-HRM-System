@@ -2,15 +2,16 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 
 class ShiftSwap extends Model
 {
-    use \App\Traits\BelongsToCompany;
+    use BelongsToCompany;
 
     protected $fillable = [
-        'company_id', 'requester_id', 'receiver_id', 'requester_schedule_id', 
-        'receiver_schedule_id', 'status', 'reason', 'approved_by', 'remark'
+        'company_id', 'requester_id', 'receiver_id', 'requester_schedule_id',
+        'receiver_schedule_id', 'status', 'reason', 'approved_by', 'remark',
     ];
 
     public function requester()

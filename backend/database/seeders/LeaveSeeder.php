@@ -2,17 +2,19 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use App\Models\Leave;
-use Illuminate\Database\Seeder;
+use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Seeder;
 
 class LeaveSeeder extends Seeder
 {
     public function run(): void
     {
-        $users = User::whereHas('role', function($q){ $q->where('name', '!=', 'Super Admin'); })->get();
-        
+        $users = User::whereHas('role', function ($q) {
+            $q->where('name', '!=', 'Super Admin');
+        })->get();
+
         foreach ($users as $user) {
             // Give 1-2 random leaves in the last 2 months
             for ($i = 0; $i < rand(1, 2); $i++) {

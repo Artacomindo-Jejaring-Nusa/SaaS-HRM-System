@@ -4,18 +4,23 @@ namespace App\Exports;
 
 use App\Models\ShiftSwap;
 use Maatwebsite\Excel\Concerns\FromQuery;
-use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class ShiftSwapExport implements FromQuery, WithMapping, WithHeadings, WithStyles
+class ShiftSwapExport implements FromQuery, WithHeadings, WithMapping, WithStyles
 {
     protected $companyId;
+
     protected $userId;
+
     protected $startDate;
+
     protected $endDate;
+
     protected $status;
+
     private $rowNumber = 0;
 
     public function __construct($companyId, $userId = null, $startDate = null, $endDate = null, $status = null)
@@ -30,10 +35,10 @@ class ShiftSwapExport implements FromQuery, WithMapping, WithHeadings, WithStyle
     public function query()
     {
         $query = ShiftSwap::with(['requester', 'receiver', 'approver', 'requesterSchedule.shift', 'receiverSchedule.shift'])
-            ->where(function($q) {
-                $q->whereHas('requester', function($sq) {
+            ->where(function ($q) {
+                $q->whereHas('requester', function ($sq) {
                     $sq->where('company_id', $this->companyId);
-                })->orWhereHas('receiver', function($sq) {
+                })->orWhereHas('receiver', function ($sq) {
                     $sq->where('company_id', $this->companyId);
                 });
             });
@@ -45,9 +50,9 @@ class ShiftSwapExport implements FromQuery, WithMapping, WithHeadings, WithStyle
             $query->whereDate('created_at', '<=', $this->endDate);
         }
         if ($this->userId) {
-            $query->where(function($q) {
+            $query->where(function ($q) {
                 $q->where('requester_id', $this->userId)
-                  ->orWhere('receiver_id', $this->userId);
+                    ->orWhere('receiver_id', $this->userId);
             });
         }
         if ($this->status) {
@@ -80,7 +85,7 @@ class ShiftSwapExport implements FromQuery, WithMapping, WithHeadings, WithStyle
             'approved' => 'Selesai (Approved)',
             'rejected' => 'Ditolak',
             'pending_receiver' => 'Menunggu Rekan',
-            'pending_manager' => 'Menunggu Atasan'
+            'pending_manager' => 'Menunggu Atasan',
         ];
 
         return [

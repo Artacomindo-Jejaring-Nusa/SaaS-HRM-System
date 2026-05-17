@@ -6,13 +6,15 @@ use App\Models\PayrollBatch;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Concerns\WithTitle;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class PayrollRekapExport implements FromCollection, WithHeadings, WithMapping, WithTitle, WithStyles
+class PayrollRekapExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithTitle
 {
     protected $batch;
+
     protected $rowNumber = 0;
 
     public function __construct(PayrollBatch $batch)
@@ -44,6 +46,7 @@ class PayrollRekapExport implements FromCollection, WithHeadings, WithMapping, W
     public function map($salary): array
     {
         $this->rowNumber++;
+
         return [
             $this->rowNumber,
             $salary->user->name ?? '-',
@@ -65,7 +68,7 @@ class PayrollRekapExport implements FromCollection, WithHeadings, WithMapping, W
         // Style heading row (row 3 after insert)
         $sheet->getStyle('A3:E3')->getFont()->setBold(true);
         $sheet->getStyle('A3:E3')->getFill()
-            ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+            ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFDCE6F1');
 
         // Column widths
@@ -92,7 +95,7 @@ class PayrollRekapExport implements FromCollection, WithHeadings, WithMapping, W
         $creatorName = $this->batch->creator->name ?? '-';
         $approverName = $this->batch->approver->name ?? '............................';
 
-        $sheet->setCellValue("B{$sigRow}", "Jakarta, " . now()->translatedFormat('d F Y'));
+        $sheet->setCellValue("B{$sigRow}", 'Jakarta, '.now()->translatedFormat('d F Y'));
         $sheet->setCellValue("D{$sigRow}", 'Approved by');
 
         $sigRow2 = $sigRow + 1;

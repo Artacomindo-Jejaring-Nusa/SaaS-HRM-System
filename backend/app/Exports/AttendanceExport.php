@@ -4,15 +4,19 @@ namespace App\Exports;
 
 use App\Models\Attendance;
 use Maatwebsite\Excel\Concerns\FromQuery;
-use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithMapping;
 
-class AttendanceExport implements FromQuery, WithMapping, WithHeadings
+class AttendanceExport implements FromQuery, WithHeadings, WithMapping
 {
     protected $userId;
+
     protected $companyId;
+
     protected $startDate;
+
     protected $endDate;
+
     private $rowNumber = 0;
 
     public function __construct($companyId, $userId = null, $startDate = null, $endDate = null)
@@ -77,7 +81,7 @@ class AttendanceExport implements FromQuery, WithMapping, WithHeadings
             $attendance->check_in_time ?: '-',
             $attendance->check_out_time ?: '-',
             $statusIndo,
-            $attendance->check_in_location
+            $attendance->check_in_location,
         ];
     }
 }

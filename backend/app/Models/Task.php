@@ -14,7 +14,7 @@ class Task extends Model
         'description',
         'deadline',
         'status',
-        'priority'
+        'priority',
     ];
 
     protected $appends = ['progress_percentage'];

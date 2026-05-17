@@ -17,7 +17,7 @@ class Permit extends Model
         'approved_by',
         'remark',
         'signature',
-        'attachment'
+        'attachment',
     ];
 
     public function user()

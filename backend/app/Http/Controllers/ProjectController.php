@@ -3,16 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\Project;
-use App\Models\ProjectBudget;
-use App\Models\ProjectCost;
-use App\Models\ProjectContract;
-use App\Models\ProjectSchedule;
-use App\Models\ProjectCashFlow;
-use App\Models\User;
 use Illuminate\Http\Request;
 
 class ProjectController extends Controller
 {
+    private const RULE_NULL_STRING = 'nullable|string';
+    private const RULE_NULL_DATE = 'nullable|date';
+    private const RULE_REQ_STRING = 'required|string';
+    private const RULE_REQ_NUM_MIN0 = 'required|numeric|min:0';
+    private const RULE_REQ_DATE = 'required|date';
+    private const REL_PROJECT_MANAGER = 'projectManager:id,name';
+
     // ============================
     // PROJECTS CRUD
     // ============================
@@ -20,7 +21,7 @@ class ProjectController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = Project::with(['projectManager:id,name'])
+        $query = Project::with([self::REL_PROJECT_MANAGER])
             ->where('company_id', $user->company_id);
 
         if ($request->has('status') && $request->status !== 'all') {
@@ -29,10 +30,10 @@ class ProjectController extends Controller
 
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%")
-                  ->orWhere('client_name', 'like', "%{$search}%");
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhere('client_name', 'like', "%{$search}%");
             });
         }
 
@@ -40,7 +41,7 @@ class ProjectController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $projects
+            'data' => $projects,
         ]);
     }
 
@@ -49,12 +50,12 @@ class ProjectController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'code' => 'required|string|unique:projects,code',
-            'description' => 'nullable|string',
-            'client_name' => 'nullable|string',
-            'location' => 'nullable|string',
+            'description' => self::RULE_NULL_STRING,
+            'client_name' => self::RULE_NULL_STRING,
+            'location' => self::RULE_NULL_STRING,
             'status' => 'in:planning,tender,in_progress,on_hold,completed,cancelled',
             'total_budget' => 'nullable|numeric|min:0',
-            'start_date' => 'nullable|date',
+            'start_date' => self::RULE_NULL_DATE,
             'end_date' => 'nullable|date|after_or_equal:start_date',
             'project_manager_id' => 'nullable|exists:users,id',
         ]);
@@ -63,8 +64,8 @@ class ProjectController extends Controller
             'company_id' => $request->user()->company_id,
             ...$request->only([
                 'name', 'code', 'description', 'client_name', 'location',
-                'status', 'total_budget', 'start_date', 'end_date', 'project_manager_id'
-            ])
+                'status', 'total_budget', 'start_date', 'end_date', 'project_manager_id',
+            ]),
         ]);
 
         $this->logActivity('CREATE_PROJECT', "Membuat proyek baru: {$project->name} ({$project->code})", $project);
@@ -72,7 +73,7 @@ class ProjectController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Proyek berhasil dibuat.',
-            'data' => $project->load('projectManager:id,name')
+            'data' => $project->load(self::REL_PROJECT_MANAGER),
         ], 201);
     }
 
@@ -85,7 +86,7 @@ class ProjectController extends Controller
             'costs.budgetItem:id,item_name,category',
             'contracts',
             'schedules',
-            'cashFlows'
+            'cashFlows',
         ])->where('company_id', $request->user()->company_id)->findOrFail($id);
 
         // Calculate summary data
@@ -144,7 +145,7 @@ class ProjectController extends Controller
                 'budget_by_category' => $budgetByCategory,
                 'cost_by_category' => $costByCategory,
                 'monthly_cash_flow' => $monthlyCashFlow,
-            ]
+            ],
         ]);
     }
 
@@ -154,11 +155,11 @@ class ProjectController extends Controller
 
         $request->validate([
             'name' => 'sometimes|string|max:255',
-            'code' => 'sometimes|string|unique:projects,code,' . $id,
+            'code' => 'sometimes|string|unique:projects,code,'.$id,
             'status' => 'sometimes|in:planning,tender,in_progress,on_hold,completed,cancelled',
             'total_budget' => 'nullable|numeric|min:0',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date',
+            'start_date' => self::RULE_NULL_DATE,
+            'end_date' => self::RULE_NULL_DATE,
             'project_manager_id' => 'nullable|exists:users,id',
         ]);
 
@@ -166,7 +167,7 @@ class ProjectController extends Controller
             'name', 'code', 'description', 'client_name', 'location',
             'status', 'total_budget', 'start_date', 'end_date',
             'actual_start_date', 'actual_end_date', 'project_manager_id',
-            'progress_percentage'
+            'progress_percentage',
         ]));
 
         $this->logActivity('UPDATE_PROJECT', "Memperbarui data proyek: {$project->name}", $project);
@@ -174,7 +175,7 @@ class ProjectController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Proyek berhasil diperbarui.',
-            'data' => $project->load('projectManager:id,name')
+            'data' => $project->load(self::REL_PROJECT_MANAGER),
         ]);
     }
 
@@ -188,7 +189,7 @@ class ProjectController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Proyek berhasil dihapus.'
+            'message' => 'Proyek berhasil dihapus.',
         ]);
     }
 
@@ -212,7 +213,7 @@ class ProjectController extends Controller
                 'total_cost_all' => $projects->sum('total_cost'),
                 'on_hold_projects' => $projects->where('status', 'on_hold')->count(),
                 'cancelled_projects' => $projects->where('status', 'cancelled')->count(),
-            ]
+            ],
         ]);
     }
 
@@ -225,16 +226,16 @@ class ProjectController extends Controller
         $project = Project::where('company_id', $request->user()->company_id)->findOrFail($projectId);
 
         $request->validate([
-            'category' => 'required|string',
-            'item_name' => 'required|string',
+            'category' => self::RULE_REQ_STRING,
+            'item_name' => self::RULE_REQ_STRING,
             'unit' => 'sometimes|string',
-            'volume' => 'required|numeric|min:0',
-            'unit_price' => 'required|numeric|min:0',
-            'notes' => 'nullable|string',
+            'volume' => self::RULE_REQ_NUM_MIN0,
+            'unit_price' => self::RULE_REQ_NUM_MIN0,
+            'notes' => self::RULE_NULL_STRING,
         ]);
 
         $budget = $project->budgets()->create($request->only([
-            'category', 'item_name', 'unit', 'volume', 'unit_price', 'notes'
+            'category', 'item_name', 'unit', 'volume', 'unit_price', 'notes',
         ]));
 
         $project->recalculate();
@@ -243,7 +244,7 @@ class ProjectController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Item RAB berhasil ditambahkan.',
-            'data' => $budget
+            'data' => $budget,
         ], 201);
     }
 
@@ -253,7 +254,7 @@ class ProjectController extends Controller
         $budget = $project->budgets()->findOrFail($budgetId);
 
         $budget->update($request->only([
-            'category', 'item_name', 'unit', 'volume', 'unit_price', 'notes'
+            'category', 'item_name', 'unit', 'volume', 'unit_price', 'notes',
         ]));
 
         $project->recalculate();
@@ -261,7 +262,7 @@ class ProjectController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Item RAB berhasil diperbarui.',
-            'data' => $budget
+            'data' => $budget,
         ]);
     }
 
@@ -275,7 +276,7 @@ class ProjectController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Item RAB berhasil dihapus.'
+            'message' => 'Item RAB berhasil dihapus.',
         ]);
     }
 
@@ -289,30 +290,30 @@ class ProjectController extends Controller
 
         $request->validate([
             'budget_item_id' => 'nullable|exists:project_budgets,id',
-            'category' => 'required|string',
-            'description' => 'required|string',
-            'amount' => 'required|numeric|min:0',
-            'cost_date' => 'required|date',
-            'vendor' => 'nullable|string',
-            'receipt_number' => 'nullable|string',
-            'notes' => 'nullable|string',
+            'category' => self::RULE_REQ_STRING,
+            'description' => self::RULE_REQ_STRING,
+            'amount' => self::RULE_REQ_NUM_MIN0,
+            'cost_date' => self::RULE_REQ_DATE,
+            'vendor' => self::RULE_NULL_STRING,
+            'receipt_number' => self::RULE_NULL_STRING,
+            'notes' => self::RULE_NULL_STRING,
         ]);
 
         $cost = $project->costs()->create([
             ...$request->only([
                 'budget_item_id', 'category', 'description', 'amount',
-                'cost_date', 'vendor', 'receipt_number', 'notes'
+                'cost_date', 'vendor', 'receipt_number', 'notes',
             ]),
             'submitted_by' => $request->user()->id,
             'status' => 'pending',
         ]);
 
-        $this->logActivity('SUBMIT_PROJECT_COST', "Mencatat biaya aktual (Rp " . number_format($cost->amount, 0, ',', '.') . ") pada proyek: {$project->name}", $project);
+        $this->logActivity('SUBMIT_PROJECT_COST', 'Mencatat biaya aktual (Rp '.number_format($cost->amount, 0, ',', '.').") pada proyek: {$project->name}", $project);
 
         return response()->json([
             'success' => true,
             'message' => 'Biaya berhasil dicatat.',
-            'data' => $cost->load('submitter:id,name')
+            'data' => $cost->load('submitter:id,name'),
         ], 201);
     }
 
@@ -323,11 +324,11 @@ class ProjectController extends Controller
 
         $cost->update(['status' => 'approved']);
         $project->recalculate();
-        $this->logActivity('APPROVE_PROJECT_COST', "Menyetujui biaya aktual (Rp " . number_format($cost->amount, 0, ',', '.') . ") pada proyek: {$project->name}", $project);
+        $this->logActivity('APPROVE_PROJECT_COST', 'Menyetujui biaya aktual (Rp '.number_format($cost->amount, 0, ',', '.').") pada proyek: {$project->name}", $project);
 
         return response()->json([
             'success' => true,
-            'message' => 'Biaya disetujui.'
+            'message' => 'Biaya disetujui.',
         ]);
     }
 
@@ -341,7 +342,7 @@ class ProjectController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Biaya ditolak.'
+            'message' => 'Biaya ditolak.',
         ]);
     }
 
@@ -355,28 +356,28 @@ class ProjectController extends Controller
 
         $request->validate([
             'contract_number' => 'required|string|unique:project_contracts,contract_number',
-            'title' => 'required|string',
-            'vendor_name' => 'required|string',
-            'vendor_contact' => 'nullable|string',
-            'contract_value' => 'required|numeric|min:0',
+            'title' => self::RULE_REQ_STRING,
+            'vendor_name' => self::RULE_REQ_STRING,
+            'vendor_contact' => self::RULE_NULL_STRING,
+            'contract_value' => self::RULE_REQ_NUM_MIN0,
             'contract_type' => 'in:main,subcontractor,supplier,consultant',
             'status' => 'in:draft,active,completed,terminated',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date',
-            'scope_of_work' => 'nullable|string',
-            'notes' => 'nullable|string',
+            'start_date' => self::RULE_NULL_DATE,
+            'end_date' => self::RULE_NULL_DATE,
+            'scope_of_work' => self::RULE_NULL_STRING,
+            'notes' => self::RULE_NULL_STRING,
         ]);
 
         $contract = $project->contracts()->create($request->only([
             'contract_number', 'title', 'vendor_name', 'vendor_contact',
             'contract_value', 'contract_type', 'status', 'start_date',
-            'end_date', 'scope_of_work', 'notes'
+            'end_date', 'scope_of_work', 'notes',
         ]));
 
         return response()->json([
             'success' => true,
             'message' => 'Kontrak berhasil ditambahkan.',
-            'data' => $contract
+            'data' => $contract,
         ], 201);
     }
 
@@ -388,13 +389,13 @@ class ProjectController extends Controller
         $contract->update($request->only([
             'contract_number', 'title', 'vendor_name', 'vendor_contact',
             'contract_value', 'contract_type', 'status', 'start_date',
-            'end_date', 'scope_of_work', 'notes'
+            'end_date', 'scope_of_work', 'notes',
         ]));
 
         return response()->json([
             'success' => true,
             'message' => 'Kontrak berhasil diperbarui.',
-            'data' => $contract
+            'data' => $contract,
         ]);
     }
 
@@ -406,7 +407,7 @@ class ProjectController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Kontrak berhasil dihapus.'
+            'message' => 'Kontrak berhasil dihapus.',
         ]);
     }
 
@@ -419,20 +420,20 @@ class ProjectController extends Controller
         $project = Project::where('company_id', $request->user()->company_id)->findOrFail($projectId);
 
         $request->validate([
-            'task_name' => 'required|string',
-            'description' => 'nullable|string',
+            'task_name' => self::RULE_REQ_STRING,
+            'description' => self::RULE_NULL_STRING,
             'phase' => 'in:tender,preparation,foundation,structure,finishing,handover,other',
-            'planned_start' => 'required|date',
+            'planned_start' => self::RULE_REQ_DATE,
             'planned_end' => 'required|date|after_or_equal:planned_start',
             'progress' => 'nullable|numeric|min:0|max:100',
             'status' => 'in:not_started,in_progress,completed,delayed,cancelled',
             'order' => 'nullable|integer',
-            'notes' => 'nullable|string',
+            'notes' => self::RULE_NULL_STRING,
         ]);
 
         $schedule = $project->schedules()->create($request->only([
             'task_name', 'description', 'phase', 'planned_start', 'planned_end',
-            'actual_start', 'actual_end', 'progress', 'status', 'order', 'notes'
+            'actual_start', 'actual_end', 'progress', 'status', 'order', 'notes',
         ]));
 
         $project->recalculate();
@@ -440,7 +441,7 @@ class ProjectController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Jadwal berhasil ditambahkan.',
-            'data' => $schedule
+            'data' => $schedule,
         ], 201);
     }
 
@@ -451,7 +452,7 @@ class ProjectController extends Controller
 
         $schedule->update($request->only([
             'task_name', 'description', 'phase', 'planned_start', 'planned_end',
-            'actual_start', 'actual_end', 'progress', 'status', 'order', 'notes'
+            'actual_start', 'actual_end', 'progress', 'status', 'order', 'notes',
         ]));
 
         $project->recalculate();
@@ -459,7 +460,7 @@ class ProjectController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Jadwal berhasil diperbarui.',
-            'data' => $schedule
+            'data' => $schedule,
         ]);
     }
 
@@ -473,7 +474,7 @@ class ProjectController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Jadwal berhasil dihapus.'
+            'message' => 'Jadwal berhasil dihapus.',
         ]);
     }
 
@@ -487,25 +488,25 @@ class ProjectController extends Controller
 
         $request->validate([
             'type' => 'required|in:income,expense',
-            'category' => 'required|string',
-            'description' => 'required|string',
-            'amount' => 'required|numeric|min:0',
-            'transaction_date' => 'required|date',
-            'reference_number' => 'nullable|string',
-            'notes' => 'nullable|string',
+            'category' => self::RULE_REQ_STRING,
+            'description' => self::RULE_REQ_STRING,
+            'amount' => self::RULE_REQ_NUM_MIN0,
+            'transaction_date' => self::RULE_REQ_DATE,
+            'reference_number' => self::RULE_NULL_STRING,
+            'notes' => self::RULE_NULL_STRING,
         ]);
 
         $cashFlow = $project->cashFlows()->create($request->only([
             'type', 'category', 'description', 'amount',
-            'transaction_date', 'reference_number', 'notes'
+            'transaction_date', 'reference_number', 'notes',
         ]));
 
-        $this->logActivity('RECORD_CASH_FLOW', "Mencatat arus kas " . ($cashFlow->type == 'income' ? 'masuk' : 'keluar') . " (Rp " . number_format($cashFlow->amount, 0, ',', '.') . ") pada proyek: {$project->name}", $project);
+        $this->logActivity('RECORD_CASH_FLOW', 'Mencatat arus kas '.($cashFlow->type == 'income' ? 'masuk' : 'keluar').' (Rp '.number_format($cashFlow->amount, 0, ',', '.').") pada proyek: {$project->name}", $project);
 
         return response()->json([
             'success' => true,
             'message' => 'Transaksi kas berhasil dicatat.',
-            'data' => $cashFlow
+            'data' => $cashFlow,
         ], 201);
     }
 
@@ -517,7 +518,7 @@ class ProjectController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Transaksi kas berhasil dihapus.'
+            'message' => 'Transaksi kas berhasil dihapus.',
         ]);
     }
 }

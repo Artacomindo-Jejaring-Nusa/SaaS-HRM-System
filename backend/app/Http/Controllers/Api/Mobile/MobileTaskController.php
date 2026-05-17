@@ -30,10 +30,10 @@ class MobileTaskController extends Controller
         }
 
         $tasks = $query->latest()
-                    ->paginate($request->per_page ?? 15);
+            ->paginate($request->per_page ?? 15);
 
         return TaskResource::collection($tasks)->additional([
-            'message' => 'Tasks retrieved successfully.'
+            'message' => 'Tasks retrieved successfully.',
         ]);
     }
 
@@ -44,7 +44,7 @@ class MobileTaskController extends Controller
     {
         $task = Task::with('creator:id,name')->find($id);
 
-        if (!$task) {
+        if (! $task) {
             return $this->errorResponse('Task not found.', 404);
         }
 

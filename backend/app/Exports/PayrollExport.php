@@ -4,19 +4,29 @@ namespace App\Exports;
 
 use App\Models\Salary;
 use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\WithDrawings;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\WithStyles;
-use Maatwebsite\Excel\Concerns\WithDrawings;
+use Maatwebsite\Excel\Concerns\WithTitle;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class PayrollExport implements FromCollection, WithHeadings, WithMapping, WithTitle, WithStyles, WithDrawings
+class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithMapping, WithStyles, WithTitle
 {
+    private const RANGE_HEADERS = 'A2:Z3';
+
     protected $companyId;
+
     protected $month;
+
     protected $year;
+
     protected $creatorName;
+
     protected $rowNumber = 0;
 
     public function __construct($companyId, $month = null, $year = null, $creatorName = 'Admin')
@@ -51,29 +61,30 @@ class PayrollExport implements FromCollection, WithHeadings, WithMapping, WithTi
     {
         return [
             [
-                'NO', 'Nama', 'Bagian', 'Gaji', 'Status', 'HH', 
+                'NO', 'Nama', 'Bagian', 'Gaji', 'Status', 'HH',
                 'Premi BPJS-Kes', 'Jumlah (Gaji+Premi)', 'Pot. JHT-TK (2%)', 'Pot. JP-TK (1%)',
-                'Tunjangan', '', '', 
-                'kyw shift 24 jam', '', 
-                'Others-Tambahan lainnya', '', '', '', '', 
+                'Tunjangan', '', '',
+                'kyw shift 24 jam', '',
+                'Others-Tambahan lainnya', '', '', '', '',
                 'Jumlah', 'Pot. Absensi', 'THP',
-                'Pembayaran ke :', '', 'Cost Center'
+                'Pembayaran ke :', '', 'Cost Center',
             ],
             [
-                '', '', '', '', '', '', 
+                '', '', '', '', '', '',
                 '', '', '', '',
-                'Jabatan', 'Kehadiran', 'Pulsa', 
-                'Premi Shift', 'UM Shift-Malam', 
-                'OT-Lembur', 'Operasional', 'Kerajinan', 'Rapel', 'Others', 
+                'Jabatan', 'Kehadiran', 'Pulsa',
+                'Premi Shift', 'UM Shift-Malam',
+                'OT-Lembur', 'Operasional', 'Kerajinan', 'Rapel', 'Others',
                 '', '', '',
-                'Bank', 'No. Rek.', ''
-            ]
+                'Bank', 'No. Rek.', '',
+            ],
         ];
     }
 
     public function map($salary): array
     {
         $this->rowNumber++;
+
         return [
             $this->rowNumber,
             $salary->user->name ?? '-',
@@ -104,7 +115,7 @@ class PayrollExport implements FromCollection, WithHeadings, WithMapping, WithTi
         ];
     }
 
-    public function styles(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet)
+    public function styles(Worksheet $sheet)
     {
         // Title row (Inserted before headers)
         $sheet->insertNewRowBefore(1, 1);
@@ -124,31 +135,31 @@ class PayrollExport implements FromCollection, WithHeadings, WithMapping, WithTi
         $sheet->mergeCells('X2:Y2'); // Pembayaran ke
 
         // Base Style for Headers
-        $sheet->getStyle('A2:Z3')->getFont()->setBold(true)->setSize(9);
-        $sheet->getStyle('A2:Z3')->getAlignment()
-            ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER)
-            ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER)
+        $sheet->getStyle(self::RANGE_HEADERS)->getFont()->setBold(true)->setSize(9);
+        $sheet->getStyle(self::RANGE_HEADERS)->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+            ->setVertical(Alignment::VERTICAL_CENTER)
             ->setWrapText(true);
-        $sheet->getStyle('A2:Z3')->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+        $sheet->getStyle(self::RANGE_HEADERS)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
         // Add Colors
-        $sheet->getStyle('G2:G3')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('FFF4B084');
-        $sheet->getStyle('K2:M3')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('FFFFD966');
-        $sheet->getStyle('N2:O3')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('FF9BC2E6');
-        $sheet->getStyle('P2:T3')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('FFA9D08E');
+        $sheet->getStyle('G2:G3')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFF4B084');
+        $sheet->getStyle('K2:M3')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFFD966');
+        $sheet->getStyle('N2:O3')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF9BC2E6');
+        $sheet->getStyle('P2:T3')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFA9D08E');
 
         // Column Auto-Size
-        foreach(range('A','Z') as $col) {
+        foreach (range('A', 'Z') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
         // Calculate precise row bounds to avoid getHighestRow() picking up drawing coordinates
-        $lastRow = $this->rowNumber + 3; 
+        $lastRow = $this->rowNumber + 3;
 
         // Format numeric columns and borders for data
         if ($this->rowNumber > 0) {
-            $sheet->getStyle("A4:Z{$lastRow}")->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
-            
+            $sheet->getStyle("A4:Z{$lastRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+
             $numericCols = ['D', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W'];
             $rupiahFormat = '_("Rp"* #,##0_);_("Rp"* \(#,##0\);_("Rp"* "-"_);_(@_)';
             foreach ($numericCols as $col) {
@@ -163,7 +174,7 @@ class PayrollExport implements FromCollection, WithHeadings, WithMapping, WithTi
         $totalRow = $lastRow + 1;
         $sheet->setCellValue("C{$totalRow}", 'Jumlah');
         $sheet->getStyle("C{$totalRow}")->getFont()->setBold(true);
-        $sheet->getStyle("A{$totalRow}:Z{$totalRow}")->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+        $sheet->getStyle("A{$totalRow}:Z{$totalRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
         foreach ($numericCols as $col) {
             $sheet->setCellValue("{$col}{$totalRow}", "=SUM({$col}4:{$col}{$lastRow})");
@@ -173,12 +184,12 @@ class PayrollExport implements FromCollection, WithHeadings, WithMapping, WithTi
 
         // --- Add Signatures ---
         $sigRow = $totalRow + 3;
-        $sheet->setCellValue("A{$sigRow}", "Jakarta, _______________");
-        $sheet->setCellValue("A" . ($sigRow + 1), "Dibuat oleh,");
-        
-        $sheet->setCellValue("A" . ($sigRow + 6), $this->creatorName);
-        $sheet->getStyle("A" . ($sigRow + 6))->getFont()->setUnderline(true)->setBold(true);
-        
+        $sheet->setCellValue("A{$sigRow}", 'Jakarta, _______________');
+        $sheet->setCellValue('A'.($sigRow + 1), 'Dibuat oleh,');
+
+        $sheet->setCellValue('A'.($sigRow + 6), $this->creatorName);
+        $sheet->getStyle('A'.($sigRow + 6))->getFont()->setUnderline(true)->setBold(true);
+
         return [];
     }
 
@@ -188,14 +199,14 @@ class PayrollExport implements FromCollection, WithHeadings, WithMapping, WithTi
         $lastRow = $count + 3; // rows 1, 2, 3 are headers
         $totalRow = $lastRow + 1;
         $sigRow = $totalRow + 3;
-        
-        $drawing = new Drawing();
+
+        $drawing = new Drawing;
         $drawing->setName('Signature');
         $drawing->setDescription('Signature');
         $drawing->setPath('c:\laragon\www\SaaS\PAYROLL\Picture1.png');
         $drawing->setHeight(60);
         // Position it just below "Dibuat oleh," which is sigRow + 1
-        $drawing->setCoordinates('A' . ($sigRow + 2));
+        $drawing->setCoordinates('A'.($sigRow + 2));
         $drawing->setOffsetX(25);
         $drawing->setOffsetY(5);
 

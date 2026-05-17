@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('marital_status')->nullable()->after('gender'); // e.g. Single, Menikah, Janda, Duda
             $table->string('religion')->nullable()->after('marital_status');
             $table->string('blood_type', 5)->nullable()->after('religion'); // A, B, AB, O
-            
+
             // Emergency Contact Data
             $table->string('emergency_contact_name')->nullable()->after('phone');
             $table->string('emergency_contact_phone')->nullable()->after('emergency_contact_name');

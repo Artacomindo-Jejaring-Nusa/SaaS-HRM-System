@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use App\Models\VehicleLog;
 use App\Models\User;
-use Illuminate\Database\Seeder;
+use App\Models\VehicleLog;
 use Carbon\Carbon;
+use Illuminate\Database\Seeder;
 
 class VehicleLogSeeder extends Seeder
 {
@@ -19,6 +19,7 @@ class VehicleLogSeeder extends Seeder
 
         if ($users->isEmpty()) {
             $this->command->warn('Tidak ada user ditemukan. Seeder VehicleLog dilewati.');
+
             return;
         }
 
@@ -88,7 +89,7 @@ class VehicleLogSeeder extends Seeder
                 'other_cost' => $otherCost,
                 'total_cost' => $totalCost,
                 'expense_attachments' => null,
-                'notes' => 'Perjalanan dinas ' . $trip['destination'] . ' berjalan lancar.',
+                'notes' => 'Perjalanan dinas '.$trip['destination'].' berjalan lancar.',
                 'status' => 'approved',
                 'approved_by' => $users->first()->id,
                 'remark' => 'Divalidasi. Jarak & biaya sesuai.',
@@ -133,7 +134,7 @@ class VehicleLogSeeder extends Seeder
                 'other_cost' => $otherCost,
                 'total_cost' => $totalCost,
                 'expense_attachments' => null,
-                'notes' => 'Mohon validasi perjalanan ke ' . $trip['destination'],
+                'notes' => 'Mohon validasi perjalanan ke '.$trip['destination'],
                 'status' => 'completed',
                 'approved_by' => null,
                 'remark' => null,
@@ -176,7 +177,7 @@ class VehicleLogSeeder extends Seeder
                 'other_cost' => 0,
                 'total_cost' => 0,
                 'expense_attachments' => null,
-                'notes' => 'Berangkat ke ' . $trip['destination'],
+                'notes' => 'Berangkat ke '.$trip['destination'],
                 'status' => 'departure',
                 'approved_by' => null,
                 'remark' => null,
@@ -238,7 +239,7 @@ class VehicleLogSeeder extends Seeder
             VehicleLog::create($log);
         }
 
-        $this->command->info("✅ VehicleLogSeeder: " . count($logs) . " data dummy berhasil dibuat!");
-        $this->command->info("   → 8 Approved | 4 Completed (Menunggu Validasi) | 3 Departure (Dalam Perjalanan) | 2 Rejected");
+        $this->command->info('✅ VehicleLogSeeder: '.count($logs).' data dummy berhasil dibuat!');
+        $this->command->info('   → 8 Approved | 4 Completed (Menunggu Validasi) | 3 Departure (Dalam Perjalanan) | 2 Rejected');
     }
 }

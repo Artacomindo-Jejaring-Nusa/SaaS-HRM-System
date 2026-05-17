@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use App\Models\Attendance;
-use Illuminate\Database\Seeder;
+use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Seeder;
 
 class AttendanceSeeder extends Seeder
 {
@@ -17,12 +17,14 @@ class AttendanceSeeder extends Seeder
 
         foreach ($users as $user) {
             for ($date = clone $start; $date->lte($today); $date->addDay()) {
-                if ($date->isWeekend()) continue;
+                if ($date->isWeekend()) {
+                    continue;
+                }
 
                 // Randomize slightly the check-in time around 08:00
                 $checkIn = clone $date;
                 $checkIn->setTime(7, rand(45, 59), rand(0, 59));
-                
+
                 // Randomize check-out around 17:00
                 $checkOut = clone $date;
                 $checkOut->setTime(17, rand(0, 30), rand(0, 59));

@@ -9,7 +9,7 @@ class ProjectSchedule extends Model
     protected $fillable = [
         'project_id', 'task_name', 'description', 'phase',
         'planned_start', 'planned_end', 'actual_start', 'actual_end',
-        'progress', 'status', 'order', 'notes'
+        'progress', 'status', 'order', 'notes',
     ];
 
     protected $casts = [

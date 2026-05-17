@@ -3,17 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\Holiday;
+use App\Models\User;
+use App\Traits\Notifiable;
 use Illuminate\Http\Request;
 
 class HolidayController extends Controller
 {
-    use \App\Traits\Notifiable;
+    use Notifiable;
+
+    private const MSG_FORBIDDEN = 'Akses ditolak.';
 
     public function index(Request $request)
     {
-        $holidays = Holiday::where(function($q) use ($request) {
+        $holidays = Holiday::where(function ($q) use ($request) {
             $q->whereNull('company_id') // National
-              ->orWhere('company_id', $request->user()->company_id);
+                ->orWhere('company_id', $request->user()->company_id);
         })->orderBy('date', 'asc')->paginate(10);
 
         return $this->successResponse($holidays, 'Daftar hari libur berhasil diambil.');
@@ -21,7 +25,7 @@ class HolidayController extends Controller
 
     public function store(Request $request)
     {
-        abort_if(!$request->user()->hasPermission('manage-holidays'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('manage-holidays'), 403, self::MSG_FORBIDDEN);
         $request->validate([
             'name' => 'required|string',
             'date' => 'required|date',
@@ -35,7 +39,7 @@ class HolidayController extends Controller
         ]);
 
         if ($request->broadcast) {
-            $members = \App\Models\User::where('company_id', $request->user()->company_id)->get();
+            $members = User::where('company_id', $request->user()->company_id)->get();
             foreach ($members as $member) {
                 $this->notify(
                     $member,
@@ -57,9 +61,9 @@ class HolidayController extends Controller
 
     public function update(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('manage-holidays'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('manage-holidays'), 403, self::MSG_FORBIDDEN);
         $holiday = Holiday::where('company_id', $request->user()->company_id)->findOrFail($id);
-        
+
         $request->validate([
             'name' => 'sometimes|string',
             'date' => 'sometimes|date',
@@ -74,10 +78,10 @@ class HolidayController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('manage-holidays'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('manage-holidays'), 403, self::MSG_FORBIDDEN);
         $holiday = Holiday::where('company_id', $request->user()->company_id)->findOrFail($id);
         $name = $holiday->name;
-        
+
         $holiday->delete();
 
         $this->logActivity('DELETE_HOLIDAY', "Menghapus hari libur: {$name}");

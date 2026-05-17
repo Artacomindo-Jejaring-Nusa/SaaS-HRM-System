@@ -2,6 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\NotificationCreated;
+use App\Models\ActivityLog;
+use App\Models\Notification;
+use App\Models\User;
+use App\Services\FCMService;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+
 abstract class Controller
 {
     public function successResponse($data, $message = null, $code = 200)
@@ -9,7 +17,7 @@ abstract class Controller
         return response()->json([
             'status' => 'success',
             'message' => $message,
-            'data' => $data
+            'data' => $data,
         ], $code);
     }
 
@@ -23,10 +31,12 @@ abstract class Controller
 
     protected function logActivity($action, $description, $model = null)
     {
-        $user = \Illuminate\Support\Facades\Auth::user();
-        if (!$user) return; // Skip if no user session (e.g. before login)
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        } // Skip if no user session (e.g. before login)
 
-        \App\Models\ActivityLog::create([
+        ActivityLog::create([
             'company_id' => $user->company_id,
             'user_id' => $user->id,
             'action' => $action,
@@ -38,36 +48,36 @@ abstract class Controller
 
     protected function sendNotification($userId, $title, $message, $type = 'general', $link = null, $category = 'GENERAL')
     {
-        $notification = \App\Models\Notification::create([
+        $notification = Notification::create([
             'user_id' => $userId,
             'title' => $title,
             'message' => $message,
             'type' => $type,
             'category' => $category,
             'link' => $link,
-            'is_read' => false
+            'is_read' => false,
         ]);
 
         // Send FCM Push Notification
         try {
-            $user = \App\Models\User::find($userId);
+            $user = User::find($userId);
             if ($user && $user->fcm_token) {
-                \App\Services\FCMService::sendNotification($user, $title, $message, [
+                FCMService::sendNotification($user, $title, $message, [
                     'type' => $type,
                     'category' => $category,
                     'link' => $link,
-                    'notification_id' => (string) $notification->id
+                    'notification_id' => (string) $notification->id,
                 ]);
             }
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("FCM failed in Controller: " . $e->getMessage());
+            Log::error('FCM failed in Controller: '.$e->getMessage());
         }
 
         // Real-time broadcast for UI update
         try {
-            event(new \App\Events\NotificationCreated($notification));
+            event(new NotificationCreated($notification));
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("Broadcast failed in Controller: " . $e->getMessage());
+            Log::error('Broadcast failed in Controller: '.$e->getMessage());
         }
 
         return $notification;

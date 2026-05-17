@@ -2,26 +2,37 @@
 
 namespace App\Http\Controllers;
 
+use App\Imports\EmployeeImport;
+use App\Mail\WelcomeEmployeeNotification;
+use App\Models\Announcement;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
-use App\Imports\EmployeeImport;
 use Maatwebsite\Excel\Facades\Excel;
-use Carbon\Carbon;
 use Yajra\DataTables\Facades\DataTables;
-use Illuminate\Support\Str;
 
 class EmployeeController extends Controller
 {
+    private const MSG_FORBIDDEN = 'Akses ditolak.';
+    private const RULE_NULLABLE_STRING = 'nullable|string';
+    private const RULE_NULLABLE_DATE = 'nullable|date';
+    private const RULE_REQ_ARRAY = 'required|array';
+    private const RULE_IDS_ALL = 'ids.*';
+    private const RULE_EXISTS_USER = 'exists:users,id';
+    private const FORMAT_DATE = 'd M Y';
+
     public function index(Request $request)
     {
-        abort_if(!$request->user()->hasPermission('view-employees'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('view-employees'), 403, self::MSG_FORBIDDEN);
 
         $query = User::query();
         $user = $request->user();
 
-        if ($user->company_id && !$user->canAccessAllCompanies()) {
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
             $query->where('company_id', $user->company_id);
         }
 
@@ -31,19 +42,19 @@ class EmployeeController extends Controller
         }
 
         $employees = $query
-            ->when($request->search, function($q) use ($request) {
-                $q->where(function($qq) use ($request) {
+            ->when($request->search, function ($q) use ($request) {
+                $q->where(function ($qq) use ($request) {
                     $qq->where('name', 'like', "%{$request->search}%")
-                      ->orWhere('email', 'like', "%{$request->search}%");
+                        ->orWhere('email', 'like', "%{$request->search}%");
                 });
             })
-            ->when($request->id, function($q) use ($request) {
+            ->when($request->id, function ($q) use ($request) {
                 $q->where('id', $request->id);
             })
             ->with(['role', 'supervisor', 'office'])
             ->orderBy('name', 'asc')
             ->paginate($request->per_page ?? 10);
-            
+
         return $this->successResponse($employees, 'Data karyawan berhasil diambil.');
     }
 
@@ -53,12 +64,12 @@ class EmployeeController extends Controller
      */
     public function datatables(Request $request)
     {
-        abort_if(!$request->user()->hasPermission('view-employees'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('view-employees'), 403, self::MSG_FORBIDDEN);
 
         $user = $request->user();
         $query = User::with(['role', 'supervisor', 'office']);
 
-        if ($user->company_id && !$user->canAccessAllCompanies()) {
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
             $query->where('company_id', $user->company_id);
         }
 
@@ -77,10 +88,10 @@ class EmployeeController extends Controller
             ->filter(function ($query) use ($request) {
                 if ($request->has('search') && $request->search['value']) {
                     $searchTerm = $request->search['value'];
-                    $query->where(function($q) use ($searchTerm) {
+                    $query->where(function ($q) use ($searchTerm) {
                         $q->where('name', 'like', "%{$searchTerm}%")
-                          ->orWhere('email', 'like', "%{$searchTerm}%")
-                          ->orWhere('nik', 'like', "%{$searchTerm}%");
+                            ->orWhere('email', 'like', "%{$searchTerm}%")
+                            ->orWhere('nik', 'like', "%{$searchTerm}%");
                     });
                 }
             })
@@ -98,31 +109,31 @@ class EmployeeController extends Controller
             return $this->errorResponse("Batas karyawan Anda ({$company->getEmployeeLimit()}) telah tercapai. Silakan upgrade paket berlangganan Anda.", 403);
         }
 
-        abort_if(!$request->user()->hasPermission('create-employees'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('create-employees'), 403, self::MSG_FORBIDDEN);
 
         $request->validate([
             'name' => 'required|string',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|min:6',
             'role_id' => 'required|exists:roles,id',
-            'nik' => 'nullable|string',
-            'phone' => 'nullable|string',
-            'address' => 'nullable|string',
-            'join_date' => 'nullable|date',
+            'nik' => self::RULE_NULLABLE_STRING,
+            'phone' => self::RULE_NULLABLE_STRING,
+            'address' => self::RULE_NULLABLE_STRING,
+            'join_date' => self::RULE_NULLABLE_DATE,
             'photo' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
             'supervisor_id' => 'nullable|exists:users,id',
-            'employment_status' => 'nullable|string',
-            'work_location' => 'nullable|string',
+            'employment_status' => self::RULE_NULLABLE_STRING,
+            'work_location' => self::RULE_NULLABLE_STRING,
             'attendance_type' => 'nullable|string|in:office_hour,shift',
-            'ktp_no' => 'nullable|string',
-            'place_of_birth' => 'nullable|string',
-            'date_of_birth' => 'nullable|date',
+            'ktp_no' => self::RULE_NULLABLE_STRING,
+            'place_of_birth' => self::RULE_NULLABLE_STRING,
+            'date_of_birth' => self::RULE_NULLABLE_DATE,
             'gender' => 'nullable|in:Laki-laki,Perempuan',
-            'marital_status' => 'nullable|string',
-            'religion' => 'nullable|string',
+            'marital_status' => self::RULE_NULLABLE_STRING,
+            'religion' => self::RULE_NULLABLE_STRING,
             'blood_type' => 'nullable|string|max:5',
-            'emergency_contact_name' => 'nullable|string',
-            'emergency_contact_phone' => 'nullable|string',
+            'emergency_contact_name' => self::RULE_NULLABLE_STRING,
+            'emergency_contact_phone' => self::RULE_NULLABLE_STRING,
             'office_id' => 'nullable|exists:offices,id',
         ]);
 
@@ -131,7 +142,7 @@ class EmployeeController extends Controller
             $path = $request->file('photo')->store('profile-photos', 'public');
         }
 
-        $employee = new User();
+        $employee = new User;
         $employee->name = $request->name;
         $employee->email = $request->email;
         $employee->password = Hash::make($request->password);
@@ -160,9 +171,9 @@ class EmployeeController extends Controller
 
         // Send Welcome & Verification Email
         try {
-            \Illuminate\Support\Facades\Mail::to($employee->email)->send(new \App\Mail\WelcomeEmployeeNotification($employee, $request->password));
+            Mail::to($employee->email)->send(new WelcomeEmployeeNotification($employee, $request->password));
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("Gagal mengirim email welcome: " . $e->getMessage());
+            Log::error('Gagal mengirim email welcome: '.$e->getMessage());
         }
 
         $this->logActivity('CREATE_EMPLOYEE', "Menambahkan karyawan baru: {$employee->name}", $employee);
@@ -173,7 +184,7 @@ class EmployeeController extends Controller
     public function show($id, Request $request)
     {
         $user = $request->user();
-        $employee = User::where(function($query) use ($user) {
+        $employee = User::where(function ($query) use ($user) {
             if ($user->role_id !== 1) {
                 $query->where('company_id', $user->company_id);
             }
@@ -184,25 +195,25 @@ class EmployeeController extends Controller
 
     public function update(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('edit-employees'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('edit-employees'), 403, self::MSG_FORBIDDEN);
 
         $employee = User::findOrFail($id);
-        
+
         $request->validate([
             'name' => 'sometimes|string',
-            'email' => 'sometimes|email|unique:users,email,' . $id,
+            'email' => 'sometimes|email|unique:users,email,'.$id,
             'role_id' => 'sometimes|exists:roles,id',
             'photo' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
             'attendance_type' => 'nullable|string|in:office_hour,shift',
-            'ktp_no' => 'nullable|string',
-            'place_of_birth' => 'nullable|string',
-            'date_of_birth' => 'nullable|date',
+            'ktp_no' => self::RULE_NULLABLE_STRING,
+            'place_of_birth' => self::RULE_NULLABLE_STRING,
+            'date_of_birth' => self::RULE_NULLABLE_DATE,
             'gender' => 'nullable|in:Laki-laki,Perempuan',
-            'marital_status' => 'nullable|string',
-            'religion' => 'nullable|string',
+            'marital_status' => self::RULE_NULLABLE_STRING,
+            'religion' => self::RULE_NULLABLE_STRING,
             'blood_type' => 'nullable|string|max:5',
-            'emergency_contact_name' => 'nullable|string',
-            'emergency_contact_phone' => 'nullable|string',
+            'emergency_contact_name' => self::RULE_NULLABLE_STRING,
+            'emergency_contact_phone' => self::RULE_NULLABLE_STRING,
             'office_id' => 'nullable|exists:offices,id',
         ]);
 
@@ -225,7 +236,7 @@ class EmployeeController extends Controller
         }
 
         $employee->save();
-        
+
         if ($request->password) {
             $employee->update(['password' => Hash::make($request->password)]);
         }
@@ -237,11 +248,11 @@ class EmployeeController extends Controller
 
     public function bulkDestroy(Request $request)
     {
-        abort_if(!$request->user()->hasPermission('delete-employees'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('delete-employees'), 403, self::MSG_FORBIDDEN);
 
         $request->validate([
-            'ids' => 'required|array',
-            'ids.*' => 'exists:users,id'
+            'ids' => self::RULE_REQ_ARRAY,
+            self::RULE_IDS_ALL => self::RULE_EXISTS_USER,
         ]);
 
         $idsCount = count($request->ids);
@@ -254,10 +265,10 @@ class EmployeeController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('delete-employees'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('delete-employees'), 403, self::MSG_FORBIDDEN);
 
         $user = $request->user();
-        $employee = User::where(function($query) use ($user) {
+        $employee = User::where(function ($query) use ($user) {
             if ($user->role_id !== 1) {
                 $query->where('company_id', $user->company_id);
             }
@@ -265,7 +276,7 @@ class EmployeeController extends Controller
 
         $name = $employee->name;
         $employee->delete();
-        
+
         $this->logActivity('DELETE_EMPLOYEE', "Menghapus data karyawan: {$name} (ID: {$id})");
 
         return $this->successResponse(null, 'Karyawan berhasil dihapus.');
@@ -273,24 +284,25 @@ class EmployeeController extends Controller
 
     public function import(Request $request)
     {
-        abort_if(!$request->user()->hasPermission('create-employees'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('create-employees'), 403, self::MSG_FORBIDDEN);
 
         $request->validate([
-            'file' => 'required|mimes:xlsx,csv,xls|max:5120'
+            'file' => 'required|mimes:xlsx,csv,xls|max:5120',
         ]);
 
         try {
             $import = new EmployeeImport($request->user()->company_id);
             Excel::import($import, $request->file('file'));
-            
+
             if ($import->importedCount === 0) {
                 return $this->errorResponse('Gagal mengimpor: Tidak ada data valid yang ditemukan (Pastikan format file sesuai template asli).', 400);
             }
 
             $this->logActivity('IMPORT_EMPLOYEE', "Mengimpor {$import->importedCount} karyawan secara massal via Excel");
+
             return $this->successResponse(null, "{$import->importedCount} data karyawan berhasil diimpor.");
         } catch (\Exception $e) {
-            return $this->errorResponse('Gagal mengimpor: ' . $e->getMessage(), 500);
+            return $this->errorResponse('Gagal mengimpor: '.$e->getMessage(), 500);
         }
     }
 
@@ -300,10 +312,10 @@ class EmployeeController extends Controller
         $query = User::where('company_id', $user->company_id);
 
         $employees = $query
-            ->when($request->search, function($q) use ($request) {
-                $q->where(function($qq) use ($request) {
+            ->when($request->search, function ($q) use ($request) {
+                $q->where(function ($qq) use ($request) {
                     $qq->where('name', 'like', "%{$request->search}%")
-                      ->orWhere('email', 'like', "%{$request->search}%");
+                        ->orWhere('email', 'like', "%{$request->search}%");
                 });
             })
             ->with(['role', 'company'])
@@ -315,7 +327,7 @@ class EmployeeController extends Controller
 
     public function toggleWfh(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('manage-wfh'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('manage-wfh'), 403, self::MSG_FORBIDDEN);
 
         $request->validate([
             'start_date' => 'required_if:is_wfh,true|nullable|date',
@@ -323,30 +335,30 @@ class EmployeeController extends Controller
         ]);
 
         $employee = User::findOrFail($id);
-        
+
         // Toggle or set specifically if provided in request
-        $isActivating = $request->has('is_wfh') ? filter_var($request->is_wfh, FILTER_VALIDATE_BOOLEAN) : !$employee->is_wfh;
-        
+        $isActivating = $request->has('is_wfh') ? filter_var($request->is_wfh, FILTER_VALIDATE_BOOLEAN) : ! $employee->is_wfh;
+
         $employee->is_wfh = $isActivating;
-        
+
         if ($isActivating) {
             $employee->wfh_start_date = $request->start_date ?? now()->toDateString();
             $employee->wfh_end_date = $request->end_date ?? now()->addDays(7)->toDateString();
-            
+
             // Create Generic Announcement (only if activating)
-            \App\Models\Announcement::create([
+            Announcement::create([
                 'company_id' => $employee->company_id,
                 'user_id' => $request->user()->id,
-                'title' => "PENGUMUMAN WFA (DINAS LUAR)",
-                'content' => "Diberitahukan kepada seluruh tim, bahwa perusahaan memberlakukan kebijakan WFA (Work From Anywhere) atau Dinas Luar terhitung mulai tanggal " . 
-                             Carbon::parse($employee->wfh_start_date)->format('d M Y') . " sampai " . 
-                             Carbon::parse($employee->wfh_end_date)->format('d M Y') . ". Selama periode ini, karyawan yang telah diberikan izin dapat melakukan absensi di luar radius kantor."
+                'title' => 'PENGUMUMAN WFA (DINAS LUAR)',
+                'content' => 'Diberitahukan kepada seluruh tim, bahwa perusahaan memberlakukan kebijakan WFA (Work From Anywhere) atau Dinas Luar terhitung mulai tanggal '.
+                             Carbon::parse($employee->wfh_start_date)->format(self::FORMAT_DATE).' sampai '.
+                             Carbon::parse($employee->wfh_end_date)->format(self::FORMAT_DATE).'. Selama periode ini, karyawan yang telah diberikan izin dapat melakukan absensi di luar radius kantor.',
             ]);
         } else {
             $employee->wfh_start_date = null;
             $employee->wfh_end_date = null;
         }
-        
+
         $employee->save();
 
         $status = $employee->is_wfh ? 'AKTIF' : 'NONAKTIF';
@@ -357,11 +369,11 @@ class EmployeeController extends Controller
 
     public function bulkWfh(Request $request)
     {
-        abort_if(!$request->user()->hasPermission('manage-wfh'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('manage-wfh'), 403, self::MSG_FORBIDDEN);
 
         $request->validate([
-            'ids' => 'required|array',
-            'ids.*' => 'exists:users,id',
+            'ids' => self::RULE_REQ_ARRAY,
+            self::RULE_IDS_ALL => self::RULE_EXISTS_USER,
             'is_wfh' => 'required|boolean',
             'start_date' => 'required_if:is_wfh,true|nullable|date',
             'end_date' => 'required_if:is_wfh,true|nullable|date|after_or_equal:start_date',
@@ -371,7 +383,7 @@ class EmployeeController extends Controller
         $users = User::whereIn('id', $request->ids)->get();
 
         foreach ($users as $user) {
-            /** @var \App\Models\User $user */
+            /** @var User $user */
             $user->is_wfh = $isWfh;
             if ($isWfh) {
                 $user->wfh_start_date = $request->start_date;
@@ -385,18 +397,19 @@ class EmployeeController extends Controller
 
         if ($isWfh && count($users) > 0) {
             // Create Single Generic Announcement for all
-            \App\Models\Announcement::create([
+            Announcement::create([
                 'company_id' => $users->first()->company_id,
                 'user_id' => $request->user()->id,
-                'title' => "PENGUMUMAN WFA (DINAS LUAR)",
-                'content' => "Diberitahukan kepada seluruh karyawan, bahwa perusahaan memberlakukan kebijakan WFA (Work From Anywhere) atau Dinas Luar terhitung mulai tanggal " . 
-                             Carbon::parse($request->start_date)->format('d M Y') . " sampai " . 
-                             Carbon::parse($request->end_date)->format('d M Y') . ". Selama periode ini, karyawan yang mendapatkan izin dapat melakukan absensi melalui perangkat mobile tanpa batasan radius kantor."
+                'title' => 'PENGUMUMAN WFA (DINAS LUAR)',
+                'content' => 'Diberitahukan kepada seluruh karyawan, bahwa perusahaan memberlakukan kebijakan WFA (Work From Anywhere) atau Dinas Luar terhitung mulai tanggal '.
+                             Carbon::parse($request->start_date)->format(self::FORMAT_DATE).' sampai '.
+                             Carbon::parse($request->end_date)->format(self::FORMAT_DATE).'. Selama periode ini, karyawan yang mendapatkan izin dapat melakukan absensi melalui perangkat mobile tanpa batasan radius kantor.',
             ]);
         }
 
-        return $this->successResponse(null, "Berhasil memperbarui status WFA untuk " . count($users) . " karyawan.");
+        return $this->successResponse(null, 'Berhasil memperbarui status WFA untuk '.count($users).' karyawan.');
     }
+
     public function resendVerification($id)
     {
         $employee = User::findOrFail($id);
@@ -409,24 +422,25 @@ class EmployeeController extends Controller
         try {
             // Use the default password set by HR (password123) as confirmed by the user
             $defaultPassword = 'password123';
-            
-            \Illuminate\Support\Facades\Mail::to($employee->email)->send(new \App\Mail\WelcomeEmployeeNotification($employee, $defaultPassword));
-            
+
+            Mail::to($employee->email)->send(new WelcomeEmployeeNotification($employee, $defaultPassword));
+
             $this->logActivity('RESEND_VERIFICATION', "Mengirim ulang email verifikasi ke: {$employee->name}", $employee);
-            
+
             return $this->successResponse(null, 'Email verifikasi berhasil dikirim ulang.');
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("Gagal mengirim ulang email: " . $e->getMessage());
+            Log::error('Gagal mengirim ulang email: '.$e->getMessage());
+
             return $this->errorResponse('Gagal mengirim ulang email verifikasi.', 500);
         }
     }
 
     public function resetDeviceId(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('edit-employees'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('edit-employees'), 403, self::MSG_FORBIDDEN);
 
         $employee = User::findOrFail($id);
-        
+
         $oldDeviceId = $employee->device_id;
         $employee->device_id = null;
         $employee->save();
@@ -439,8 +453,8 @@ class EmployeeController extends Controller
     public function bulkResendVerification(Request $request)
     {
         $request->validate([
-            'ids' => 'required|array',
-            'ids.*' => 'exists:users,id'
+            'ids' => self::RULE_REQ_ARRAY,
+            self::RULE_IDS_ALL => self::RULE_EXISTS_USER,
         ]);
 
         $employees = User::whereIn('id', $request->ids)->whereNull('email_verified_at')->get();
@@ -451,10 +465,10 @@ class EmployeeController extends Controller
                 // Use the fixed default password confirmed by HR
                 $defaultPassword = 'password123';
 
-                \Illuminate\Support\Facades\Mail::to($employee->email)->send(new \App\Mail\WelcomeEmployeeNotification($employee, $defaultPassword));
+                Mail::to($employee->email)->send(new WelcomeEmployeeNotification($employee, $defaultPassword));
                 $count++;
             } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::error("Gagal mengirim ulang email massal ke {$employee->email}: " . $e->getMessage());
+                Log::error("Gagal mengirim ulang email massal ke {$employee->email}: ".$e->getMessage());
             }
         }
 
@@ -465,7 +479,7 @@ class EmployeeController extends Controller
     {
         $user = $request->user();
         $query = User::select('id', 'name')->where('company_id', $user->company_id);
-        
+
         // Exclude current employee if editing
         if ($request->exclude_id) {
             $query->where('id', '!=', $request->exclude_id);

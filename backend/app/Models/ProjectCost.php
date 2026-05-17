@@ -8,7 +8,7 @@ class ProjectCost extends Model
 {
     protected $fillable = [
         'project_id', 'budget_item_id', 'category', 'description', 'amount',
-        'cost_date', 'vendor', 'receipt_number', 'status', 'submitted_by', 'notes'
+        'cost_date', 'vendor', 'receipt_number', 'status', 'submitted_by', 'notes',
     ];
 
     protected $casts = [

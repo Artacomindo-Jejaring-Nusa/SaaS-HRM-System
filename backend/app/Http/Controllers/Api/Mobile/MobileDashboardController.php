@@ -4,11 +4,9 @@ namespace App\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Mobile\AnnouncementResource;
-use App\Models\ActivityLog;
 use App\Models\Announcement;
 use App\Models\Attendance;
 use App\Models\Leave;
-use App\Models\Overtime;
 use App\Models\Reimbursement;
 use App\Models\Task;
 use App\Models\User;
@@ -33,7 +31,7 @@ class MobileDashboardController extends Controller
                 ->where('status', 'present')
                 ->whereMonth('check_in', Carbon::now()->month)
                 ->count();
-            
+
             $summary = [
                 'present_this_month' => $totalPresentMonth,
                 'leaves_this_month' => Leave::where('user_id', $user->id)
@@ -89,7 +87,7 @@ class MobileDashboardController extends Controller
                 'name' => $user->name,
                 'role' => $user->role->name ?? 'User',
                 'photo' => $user->profile_photo_url,
-                'wfh_active' => (bool)$user->is_wfh,
+                'wfh_active' => (bool) $user->is_wfh,
             ],
             'summary' => $summary,
             'today_status' => $status,

@@ -4,18 +4,26 @@ namespace Database\Seeders;
 
 use App\Models\Task;
 use App\Models\User;
-use Illuminate\Database\Seeder;
 use Carbon\Carbon;
+use Illuminate\Database\Seeder;
 
 class TaskSeeder extends Seeder
 {
     public function run()
     {
-        $superAdmin = User::whereHas('role', function($q) { $q->where('name', 'Super Admin'); })->first();
-        if (!$superAdmin) return;
-        
-        $staff = User::whereHas('role', function($q) { $q->where('name', 'Karyawan'); })->first();
-        if (!$staff) return;
+        $superAdmin = User::whereHas('role', function ($q) {
+            $q->where('name', 'Super Admin');
+        })->first();
+        if (! $superAdmin) {
+            return;
+        }
+
+        $staff = User::whereHas('role', function ($q) {
+            $q->where('name', 'Karyawan');
+        })->first();
+        if (! $staff) {
+            return;
+        }
 
         $tasks = [
             [

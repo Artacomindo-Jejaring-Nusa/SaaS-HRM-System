@@ -7,13 +7,13 @@ use Illuminate\Database\Eloquent\Model;
 class TaskEvidence extends Model
 {
     protected $table = 'task_evidences';
-    
+
     protected $fillable = [
         'task_activity_id',
         'photo_before_path',
         'photo_after_path',
         'notes',
-        'submitted_at'
+        'submitted_at',
     ];
 
     protected $casts = [
@@ -30,11 +30,11 @@ class TaskEvidence extends Model
      */
     public function getPhotoBeforeUrlAttribute()
     {
-        return $this->photo_before_path ? asset('storage/' . $this->photo_before_path) : null;
+        return $this->photo_before_path ? asset('storage/'.$this->photo_before_path) : null;
     }
 
     public function getPhotoAfterUrlAttribute()
     {
-        return $this->photo_after_path ? asset('storage/' . $this->photo_after_path) : null;
+        return $this->photo_after_path ? asset('storage/'.$this->photo_after_path) : null;
     }
 }

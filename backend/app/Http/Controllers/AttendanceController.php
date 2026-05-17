@@ -2,20 +2,18 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Attendance;
-use App\Models\Schedule;
-use App\Models\Office;
-use Illuminate\Http\Request;
-use Carbon\Carbon;
 use App\Exports\AttendanceExport;
-use Maatwebsite\Excel\Facades\Excel;
-use App\Traits\Notifiable;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Auth;
+use App\Models\Attendance;
+use App\Models\Office;
+use App\Models\Schedule;
 use App\Models\User;
-use Illuminate\Support\Str;
+use App\Traits\Notifiable;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Intervention\Image\Laravel\Facades\Image;
-
+use Maatwebsite\Excel\Facades\Excel;
 
 class AttendanceController extends Controller
 {
@@ -26,44 +24,18 @@ class AttendanceController extends Controller
         $user = $request->user();
         $now = now();
         $today = Carbon::today()->toDateString();
-        
+
         $attendance = Attendance::where('user_id', $user->id)
             ->whereDate('check_in', $today)
             ->first();
-            
+
         if ($attendance) {
             return $this->errorResponse('Anda sudah check-in hari ini.', 400);
         }
 
-        // --- 1. Fake GPS Detection ---
-        if ($request->is_mocked) {
-             return $this->errorResponse('Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli perangkat Anda.', 403);
-        }
-
-        // --- 2. Device Binding Check ---
-        if ($request->device_id) {
-            if (!$user->device_id) {
-                // First time using a device, bind it
-                $user->update(['device_id' => $request->device_id]);
-            } elseif ($user->device_id !== $request->device_id) {
-                return $this->errorResponse('HP Anda tidak terdaftar. Mohon hubungi Admin untuk reset Device ID.', 403);
-            }
-        }
-
-        // --- 3. Liveness Verification check ---
-        // (From Frontend Liveness Detection)
-        // Image is now optional for button-based attendance
-        
-        // --- 4. Face Match Logic (Placeholder/Basic Check) ---
-        // Mencocokkan wajah saat selfie dengan foto profil
-        $faceMatch = true; // Default to true if not implementing ML right away
-        
-        // IF IMPLEMENTING ML Face Recognition:
-        // $manager = new FaceRecognitionManager();
-        // $faceMatch = $manager->match($user->profile_photo_path, $request->image);
-        
-        if ($request->image && $user->profile_photo_path && !$faceMatch) {
-             return $this->errorResponse('Wajah tidak cocok dengan profil Anda. Pastikan wajah terlihat jelas!', 403);
+        $securityError = $this->validateDeviceAndSecurity($user, $request);
+        if ($securityError) {
+            return $this->errorResponse($securityError['message'], $securityError['code']);
         }
 
         $schedule = Schedule::with('shift')
@@ -71,85 +43,22 @@ class AttendanceController extends Controller
             ->where('date', $today)
             ->first();
 
-        $status = 'present';
-        $shift = $schedule ? $schedule->shift : null;
-        
-        if ($shift) {
-            if ($now->toTimeString() > $shift->start_time) {
-                $status = 'late';
-            }
-        } else {
-            $status = $user->attendance_type === 'shift' ? 'no_schedule' : 'office_hour';
-        }
+        $status = $this->determineCheckInStatus($user, $schedule, $now);
 
         // --- Geofencing Check (Multi-Office) ---
-        $company = $user->company;
-        $matchedOffice = null;
-
-        $userRoleName = $user->role ? strtolower($user->role->name) : '';
-        $isTechnician = str_contains($userRoleName, 'teknisi');
-
-        // Check if user is WFH based on flag and date range
-        $today = now()->startOfDay();
-        $isWfhActive = $user->is_wfh && 
-                       ($user->wfh_start_date <= $today && $user->wfh_end_date >= $today);
-
-        if (!$isTechnician && !$isWfhActive) {
-            $userLat = $request->latitude;
-            $userLng = $request->longitude;
-
-            // Strategy 1: If user HAS an assigned office, STICK TO IT (Strict mode)
-            if ($user->office_id) {
-                $assignedOffice = Office::find($user->office_id);
-                if ($assignedOffice && $assignedOffice->is_active) {
-                    $distance = $this->calculateDistance($userLat, $userLng, $assignedOffice->latitude, $assignedOffice->longitude);
-                    if ($distance > ($assignedOffice->radius ?? 100)) {
-                        return $this->errorResponse("Maaf, Anda berada di luar area kantor assigned Anda: {$assignedOffice->name} ({$distance} meter). Silakan mendekat ke lokasi kerja Anda!", 400);
-                    }
-                    $matchedOffice = $assignedOffice;
-                }
-            } 
-            // Strategy 2: If user has NO assigned office, allow check-in at ANY branch or HQ (Flexible mode)
-            else {
-                // A. Check ALL active offices for the company (find nearest in-range)
-                $allOffices = Office::where('company_id', $user->company_id)->active()->get();
-                $nearestDistance = PHP_INT_MAX;
-
-                foreach ($allOffices as $office) {
-                    $distance = $this->calculateDistance($userLat, $userLng, $office->latitude, $office->longitude);
-                    if ($distance <= ($office->radius ?? 100) && $distance < $nearestDistance) {
-                        $nearestDistance = $distance;
-                        $matchedOffice = $office;
-                    }
-                }
-
-                // B. If still not matched, Fallback to company coordinates (HQ)
-                if (!$matchedOffice) {
-                    $targetLat = $company?->latitude ?? null;
-                    $targetLng = $company?->longitude ?? null;
-                    $radius = $company?->radius_meters ?? $company?->default_radius ?? 100;
-
-                    if ($targetLat && $targetLng) {
-                        $distance = $this->calculateDistance($userLat, $userLng, $targetLat, $targetLng);
-                        if ($distance > $radius) {
-                            return $this->errorResponse("Maaf, Anda berada di luar area kantor manapun ({$distance} meter dari titik terdekat). Silakan mendekat ke kantor Anda!", 400);
-                        }
-                        // Matched HQ
-                    } else {
-                        // No coordinates at all defined
-                        return $this->errorResponse("Koordinat lokasi kantor belum diatur oleh Admin.", 400);
-                    }
-                }
-            }
+        $geoResult = $this->validateGeofencing($user, $request);
+        if (!$geoResult['success']) {
+            return $this->errorResponse($geoResult['message'], $geoResult['status']);
         }
+        $matchedOffice = $geoResult['office'];
 
         // Handle Image & Compression
         $imageName = null;
         if ($request->image) {
-            $imageName = 'attendance/in_' . $user->id . '_' . time() . '.jpg';
+            $imageName = 'attendance/in_'.$user->id.'_'.time().'.jpg';
             // Compress and resize image to save storage space (target ~50-80KB)
             $img = Image::decode($request->image);
-            $img->scale(width: 800); 
+            $img->scale(width: 800);
             Storage::disk('public')->put($imageName, (string) $img->encodeUsingFileExtension('jpg', 80));
         }
 
@@ -163,53 +72,28 @@ class AttendanceController extends Controller
             'status' => $status,
             'office_id' => $matchedOffice ? $matchedOffice->id : null,
         ]);
-        
-        // --- Notifications ---
-        
-        // 1. Notify the User (Personal)
-        $this->notify(
-            $user, 
-            'BERHASIL ABSEN MASUK', 
-            "Anda telah berhasil absen masuk pada pukul {$now->format('H:i')} WIB. Status: " . strtoupper($status),
-            $status === 'late' ? 'warning' : 'success',
-            null,
-            'notif',
-            false
-        );
 
-        // 2. Proactive: Notify Supervisor if LATE
-        if ($status === 'late' && $user->supervisor_id) {
-            $supervisor = User::find($user->supervisor_id);
-            if ($supervisor) {
-                $this->notify(
-                    $supervisor,
-                    'BAWAHAN TERLAMBAT',
-                    "Karyawan {$user->name} baru saja absen masuk terlambat (Pukul {$now->format('H:i')}). Status: " . strtoupper($status),
-                    'warning',
-                    '/dashboard/attendance'
-                );
-            }
-        }
+        $this->sendCheckInNotifications($user, $status, $now);
 
-        return $this->successResponse($attendance, 'Check-in berhasil. Status: ' . $status);
+        return $this->successResponse($attendance, 'Check-in berhasil. Status: '.$status);
     }
 
     public function checkOut(Request $request)
     {
         $user = $request->user();
-        
+
         $attendance = Attendance::where('user_id', $user->id)
             ->whereDate('check_in', Carbon::today())
             ->whereNull('check_out')
             ->first();
-            
-        if (!$attendance) {
+
+        if (! $attendance) {
             return $this->errorResponse('Anda belum check-in atau sudah check-out.', 400);
         }
 
         // --- 1. Fake GPS Check ---
         if ($request->is_mocked) {
-             return $this->errorResponse('Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli.', 403);
+            return $this->errorResponse('Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli.', 403);
         }
 
         // --- 2. Device Binding Check ---
@@ -219,16 +103,16 @@ class AttendanceController extends Controller
 
         // --- 3. Foto Selfie Check & Face Match Placeholder ---
         // Image is now optional
-        
-        $faceMatch = true; 
-        if ($request->image && $user->profile_photo_path && !$faceMatch) {
-             return $this->errorResponse('Wajah tidak cocok dengan profil Anda.', 403);
+
+        $faceMatch = true;
+        if ($request->image && $user->profile_photo_path && ! $faceMatch) {
+            return $this->errorResponse('Wajah tidak cocok dengan profil Anda.', 403);
         }
 
         // Handle Image & Compression
         $imageName = null;
         if ($request->image) {
-            $imageName = 'attendance/out_' . $user->id . '_' . time() . '.jpg';
+            $imageName = 'attendance/out_'.$user->id.'_'.time().'.jpg';
             // Compress and resize image to save storage space
             $img = Image::decode($request->image);
             $img->scale(width: 800);
@@ -243,9 +127,9 @@ class AttendanceController extends Controller
         ]);
 
         $this->notify(
-            $user, 
-            'BERHASIL ABSEN KELUAR', 
-            "Anda telah berhasil absen keluar pada pukul " . now()->format('H:i') . " WIB. Terima kasih atas kerja keras Anda!",
+            $user,
+            'BERHASIL ABSEN KELUAR',
+            'Anda telah berhasil absen keluar pada pukul '.now()->format('H:i').' WIB. Terima kasih atas kerja keras Anda!',
             'info',
             null,
             'notif',
@@ -270,26 +154,27 @@ class AttendanceController extends Controller
         $query = Attendance::with('user')->where('company_id', $request->user()->company_id);
 
         $user = $request->user();
-        
+
         if ($user->canAccessAllCompanies()) {
             // Master Admin sees all
-        } else if ($user->is_manager) {
+        } elseif ($user->is_manager) {
             $query->where('company_id', $user->company_id);
         } else {
             $query->where('user_id', $user->id)
-                  ->where('company_id', $user->company_id);
+                ->where('company_id', $user->company_id);
         }
 
         if ($request->start_date && $request->end_date) {
             $query->whereDate('check_in', '>=', $request->start_date)
-                  ->whereDate('check_in', '<=', $request->end_date);
+                ->whereDate('check_in', '<=', $request->end_date);
         }
 
         if ($request->user_id) { // Tambahan filter ID karyawan jika dikirim
             $query->where('user_id', $request->user_id);
         }
-            
+
         $history = $query->orderBy('id', 'desc')->paginate(10);
+
         return $this->successResponse($history, 'Riwayat absensi berhasil diambil.');
     }
 
@@ -300,8 +185,8 @@ class AttendanceController extends Controller
 
         // Security check: Only Admin, HR, or Owner can see the map
         $userRoleName = $user->role ? strtolower($user->role->name) : '';
-        if (str_contains($userRoleName, 'karyawan') && !str_contains($userRoleName, 'admin') && !str_contains($userRoleName, 'hr')) {
-             return $this->errorResponse('Akses ditolak. Fitur ini hanya untuk Admin/HR.', 403);
+        if (str_contains($userRoleName, 'karyawan') && ! str_contains($userRoleName, 'admin') && ! str_contains($userRoleName, 'hr')) {
+            return $this->errorResponse('Akses ditolak. Fitur ini hanya untuk Admin/HR.', 403);
         }
 
         $attendances = Attendance::with('user')
@@ -315,8 +200,8 @@ class AttendanceController extends Controller
     public function suspiciousRecords(Request $request)
     {
         $user = $request->user();
-        if (!$user->is_manager && !str_contains(strtolower($user->role->name), 'admin')) {
-             return $this->errorResponse('Akses ditolak.', 403);
+        if (! $user->is_manager && ! str_contains(strtolower($user->role->name), 'admin')) {
+            return $this->errorResponse('Akses ditolak.', 403);
         }
 
         $query = Attendance::with('user')->where('company_id', $user->company_id);
@@ -325,20 +210,20 @@ class AttendanceController extends Controller
         if ($request->user_id) {
             $query->where('user_id', $request->user_id);
         }
-        
+
         if ($request->start_date && $request->end_date) {
             $query->whereDate('check_in', '>=', $request->start_date)
-                  ->whereDate('check_in', '<=', $request->end_date);
+                ->whereDate('check_in', '<=', $request->end_date);
         }
 
         // Show ALL for now or just the marked ones?
         // Usually, the report shows ALL with a status of "Suspicious" if any flag caught it.
         // For the sake of this task, I'll return records where is_suspicious is true
         // OR simply return all with suspicious reason.
-        
+
         $records = $query->where('is_suspicious', true)
-                         ->orderBy('id', 'desc')
-                         ->paginate(20);
+            ->orderBy('id', 'desc')
+            ->paginate(20);
 
         return $this->successResponse($records, 'Data kecurigaan berhasil diambil.');
     }
@@ -350,15 +235,16 @@ class AttendanceController extends Controller
         $endDate = $request->end_date ?? Carbon::now()->toDateString();
 
         $query = User::where('company_id', $user->company_id);
-        
+
         if ($request->user_id) {
             $query->where('id', $request->user_id);
         }
 
-        $summary = $query->with(['attendances' => function($q) use ($startDate, $endDate) {
-            $q->whereBetween('check_in', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-        }])->get()->map(function($emp) {
+        $summary = $query->with(['attendances' => function ($q) use ($startDate, $endDate) {
+            $q->whereBetween('check_in', [$startDate.' 00:00:00', $endDate.' 23:59:59']);
+        }])->get()->map(function ($emp) {
             $atts = $emp->attendances;
+
             return [
                 'user_id' => $emp->id,
                 'name' => $emp->name,
@@ -376,15 +262,15 @@ class AttendanceController extends Controller
     public function export(Request $request)
     {
         $user = $request->user();
-        $fileName = 'attendance_' . now()->format('Y_m_d_His') . '.xlsx';
-        
+        $fileName = 'attendance_'.now()->format('Y_m_d_His').'.xlsx';
+
         return Excel::download(
             new AttendanceExport(
-                $user->company_id, 
+                $user->company_id,
                 $request->user_id, // optional: filter per karyawan
-                $request->start_date, 
+                $request->start_date,
                 $request->end_date
-            ), 
+            ),
             $fileName
         );
     }
@@ -403,7 +289,7 @@ class AttendanceController extends Controller
         if ($request->has('check_in')) {
             $attendance->check_in = $request->check_in;
         }
-        
+
         if ($request->has('check_out')) {
             $attendance->check_out = $request->check_out;
         }
@@ -415,6 +301,146 @@ class AttendanceController extends Controller
         $attendance->save();
 
         return $this->successResponse($attendance, 'Data absensi berhasil dikoreksi.');
+    }
+
+    private function validateDeviceAndSecurity($user, $request)
+    {
+        if ($request->is_mocked) {
+            return ['message' => 'Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli perangkat Anda.', 'code' => 403];
+        }
+
+        if ($request->device_id) {
+            if (! $user->device_id) {
+                $user->update(['device_id' => $request->device_id]);
+            } elseif ($user->device_id !== $request->device_id) {
+                return ['message' => 'HP Anda tidak terdaftar. Mohon hubungi Admin untuk reset Device ID.', 'code' => 403];
+            }
+        }
+
+        $faceMatch = true;
+        if ($request->image && $user->profile_photo_path && ! $faceMatch) {
+            return ['message' => 'Wajah tidak cocok dengan profil Anda. Pastikan wajah terlihat jelas!', 'code' => 403];
+        }
+
+        return null;
+    }
+
+    private function findNearestOffice($allOffices, $userLat, $userLng)
+    {
+        $nearestDistance = PHP_INT_MAX;
+        $matchedOffice = null;
+
+        foreach ($allOffices as $office) {
+            $distance = $this->calculateDistance($userLat, $userLng, $office->latitude, $office->longitude);
+            if ($distance <= ($office->radius ?? 100) && $distance < $nearestDistance) {
+                $nearestDistance = $distance;
+                $matchedOffice = $office;
+            }
+        }
+
+        return $matchedOffice;
+    }
+
+    private function determineCheckInStatus($user, $schedule, $now)
+    {
+        $shift = $schedule ? $schedule->shift : null;
+
+        if ($shift) {
+            if ($now->toTimeString() > $shift->start_time) {
+                return 'late';
+            }
+            return 'present';
+        }
+
+        return $user->attendance_type === 'shift' ? 'no_schedule' : 'office_hour';
+    }
+
+    private function sendCheckInNotifications($user, $status, $now)
+    {
+        $this->notify(
+            $user,
+            'BERHASIL ABSEN MASUK',
+            "Anda telah berhasil absen masuk pada pukul {$now->format('H:i')} WIB. Status: ".strtoupper($status),
+            $status === 'late' ? 'warning' : 'success',
+            null,
+            'notif',
+            false
+        );
+
+        if ($status === 'late' && $user->supervisor_id) {
+            $supervisor = User::find($user->supervisor_id);
+            if ($supervisor) {
+                $this->notify(
+                    $supervisor,
+                    'BAWAHAN TERLAMBAT',
+                    "Karyawan {$user->name} baru saja absen masuk terlambat (Pukul {$now->format('H:i')}). Status: ".strtoupper($status),
+                    'warning',
+                    '/dashboard/attendance'
+                );
+            }
+        }
+    }
+
+    private function checkAssignedOffice($userLat, $userLng, $officeId)
+    {
+        $assignedOffice = Office::find($officeId);
+        if ($assignedOffice && $assignedOffice->is_active) {
+            $distance = $this->calculateDistance($userLat, $userLng, $assignedOffice->latitude, $assignedOffice->longitude);
+            if ($distance > ($assignedOffice->radius ?? 100)) {
+                return ['success' => false, 'message' => "Maaf, Anda berada di luar area kantor assigned Anda: {$assignedOffice->name} ({$distance} meter). Silakan mendekat ke lokasi kerja Anda!", 'status' => 400];
+            }
+            return ['success' => true, 'office' => $assignedOffice];
+        }
+        return null;
+    }
+
+    private function checkCompanyRadius($user, $userLat, $userLng)
+    {
+        $company = $user->company;
+        $targetLat = $company?->latitude ?? null;
+        $targetLng = $company?->longitude ?? null;
+        $radius = $company?->radius_meters ?? $company?->default_radius ?? 100;
+
+        if ($targetLat && $targetLng) {
+            $distance = $this->calculateDistance($userLat, $userLng, $targetLat, $targetLng);
+            if ($distance > $radius) {
+                return ['success' => false, 'message' => "Maaf, Anda berada di luar area kantor manapun ({$distance} meter dari titik terdekat). Silakan mendekat ke kantor Anda!", 'status' => 400];
+            }
+            return ['success' => true, 'office' => null];
+        }
+        return ['success' => false, 'message' => 'Koordinat lokasi kantor belum diatur oleh Admin.', 'status' => 400];
+    }
+
+    private function validateGeofencing($user, $request)
+    {
+        $userRoleName = $user->role ? strtolower($user->role->name) : '';
+        $isTechnician = str_contains($userRoleName, 'teknisi');
+
+        $today = now()->startOfDay();
+        $isWfhActive = $user->is_wfh && ($user->wfh_start_date <= $today && $user->wfh_end_date >= $today);
+
+        if ($isTechnician || $isWfhActive) {
+            return ['success' => true, 'office' => null];
+        }
+
+        $userLat = $request->latitude;
+        $userLng = $request->longitude;
+
+        if ($user->office_id) {
+            $assignedCheck = $this->checkAssignedOffice($userLat, $userLng, $user->office_id);
+            if ($assignedCheck) {
+                return $assignedCheck;
+            }
+        }
+
+        $allOffices = Office::where('company_id', $user->company_id)->active()->get();
+        $matchedOffice = $this->findNearestOffice($allOffices, $userLat, $userLng);
+
+        if (! $matchedOffice) {
+            return $this->checkCompanyRadius($user, $userLat, $userLng);
+        }
+
+        return ['success' => true, 'office' => $matchedOffice];
     }
 
     private function calculateDistance($lat1, $lon1, $lat2, $lon2)

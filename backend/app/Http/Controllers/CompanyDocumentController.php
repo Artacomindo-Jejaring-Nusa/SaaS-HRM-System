@@ -3,9 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\CompanyDocument;
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class CompanyDocumentController extends Controller
 {
@@ -17,23 +18,23 @@ class CompanyDocumentController extends Controller
             $query->where('type', $request->type);
         }
 
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
         $user->load('role.permissions');
 
-        if (!$user->hasPermission('manage-documents')) {
+        if (! $user->hasPermission('manage-documents')) {
             $query->where('is_published', true)
-                  ->where(function($q) use ($user) {
-                      $q->whereNull('target_user_id')
+                ->where(function ($q) use ($user) {
+                    $q->whereNull('target_user_id')
                         ->orWhere('target_user_id', $user->id);
-                  });
+                });
         }
 
         $documents = $query->orderBy('published_at', 'desc')->get();
 
         return response()->json([
             'status' => 'success',
-            'data' => $documents
+            'data' => $documents,
         ]);
     }
 
@@ -52,7 +53,7 @@ class CompanyDocumentController extends Controller
         $filePath = null;
         if ($request->hasFile('file')) {
             $file = $request->file('file');
-            $fileName = time() . '_' . $file->getClientOriginalName();
+            $fileName = time().'_'.$file->getClientOriginalName();
             $filePath = $file->storeAs('company_documents', $fileName, 'public');
         }
 
@@ -73,16 +74,17 @@ class CompanyDocumentController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Document uploaded successfully',
-            'data' => $document
+            'data' => $document,
         ], 201);
     }
 
     public function show($id)
     {
         $document = CompanyDocument::findOrFail($id);
+
         return response()->json([
             'status' => 'success',
-            'data' => $document
+            'data' => $document,
         ]);
     }
 
@@ -93,7 +95,7 @@ class CompanyDocumentController extends Controller
     {
         $document = CompanyDocument::findOrFail($id);
 
-        if (!$document->file_path || !Storage::disk('public')->exists($document->file_path)) {
+        if (! $document->file_path || ! Storage::disk('public')->exists($document->file_path)) {
             abort(404, 'File not found');
         }
 
@@ -101,7 +103,7 @@ class CompanyDocumentController extends Controller
 
         return response()->file($filePath, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="' . $document->title . '.pdf"',
+            'Content-Disposition' => 'inline; filename="'.$document->title.'.pdf"',
         ]);
     }
 
@@ -126,7 +128,7 @@ class CompanyDocumentController extends Controller
             }
 
             $file = $request->file('file');
-            $fileName = time() . '_' . $file->getClientOriginalName();
+            $fileName = time().'_'.$file->getClientOriginalName();
             $document->file_path = $file->storeAs('company_documents', $fileName, 'public');
         }
 
@@ -137,7 +139,7 @@ class CompanyDocumentController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Document updated successfully',
-            'data' => $document
+            'data' => $document,
         ]);
     }
 
@@ -153,7 +155,7 @@ class CompanyDocumentController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Document deleted successfully'
+            'message' => 'Document deleted successfully',
         ]);
     }
 }

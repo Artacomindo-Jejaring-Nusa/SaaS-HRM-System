@@ -3,18 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\PerformanceReview;
-use App\Models\User;
-use Illuminate\Http\Request;
 use App\Traits\Notifiable;
+use Illuminate\Http\Request;
 
 class PerformanceReviewController extends Controller
 {
     use Notifiable;
 
+    private const MSG_FORBIDDEN = 'Akses ditolak.';
+    private const RULE_REQ_SCORE = 'required|integer|min:0|max:100';
+    private const RULE_SOME_SCORE = 'sometimes|integer|min:0|max:100';
+
     public function index(Request $request)
     {
         $query = PerformanceReview::with(['user', 'reviewer']);
-        if ($request->user()->company_id && !$request->user()->canAccessAllCompanies()) {
+        if ($request->user()->company_id && ! $request->user()->canAccessAllCompanies()) {
             $query->where('company_id', $request->user()->company_id);
         }
 
@@ -28,25 +31,26 @@ class PerformanceReviewController extends Controller
 
         // Karyawan only see their own PUBLISHED reviews
         $userRoleName = $request->user()->role ? strtolower($request->user()->role->name) : '';
-        if (str_contains($userRoleName, 'karyawan') && !str_contains($userRoleName, 'admin') && !str_contains($userRoleName, 'hr')) {
+        if (str_contains($userRoleName, 'karyawan') && ! str_contains($userRoleName, 'admin') && ! str_contains($userRoleName, 'hr')) {
             $query->where('user_id', $request->user()->id)
-                  ->where('status', 'published');
+                ->where('status', 'published');
         }
 
         $reviews = $query->orderBy('period', 'desc')->paginate(10);
+
         return $this->successResponse($reviews, 'Data review performa berhasil diambil.');
     }
 
     public function store(Request $request)
     {
-        abort_if(!$request->user()->hasPermission('manage-kpis'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('manage-kpis'), 403, self::MSG_FORBIDDEN);
         $request->validate([
             'user_id' => 'required|exists:users,id',
             'period' => 'required|string',
-            'score_discipline' => 'required|integer|min:0|max:100',
-            'score_technical' => 'required|integer|min:0|max:100',
-            'score_cooperation' => 'required|integer|min:0|max:100',
-            'score_attitude' => 'required|integer|min:0|max:100',
+            'score_discipline' => self::RULE_REQ_SCORE,
+            'score_technical' => self::RULE_REQ_SCORE,
+            'score_cooperation' => self::RULE_REQ_SCORE,
+            'score_attitude' => self::RULE_REQ_SCORE,
             'status' => 'sometimes|string|in:draft,published',
         ]);
 
@@ -88,35 +92,35 @@ class PerformanceReviewController extends Controller
         $review = PerformanceReview::with(['user', 'reviewer'])
             ->where('company_id', $request->user()->company_id)
             ->findOrFail($id);
-            
+
         return $this->successResponse($review, 'Detail review performa.');
     }
 
     public function update(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('manage-kpis'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('manage-kpis'), 403, self::MSG_FORBIDDEN);
         $review = PerformanceReview::where('company_id', $request->user()->company_id)->findOrFail($id);
 
         $request->validate([
-            'score_discipline' => 'sometimes|integer|min:0|max:100',
-            'score_technical' => 'sometimes|integer|min:0|max:100',
-            'score_cooperation' => 'sometimes|integer|min:0|max:100',
-            'score_attitude' => 'sometimes|integer|min:0|max:100',
+            'score_discipline' => self::RULE_SOME_SCORE,
+            'score_technical' => self::RULE_SOME_SCORE,
+            'score_cooperation' => self::RULE_SOME_SCORE,
+            'score_attitude' => self::RULE_SOME_SCORE,
             'status' => 'sometimes|string|in:draft,published',
         ]);
 
         $data = $request->all();
-        
+
         if ($request->hasAny(['score_discipline', 'score_technical', 'score_cooperation', 'score_attitude'])) {
-             $sd = $request->score_discipline ?? $review->score_discipline;
-             $st = $request->score_technical ?? $review->score_technical;
-             $sc = $request->score_cooperation ?? $review->score_cooperation;
-             $sa = $request->score_attitude ?? $review->score_attitude;
-             $data['score_total'] = ($sd + $st + $sc + $sa) / 4;
+            $sd = $request->score_discipline ?? $review->score_discipline;
+            $st = $request->score_technical ?? $review->score_technical;
+            $sc = $request->score_cooperation ?? $review->score_cooperation;
+            $sa = $request->score_attitude ?? $review->score_attitude;
+            $data['score_total'] = ($sd + $st + $sc + $sa) / 4;
         }
 
         $review->update($data);
-        
+
         if ($review->wasChanged('status') && $review->status === 'published') {
             $this->notify(
                 $review->user,
@@ -126,7 +130,7 @@ class PerformanceReviewController extends Controller
                 '/dashboard/performance'
             );
         }
-        
+
         $this->logActivity('UPDATE_PERFORMANCE_REVIEW', "Memperbarui review performa ID: {$id}", $review);
 
         return $this->successResponse($review, 'Review performa berhasil diperbarui.');
@@ -134,7 +138,7 @@ class PerformanceReviewController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('manage-kpis'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('manage-kpis'), 403, self::MSG_FORBIDDEN);
         $review = PerformanceReview::where('company_id', $request->user()->company_id)->findOrFail($id);
         $review->delete();
 

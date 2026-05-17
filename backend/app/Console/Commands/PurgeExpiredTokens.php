@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\RefreshToken;
 use Illuminate\Console\Command;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class PurgeExpiredTokens extends Command
 {
@@ -25,7 +26,7 @@ class PurgeExpiredTokens extends Command
         $deleted = RefreshToken::purgeExpired();
 
         // Also clean up expired Sanctum personal access tokens
-        $sanctumDeleted = \Laravel\Sanctum\PersonalAccessToken::where('expires_at', '<', now())->delete();
+        $sanctumDeleted = PersonalAccessToken::where('expires_at', '<', now())->delete();
 
         $this->info("Purged {$deleted} expired/revoked refresh tokens.");
         $this->info("Purged {$sanctumDeleted} expired Sanctum access tokens.");

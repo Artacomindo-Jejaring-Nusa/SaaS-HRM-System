@@ -2,31 +2,35 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\OvertimeExport;
+use App\Models\ActivityLog;
 use App\Models\Overtime;
 use App\Models\User;
-use App\Models\ActivityLog;
-use Illuminate\Http\Request;
 use App\Traits\Notifiable;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use App\Exports\OvertimeExport;
 use Maatwebsite\Excel\Facades\Excel;
 
 class OvertimeController extends Controller
 {
     use Notifiable;
 
+    private const MSG_FORBIDDEN = 'Akses ditolak.';
+    private const MODEL_OVERTIME = 'App\Models\Overtime';
+    private const RULE_REQ_STRING = 'required|string';
+
     public function index(Request $request)
     {
         $query = Overtime::with(['user', 'approver']);
 
         $user = $request->user();
-        
+
         // Logic for Data Isolation:
         // 1. Managers/Admin see all company data by default.
         // 2. Staff (non-manager) only sees their own data.
-        
+
         if ($user->is_manager) {
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
         } else {
@@ -34,7 +38,7 @@ class OvertimeController extends Controller
         }
 
         $overtimes = $query->orderBy('id', 'desc')->paginate(10);
-            
+
         return $this->successResponse($overtimes, 'Data lembur berhasil diambil.');
     }
 
@@ -42,9 +46,9 @@ class OvertimeController extends Controller
     {
         $request->validate([
             'date' => 'required|date',
-            'start_time' => 'required|string',
-            'end_time' => 'required|string',
-            'reason' => 'required|string',
+            'start_time' => self::RULE_REQ_STRING,
+            'end_time' => self::RULE_REQ_STRING,
+            'reason' => self::RULE_REQ_STRING,
         ]);
 
         $overtime = Overtime::create([
@@ -63,8 +67,8 @@ class OvertimeController extends Controller
             'company_id' => $request->user()->company_id,
             'action' => 'OVERTIME_SUBMISSION',
             'description' => "Mengajukan lembur untuk tanggal {$request->date}",
-            'model_type' => 'App\Models\Overtime',
-            'model_id' => $overtime->id
+            'model_type' => self::MODEL_OVERTIME,
+            'model_id' => $overtime->id,
         ]);
 
         // 1. Notify the User's Immediate Supervisor
@@ -86,7 +90,7 @@ class OvertimeController extends Controller
             ->where('role_id', '>', 1) // Any role above Karyawan
             ->where('id', '!=', $request->user()->supervisor_id) // Don't notify twice
             ->get();
-            
+
         foreach ($admins as $admin) {
             $this->notify(
                 $admin,
@@ -97,8 +101,8 @@ class OvertimeController extends Controller
         }
 
         $this->notify(
-            $request->user(), 
-            'PENGAJUAN LEMBUR BERHASIL', 
+            $request->user(),
+            'PENGAJUAN LEMBUR BERHASIL',
             "Permohonan lembur Anda pada tanggal {$request->date} sedang menunggu persetujuan.",
             'info'
         );
@@ -108,9 +112,9 @@ class OvertimeController extends Controller
 
     public function approve(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('approve-overtimes'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('approve-overtimes'), 403, self::MSG_FORBIDDEN);
         $overtime = Overtime::findOrFail($id);
-        
+
         $overtime->update([
             'status' => 'approved',
             'approved_by' => $request->user()->id,
@@ -123,13 +127,13 @@ class OvertimeController extends Controller
             'company_id' => $request->user()->company_id,
             'action' => 'OVERTIME_APPROVAL',
             'description' => "Menyetujui lembur {$overtime->user->name} tanggal {$overtime->date}",
-            'model_type' => 'App\Models\Overtime',
-            'model_id' => $overtime->id
+            'model_type' => self::MODEL_OVERTIME,
+            'model_id' => $overtime->id,
         ]);
 
         $this->notify(
-            $overtime->user, 
-            'LEMBUR DISETUJUI', 
+            $overtime->user,
+            'LEMBUR DISETUJUI',
             "Permohonan lembur Anda pada tanggal {$overtime->date} telah DISETUJUI oleh Admin.",
             'success'
         );
@@ -139,9 +143,9 @@ class OvertimeController extends Controller
 
     public function reject(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('approve-overtimes'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('approve-overtimes'), 403, self::MSG_FORBIDDEN);
         $overtime = Overtime::findOrFail($id);
-        
+
         $overtime->update([
             'status' => 'rejected',
             'approved_by' => $request->user()->id,
@@ -154,13 +158,13 @@ class OvertimeController extends Controller
             'company_id' => $request->user()->company_id,
             'action' => 'OVERTIME_REJECTION',
             'description' => "Menolak lembur {$overtime->user->name} tanggal {$overtime->date}",
-            'model_type' => 'App\Models\Overtime',
-            'model_id' => $overtime->id
+            'model_type' => self::MODEL_OVERTIME,
+            'model_id' => $overtime->id,
         ]);
 
         $this->notify(
-            $overtime->user, 
-            'LEMBUR DITOLAK', 
+            $overtime->user,
+            'LEMBUR DITOLAK',
             "Mohon maaf, permohonan lembur Anda pada tanggal {$overtime->date} telah DITOLAK.",
             'danger'
         );
@@ -170,7 +174,7 @@ class OvertimeController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('delete-overtimes'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('delete-overtimes'), 403, self::MSG_FORBIDDEN);
         $overtime = Overtime::findOrFail($id);
 
         if ($overtime->status !== 'pending') {
@@ -183,11 +187,12 @@ class OvertimeController extends Controller
             'company_id' => $request->user()->company_id,
             'action' => 'OVERTIME_DELETION',
             'description' => "Menghapus pengajuan lembur tanggal {$overtime->date}",
-            'model_type' => 'App\Models\Overtime',
-            'model_id' => $overtime->id
+            'model_type' => self::MODEL_OVERTIME,
+            'model_id' => $overtime->id,
         ]);
 
         $overtime->delete();
+
         return $this->successResponse(null, 'Permohonan lembur berhasil dihapus.');
     }
 
@@ -198,7 +203,7 @@ class OvertimeController extends Controller
 
         // Isolation logic (same as index)
         if ($user->is_manager) {
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
         } else {
@@ -209,7 +214,7 @@ class OvertimeController extends Controller
         if ($request->filled('start_date') && $request->filled('end_date')) {
             $query->whereBetween('date', [$request->start_date, $request->end_date]);
         }
-        
+
         if ($request->filled('user_id')) {
             $query->where('user_id', $request->user_id);
         }
@@ -230,12 +235,12 @@ class OvertimeController extends Controller
             'office_name' => $user->company?->offices()->first()->name ?? 'KP Cakung',
             'company_name' => $user->company->name ?? 'PT. Narwastu Group',
             'hr_ga' => User::where('company_id', $user->company_id)
-                ->whereHas('role', function($q){ 
-                    $q->where('name', 'LIKE', '%HR%'); 
+                ->whereHas('role', function ($q) {
+                    $q->where('name', 'LIKE', '%HR%');
                 })->first()->name ?? 'Nazirin Nawawi',
-            'today' => now()
+            'today' => now(),
         ];
 
-        return Excel::download(new OvertimeExport($overtimes, $meta), 'laporan-lembur-' . now()->format('Y-m-d') . '.xlsx');
+        return Excel::download(new OvertimeExport($overtimes, $meta), 'laporan-lembur-'.now()->format('Y-m-d').'.xlsx');
     }
 }

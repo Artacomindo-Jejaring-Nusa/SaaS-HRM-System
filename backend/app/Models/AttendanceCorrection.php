@@ -2,8 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Traits\BelongsToCompany;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Model;
 
 class AttendanceCorrection extends Model
 {
@@ -34,16 +35,16 @@ class AttendanceCorrection extends Model
 
     public function getCorrectedCheckInTimeAttribute()
     {
-        return $this->corrected_check_in ? \Carbon\Carbon::parse($this->corrected_check_in)->format('H:i') : null;
+        return $this->corrected_check_in ? Carbon::parse($this->corrected_check_in)->format('H:i') : null;
     }
 
     public function getCorrectedCheckOutTimeAttribute()
     {
-        return $this->corrected_check_out ? \Carbon\Carbon::parse($this->corrected_check_out)->format('H:i') : null;
+        return $this->corrected_check_out ? Carbon::parse($this->corrected_check_out)->format('H:i') : null;
     }
 
     public function getAttendanceDateAttribute()
     {
-        return $this->attendance ? \Carbon\Carbon::parse($this->attendance->check_in)->format('Y-m-d') : null;
+        return $this->attendance ? Carbon::parse($this->attendance->check_in)->format('Y-m-d') : null;
     }
 }

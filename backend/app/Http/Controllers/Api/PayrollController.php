@@ -2,22 +2,22 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
-use App\Models\User;
-use App\Models\Salary;
-use App\Models\PayrollBatch;
-use App\Models\PayrollSetting;
-use App\Models\Holiday;
-use App\Models\Permit;
-use App\Services\PayrollService;
-use Illuminate\Http\Request;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
-use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\PayrollExport;
 use App\Exports\PayrollRekapExport;
+use App\Http\Controllers\Controller;
 use App\Imports\EmployeePayrollImport;
+use App\Models\Holiday;
+use App\Models\PayrollBatch;
+use App\Models\PayrollSetting;
+use App\Models\Salary;
+use App\Models\User;
+use App\Services\PayrollService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\PersonalAccessToken;
+use Maatwebsite\Excel\Facades\Excel;
 
 class PayrollController extends Controller
 {
@@ -38,6 +38,7 @@ class PayrollController extends Controller
             ['company_id' => $request->user()->company_id],
             ['cutoff_day' => 25]
         );
+
         return response()->json(['data' => $settings]);
     }
 
@@ -47,6 +48,7 @@ class PayrollController extends Controller
             ['company_id' => $request->user()->company_id],
             $request->all()
         );
+
         return response()->json(['message' => 'Settings updated', 'data' => $settings]);
     }
 
@@ -58,19 +60,19 @@ class PayrollController extends Controller
     {
         $request->validate([
             'month' => 'required',
-            'year'  => 'required|integer',
+            'year' => 'required|integer',
         ]);
 
         $companyId = $request->user()->company_id;
         $monthName = $request->month;
-        $monthNum  = Carbon::parse($request->month)->month;
-        $year      = $request->year;
+        $monthNum = Carbon::parse($request->month)->month;
+        $year = $request->year;
 
         // Check if batch already exists
         $existingBatch = PayrollBatch::where([
-            'company_id'   => $companyId,
+            'company_id' => $companyId,
             'period_month' => $monthName,
-            'period_year'  => $year,
+            'period_year' => $year,
         ])->first();
 
         if ($existingBatch && in_array($existingBatch->status, ['approved', 'paid'])) {
@@ -84,7 +86,7 @@ class PayrollController extends Controller
         }
 
         $settings = PayrollSetting::where('company_id', $companyId)->first();
-        if (!$settings) {
+        if (! $settings) {
             return response()->json(['message' => 'Silakan konfigurasi payroll settings terlebih dahulu.'], 422);
         }
 
@@ -98,19 +100,21 @@ class PayrollController extends Controller
             }])
             ->with(['permits' => function ($q) use ($monthNum, $year) {
                 $q->where('status', 'approved')
-                  ->where(function($query) use ($monthNum, $year) {
-                      $query->whereMonth('start_date', $monthNum)->whereYear('start_date', $year)
+                    ->where(function ($query) use ($monthNum, $year) {
+                        $query->whereMonth('start_date', $monthNum)->whereYear('start_date', $year)
                             ->orWhereMonth('end_date', $monthNum)->whereYear('end_date', $year);
-                  });
+                    });
             }])
             ->get();
 
         // Calculate total working days in this month (weekdays)
         $startDate = Carbon::createFromDate($year, $monthNum, 1);
-        $endDate   = $startDate->copy()->endOfMonth();
+        $endDate = $startDate->copy()->endOfMonth();
         $totalWorkingDays = 0;
         for ($d = $startDate->copy(); $d->lte($endDate); $d->addDay()) {
-            if (!$d->isWeekend()) $totalWorkingDays++;
+            if (! $d->isWeekend()) {
+                $totalWorkingDays++;
+            }
         }
 
         // Fetch holidays for the month
@@ -124,123 +128,17 @@ class PayrollController extends Controller
         try {
             // Create batch
             $batch = PayrollBatch::create([
-                'company_id'   => $companyId,
+                'company_id' => $companyId,
                 'period_month' => $monthName,
-                'period_year'  => $year,
-                'status'       => 'draft',
-                'created_by'   => $request->user()->id,
+                'period_year' => $year,
+                'status' => 'draft',
+                'created_by' => $request->user()->id,
             ]);
 
             $processedCount = 0;
 
             foreach ($users as $user) {
-                $basicSalary = (float) ($user->basic_salary ?? 0);
-
-                // ── Attendance & Absence Logic ──
-                $attendances = $user->attendances;
-                $totalLateDeduction = 0;
-                $totalActualWorkHours = 0;
-                
-                foreach ($attendances as $att) {
-                    // Calculate Work Hours
-                    if ($att->check_in && $att->check_out) {
-                        $cIn = Carbon::parse($att->check_in);
-                        $cOut = Carbon::parse($att->check_out);
-                        $totalActualWorkHours += $cIn->diffInHours($cOut);
-                    }
-
-                    // Calculate Late Deduction (after 09:00 AM)
-                    if ($att->check_in) {
-                        $checkInTime = Carbon::parse($att->check_in);
-                        $lateThreshold = Carbon::parse($att->check_in)->setTime(9, 0, 0);
-                        if ($checkInTime->gt($lateThreshold)) {
-                            $hoursLate = $checkInTime->diffInMinutes($lateThreshold) / 60;
-                            $totalLateDeduction += ($hoursLate * 50000);
-                        }
-                    }
-                }
-
-                // Attended Days
-                $attendedDays = $attendances->filter(function ($att) {
-                    return $att->check_in && ($att->check_out || true);
-                })->count();
-
-                // Paid Leave Days
-                $paidLeaveDays = 0;
-                foreach ($user->permits as $permit) {
-                    if (in_array(strtolower($permit->type), ['sakit', 'sick'])) {
-                        $paidLeaveDays += Carbon::parse($permit->start_date)->diffInDays(Carbon::parse($permit->end_date)) + 1;
-                    }
-                }
-
-                $effectivePresence = $attendedDays + $paidLeaveDays;
-                $absentDays = max(0, $totalWorkingDays - $effectivePresence);
-                $deductionPerHK = $totalWorkingDays > 0 ? ($basicSalary / $totalWorkingDays) : 0;
-                $totalAbsenceDeduction = $absentDays * $deductionPerHK;
-
-                // Overtime
-                $overtimeAmount = 0;
-                $totalOvertimeHours = 0;
-                $regularRate = $settings->overtime_rate_per_hour ?? 30000;
-                $holidayRate = $settings->overtime_rate_holiday_per_hour ?? 50000;
-
-                foreach ($user->overtimes as $ot) {
-                    $hours = Carbon::parse($ot->start_time)->diffInHours(Carbon::parse($ot->end_time));
-                    $totalOvertimeHours += $hours;
-                    $isHoliday = in_array(Carbon::parse($ot->date)->format('Y-m-d'), $holidays) || Carbon::parse($ot->date)->isWeekend();
-                    $overtimeAmount += ($hours * ($isHoliday ? $holidayRate : $regularRate));
-                }
-
-                $bpjs = $this->payrollService->calculateBPJS($basicSalary, $settings);
-
-                $salary = new Salary();
-                $salary->user_id       = $user->id;
-                $salary->company_id    = $companyId;
-                $salary->batch_id      = $batch->id;
-                $salary->month         = $monthName;
-                $salary->year          = $year;
-                $salary->basic_salary  = $basicSalary;
-                $salary->department    = $user->role->name ?? '-';
-                $salary->working_days  = $attendedDays;
-                $salary->total_working_days = $totalWorkingDays;
-
-                // Earnings
-                $salary->earning_bpjs_kes_premium = $bpjs['kesehatan']['company'] ?? 0;
-                
-                // Rule No. 6: Tunjangan dihitung berdasarkan kehadiran (Daily Allowance)
-                $totalFixedAllowance = (float)($user->fixed_allowance ?? 0);
-                $salary->earning_attendance_allowance = $attendedDays * ($totalWorkingDays > 0 ? ($totalFixedAllowance / $totalWorkingDays) : 0);
-                
-                $salary->earning_overtime = $overtimeAmount;
-                
-                // Deductions
-                $salary->deduction_bpjs_jht = $bpjs['jht']['employee'] ?? 0;
-                $salary->deduction_bpjs_jp  = $bpjs['jp']['employee'] ?? 0;
-                $salary->deduction_absence  = $totalAbsenceDeduction; // Rule No. 1 & 2: Potongan HK
-                $salary->deduction_late     = $totalLateDeduction;    // Rule No. 3: Telat > 09:00
-                $salary->deduction_tax      = $this->payrollService->calculatePPh21TER($basicSalary + $overtimeAmount, $user->ptkp_status);
-
-                $salary->bank_name       = $user->bank_name ?? '-';
-                $salary->bank_account_no = $user->bank_account_no ?? '-';
-                $salary->cost_center     = $user->cost_center ?? 'PT. Artacomindo Jejaring Nusa';
-                $salary->status          = 'draft';
-
-                $salary->calculateTotals();
-
-                $salary->details = json_encode([
-                    'ptkp'                 => $user->ptkp_status,
-                    'tax'                  => $salary->deduction_tax,
-                    'bpjs'                 => $bpjs,
-                    'overtime'             => $overtimeAmount,
-                    'total_work_hours'     => $totalActualWorkHours,
-                    'total_overtime_hours' => $totalOvertimeHours,
-                    'breakdown'            => [
-                        'gross' => $salary->total_earnings,
-                        'net'   => $salary->net_salary,
-                    ]
-                ]);
-
-                $salary->save();
+                $this->processEmployeePayroll($user, $companyId, $batch, $monthName, $year, $holidays, $settings, $totalWorkingDays);
                 $processedCount++;
             }
 
@@ -250,15 +148,16 @@ class PayrollController extends Controller
             DB::commit();
 
             return response()->json([
-                'message'  => "Berhasil memproses $processedCount karyawan.",
+                'message' => "Berhasil memproses $processedCount karyawan.",
                 'batch_id' => $batch->id,
-                'data'     => $batch->fresh()->load('salaries.user'),
+                'data' => $batch->fresh()->load('salaries.user'),
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Gagal generate payroll',
-                'error'   => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -267,12 +166,117 @@ class PayrollController extends Controller
     //  UPDATE INDIVIDUAL SALARY (HR edits)
     // ─────────────────────────────────────────────
 
+    private function getAttendanceMetrics($attendances)
+    {
+        $totalLateDeduction = 0;
+        $totalActualWorkHours = 0;
+
+        foreach ($attendances as $att) {
+            if ($att->check_in && $att->check_out) {
+                $totalActualWorkHours += Carbon::parse($att->check_in)->diffInHours(Carbon::parse($att->check_out));
+            }
+            if ($att->check_in) {
+                $checkInTime = Carbon::parse($att->check_in);
+                $lateThreshold = Carbon::parse($att->check_in)->setTime(9, 0, 0);
+                if ($checkInTime->gt($lateThreshold)) {
+                    $totalLateDeduction += (($checkInTime->diffInMinutes($lateThreshold) / 60) * 50000);
+                }
+            }
+        }
+
+        return [
+            'actual_work_hours' => $totalActualWorkHours,
+            'late_deduction' => $totalLateDeduction,
+            'attended_days' => $attendances->filter(fn($a) => $a->check_in)->count()
+        ];
+    }
+
+    private function getOvertimeMetrics($overtimes, $holidays, $regularRate, $holidayRate)
+    {
+        $overtimeAmount = 0;
+        $totalOvertimeHours = 0;
+
+        foreach ($overtimes as $ot) {
+            $hours = Carbon::parse($ot->start_time)->diffInHours(Carbon::parse($ot->end_time));
+            $totalOvertimeHours += $hours;
+            $isHoliday = in_array(Carbon::parse($ot->date)->format('Y-m-d'), $holidays) || Carbon::parse($ot->date)->isWeekend();
+            $overtimeAmount += ($hours * ($isHoliday ? $holidayRate : $regularRate));
+        }
+
+        return ['hours' => $totalOvertimeHours, 'amount' => $overtimeAmount];
+    }
+
+    private function processEmployeePayroll($user, $companyId, $batch, $monthName, $year, $holidays, $settings, $totalWorkingDays)
+    {
+        $basicSalary = (float) ($user->basic_salary ?? 0);
+        
+        $attMetrics = $this->getAttendanceMetrics($user->attendances);
+        $totalActualWorkHours = $attMetrics['actual_work_hours'];
+        $totalLateDeduction = $attMetrics['late_deduction'];
+        $attendedDays = $attMetrics['attended_days'];
+
+        $paidLeaveDays = 0;
+        foreach ($user->permits as $permit) {
+            if (in_array(strtolower($permit->type), ['sakit', 'sick'])) {
+                $paidLeaveDays += Carbon::parse($permit->start_date)->diffInDays(Carbon::parse($permit->end_date)) + 1;
+            }
+        }
+
+        $absentDays = max(0, $totalWorkingDays - ($attendedDays + $paidLeaveDays));
+        $totalAbsenceDeduction = $absentDays * ($totalWorkingDays > 0 ? ($basicSalary / $totalWorkingDays) : 0);
+
+        $regularRate = $settings->overtime_rate_per_hour ?? 30000;
+        $holidayRate = $settings->overtime_rate_holiday_per_hour ?? 50000;
+        
+        $otMetrics = $this->getOvertimeMetrics($user->overtimes, $holidays, $regularRate, $holidayRate);
+        $totalOvertimeHours = $otMetrics['hours'];
+        $overtimeAmount = $otMetrics['amount'];
+
+        $bpjs = $this->payrollService->calculateBPJS($basicSalary, $settings);
+
+        $salary = new Salary;
+        $salary->user_id = $user->id;
+        $salary->company_id = $companyId;
+        $salary->batch_id = $batch->id;
+        $salary->month = $monthName;
+        $salary->year = $year;
+        $salary->basic_salary = $basicSalary;
+        $salary->department = $user->role->name ?? '-';
+        $salary->working_days = $attendedDays;
+        $salary->total_working_days = $totalWorkingDays;
+        $salary->earning_bpjs_kes_premium = $bpjs['kesehatan']['company'] ?? 0;
+        $totalFixedAllowance = (float) ($user->fixed_allowance ?? 0);
+        $salary->earning_attendance_allowance = $attendedDays * ($totalWorkingDays > 0 ? ($totalFixedAllowance / $totalWorkingDays) : 0);
+        $salary->earning_overtime = $overtimeAmount;
+        $salary->deduction_bpjs_jht = $bpjs['jht']['employee'] ?? 0;
+        $salary->deduction_bpjs_jp = $bpjs['jp']['employee'] ?? 0;
+        $salary->deduction_absence = $totalAbsenceDeduction;
+        $salary->deduction_late = $totalLateDeduction;
+        $salary->deduction_tax = $this->payrollService->calculatePPh21TER($basicSalary + $overtimeAmount, $user->ptkp_status);
+        $salary->bank_name = $user->bank_name ?? '-';
+        $salary->bank_account_no = $user->bank_account_no ?? '-';
+        $salary->cost_center = $user->cost_center ?? 'PT. Artacomindo Jejaring Nusa';
+        $salary->status = 'draft';
+
+        $salary->calculateTotals();
+        $salary->details = json_encode([
+            'ptkp' => $user->ptkp_status,
+            'tax' => $salary->deduction_tax,
+            'bpjs' => $bpjs,
+            'overtime' => $overtimeAmount,
+            'total_work_hours' => $totalActualWorkHours,
+            'total_overtime_hours' => $totalOvertimeHours,
+            'breakdown' => ['gross' => $salary->total_earnings, 'net' => $salary->net_salary],
+        ]);
+        $salary->save();
+    }
+
     public function updateSalary(Request $request, $id)
     {
         $salary = Salary::findOrFail($id);
 
         // Only allow editing if draft or rejected
-        if (!in_array($salary->status, ['draft', 'rejected'])) {
+        if (! in_array($salary->status, ['draft', 'rejected'])) {
             return response()->json(['message' => 'Tidak bisa mengubah gaji yang sudah disetujui.'], 422);
         }
 
@@ -282,7 +286,7 @@ class PayrollController extends Controller
             'earning_shift_meal', 'earning_overtime', 'earning_operational',
             'earning_diligence_bonus', 'earning_backpay', 'earning_others',
             'earning_others_note', 'deduction_absence', 'cost_center',
-            'bank_name', 'bank_account_no', 'bank_account_name'
+            'bank_name', 'bank_account_no', 'bank_account_name',
         ];
 
         $salary->fill($request->only($editableFields));
@@ -292,7 +296,7 @@ class PayrollController extends Controller
         $details = json_decode($salary->details, true) ?? [];
         $details['breakdown'] = [
             'gross' => $salary->total_earnings,
-            'net'   => $salary->net_salary,
+            'net' => $salary->net_salary,
         ];
         $salary->details = json_encode($details);
 
@@ -305,7 +309,7 @@ class PayrollController extends Controller
 
         return response()->json([
             'message' => 'Data gaji berhasil diperbarui.',
-            'data'    => $salary->fresh()->load('user'),
+            'data' => $salary->fresh()->load('user'),
         ]);
     }
 
@@ -343,7 +347,7 @@ class PayrollController extends Controller
         }
 
         $batch->update([
-            'status'       => 'pending_approval',
+            'status' => 'pending_approval',
             'submitted_at' => now(),
         ]);
 
@@ -352,7 +356,7 @@ class PayrollController extends Controller
 
         return response()->json([
             'message' => 'Payroll berhasil disubmit untuk persetujuan CEO.',
-            'data'    => $batch->fresh(),
+            'data' => $batch->fresh(),
         ]);
     }
 
@@ -366,7 +370,7 @@ class PayrollController extends Controller
         }
 
         $batch->update([
-            'status'      => 'approved',
+            'status' => 'approved',
             'approved_by' => $request->user()->id,
             'approved_at' => now(),
         ]);
@@ -376,7 +380,7 @@ class PayrollController extends Controller
 
         return response()->json([
             'message' => 'Payroll berhasil disetujui.',
-            'data'    => $batch->fresh()->load('approver'),
+            'data' => $batch->fresh()->load('approver'),
         ]);
     }
 
@@ -392,7 +396,7 @@ class PayrollController extends Controller
         }
 
         $batch->update([
-            'status'         => 'rejected',
+            'status' => 'rejected',
             'rejection_note' => $request->rejection_note,
         ]);
 
@@ -400,7 +404,7 @@ class PayrollController extends Controller
 
         return response()->json([
             'message' => 'Payroll ditolak.',
-            'data'    => $batch->fresh(),
+            'data' => $batch->fresh(),
         ]);
     }
 
@@ -418,7 +422,7 @@ class PayrollController extends Controller
 
         return response()->json([
             'message' => 'Payroll ditandai sudah dibayar.',
-            'data'    => $batch->fresh(),
+            'data' => $batch->fresh(),
         ]);
     }
 
@@ -460,9 +464,9 @@ class PayrollController extends Controller
     public function destroyBatch($id)
     {
         $batch = PayrollBatch::findOrFail($id);
-        
+
         // Only allow deleting draft or rejected batches
-        if (!in_array($batch->status, ['draft', 'rejected'])) {
+        if (! in_array($batch->status, ['draft', 'rejected'])) {
             return response()->json(['message' => 'Hanya draft atau gaji yang ditolak yang bisa dihapus.'], 422);
         }
 
@@ -471,10 +475,11 @@ class PayrollController extends Controller
             Salary::where('batch_id', $batch->id)->delete();
             $batch->delete();
             DB::commit();
-            
+
             return response()->json(['message' => 'Draft payroll berhasil dihapus.']);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json(['message' => 'Gagal menghapus draft payroll.'], 500);
         }
     }
@@ -485,10 +490,10 @@ class PayrollController extends Controller
 
     public function export(Request $request)
     {
-        $month     = $request->query('month');
-        $year      = $request->query('year', date('Y'));
+        $month = $request->query('month');
+        $year = $request->query('year', date('Y'));
         $companyId = $request->user()->company_id;
-        $userName  = $request->user()->name;
+        $userName = $request->user()->name;
 
         return Excel::download(
             new PayrollExport($companyId, $month, $year, $userName),
@@ -511,7 +516,7 @@ class PayrollController extends Controller
     public function importPayrollData(Request $request)
     {
         $request->validate([
-            'file' => 'required|mimes:xlsx,xls,csv'
+            'file' => 'required|mimes:xlsx,xls,csv',
         ]);
 
         $import = new EmployeePayrollImport($request->user()->company_id);
@@ -521,7 +526,7 @@ class PayrollController extends Controller
             'message' => "Berhasil memperbarui {$import->updatedCount} data karyawan.",
             'updated' => $import->updatedCount,
             'skipped' => $import->skippedCount,
-            'errors'  => $import->errors
+            'errors' => $import->errors,
         ]);
     }
 
@@ -532,14 +537,14 @@ class PayrollController extends Controller
         $user = $request->user();
 
         // Fallback for manual token authentication (for mobile downloads)
-        if (!$user && $request->has('token')) {
-            $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->token);
+        if (! $user && $request->has('token')) {
+            $token = PersonalAccessToken::findToken($request->token);
             if ($token) {
                 $user = $token->tokenable;
             }
         }
 
-        if (!$user) {
+        if (! $user) {
             abort(401);
         }
 
@@ -549,6 +554,7 @@ class PayrollController extends Controller
         }
 
         $pdf = Pdf::loadView('pdf.payslip', compact('salary'));
+
         return $pdf->download("slip_gaji_{$salary->user->name}_{$salary->month}_{$salary->year}.pdf");
     }
 
@@ -562,14 +568,14 @@ class PayrollController extends Controller
         $user = $request->user();
 
         // Fallback for manual token authentication (for mobile viewing)
-        if (!$user && $request->has('token')) {
-            $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->token);
+        if (! $user && $request->has('token')) {
+            $token = PersonalAccessToken::findToken($request->token);
             if ($token) {
                 $user = $token->tokenable;
             }
         }
 
-        if (!$user) {
+        if (! $user) {
             abort(401);
         }
 

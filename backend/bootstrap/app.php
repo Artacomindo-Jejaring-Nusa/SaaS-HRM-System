@@ -1,8 +1,13 @@
 <?php
 
+use App\Http\Middleware\PermissionMiddleware;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -15,11 +20,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
         $middleware->alias([
-            'permission' => \App\Http\Middleware\PermissionMiddleware::class,
+            'permission' => PermissionMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->render(function (\Illuminate\Validation\ValidationException $e, $request) {
+        $exceptions->render(function (ValidationException $e, $request) {
             if ($request->is('api/*')) {
                 return response()->json([
                     'status' => 'error',
@@ -29,7 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
-        $exceptions->render(function (\Illuminate\Database\Eloquent\ModelNotFoundException $e, $request) {
+        $exceptions->render(function (ModelNotFoundException $e, $request) {
             if ($request->is('api/*')) {
                 return response()->json([
                     'status' => 'error',
@@ -38,7 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
-        $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\NotFoundHttpException $e, $request) {
+        $exceptions->render(function (NotFoundHttpException $e, $request) {
             if ($request->is('api/*')) {
                 return response()->json([
                     'status' => 'error',
@@ -47,7 +52,7 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
-        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, $request) {
+        $exceptions->render(function (AuthenticationException $e, $request) {
             if ($request->is('api/*')) {
                 return response()->json([
                     'status' => 'error',
@@ -56,12 +61,13 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
-        $exceptions->render(function (\Exception $e, $request) {
+        $exceptions->render(function (Exception $e, $request) {
             if ($request->is('api/*')) {
-                $debugMsg = config('app.debug') ? ': ' . $e->getMessage() : '';
+                $debugMsg = config('app.debug') ? ': '.$e->getMessage() : '';
+
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Terjadi kesalahan sistem internal' . $debugMsg,
+                    'message' => 'Terjadi kesalahan sistem internal'.$debugMsg,
                 ], 500);
             }
         });

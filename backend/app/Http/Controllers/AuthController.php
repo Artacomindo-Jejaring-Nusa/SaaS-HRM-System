@@ -2,10 +2,17 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
+use App\Models\ActivityLog;
+use App\Models\Company;
 use App\Models\RefreshToken;
+use App\Models\User;
+use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -20,11 +27,15 @@ class AuthController extends Controller
      */
     private const REFRESH_TOKEN_DAYS = 30;
 
+    private const MSG_INVALID_CREDS = 'Invalid credentials';
+    private const RULE_REQ_STRING = 'required|string';
+    private const RULE_REQ_EMAIL = 'required|email';
+
     public function searchCompanies(Request $request)
     {
         $query = $request->get('q');
-        
-        $companies = \App\Models\Company::where('name', 'like', "%$query%")
+
+        $companies = Company::where('name', 'like', "%$query%")
             ->select('id', 'name')
             ->limit(10)
             ->get();
@@ -36,20 +47,20 @@ class AuthController extends Controller
     {
         try {
             $request->validate([
-                'email' => 'required|email',
+                'email' => self::RULE_REQ_EMAIL,
                 'password' => 'required',
-                'company_name' => 'required|string',
+                'company_name' => self::RULE_REQ_STRING,
             ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse('Invalid credentials', 401);
+        } catch (ValidationException $e) {
+            return $this->errorResponse(self::MSG_INVALID_CREDS, 401);
         }
 
-        $company = \App\Models\Company::where('name', $request->company_name)
-            ->orWhere('name', 'like', '%' . $request->company_name . '%')
+        $company = Company::where('name', $request->company_name)
+            ->orWhere('name', 'like', '%'.$request->company_name.'%')
             ->first();
 
-        if (!$company) {
-            return $this->errorResponse('Invalid credentials', 401);
+        if (! $company) {
+            return $this->errorResponse(self::MSG_INVALID_CREDS, 401);
         }
 
         $user = User::where('email', $request->email)
@@ -63,18 +74,18 @@ class AuthController extends Controller
         // --- Device Binding & FCM Token ---
         $updateData = [];
         if ($request->device_id) {
-            if (!$user->device_id) {
+            if (! $user->device_id) {
                 $updateData['device_id'] = $request->device_id;
             } elseif ($user->device_id !== $request->device_id) {
                 return $this->errorResponse('Akun Anda terkunci pada perangkat lain. Silakan hubungi Admin untuk reset Device ID Anda.', 403);
             }
         }
-        
+
         if ($request->fcm_token) {
             $updateData['fcm_token'] = $request->fcm_token;
         }
 
-        if (!empty($updateData)) {
+        if (! empty($updateData)) {
             $user->update($updateData);
         }
 
@@ -95,7 +106,7 @@ class AuthController extends Controller
             self::REFRESH_TOKEN_DAYS
         );
 
-        \App\Models\ActivityLog::create([
+        ActivityLog::create([
             'company_id' => $user->company_id,
             'user_id' => $user->id,
             'action' => 'LOGIN',
@@ -108,7 +119,7 @@ class AuthController extends Controller
             'token_type' => 'Bearer',
             'expires_in' => self::ACCESS_TOKEN_MINUTES * 60, // in seconds
             'refresh_expires_in' => self::REFRESH_TOKEN_DAYS * 86400, // in seconds
-            'user' => $user->load(['role.permissions', 'office'])
+            'user' => $user->load(['role.permissions', 'office']),
         ], 'Login berhasil');
     }
 
@@ -120,23 +131,24 @@ class AuthController extends Controller
     {
         try {
             $request->validate([
-                'refresh_token' => 'required|string',
+                'refresh_token' => self::RULE_REQ_STRING,
             ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             return $this->errorResponse('Refresh token diperlukan.', 422);
         }
 
         // Find the valid refresh token
         $refreshToken = RefreshToken::findValidToken($request->refresh_token);
 
-        if (!$refreshToken) {
+        if (! $refreshToken) {
             return $this->errorResponse('Refresh token tidak valid atau sudah kadaluarsa. Silakan login ulang.', 401);
         }
 
         $user = $refreshToken->user;
 
-        if (!$user) {
+        if (! $user) {
             $refreshToken->revoke();
+
             return $this->errorResponse('User tidak ditemukan.', 401);
         }
 
@@ -176,13 +188,13 @@ class AuthController extends Controller
     {
         $user = $request->user();
         $this->logActivity('LOGOUT', "User {$user->name} keluar dari sistem.");
-        
+
         // Clear FCM token on logout for security
         $user->update(['fcm_token' => null]);
 
         // Revoke all refresh tokens for this user
         RefreshToken::revokeAllForUser($user->id);
-        
+
         $user->currentAccessToken()->delete();
 
         return $this->successResponse(null, 'Logged out successfully');
@@ -197,12 +209,12 @@ class AuthController extends Controller
 
         $user = $request->user();
 
-        if (!Hash::check($request->current_password, $user->password)) {
+        if (! Hash::check($request->current_password, $user->password)) {
             return $this->errorResponse('Kata sandi saat ini salah.', 422);
         }
 
         $user->update([
-            'password' => Hash::make($request->new_password)
+            'password' => Hash::make($request->new_password),
         ]);
 
         // Revoke all refresh tokens on password change (security best practice)
@@ -215,6 +227,7 @@ class AuthController extends Controller
 
         return $this->successResponse(null, 'Kata sandi berhasil diubah.');
     }
+
     public function verifyEmail($token)
     {
         // Simple token-based verification (base64 encoded email for this example, or a custom field)
@@ -223,7 +236,7 @@ class AuthController extends Controller
             $email = base64_decode($token);
             $user = User::where('email', $email)->first();
 
-            if (!$user) {
+            if (! $user) {
                 return $this->errorResponse('Tautan verifikasi tidak valid.', 404);
             }
 
@@ -234,7 +247,7 @@ class AuthController extends Controller
             $user->email_verified_at = now();
             $user->save();
 
-            \App\Models\ActivityLog::create([
+            ActivityLog::create([
                 'company_id' => $user->company_id,
                 'user_id' => $user->id,
                 'action' => 'VERIFY_EMAIL',
@@ -250,33 +263,34 @@ class AuthController extends Controller
     public function forgotPassword(Request $request)
     {
         $request->validate([
-            'email' => 'required|email'
+            'email' => self::RULE_REQ_EMAIL,
         ]);
 
         $user = User::where('email', $request->email)->first();
 
-        if (!$user) {
+        if (! $user) {
             return $this->errorResponse('Email tidak ditemukan.', 404);
         }
 
-        $token = \Illuminate\Support\Str::random(64);
-        
-        \Illuminate\Support\Facades\DB::table('password_reset_tokens')->updateOrInsert(
+        $token = Str::random(64);
+
+        DB::table('password_reset_tokens')->updateOrInsert(
             ['email' => $request->email],
-            ['token' => \Illuminate\Support\Facades\Hash::make($token), 'created_at' => now()]
+            ['token' => Hash::make($token), 'created_at' => now()]
         );
 
         $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
-        $resetUrl = $frontendUrl . '/reset-password?token=' . $token . '&email=' . urlencode($request->email);
+        $resetUrl = $frontendUrl.'/reset-password?token='.$token.'&email='.urlencode($request->email);
 
         try {
-            \Illuminate\Support\Facades\Mail::send('emails.reset-password', ['resetUrl' => $resetUrl], function($message) use($request) {
+            Mail::send('emails.reset-password', ['resetUrl' => $resetUrl], function ($message) use ($request) {
                 $message->to($request->email);
                 $message->subject('Reset Password HRMS Narwastu Arthatama');
             });
+
             return $this->successResponse(null, 'Tautan reset password telah dikirim ke email Anda.');
         } catch (\Exception $e) {
-            return $this->errorResponse('Gagal mengirim email reset password: ' . $e->getMessage(), 500);
+            return $this->errorResponse('Gagal mengirim email reset password: '.$e->getMessage(), 500);
         }
     }
 
@@ -288,11 +302,11 @@ class AuthController extends Controller
             'password' => 'required|min:8|confirmed',
         ]);
 
-        $record = \Illuminate\Support\Facades\DB::table('password_reset_tokens')
+        $record = DB::table('password_reset_tokens')
             ->where('email', $request->email)
             ->first();
 
-        if (!$record || !\Illuminate\Support\Facades\Hash::check($request->token, $record->token)) {
+        if (! $record || ! Hash::check($request->token, $record->token)) {
             return $this->errorResponse('Token tidak valid atau sudah kadaluarsa.', 400);
         }
 
@@ -304,7 +318,7 @@ class AuthController extends Controller
         $user = User::where('email', $request->email)->first();
 
         $user->update([
-            'password' => \Illuminate\Support\Facades\Hash::make($request->password)
+            'password' => Hash::make($request->password),
         ]);
 
         // Revoke all refresh tokens on password reset
@@ -313,7 +327,7 @@ class AuthController extends Controller
             $user->tokens()->delete(); // Revoke all access tokens too
         }
 
-        \Illuminate\Support\Facades\DB::table('password_reset_tokens')
+        DB::table('password_reset_tokens')
             ->where('email', $request->email)
             ->delete();
 
@@ -323,8 +337,8 @@ class AuthController extends Controller
     public function loginWithGoogle(Request $request)
     {
         $request->validate([
-            'id_token' => 'required|string',
-            'company_name' => 'required|string',
+            'id_token' => self::RULE_REQ_STRING,
+            'company_name' => self::RULE_REQ_STRING,
         ]);
 
         try {
@@ -333,18 +347,18 @@ class AuthController extends Controller
             $client = new \Google_Client(['client_id' => env('GOOGLE_CLIENT_ID')]);
             $payload = $client->verifyIdToken($request->id_token);
 
-            if (!$payload) {
+            if (! $payload) {
                 return $this->errorResponse('Token Google tidak valid atau sudah kadaluarsa.', 401);
             }
 
             $email = $payload['email'];
 
             // 2. Cari Perusahaan
-            $company = \App\Models\Company::where('name', $request->company_name)
-                ->orWhere('name', 'like', '%' . $request->company_name . '%')
+            $company = Company::where('name', $request->company_name)
+                ->orWhere('name', 'like', '%'.$request->company_name.'%')
                 ->first();
 
-            if (!$company) {
+            if (! $company) {
                 return $this->errorResponse('Perusahaan tidak ditemukan.', 401);
             }
 
@@ -353,7 +367,7 @@ class AuthController extends Controller
                 ->where('company_id', $company->id)
                 ->first();
 
-            if (!$user) {
+            if (! $user) {
                 return $this->errorResponse("Email $email tidak terdaftar di $company->name. Silakan hubungi Admin.", 401);
             }
 
@@ -364,12 +378,12 @@ class AuthController extends Controller
             if ($request->device_id) {
                 $updateData['device_id'] = $request->device_id;
             }
-            
+
             if ($request->fcm_token) {
                 $updateData['fcm_token'] = $request->fcm_token;
             }
 
-            if (!empty($updateData)) {
+            if (! empty($updateData)) {
                 $user->update($updateData);
             }
 
@@ -388,7 +402,7 @@ class AuthController extends Controller
                 self::REFRESH_TOKEN_DAYS
             );
 
-            \App\Models\ActivityLog::create([
+            ActivityLog::create([
                 'company_id' => $user->company_id,
                 'user_id' => $user->id,
                 'action' => 'LOGIN_GOOGLE',
@@ -401,32 +415,32 @@ class AuthController extends Controller
                 'token_type' => 'Bearer',
                 'expires_in' => self::ACCESS_TOKEN_MINUTES * 60,
                 'refresh_expires_in' => self::REFRESH_TOKEN_DAYS * 86400,
-                'user' => $user->load(['role.permissions', 'office'])
+                'user' => $user->load(['role.permissions', 'office']),
             ], 'Login berhasil');
 
         } catch (\Exception $e) {
-            return $this->errorResponse('Terjadi kesalahan pada server saat verifikasi Google: ' . $e->getMessage(), 500);
+            return $this->errorResponse('Terjadi kesalahan pada server saat verifikasi Google: '.$e->getMessage(), 500);
         }
     }
 
     public function sendOtp(Request $request)
     {
         $request->validate([
-            'phone' => 'required|string',
+            'phone' => self::RULE_REQ_STRING,
         ]);
 
         $user = User::where('phone', $request->phone)->first();
 
-        if (!$user) {
+        if (! $user) {
             return $this->errorResponse('Nomor WhatsApp tidak terdaftar.', 404);
         }
 
-        $otp = rand(100000, 999999);
-        
-        // Store OTP in cache for 5 minutes
-        \Illuminate\Support\Facades\Cache::put('otp_' . $user->id, $otp, now()->addMinutes(5));
+        $otp = random_int(100000, 999999);
 
-        $waService = new \App\Services\WhatsAppService();
+        // Store OTP in cache for 5 minutes
+        Cache::put('otp_'.$user->id, $otp, now()->addMinutes(5));
+
+        $waService = new WhatsAppService;
         $message = "*[OTP] HRMS Narwastu Arthatama*\n\nKode verifikasi Anda adalah: *{$otp}*\n\nJangan berikan kode ini kepada siapapun. Kode berlaku selama 5 menit.";
 
         if ($waService->sendMessage($user->phone, $message)) {
@@ -445,28 +459,28 @@ class AuthController extends Controller
 
         $user = User::where('phone', $request->phone)->first();
 
-        if (!$user) {
+        if (! $user) {
             return $this->errorResponse('User tidak ditemukan.', 404);
         }
 
-        $cachedOtp = \Illuminate\Support\Facades\Cache::get('otp_' . $user->id);
+        $cachedOtp = Cache::get('otp_'.$user->id);
 
-        if (!$cachedOtp || $cachedOtp != $request->otp) {
+        if (! $cachedOtp || $cachedOtp != $request->otp) {
             return $this->errorResponse('Kode OTP salah atau sudah kadaluarsa.', 400);
         }
 
         // OTP Valid, Clear it
-        \Illuminate\Support\Facades\Cache::forget('otp_' . $user->id);
+        Cache::forget('otp_'.$user->id);
 
         // Auto-verify email if not verified
-        if (!$user->email_verified_at) {
+        if (! $user->email_verified_at) {
             $user->email_verified_at = now();
             $user->save();
         }
 
         // Generate Login Token
         $accessToken = $user->createToken('auth_token', ['*'], now()->addMinutes(60))->plainTextToken;
-        
+
         $refreshTokenData = RefreshToken::generateFor(
             $user,
             $request->device_id,
@@ -478,7 +492,7 @@ class AuthController extends Controller
         return $this->successResponse([
             'access_token' => $accessToken,
             'refresh_token' => $refreshTokenData['plain_token'],
-            'user' => $user->load(['role.permissions', 'office'])
+            'user' => $user->load(['role.permissions', 'office']),
         ], 'Verifikasi OTP berhasil. Anda telah masuk.');
     }
 }

@@ -2,24 +2,25 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\User;
-use App\Models\Company;
 use App\Models\Attendance;
-use App\Models\Permit;
+use App\Models\Company;
 use App\Models\Overtime;
+use App\Models\Permit;
+use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Seeder;
 
 class AttendanceTestSeeder extends Seeder
 {
     public function run()
     {
         $company = Company::first();
-        if (!$company) return;
+        if (! $company) {
+            return;
+        }
 
         $users = User::where('company_id', $company->id)->get();
-        
+
         // Target: April 2026
         $month = 4;
         $year = 2026;
@@ -33,13 +34,13 @@ class AttendanceTestSeeder extends Seeder
 
         foreach ($users as $user) {
             $this->command->info("Seeding attendance for: {$user->name}");
-            
+
             for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
                 $isWeekend = $date->isWeekend();
-                
-                if (!$isWeekend) {
+
+                if (! $isWeekend) {
                     $rand = rand(1, 100);
-                    
+
                     if ($rand <= 85) {
                         // Regular Attendance
                         Attendance::create([
@@ -105,6 +106,6 @@ class AttendanceTestSeeder extends Seeder
             }
         }
 
-        $this->command->info("Seeder Absensi Berhasil! Data April 2026 siap diuji.");
+        $this->command->info('Seeder Absensi Berhasil! Data April 2026 siap diuji.');
     }
 }

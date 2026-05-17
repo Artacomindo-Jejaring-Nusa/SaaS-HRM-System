@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\ScheduleExport;
 use App\Models\Schedule;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ScheduleController extends Controller
 {
@@ -13,9 +16,9 @@ class ScheduleController extends Controller
 
         // Filter by company's users
         $user = $request->user();
-        
-        if ($user->company_id && !$user->canAccessAllCompanies()) {
-            $query->whereHas('user', function($q) use ($user) {
+
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
+            $query->whereHas('user', function ($q) use ($user) {
                 $q->where('company_id', $user->company_id);
             });
         }
@@ -30,10 +33,10 @@ class ScheduleController extends Controller
             $query->whereBetween('date', [$request->start_date, $request->end_date]);
         } elseif ($request->month && $request->year) {
             $query->whereMonth('date', $request->month)
-                  ->whereYear('date', $request->year);
+                ->whereYear('date', $request->year);
         } else {
             // Default: Show only from current year onwards
-             $query->whereYear('date', '>=', now()->year);
+            $query->whereYear('date', '>=', now()->year);
         }
 
         return $this->successResponse($query->paginate($request->per_page ?? 10), 'Daftar jadwal berhasil diambil.');
@@ -48,7 +51,7 @@ class ScheduleController extends Controller
         ]);
 
         // Cek apakah user ada di perusahaan yang sama
-        $user = \App\Models\User::findOrFail($request->user_id);
+        $user = User::findOrFail($request->user_id);
         if ($user->company_id !== $request->user()->company_id) {
             return $this->errorResponse('Anda tidak bisa membuat jadwal untuk karyawan luar perusahaan.', 403);
         }
@@ -65,20 +68,22 @@ class ScheduleController extends Controller
     {
         $schedule = Schedule::findOrFail($id);
         $schedule->delete();
+
         return $this->successResponse(null, 'Jadwal berhasil dihapus.');
     }
+
     public function export(Request $request)
     {
         $user = $request->user();
-        $fileName = 'schedule_report_' . now()->format('Y_m_d_His') . '.xlsx';
-        
-        return \Maatwebsite\Excel\Facades\Excel::download(
-            new \App\Exports\ScheduleExport(
-                $user->company_id, 
-                $request->user_id, 
-                $request->start_date, 
+        $fileName = 'schedule_report_'.now()->format('Y_m_d_His').'.xlsx';
+
+        return Excel::download(
+            new ScheduleExport(
+                $user->company_id,
+                $request->user_id,
+                $request->start_date,
                 $request->end_date
-            ), 
+            ),
             $fileName
         );
     }

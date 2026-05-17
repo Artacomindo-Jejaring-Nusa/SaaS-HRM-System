@@ -3,10 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Permit;
-use Illuminate\Http\Request;
+use App\Models\User;
+use App\Services\FCMService;
 use App\Traits\Notifiable;
-use Illuminate\Support\Facades\Mail;
-use Carbon\Carbon;
+use Illuminate\Http\Request;
 
 class PermitController extends Controller
 {
@@ -16,25 +16,25 @@ class PermitController extends Controller
     {
         $query = Permit::with('user');
         $user = $request->user();
-        
+
         // Load role relation to ensure is_manager works
-        if (!$user->relationLoaded('role')) {
+        if (! $user->relationLoaded('role')) {
             $user->load('role');
         }
 
         if ($user->role_id === 1) {
             // Master Admin sees all
-        } else if ($user->is_manager || $user->hasPermission('approve-leaves')) {
+        } elseif ($user->is_manager || $user->hasPermission('approve-leaves')) {
             $query->where('company_id', $user->company_id);
-            
+
             // If strictly a manager/supervisor (not HRD/Admin), see only subordinates
-            if (!$user->hasPermission('approve-leaves') && in_array($user->role->name, ['Manager', 'Supervisor'])) {
-                $subordinateIds = \App\Models\User::where('supervisor_id', $user->id)->pluck('id');
+            if (! $user->hasPermission('approve-leaves') && in_array($user->role->name, ['Manager', 'Supervisor'])) {
+                $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
                 $query->whereIn('user_id', $subordinateIds);
             }
         } else {
             $query->where('user_id', $user->id)
-                  ->where('company_id', $user->company_id);
+                ->where('company_id', $user->company_id);
         }
 
         if ($request->has('status')) {
@@ -42,11 +42,11 @@ class PermitController extends Controller
         }
 
         $permits = $query->orderBy('id', 'desc')->paginate(10);
-            
+
         return response()->json([
             'status' => 'success',
             'message' => 'Data perizinan berhasil diambil.',
-            'data' => $permits
+            'data' => $permits,
         ]);
     }
 
@@ -72,23 +72,23 @@ class PermitController extends Controller
         ]);
 
         $this->notify(
-            $request->user(), 
-            'PENGAJUAN IZIN BERHASIL', 
+            $request->user(),
+            'PENGAJUAN IZIN BERHASIL',
             "Permohonan izin ({$request->type}) Anda telah diajukan dan sedang menunggu persetujuan.",
             'info'
         );
 
         // Notify Admins
-        $admins = \App\Models\User::where('company_id', $request->user()->company_id)
-            ->where(function($q) {
+        $admins = User::where('company_id', $request->user()->company_id)
+            ->where(function ($q) {
                 // Anyone who is Admin OR has manager rights (like HR)
                 $q->where('role_id', '>', 1)
-                  ->whereHas('role', function($q2) {
-                       $q2->where('name', 'HRD')->orWhere('name', 'Admin');
-                  });
+                    ->whereHas('role', function ($q2) {
+                        $q2->where('name', 'HRD')->orWhere('name', 'Admin');
+                    });
             })
             ->get();
-            
+
         foreach ($admins as $admin) {
             $this->notify(
                 $admin,
@@ -104,12 +104,12 @@ class PermitController extends Controller
     public function approve(Request $request, $id)
     {
         $user = $request->user();
-        $permit = Permit::where(function($q) use ($user) {
+        $permit = Permit::where(function ($q) use ($user) {
             if ($user->role_id !== 1) {
                 $q->where('company_id', $user->company_id);
             }
         })->findOrFail($id);
-        
+
         $permit->update([
             'status' => 'approved',
             'approved_by' => $request->user()->id,
@@ -117,16 +117,16 @@ class PermitController extends Controller
         ]);
 
         $this->notify(
-            $permit->user, 
-            'IZIN DISETUJUI', 
+            $permit->user,
+            'IZIN DISETUJUI',
             "Permohonan izin ({$permit->type}) Anda untuk tanggal {$permit->start_date} telah DISETUJUI.",
             'success'
         );
 
-        \App\Services\FCMService::sendNotification(
-            $permit->user, 
-            'Permohonan Izin Disetujui', 
-            "Izin Anda telah DISETUJUI."
+        FCMService::sendNotification(
+            $permit->user,
+            'Permohonan Izin Disetujui',
+            'Izin Anda telah DISETUJUI.'
         );
 
         return $this->successResponse(null, 'Permohonan izin disetujui.');
@@ -135,7 +135,7 @@ class PermitController extends Controller
     public function reject(Request $request, $id)
     {
         $permit = Permit::findOrFail($id);
-        
+
         $permit->update([
             'status' => 'rejected',
             'approved_by' => $request->user()->id,
@@ -143,16 +143,16 @@ class PermitController extends Controller
         ]);
 
         $this->notify(
-            $permit->user, 
-            'IZIN DITOLAK', 
+            $permit->user,
+            'IZIN DITOLAK',
             "Mohon maaf, permohonan izin ({$permit->type}) Anda telah DITOLAK.",
             'danger'
         );
 
-        \App\Services\FCMService::sendNotification(
-            $permit->user, 
-            'Permohonan Izin Ditolak', 
-            "Mohon maaf, izin Anda DITOLAK."
+        FCMService::sendNotification(
+            $permit->user,
+            'Permohonan Izin Ditolak',
+            'Mohon maaf, izin Anda DITOLAK.'
         );
 
         return $this->successResponse(null, 'Permohonan izin ditolak.');
@@ -161,7 +161,7 @@ class PermitController extends Controller
     public function destroy(Request $request, $id)
     {
         $user = $request->user();
-        $permit = Permit::where(function($q) use ($user) {
+        $permit = Permit::where(function ($q) use ($user) {
             if ($user->role_id !== 1) {
                 $q->where('company_id', $user->company_id);
             }
@@ -172,6 +172,7 @@ class PermitController extends Controller
         }
 
         $permit->delete();
+
         return $this->successResponse(null, 'Izin berhasil dihapus.');
     }
 }

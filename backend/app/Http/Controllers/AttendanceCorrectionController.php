@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\AttendanceCorrection;
+use App\Exports\AttendanceCorrectionExport;
 use App\Models\Attendance;
+use App\Models\AttendanceCorrection;
 use App\Models\User;
-use Illuminate\Http\Request;
 use App\Traits\Notifiable;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Maatwebsite\Excel\Facades\Excel;
 
 class AttendanceCorrectionController extends Controller
 {
@@ -22,7 +24,7 @@ class AttendanceCorrectionController extends Controller
         $query = AttendanceCorrection::with(['user', 'approver', 'attendance']);
 
         if ($user->is_manager) {
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
         } else {
@@ -34,10 +36,11 @@ class AttendanceCorrectionController extends Controller
         }
 
         if ($request->start_date && $request->end_date) {
-            $query->whereBetween('created_at', [$request->start_date . ' 00:00:00', $request->end_date . ' 23:59:59']);
+            $query->whereBetween('created_at', [$request->start_date.' 00:00:00', $request->end_date.' 23:59:59']);
         }
 
         $corrections = $query->orderBy('id', 'desc')->paginate(10);
+
         return $this->successResponse($corrections, 'Data koreksi absen berhasil diambil.');
     }
 
@@ -76,12 +79,12 @@ class AttendanceCorrectionController extends Controller
 
         $correctedCheckIn = null;
         if ($request->corrected_check_in) {
-            $correctedCheckIn = Carbon::parse($attendanceDate . ' ' . $request->corrected_check_in);
+            $correctedCheckIn = Carbon::parse($attendanceDate.' '.$request->corrected_check_in);
         }
 
         $correctedCheckOut = null;
         if ($request->corrected_check_out) {
-            $correctedCheckOut = Carbon::parse($attendanceDate . ' ' . $request->corrected_check_out);
+            $correctedCheckOut = Carbon::parse($attendanceDate.' '.$request->corrected_check_out);
         }
 
         $correction = AttendanceCorrection::create([
@@ -131,7 +134,7 @@ class AttendanceCorrectionController extends Controller
 
         $admins = $adminQuery->get();
         foreach ($admins as $admin) {
-            /** @var \App\Models\User $admin */
+            /** @var User $admin */
             $this->notify(
                 $admin,
                 'KOREKSI ABSEN BARU',
@@ -149,7 +152,7 @@ class AttendanceCorrectionController extends Controller
      */
     public function approve(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('approve-leaves'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('approve-leaves'), 403, 'Akses ditolak.');
 
         $correction = AttendanceCorrection::with('attendance')->findOrFail($id);
 
@@ -176,7 +179,7 @@ class AttendanceCorrectionController extends Controller
             $updateData['check_out'] = $correction->corrected_check_out;
         }
 
-        if (!empty($updateData)) {
+        if (! empty($updateData)) {
             $attendance->update($updateData);
         }
 
@@ -197,7 +200,7 @@ class AttendanceCorrectionController extends Controller
      */
     public function reject(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('approve-leaves'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('approve-leaves'), 403, 'Akses ditolak.');
 
         $correction = AttendanceCorrection::with('attendance')->findOrFail($id);
 
@@ -215,7 +218,7 @@ class AttendanceCorrectionController extends Controller
         $this->notify(
             $correction->user,
             'KOREKSI ABSEN DITOLAK',
-            "Mohon maaf, pengajuan koreksi absen Anda untuk tanggal {$attendanceDate} telah DITOLAK. " . ($request->remark ? "Alasan: {$request->remark}" : ''),
+            "Mohon maaf, pengajuan koreksi absen Anda untuk tanggal {$attendanceDate} telah DITOLAK. ".($request->remark ? "Alasan: {$request->remark}" : ''),
             'danger'
         );
 
@@ -225,16 +228,16 @@ class AttendanceCorrectionController extends Controller
     public function export(Request $request)
     {
         $user = $request->user();
-        $fileName = 'correction_report_' . now()->format('Y_m_d_His') . '.xlsx';
-        
-        return \Maatwebsite\Excel\Facades\Excel::download(
-            new \App\Exports\AttendanceCorrectionExport(
-                $user->company_id, 
+        $fileName = 'correction_report_'.now()->format('Y_m_d_His').'.xlsx';
+
+        return Excel::download(
+            new AttendanceCorrectionExport(
+                $user->company_id,
                 $request->user_id,
-                $request->status, 
-                $request->start_date, 
+                $request->status,
+                $request->start_date,
                 $request->end_date
-            ), 
+            ),
             $fileName
         );
     }

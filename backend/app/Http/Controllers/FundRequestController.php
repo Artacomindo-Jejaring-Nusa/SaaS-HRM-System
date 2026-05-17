@@ -4,15 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Models\FundRequest;
 use App\Models\User;
-use Illuminate\Http\Request;
 use App\Traits\Notifiable;
-use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\Laravel\Facades\Image;
 
 class FundRequestController extends Controller
 {
     use Notifiable;
+
+    private const ROLE_HRD_MANAGER = 'HRD Manager';
 
     public function index(Request $request)
     {
@@ -21,18 +22,18 @@ class FundRequestController extends Controller
 
         if ($user->role_id === 1) {
             // Master Admin sees all
-        } else if ($user->is_manager || $user->hasPermission('approve-permits')) {
+        } elseif ($user->is_manager || $user->hasPermission('approve-permits')) {
             $query->where('company_id', $user->company_id);
-            
+
             // If strictly a manager/supervisor (not HRD/Admin), see only subordinates OR assigned approvals
             $roleName = $user->role ? $user->role->name : '';
-            if (!in_array($roleName, ['HRD', 'HRD Manager', 'Admin', 'Super Admin'])) {
-                $query->where(function($q) use ($user) {
+            if (! in_array($roleName, ['HRD', self::ROLE_HRD_MANAGER, 'Admin', 'Super Admin'])) {
+                $query->where(function ($q) use ($user) {
                     $q->where('supervisor_id', $user->id)
-                      ->orWhere('user_id', $user->id)
-                      ->orWhereHas('user', function($qu) use ($user) {
-                          $qu->where('supervisor_id', $user->id);
-                      });
+                        ->orWhere('user_id', $user->id)
+                        ->orWhereHas('user', function ($qu) use ($user) {
+                            $qu->where('supervisor_id', $user->id);
+                        });
                 });
             }
         } else {
@@ -47,7 +48,7 @@ class FundRequestController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $requests
+            'data' => $requests,
         ]);
     }
 
@@ -60,10 +61,10 @@ class FundRequestController extends Controller
         ]);
 
         $user = $request->user();
-        
+
         $attachmentPath = null;
         if ($request->attachment) {
-            $imageName = 'fund_requests/' . $user->id . '_' . time() . '.jpg';
+            $imageName = 'fund_requests/'.$user->id.'_'.time().'.jpg';
             $img = Image::decode($request->attachment);
             $img->scale(width: 800);
             Storage::disk('public')->put($imageName, (string) $img->encodeUsingFileExtension('jpg', 80));
@@ -87,7 +88,7 @@ class FundRequestController extends Controller
                 $this->notify(
                     $supervisor,
                     'PENGAJUAN DANA BARU',
-                    "{$user->name} mengajukan dana sebesar Rp " . number_format($request->amount, 0, ',', '.') . ". Mohon tinjau.",
+                    "{$user->name} mengajukan dana sebesar Rp ".number_format($request->amount, 0, ',', '.').'. Mohon tinjau.',
                     'warning',
                     '/dashboard/approvals'
                 );
@@ -97,13 +98,14 @@ class FundRequestController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Pengajuan dana berhasil dikirim.',
-            'data' => $fundRequest
+            'data' => $fundRequest,
         ], 201);
     }
 
     public function show($id)
     {
         $request = FundRequest::with(['user', 'supervisor', 'hrd'])->findOrFail($id);
+
         return response()->json(['status' => 'success', 'data' => $request]);
     }
 
@@ -111,12 +113,12 @@ class FundRequestController extends Controller
     {
         $user = $request->user();
         $fundRequest = FundRequest::findOrFail($id);
-        
+
         $isSupervisor = $fundRequest->user->supervisor_id === $user->id;
-        $isHR = $user->hasPermission('approve-permits') || in_array($user->role->name, ['HRD', 'HRD Manager', 'Admin', 'Super Admin']);
+        $isHR = $user->hasPermission('approve-permits') || in_array($user->role->name, ['HRD', self::ROLE_HRD_MANAGER, 'Admin', 'Super Admin']);
 
         if ($fundRequest->status === 'pending') {
-            if (!$isSupervisor && !$isHR) {
+            if (! $isSupervisor && ! $isHR) {
                 return response()->json(['status' => 'error', 'message' => 'Anda tidak memiliki akses untuk menyetujui tahap ini.'], 403);
             }
 
@@ -129,8 +131,8 @@ class FundRequestController extends Controller
 
             // Notify HRD
             $hrds = User::where('company_id', $user->company_id)
-                ->whereHas('role', function($q) {
-                    $q->where('name', 'HRD')->orWhere('name', 'HRD Manager')->orWhere('name', 'Admin');
+                ->whereHas('role', function ($q) {
+                    $q->where('name', 'HRD')->orWhere('name', self::ROLE_HRD_MANAGER)->orWhere('name', 'Admin');
                 })->get();
 
             foreach ($hrds as $hrd) {
@@ -145,8 +147,8 @@ class FundRequestController extends Controller
 
             return response()->json(['status' => 'success', 'message' => 'Disetujui oleh Supervisor. Menunggu persetujuan HRD.']);
 
-        } else if ($fundRequest->status === 'approved_by_supervisor') {
-            if (!$isHR) {
+        } elseif ($fundRequest->status === 'approved_by_supervisor') {
+            if (! $isHR) {
                 return response()->json(['status' => 'error', 'message' => 'Hanya HRD yang dapat memberikan persetujuan akhir.'], 403);
             }
 
@@ -160,7 +162,7 @@ class FundRequestController extends Controller
             $this->notify(
                 $fundRequest->user,
                 'PENGAJUAN DANA DISETUJUI',
-                "Pengajuan dana Anda sebesar Rp " . number_format($fundRequest->amount, 0, ',', '.') . " telah DISETUJUI sepenuhnya.",
+                'Pengajuan dana Anda sebesar Rp '.number_format($fundRequest->amount, 0, ',', '.').' telah DISETUJUI sepenuhnya.',
                 'success'
             );
 
@@ -173,7 +175,7 @@ class FundRequestController extends Controller
     public function reject(Request $request, $id)
     {
         $request->validate(['reject_reason' => 'required|string']);
-        
+
         $user = $request->user();
         $fundRequest = FundRequest::findOrFail($id);
 
@@ -200,6 +202,7 @@ class FundRequestController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Pengajuan yang sudah diproses tidak dapat dihapus.'], 403);
         }
         $fundRequest->delete();
+
         return response()->json(['status' => 'success', 'message' => 'Pengajuan berhasil dihapus.']);
     }
 }

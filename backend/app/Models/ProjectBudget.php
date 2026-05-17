@@ -6,14 +6,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class ProjectBudget extends Model
 {
+    private const CAST_DECIMAL_2 = 'decimal:2';
+
     protected $fillable = [
-        'project_id', 'category', 'item_name', 'unit', 'volume', 'unit_price', 'total_price', 'notes'
+        'project_id', 'category', 'item_name', 'unit', 'volume', 'unit_price', 'total_price', 'notes',
     ];
 
     protected $casts = [
-        'volume' => 'decimal:2',
-        'unit_price' => 'decimal:2',
-        'total_price' => 'decimal:2',
+        'volume' => self::CAST_DECIMAL_2,
+        'unit_price' => self::CAST_DECIMAL_2,
+        'total_price' => self::CAST_DECIMAL_2,
     ];
 
     public function project()

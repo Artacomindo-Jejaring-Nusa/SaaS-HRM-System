@@ -2,10 +2,11 @@
 
 namespace Tests\Unit;
 
-use Tests\TestCase;
-use App\Models\User;
+use App\Models\Company;
 use App\Models\Permit;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 class PermitTest extends TestCase
 {
@@ -14,9 +15,9 @@ class PermitTest extends TestCase
     /** @test */
     public function test_it_can_create_a_permit_request()
     {
-        $company = \App\Models\Company::create(['name' => 'Test Co']);
+        $company = Company::create(['name' => 'Test Co']);
         $user = User::factory()->create(['company_id' => $company->id]);
-        
+
         $permit = Permit::create([
             'user_id' => $user->id,
             'company_id' => $company->id,
@@ -24,12 +25,12 @@ class PermitTest extends TestCase
             'start_date' => now()->toDateString(),
             'end_date' => now()->toDateString(),
             'reason' => 'Feeling unwell',
-            'status' => 'pending'
+            'status' => 'pending',
         ]);
 
         $this->assertDatabaseHas('permits', [
             'id' => $permit->id,
-            'reason' => 'Feeling unwell'
+            'reason' => 'Feeling unwell',
         ]);
     }
 }

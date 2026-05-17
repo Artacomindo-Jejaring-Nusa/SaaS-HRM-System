@@ -2,23 +2,23 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Traits\BelongsToCompany;
+use Illuminate\Database\Eloquent\Model;
 
 class Overtime extends Model
 {
     use BelongsToCompany;
 
     protected $fillable = [
-        'user_id', 
-        'company_id', 
-        'date', 
-        'start_time', 
-        'end_time', 
-        'reason', 
-        'status', 
-        'approved_by', 
-        'remark'
+        'user_id',
+        'company_id',
+        'date',
+        'start_time',
+        'end_time',
+        'reason',
+        'status',
+        'approved_by',
+        'remark',
     ];
 
     public function user()

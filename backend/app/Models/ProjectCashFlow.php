@@ -8,7 +8,7 @@ class ProjectCashFlow extends Model
 {
     protected $fillable = [
         'project_id', 'type', 'category', 'description', 'amount',
-        'transaction_date', 'reference_number', 'notes'
+        'transaction_date', 'reference_number', 'notes',
     ];
 
     protected $casts = [

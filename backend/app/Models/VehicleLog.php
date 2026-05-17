@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Traits\BelongsToCompany;
+use Illuminate\Database\Eloquent\Model;
 
 class VehicleLog extends Model
 {
     use BelongsToCompany;
+
+    private const CAST_DECIMAL_2 = 'decimal:2';
 
     protected $fillable = [
         'company_id', 'user_id',
@@ -24,11 +26,11 @@ class VehicleLog extends Model
     protected $casts = [
         'departure_date' => 'date',
         'return_date' => 'date',
-        'fuel_cost' => 'decimal:2',
-        'toll_cost' => 'decimal:2',
-        'parking_cost' => 'decimal:2',
-        'other_cost' => 'decimal:2',
-        'total_cost' => 'decimal:2',
+        'fuel_cost' => self::CAST_DECIMAL_2,
+        'toll_cost' => self::CAST_DECIMAL_2,
+        'parking_cost' => self::CAST_DECIMAL_2,
+        'other_cost' => self::CAST_DECIMAL_2,
+        'total_cost' => self::CAST_DECIMAL_2,
         'expense_attachments' => 'array',
     ];
 

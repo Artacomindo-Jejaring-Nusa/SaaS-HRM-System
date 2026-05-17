@@ -3,9 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Reimbursement;
-use Illuminate\Http\Request;
+use App\Models\User;
 use App\Traits\Notifiable;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Intervention\Image\Laravel\Facades\Image;
@@ -13,6 +13,9 @@ use Intervention\Image\Laravel\Facades\Image;
 class ReimbursementController extends Controller
 {
     use Notifiable;
+
+    private const MSG_FORBIDDEN = 'Akses ditolak.';
+    private const URL_DASHBOARD_REIMBURSEMENTS = '/dashboard/reimbursements';
 
     public function index(Request $request)
     {
@@ -23,9 +26,9 @@ class ReimbursementController extends Controller
         // Logic for Data Isolation:
         // 1. Managers/Admin see all company data by default.
         // 2. Staff (non-manager) only sees their own data.
-        
+
         if ($user->is_manager) {
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
         } else {
@@ -33,6 +36,7 @@ class ReimbursementController extends Controller
         }
 
         $reimbursements = $query->orderBy('id', 'desc')->paginate(10);
+
         return $this->successResponse($reimbursements, 'Daftar klaim berhasil diambil.');
     }
 
@@ -50,7 +54,7 @@ class ReimbursementController extends Controller
         if ($request->hasFile('attachments')) {
             foreach ($request->file('attachments') as $file) {
                 // Compress and scale (1000px for receipt readability)
-                $path = 'reimbursements/' . Str::random(40) . '.jpg';
+                $path = 'reimbursements/'.Str::random(40).'.jpg';
                 $img = Image::decode($file);
                 $img->scale(width: 1000);
                 Storage::disk('public')->put($path, (string) $img->encodeUsingFileExtension('jpg', 80));
@@ -70,11 +74,11 @@ class ReimbursementController extends Controller
 
         // 1. Notify the Submitting User (Confirmation)
         $this->notify(
-            $request->user(), 
-            'PENGAJUAN REIMBURSEMENT', 
-            "Klaim reimbursement Anda '{$request->title}' sebesar Rp " . number_format($request->amount, 0, ',', '.') . " telah diajukan.",
+            $request->user(),
+            'PENGAJUAN REIMBURSEMENT',
+            "Klaim reimbursement Anda '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').' telah diajukan.',
             'info',
-            '/dashboard/reimbursements'
+            self::URL_DASHBOARD_REIMBURSEMENTS
         );
 
         // 2. Notify User's Supervisor
@@ -84,7 +88,7 @@ class ReimbursementController extends Controller
                 $this->notify(
                     $supervisor,
                     'KLAIM REIMBURSEMENT BAWAHAN',
-                    "Karyawan {$request->user()->name} mengajukan klaim '{$request->title}' sebesar Rp " . number_format($request->amount, 0, ',', '.') . ". Mohon segera tinjau.",
+                    "Karyawan {$request->user()->name} mengajukan klaim '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'. Mohon segera tinjau.',
                     'warning',
                     '/dashboard/approvals'
                 );
@@ -93,50 +97,50 @@ class ReimbursementController extends Controller
 
         // 3. Notify Admins/Approvers/Finance in the same company
         // Approver roles: Super Admin (7), HRD (2), Finance (10), HRD Manager (8)
-        $admins = \App\Models\User::where('company_id', $request->user()->company_id)
-            ->whereIn('role_id', [7, 2, 10, 8]) 
+        $admins = User::where('company_id', $request->user()->company_id)
+            ->whereIn('role_id', [7, 2, 10, 8])
             ->where('id', '!=', $request->user()->id)
             ->where('id', '!=', $request->user()->supervisor_id) // Don't notify twice
             ->get();
-            
+
         foreach ($admins as $admin) {
             $this->notify(
                 $admin,
                 'KLAIM REIMBURSEMENT BARU (ADMIN)',
-                "Karyawan {$request->user()->name} mengajukan klaim '{$request->title}' sebesar Rp " . number_format($request->amount, 0, ',', '.') . ".",
+                "Karyawan {$request->user()->name} mengajukan klaim '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'.',
                 'warning',
                 '/dashboard/approvals'
             );
         }
 
-        $this->logActivity('SUBMIT_REIMBURSEMENT', "Mengajukan reimbursement '{$request->title}' senilai Rp " . number_format($request->amount, 0, ',', '.'), $reimbursement);
+        $this->logActivity('SUBMIT_REIMBURSEMENT', "Mengajukan reimbursement '{$request->title}' senilai Rp ".number_format($request->amount, 0, ',', '.'), $reimbursement);
 
         return $this->successResponse($reimbursement, 'Klaim berhasil diajukan.', 201);
     }
 
     public function approve(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('approve-reimbursements'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('approve-reimbursements'), 403, self::MSG_FORBIDDEN);
         $reimbursement = Reimbursement::findOrFail($id);
-        
+
         $reimbursement->update([
             'status' => 'approved',
-            'remark' => $request->remark
+            'remark' => $request->remark,
         ]);
 
-        $msg = "Klaim reimbursement Anda '{$reimbursement->title}' sebesar Rp " . number_format($reimbursement->amount, 0, ',', '.') . " telah DISETUJUI.";
+        $msg = "Klaim reimbursement Anda '{$reimbursement->title}' sebesar Rp ".number_format($reimbursement->amount, 0, ',', '.').' telah DISETUJUI.';
         if ($request->remark) {
             $msg .= " Catatan: {$request->remark}";
         }
 
         $this->notify(
-            $reimbursement->user, 
-            'REIMBURSEMENT DISETUJUI', 
+            $reimbursement->user,
+            'REIMBURSEMENT DISETUJUI',
             $msg,
             'success',
-            '/dashboard/reimbursements'
+            self::URL_DASHBOARD_REIMBURSEMENTS
         );
-        
+
         $this->logActivity('APPROVE_REIMBURSEMENT', "Menyetujui klaim '{$reimbursement->title}' dari {$reimbursement->user->name}", $reimbursement);
 
         return $this->successResponse($reimbursement, 'Klaim disetujui.');
@@ -144,12 +148,12 @@ class ReimbursementController extends Controller
 
     public function reject(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('approve-reimbursements'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('approve-reimbursements'), 403, self::MSG_FORBIDDEN);
         $reimbursement = Reimbursement::findOrFail($id);
-        
+
         $reimbursement->update([
             'status' => 'rejected',
-            'remark' => $request->remark
+            'remark' => $request->remark,
         ]);
 
         $msg = "Mohon maaf, klaim reimbursement Anda '{$reimbursement->title}' telah DITOLAK.";
@@ -158,13 +162,13 @@ class ReimbursementController extends Controller
         }
 
         $this->notify(
-            $reimbursement->user, 
-            'REIMBURSEMENT DITOLAK', 
+            $reimbursement->user,
+            'REIMBURSEMENT DITOLAK',
             $msg,
             'danger',
-            '/dashboard/reimbursements'
+            self::URL_DASHBOARD_REIMBURSEMENTS
         );
-        
+
         $this->logActivity('REJECT_REIMBURSEMENT', "Menolak klaim '{$reimbursement->title}' dari {$reimbursement->user->name}", $reimbursement);
 
         return $this->successResponse($reimbursement, 'Klaim ditolak.');
@@ -172,7 +176,7 @@ class ReimbursementController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('delete-reimbursements'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('delete-reimbursements'), 403, self::MSG_FORBIDDEN);
         $reimbursement = Reimbursement::findOrFail($id);
 
         if ($reimbursement->status !== 'pending') {

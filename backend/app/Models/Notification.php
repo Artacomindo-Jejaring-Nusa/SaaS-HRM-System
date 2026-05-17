@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Events\NotificationCreated;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -16,7 +17,7 @@ class Notification extends Model
         'type',
         'category',
         'is_read',
-        'link'
+        'link',
     ];
 
     protected $casts = [
@@ -24,7 +25,7 @@ class Notification extends Model
     ];
 
     protected $dispatchesEvents = [
-        'created' => \App\Events\NotificationCreated::class,
+        'created' => NotificationCreated::class,
     ];
 
     public function user()

@@ -6,6 +6,6 @@ Route::get('/', function () {
     return response()->json([
         'app' => 'HRM SaaS API',
         'version' => '1.0.0',
-        'status' => 'Running'
+        'status' => 'Running',
     ]);
 });

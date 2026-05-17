@@ -4,15 +4,19 @@ namespace App\Exports;
 
 use App\Models\Schedule;
 use Maatwebsite\Excel\Concerns\FromQuery;
-use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithMapping;
 
-class ScheduleExport implements FromQuery, WithMapping, WithHeadings
+class ScheduleExport implements FromQuery, WithHeadings, WithMapping
 {
     protected $companyId;
+
     protected $userId;
+
     protected $startDate;
+
     protected $endDate;
+
     private $rowNumber = 0;
 
     public function __construct($companyId, $userId = null, $startDate = null, $endDate = null)
@@ -25,7 +29,7 @@ class ScheduleExport implements FromQuery, WithMapping, WithHeadings
 
     public function query()
     {
-        $query = Schedule::with(['user', 'shift'])->whereHas('user', function($q) {
+        $query = Schedule::with(['user', 'shift'])->whereHas('user', function ($q) {
             $q->where('company_id', $this->companyId);
         });
 
@@ -53,7 +57,7 @@ class ScheduleExport implements FromQuery, WithMapping, WithHeadings
             'NIK',
             'Shift',
             'Masuk',
-            'Keluar'
+            'Keluar',
         ];
     }
 

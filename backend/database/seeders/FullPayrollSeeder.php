@@ -2,17 +2,16 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\User;
-use App\Models\Role;
-use App\Models\Company;
 use App\Models\Attendance;
-use App\Models\Overtime;
+use App\Models\Company;
 use App\Models\Leave;
+use App\Models\Overtime;
 use App\Models\Permit;
-use App\Models\Permission;
-use Illuminate\Support\Facades\Hash;
+use App\Models\Role;
+use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class FullPayrollSeeder extends Seeder
 {
@@ -46,7 +45,7 @@ class FullPayrollSeeder extends Seeder
                 'bank_account_no' => '1234567890',
                 'cost_center' => 'Pusat',
                 'ptkp_status' => 'K/0',
-                'employment_status' => 'Permanent'
+                'employment_status' => 'Permanent',
             ]
         );
 
@@ -57,27 +56,37 @@ class FullPayrollSeeder extends Seeder
         $endDate = Carbon::create($year, $month, 30);
 
         echo "Generating attendance for {$user->name}...\n";
-        
+
         for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
             // Skip weekends
-            if ($date->isWeekend()) continue;
+            if ($date->isWeekend()) {
+                continue;
+            }
 
             // Skip some specific dates for Leave/Permit later
-            if ($date->day == 15 || $date->day == 16) continue;
+            if ($date->day == 15 || $date->day == 16) {
+                continue;
+            }
 
             $checkIn = $date->copy()->setTime(8, 0, 0);
-            
+
             // Simulation: 3 days late (Late after 09:00)
-            if ($date->day == 5) $checkIn->setTime(9, 30, 0); // 30 mins late
-            if ($date->day == 10) $checkIn->setTime(10, 0, 0); // 1 hour late
-            if ($date->day == 20) $checkIn->setTime(11, 0, 0); // 2 hours late
+            if ($date->day == 5) {
+                $checkIn->setTime(9, 30, 0);
+            } // 30 mins late
+            if ($date->day == 10) {
+                $checkIn->setTime(10, 0, 0);
+            } // 1 hour late
+            if ($date->day == 20) {
+                $checkIn->setTime(11, 0, 0);
+            } // 2 hours late
 
             // Use whereDate on check_in since 'date' column doesn't exist
             $exists = Attendance::where('user_id', $user->id)
                 ->whereDate('check_in', $date->format('Y-m-d'))
                 ->exists();
 
-            if (!$exists) {
+            if (! $exists) {
                 Attendance::create([
                     'user_id' => $user->id,
                     'company_id' => $company->id,
@@ -85,7 +94,7 @@ class FullPayrollSeeder extends Seeder
                     'check_out' => $date->copy()->setTime(17, 0, 0)->format('Y-m-d H:i:s'),
                     'status' => 'present',
                     'latitude_in' => -6.2477,
-                    'longitude_in' => 106.9493
+                    'longitude_in' => 106.9493,
                 ]);
             }
         }
@@ -102,7 +111,7 @@ class FullPayrollSeeder extends Seeder
                     'end_time' => Carbon::create($year, $month, $d, 20, 0, 0)->format('H:i:s'), // 3 hours
                     'reason' => 'Meeting Akhir Hari',
                     'status' => 'approved',
-                    'approved_by' => $user->id
+                    'approved_by' => $user->id,
                 ]
             );
         }
@@ -117,7 +126,7 @@ class FullPayrollSeeder extends Seeder
                 'type' => 'Cuti Tahunan',
                 'reason' => 'Urusan Keluarga',
                 'status' => 'approved',
-                'approved_by' => $user->id
+                'approved_by' => $user->id,
             ]
         );
 
@@ -131,7 +140,7 @@ class FullPayrollSeeder extends Seeder
                 'type' => 'Sakit',
                 'reason' => 'Demam',
                 'status' => 'approved',
-                'approved_by' => $user->id
+                'approved_by' => $user->id,
             ]
         );
 

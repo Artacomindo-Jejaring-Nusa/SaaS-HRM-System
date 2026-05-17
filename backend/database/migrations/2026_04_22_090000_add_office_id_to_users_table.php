@@ -15,7 +15,7 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             $table->foreignId('office_id')->nullable()->after('company_id')
-                  ->constrained('offices')->onDelete('set null');
+                ->constrained('offices')->onDelete('set null');
         });
 
         // Add optional address column to offices for better context

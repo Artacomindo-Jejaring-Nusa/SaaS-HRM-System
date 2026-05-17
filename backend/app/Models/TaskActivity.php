@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class TaskActivity extends Model
 {
     protected $table = 'task_activities';
-    
+
     protected $fillable = [
         'task_id',
         'activity_name',
@@ -16,7 +16,7 @@ class TaskActivity extends Model
         'status',
         'has_before_photo',
         'has_after_photo',
-        'completed_at'
+        'completed_at',
     ];
 
     protected $casts = [
@@ -41,7 +41,7 @@ class TaskActivity extends Model
     public static function calculateTaskProgress($taskId)
     {
         $totalActivities = self::where('task_id', $taskId)->count();
-        
+
         if ($totalActivities === 0) {
             return 0;
         }

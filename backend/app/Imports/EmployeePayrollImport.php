@@ -3,16 +3,18 @@
 namespace App\Imports;
 
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log;
 
 class EmployeePayrollImport implements ToCollection, WithHeadingRow
 {
     protected $companyId;
+
     public $updatedCount = 0;
+
     public $skippedCount = 0;
+
     public $errors = [];
 
     public function __construct($companyId)
@@ -28,50 +30,53 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
 
             if (empty($email) && empty($nik)) {
                 $this->skippedCount++;
+
                 continue;
             }
 
             // Find user by email or NIK
             $user = null;
-            if (!empty($email)) {
+            if (! empty($email)) {
                 $user = User::where('company_id', $this->companyId)->where('email', trim($email))->first();
             }
-            
-            if (!$user && !empty($nik)) {
+
+            if (! $user && ! empty($nik)) {
                 $user = User::where('company_id', $this->companyId)->where('nik', trim($nik))->first();
             }
 
-            if (!$user) {
+            if (! $user) {
                 $this->skippedCount++;
-                $this->errors[] = "Employee with email/NIK [" . ($email ?: $nik) . "] not found.";
+                $this->errors[] = 'Employee with email/NIK ['.($email ?: $nik).'] not found.';
+
                 continue;
             }
 
-            // Update payroll related fields
-            $updateData = [];
-            
-            $bankName = $this->getValue($row, 'bank');
-            if ($bankName !== null) $updateData['bank_name'] = trim($bankName);
+            $this->updateUserPayroll($user, $row);
+        }
+    }
 
-            $accNo = $this->getValue($row, 'nomor_rekening');
-            if ($accNo !== null) $updateData['bank_account_no'] = (string)$accNo;
+    private function updateUserPayroll($user, array $row)
+    {
+        $updateData = [];
+        $fields = [
+            'bank' => ['key' => 'bank_name', 'type' => 'string'],
+            'nomor_rekening' => ['key' => 'bank_account_no', 'type' => 'string'],
+            'nama_rekening' => ['key' => 'bank_account_name', 'type' => 'string'],
+            'cost_center' => ['key' => 'cost_center', 'type' => 'string'],
+            'gaji_pokok' => ['key' => 'basic_salary', 'type' => 'float'],
+            'tunjangan_tetap' => ['key' => 'fixed_allowance', 'type' => 'float'],
+        ];
 
-            $accName = $this->getValue($row, 'nama_rekening');
-            if ($accName !== null) $updateData['bank_account_name'] = trim($accName);
-
-            $costCenter = $this->getValue($row, 'cost_center');
-            if ($costCenter !== null) $updateData['cost_center'] = trim($costCenter);
-
-            $basicSalary = $this->getValue($row, 'gaji_pokok');
-            if ($basicSalary !== null) $updateData['basic_salary'] = (float)$basicSalary;
-
-            $fixedAllowance = $this->getValue($row, 'tunjangan_tetap');
-            if ($fixedAllowance !== null) $updateData['fixed_allowance'] = (float)$fixedAllowance;
-
-            if (!empty($updateData)) {
-                $user->update($updateData);
-                $this->updatedCount++;
+        foreach ($fields as $prefix => $config) {
+            $val = $this->getValue($row, $prefix);
+            if ($val !== null) {
+                $updateData[$config['key']] = $config['type'] === 'float' ? (float)$val : (string)trim($val);
             }
+        }
+
+        if (!empty($updateData)) {
+            $user->update($updateData);
+            $this->updatedCount++;
         }
     }
 
@@ -83,6 +88,7 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
                 return $value;
             }
         }
+
         return null;
     }
 }

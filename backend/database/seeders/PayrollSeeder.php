@@ -2,21 +2,22 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\User;
 use App\Models\Company;
 use App\Models\PayrollBatch;
-use App\Models\Salary;
 use App\Models\PayrollSetting;
+use App\Models\Salary;
+use App\Models\User;
+use Illuminate\Database\Seeder;
 
 class PayrollSeeder extends Seeder
 {
     public function run()
     {
         $company = Company::first();
-        
-        if (!$company) {
-            $this->command->info("Tidak ada perusahaan ditemukan. Seeder payroll dibatalkan.");
+
+        if (! $company) {
+            $this->command->info('Tidak ada perusahaan ditemukan. Seeder payroll dibatalkan.');
+
             return;
         }
 
@@ -35,13 +36,14 @@ class PayrollSeeder extends Seeder
         );
 
         $users = User::where('company_id', $company->id)->with('role')->limit(10)->get();
-        
+
         if ($users->count() === 0) {
-            $this->command->info("Tidak ada karyawan untuk di-generate. Seeder payroll dibatalkan.");
+            $this->command->info('Tidak ada karyawan untuk di-generate. Seeder payroll dibatalkan.');
+
             return;
         }
 
-        $superAdmin = User::where('company_id', $company->id)->with('role')->whereHas('role', function($q) {
+        $superAdmin = User::where('company_id', $company->id)->with('role')->whereHas('role', function ($q) {
             $q->where('name', 'Super Admin');
         })->first() ?? $users->first();
 
@@ -49,8 +51,8 @@ class PayrollSeeder extends Seeder
         $existingBatches = PayrollBatch::where('company_id', $company->id)
             ->whereIn('period_year', [2025, 2026])
             ->get();
-            
-        foreach($existingBatches as $b) {
+
+        foreach ($existingBatches as $b) {
             Salary::where('batch_id', $b->id)->delete();
             $b->delete();
         }
@@ -80,10 +82,10 @@ class PayrollSeeder extends Seeder
         foreach ([$batchLalu, $batchSekarang] as $batch) {
             foreach ($users as $index => $user) {
                 // Update basic salary karyawan jika 0 (untuk testing)
-                if (!$user->basic_salary || $user->basic_salary == 0) {
+                if (! $user->basic_salary || $user->basic_salary == 0) {
                     $user->basic_salary = rand(4000000, 15000000);
                     $user->bank_name = 'BCA';
-                    $user->bank_account_no = '12345678' . rand(10, 99);
+                    $user->bank_account_no = '12345678'.rand(10, 99);
                     $user->save();
                 }
 
@@ -95,7 +97,7 @@ class PayrollSeeder extends Seeder
                 $tunjanganPulsa = ($index % 2 === 0) ? 100000 : 0;
                 $lembur = rand(0, 5) * 30000;
                 $rapel = 0;
-                
+
                 // Tambahan khusus untuk batch sekarang agar bervariasi
                 if ($batch->id === $batchSekarang->id && $index === 0) {
                     $rapel = 500000; // Ada rapelan
@@ -122,7 +124,7 @@ class PayrollSeeder extends Seeder
                     'department' => $user->role->name ?? 'Staff',
                     'working_days' => 20,
                     'total_working_days' => 20,
-                    
+
                     // Earnings
                     'earning_bpjs_kes_premium' => $bpjsKes,
                     'earning_position_allowance' => $tunjanganJabatan,
@@ -135,7 +137,7 @@ class PayrollSeeder extends Seeder
                     'earning_diligence_bonus' => 0,
                     'earning_backpay' => $rapel,
                     'earning_others' => 0,
-                    
+
                     // Deductions
                     'deduction_bpjs_jht' => $bpjsJht,
                     'deduction_bpjs_jp' => $bpjsJp,
@@ -150,7 +152,7 @@ class PayrollSeeder extends Seeder
                 ]);
 
                 $salary->calculateTotals();
-                
+
                 // Tambahkan JSON fallback legacy
                 $salary->details = json_encode([
                     'ptkp' => $user->ptkp_status,
@@ -158,7 +160,7 @@ class PayrollSeeder extends Seeder
                     'breakdown' => [
                         'gross' => $salary->total_earnings,
                         'net' => $salary->net_salary,
-                    ]
+                    ],
                 ]);
 
                 $salary->save();
@@ -168,6 +170,6 @@ class PayrollSeeder extends Seeder
             $batch->recalculateTotals();
         }
 
-        $this->command->info("Payroll Dummy Data berhasil di-generate! (1 Paid, 1 Pending Approval)");
+        $this->command->info('Payroll Dummy Data berhasil di-generate! (1 Paid, 1 Pending Approval)');
     }
 }

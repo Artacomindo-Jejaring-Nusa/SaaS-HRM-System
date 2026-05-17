@@ -23,7 +23,7 @@ return new class extends Migration
             $table->boolean('has_after_photo')->default(false);
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();
-            
+
             $table->index('task_id');
         });
 
@@ -36,7 +36,7 @@ return new class extends Migration
             $table->text('notes')->nullable();
             $table->timestamp('submitted_at')->nullable();
             $table->timestamps();
-            
+
             $table->index('task_activity_id');
         });
     }

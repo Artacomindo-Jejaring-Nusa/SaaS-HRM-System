@@ -33,7 +33,7 @@ return new class extends Migration
             $table->dropColumn([
                 'ptkp_status', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no',
                 'bank_name', 'bank_account_no', 'basic_salary',
-                'fixed_allowance', 'working_days_per_week', 'payroll_type'
+                'fixed_allowance', 'working_days_per_week', 'payroll_type',
             ]);
         });
     }

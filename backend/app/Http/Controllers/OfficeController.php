@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Office;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 class OfficeController extends Controller
@@ -20,7 +21,7 @@ class OfficeController extends Controller
         if ($request->search) {
             $query->where(function ($q) use ($request) {
                 $q->where('name', 'like', "%{$request->search}%")
-                  ->orWhere('address', 'like', "%{$request->search}%");
+                    ->orWhere('address', 'like', "%{$request->search}%");
             });
         }
 
@@ -88,7 +89,7 @@ class OfficeController extends Controller
         ]);
 
         $office->update($request->only([
-            'name', 'address', 'latitude', 'longitude', 'radius', 'is_active'
+            'name', 'address', 'latitude', 'longitude', 'radius', 'is_active',
         ]));
 
         return $this->successResponse($office, 'Kantor cabang berhasil diperbarui.');
@@ -118,10 +119,10 @@ class OfficeController extends Controller
             'user_ids.*' => 'exists:users,id',
         ]);
 
-        \App\Models\User::where('company_id', $request->user()->company_id)
+        User::where('company_id', $request->user()->company_id)
             ->whereIn('id', $request->user_ids)
             ->update(['office_id' => $office->id]);
 
-        return $this->successResponse(null, count($request->user_ids) . ' karyawan berhasil di-assign ke ' . $office->name);
+        return $this->successResponse(null, count($request->user_ids).' karyawan berhasil di-assign ke '.$office->name);
     }
 }

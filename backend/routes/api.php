@@ -1,56 +1,59 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
-
-use App\Http\Controllers\AuthController;
-use App\Http\Middleware\TenantMiddleware;
-
-use App\Http\Controllers\AttendanceController;
-use App\Http\Controllers\LeaveController;
-use App\Http\Controllers\EmployeeController;
-use App\Http\Controllers\ShiftController;
-use App\Http\Controllers\HolidayController;
-use App\Http\Controllers\ScheduleController;
-use App\Http\Controllers\PermitController;
-use App\Http\Controllers\CompanyController;
-use App\Http\Controllers\ReimbursementController;
-use App\Http\Controllers\AnnouncementController;
-use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ActivityLogController;
-use App\Http\Controllers\Api\RoleController;
-use App\Http\Controllers\Api\ProfileRequestController;
+use App\Http\Controllers\AnnouncementController;
+use App\Http\Controllers\Api\Mobile\MobileAttendanceController;
+use App\Http\Controllers\Api\Mobile\MobileDashboardController;
+use App\Http\Controllers\Api\Mobile\MobileTaskController;
 use App\Http\Controllers\Api\NotificationController;
-use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Api\PayrollController;
+use App\Http\Controllers\Api\ProfileRequestController;
+use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\AttendanceCorrectionController;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\CompanyDocumentController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExportController;
-use App\Http\Controllers\OvertimeController;
-use App\Http\Controllers\SalaryController;
-use App\Http\Controllers\TaskController;
-use App\Http\Controllers\TaskActivityController;
-use App\Http\Controllers\ShiftSwapController;
+use App\Http\Controllers\FundRequestController;
+use App\Http\Controllers\HolidayController;
+use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\ManagerController;
-use App\Http\Controllers\PerformanceReviewController;
-use App\Http\Controllers\ProjectController;
-use App\Http\Controllers\VehicleLogController;
 use App\Http\Controllers\MassLeaveController;
 use App\Http\Controllers\OfficeController;
-use App\Http\Controllers\Api\Mobile\MobileDashboardController;
-use App\Http\Controllers\Api\Mobile\MobileAttendanceController;
-use App\Http\Controllers\Api\Mobile\MobileTaskController;
-use App\Http\Controllers\FundRequestController;
-
+use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\OvertimeController;
+use App\Http\Controllers\PerformanceReviewController;
+use App\Http\Controllers\PermitController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\ReimbursementController;
+use App\Http\Controllers\SalaryController;
+use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\ShiftController;
+use App\Http\Controllers\ShiftSwapController;
+use App\Http\Controllers\TaskActivityController;
+use App\Http\Controllers\TaskController;
+use App\Http\Controllers\VehicleLogController;
+use App\Http\Middleware\TenantMiddleware;
+use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 
 // Health Check (Docker)
 Route::get('/health', function () {
     try {
-        \Illuminate\Support\Facades\DB::connection()->getPdo();
+        DB::connection()->getPdo();
+
         return response()->json([
             'status' => 'healthy',
             'service' => 'HRMS Narwasthu Group API',
             'database' => 'connected',
             'timestamp' => now()->toISOString(),
         ]);
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
         return response()->json([
             'status' => 'unhealthy',
             'service' => 'HRMS Narwasthu Group API',
@@ -72,9 +75,8 @@ Route::post('/send-otp', [AuthController::class, 'sendOtp']);
 Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
 Route::post('/refresh-token', [AuthController::class, 'refreshToken'])->middleware('throttle:10,1');
 
-
 // Broadcast Route
-\Illuminate\Support\Facades\Broadcast::routes(['middleware' => ['auth:sanctum']]);
+Broadcast::routes(['middleware' => ['auth:sanctum']]);
 
 Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -88,7 +90,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::group(['prefix' => 'mobile'], function () {
         // Dashboard
         Route::get('/dashboard', [MobileDashboardController::class, 'index']);
-        
+
         // Attendance
         Route::get('/attendance/today', [MobileAttendanceController::class, 'today']);
         Route::get('/attendance/history', [MobileAttendanceController::class, 'history']);
@@ -157,12 +159,12 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::middleware('permission:export-attendance')->get('/attendance/export', [AttendanceController::class, 'export']);
 
     // Attendance Corrections (Koreksi Absen)
-    Route::middleware('permission:view-attendances')->get('/attendance-corrections', [\App\Http\Controllers\AttendanceCorrectionController::class, 'index']);
-    Route::middleware('permission:apply-attendances')->post('/attendance-corrections', [\App\Http\Controllers\AttendanceCorrectionController::class, 'store']);
+    Route::middleware('permission:view-attendances')->get('/attendance-corrections', [AttendanceCorrectionController::class, 'index']);
+    Route::middleware('permission:apply-attendances')->post('/attendance-corrections', [AttendanceCorrectionController::class, 'store']);
     Route::middleware('permission:manage-attendance-corrections')->group(function () {
         Route::put('/attendance/{id}', [AttendanceController::class, 'update']);
-        Route::post('/attendance-corrections/{id}/approve', [\App\Http\Controllers\AttendanceCorrectionController::class, 'approve']);
-        Route::post('/attendance-corrections/{id}/reject', [\App\Http\Controllers\AttendanceCorrectionController::class, 'reject']);
+        Route::post('/attendance-corrections/{id}/approve', [AttendanceCorrectionController::class, 'approve']);
+        Route::post('/attendance-corrections/{id}/reject', [AttendanceCorrectionController::class, 'reject']);
     });
 
     // Leave
@@ -190,7 +192,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
 
     // Overtimes
     Route::middleware('permission:view-overtimes')->group(function () {
-        Route::get('/overtimes/export', [\App\Http\Controllers\OvertimeController::class, 'export']);
+        Route::get('/overtimes/export', [OvertimeController::class, 'export']);
         Route::get('/overtimes', [OvertimeController::class, 'index']);
         Route::delete('/overtimes/{id}', [OvertimeController::class, 'destroy']);
     });
@@ -228,13 +230,13 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     });
 
     // Company Documents (SK & Regulations)
-    Route::middleware('permission:view-documents')->get('/documents', [\App\Http\Controllers\CompanyDocumentController::class, 'index']);
-    Route::middleware('permission:view-documents')->get('/documents/{id}/preview', [\App\Http\Controllers\CompanyDocumentController::class, 'preview']);
+    Route::middleware('permission:view-documents')->get('/documents', [CompanyDocumentController::class, 'index']);
+    Route::middleware('permission:view-documents')->get('/documents/{id}/preview', [CompanyDocumentController::class, 'preview']);
     Route::middleware('permission:manage-documents')->group(function () {
-        Route::post('/documents', [\App\Http\Controllers\CompanyDocumentController::class, 'store']);
-        Route::get('/documents/{id}', [\App\Http\Controllers\CompanyDocumentController::class, 'show']);
-        Route::put('/documents/{id}', [\App\Http\Controllers\CompanyDocumentController::class, 'update']);
-        Route::delete('/documents/{id}', [\App\Http\Controllers\CompanyDocumentController::class, 'destroy']);
+        Route::post('/documents', [CompanyDocumentController::class, 'store']);
+        Route::get('/documents/{id}', [CompanyDocumentController::class, 'show']);
+        Route::put('/documents/{id}', [CompanyDocumentController::class, 'update']);
+        Route::delete('/documents/{id}', [CompanyDocumentController::class, 'destroy']);
     });
 
     // Activity Logs
@@ -259,18 +261,18 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::middleware('permission:manage-wfh')->post('/employees/bulk-wfh', [EmployeeController::class, 'bulkWfh']);
 
     // Schedules & Shift
-    Route::get('/shifts', [\App\Http\Controllers\ShiftController::class, 'index']);
-    Route::post('/shifts', [\App\Http\Controllers\ShiftController::class, 'store']);
-    Route::get('/schedules', [\App\Http\Controllers\ScheduleController::class, 'index']);
-    Route::post('/schedules', [\App\Http\Controllers\ScheduleController::class, 'store']);
+    Route::get('/shifts', [ShiftController::class, 'index']);
+    Route::post('/shifts', [ShiftController::class, 'store']);
+    Route::get('/schedules', [ScheduleController::class, 'index']);
+    Route::post('/schedules', [ScheduleController::class, 'store']);
     // Schedules & Shift (Additional management)
     Route::middleware('permission:manage-schedules')->group(function () {
-        Route::post('/schedules/generate', [\App\Http\Controllers\ScheduleController::class, 'generate']);
-        Route::get('/schedules/export', [\App\Http\Controllers\ScheduleController::class, 'export']);
+        Route::post('/schedules/generate', [ScheduleController::class, 'generate']);
+        Route::get('/schedules/export', [ScheduleController::class, 'export']);
     });
 
     // Attendance Correction Export
-    Route::get('/attendance-corrections/export', [\App\Http\Controllers\AttendanceCorrectionController::class, 'export']);
+    Route::get('/attendance-corrections/export', [AttendanceCorrectionController::class, 'export']);
 
     // Roles & Permissions
     Route::middleware('permission:manage-roles')->group(function () {
@@ -298,46 +300,46 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
 
     // Salary (Gaji)
     Route::get('/salary', [SalaryController::class, 'index']);
-    
+
     // Payroll System (Comprehensive)
     Route::group(['prefix' => 'payroll'], function () {
         // Restricted to Payroll Managers (HRD, CEO, Super Admin)
         Route::middleware('permission:manage-payroll')->group(function () {
             // Settings
-            Route::get('/settings', [\App\Http\Controllers\Api\PayrollController::class, 'getSettings']);
-            Route::post('/settings', [\App\Http\Controllers\Api\PayrollController::class, 'updateSettings']);
-            Route::post('/import-data', [\App\Http\Controllers\Api\PayrollController::class, 'importPayrollData']);
+            Route::get('/settings', [PayrollController::class, 'getSettings']);
+            Route::post('/settings', [PayrollController::class, 'updateSettings']);
+            Route::post('/import-data', [PayrollController::class, 'importPayrollData']);
 
             // Generate & History
-            Route::post('/generate', [\App\Http\Controllers\Api\PayrollController::class, 'generate']);
-            Route::get('/history', [\App\Http\Controllers\Api\PayrollController::class, 'index']);
+            Route::post('/generate', [PayrollController::class, 'generate']);
+            Route::get('/history', [PayrollController::class, 'index']);
 
             // Batch Operations (Approval Workflow)
-            Route::get('/batches', [\App\Http\Controllers\Api\PayrollController::class, 'getBatches']);
-            Route::get('/batches/{id}', [\App\Http\Controllers\Api\PayrollController::class, 'getBatchDetail']);
-            Route::delete('/batches/{id}', [\App\Http\Controllers\Api\PayrollController::class, 'destroyBatch']);
-            Route::post('/batches/{id}/submit', [\App\Http\Controllers\Api\PayrollController::class, 'submitForApproval']);
-            Route::post('/batches/{id}/approve', [\App\Http\Controllers\Api\PayrollController::class, 'approveBatch']);
-            Route::post('/batches/{id}/reject', [\App\Http\Controllers\Api\PayrollController::class, 'rejectBatch']);
-            Route::post('/batches/{id}/paid', [\App\Http\Controllers\Api\PayrollController::class, 'markAsPaid']);
+            Route::get('/batches', [PayrollController::class, 'getBatches']);
+            Route::get('/batches/{id}', [PayrollController::class, 'getBatchDetail']);
+            Route::delete('/batches/{id}', [PayrollController::class, 'destroyBatch']);
+            Route::post('/batches/{id}/submit', [PayrollController::class, 'submitForApproval']);
+            Route::post('/batches/{id}/approve', [PayrollController::class, 'approveBatch']);
+            Route::post('/batches/{id}/reject', [PayrollController::class, 'rejectBatch']);
+            Route::post('/batches/{id}/paid', [PayrollController::class, 'markAsPaid']);
 
             // Individual Salary Edit (HR adjustments)
-            Route::put('/salaries/{id}', [\App\Http\Controllers\Api\PayrollController::class, 'updateSalary']);
+            Route::put('/salaries/{id}', [PayrollController::class, 'updateSalary']);
 
             // Exports
-            Route::get('/export', [\App\Http\Controllers\Api\PayrollController::class, 'export']);
-            Route::get('/batches/{id}/export-rekap', [\App\Http\Controllers\Api\PayrollController::class, 'exportRekap']);
+            Route::get('/export', [PayrollController::class, 'export']);
+            Route::get('/batches/{id}/export-rekap', [PayrollController::class, 'exportRekap']);
         });
 
         // Personal History (Staff access)
         Route::middleware('permission:view-salaries')->group(function () {
-            Route::get('/my-history', [\App\Http\Controllers\Api\PayrollController::class, 'myPayroll']);
+            Route::get('/my-history', [PayrollController::class, 'myPayroll']);
         });
     });
 
     // Public/Token-based Payroll Routes (for Mobile Browser access)
-    Route::get('/payroll/download-slip/{id}', [\App\Http\Controllers\Api\PayrollController::class, 'downloadSlip']);
-    Route::get('/payroll/preview-slip/{id}', [\App\Http\Controllers\Api\PayrollController::class, 'previewSlip']);
+    Route::get('/payroll/download-slip/{id}', [PayrollController::class, 'downloadSlip']);
+    Route::get('/payroll/preview-slip/{id}', [PayrollController::class, 'previewSlip']);
 
     // Tasks (Tugas)
     Route::get('/tasks', [TaskController::class, 'index']);
@@ -381,7 +383,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     // Employee Directory & Org Chart
     // Employee Directory & Org Chart
     Route::middleware('permission:view-directory')->get('/directory', [EmployeeController::class, 'directory']);
-    Route::middleware('permission:view-organization')->get('/organization-chart', [\App\Http\Controllers\OrganizationController::class, 'getChart']);
+    Route::middleware('permission:view-organization')->get('/organization-chart', [OrganizationController::class, 'getChart']);
 
     // MassLeave
     Route::middleware('permission:approve-leaves')->group(function () {

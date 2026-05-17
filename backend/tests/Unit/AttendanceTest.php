@@ -2,10 +2,11 @@
 
 namespace Tests\Unit;
 
-use Tests\TestCase;
-use App\Models\User;
 use App\Models\Attendance;
+use App\Models\Company;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 class AttendanceTest extends TestCase
 {
@@ -14,9 +15,9 @@ class AttendanceTest extends TestCase
     /** @test */
     public function test_it_can_record_attendance_check_in()
     {
-        $company = \App\Models\Company::create(['name' => 'Test Co']);
+        $company = Company::create(['name' => 'Test Co']);
         $user = User::factory()->create(['company_id' => $company->id]);
-        
+
         $attendance = Attendance::create([
             'user_id' => $user->id,
             'company_id' => $company->id,
@@ -28,18 +29,18 @@ class AttendanceTest extends TestCase
 
         $this->assertDatabaseHas('attendances', [
             'user_id' => $user->id,
-            'status' => 'present'
+            'status' => 'present',
         ]);
     }
 
     /** @test */
     public function test_it_calculates_late_status_correctly()
     {
-        // This is more of a logic check that could be tied to a service 
+        // This is more of a logic check that could be tied to a service
         // but for now we test the model/database entry.
-        $company = \App\Models\Company::create(['name' => 'Test Co 2']);
+        $company = Company::create(['name' => 'Test Co 2']);
         $user = User::factory()->create(['company_id' => $company->id]);
-        
+
         $attendance = Attendance::create([
             'user_id' => $user->id,
             'company_id' => $company->id,

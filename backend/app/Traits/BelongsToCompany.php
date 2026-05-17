@@ -2,6 +2,7 @@
 
 namespace App\Traits;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 
@@ -10,10 +11,10 @@ trait BelongsToCompany
     protected static function bootBelongsToCompany()
     {
         static::addGlobalScope('company', function (Builder $builder) {
-            /** @var \App\Models\User $user */
+            /** @var User $user */
             $user = Auth::user();
             // Cek apakah user sudah login, punya company_id, puny method canAccessAllCompanies, dan bukan Super Admin
-            if ($user && isset($user->company_id) && method_exists($user, 'canAccessAllCompanies') && !$user->canAccessAllCompanies()) {
+            if ($user && isset($user->company_id) && method_exists($user, 'canAccessAllCompanies') && ! $user->canAccessAllCompanies()) {
                 $builder->where('company_id', $user->company_id);
             }
         });

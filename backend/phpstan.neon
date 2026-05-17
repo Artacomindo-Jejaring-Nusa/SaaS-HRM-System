@@ -1,0 +1,15 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app/
+
+    # Level 9 is the highest level (strictest). We'll start at level 5 to catch common logic bugs without being too annoying.
+    level: 5
+
+    ignoreErrors:
+        # Ignore some general errors if necessary
+
+    excludePaths:
+        - ./*/*/FileToBeExcluded.php

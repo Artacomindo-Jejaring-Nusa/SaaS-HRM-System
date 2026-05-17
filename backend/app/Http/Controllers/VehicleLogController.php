@@ -2,19 +2,23 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\VehicleLog;
 use App\Models\User;
-use Illuminate\Http\Request;
+use App\Models\VehicleLog;
 use App\Traits\Notifiable;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Intervention\Image\Laravel\Facades\Image;
 
-
 class VehicleLogController extends Controller
 {
     use Notifiable;
+
+    private const MSG_FORBIDDEN = 'Akses ditolak.';
+    private const URL_FLEET_LOGS = '/dashboard/fleet-logs';
+    private const RULE_NULL_NUM = 'nullable|numeric|min:0';
 
     /**
      * List all vehicle logs (with data isolation)
@@ -25,7 +29,7 @@ class VehicleLogController extends Controller
         $user = $request->user();
 
         if ($user->is_manager) {
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
         } else {
@@ -39,7 +43,7 @@ class VehicleLogController extends Controller
 
         // Filter by plate number
         if ($request->has('plate_number') && $request->plate_number) {
-            $query->where('plate_number', 'like', '%' . $request->plate_number . '%');
+            $query->where('plate_number', 'like', '%'.$request->plate_number.'%');
         }
 
         // Filter by date range
@@ -51,6 +55,7 @@ class VehicleLogController extends Controller
         }
 
         $logs = $query->orderBy('id', 'desc')->paginate(10);
+
         return $this->successResponse($logs, 'Daftar log kendaraan berhasil diambil.');
     }
 
@@ -60,6 +65,7 @@ class VehicleLogController extends Controller
     public function show(Request $request, $id)
     {
         $log = VehicleLog::with(['user', 'approver'])->findOrFail($id);
+
         return $this->successResponse($log);
     }
 
@@ -82,11 +88,11 @@ class VehicleLogController extends Controller
         $photoPath = null;
         if ($request->hasFile('odometer_start_photo')) {
             $file = $request->file('odometer_start_photo');
-            $photoPath = 'vehicle-logs/odometer/' . Str::random(40) . '.jpg';
-            
+            $photoPath = 'vehicle-logs/odometer/'.Str::random(40).'.jpg';
+
             // Compress and scale (1000px for better odometer readability)
             $img = Image::decode($file);
-            $img->scale(width: 1000); 
+            $img->scale(width: 1000);
             Storage::disk('public')->put($photoPath, (string) $img->encodeUsingFileExtension('jpg', 80));
         }
 
@@ -110,7 +116,7 @@ class VehicleLogController extends Controller
             'LOG KENDARAAN — KEBERANGKATAN',
             "Pencatatan keberangkatan berhasil. Kendaraan {$request->vehicle_name} ({$request->plate_number}) dengan KM Awal {$request->odometer_start} ke {$request->destination}.",
             'info',
-            '/dashboard/fleet-logs'
+            self::URL_FLEET_LOGS
         );
 
         // Notify Supervisor
@@ -122,7 +128,7 @@ class VehicleLogController extends Controller
                     'PENGGUNAAN KENDARAAN BAWAHAN',
                     "Karyawan {$request->user()->name} menggunakan kendaraan {$request->vehicle_name} ({$request->plate_number}) untuk perjalanan dinas ke {$request->destination}.",
                     'warning',
-                    '/dashboard/fleet-logs'
+                    self::URL_FLEET_LOGS
                 );
             }
         }
@@ -140,7 +146,7 @@ class VehicleLogController extends Controller
                 'KENDARAAN DINAS KELUAR',
                 "Karyawan {$request->user()->name} baru saja membawa kendaraan {$request->vehicle_name} ({$request->plate_number}) menuju {$request->destination}.",
                 'info',
-                '/dashboard/fleet-logs'
+                self::URL_FLEET_LOGS
             );
         }
 
@@ -159,13 +165,13 @@ class VehicleLogController extends Controller
             ->findOrFail($id);
 
         $request->validate([
-            'return_date' => 'required|date|after_or_equal:' . \Carbon\Carbon::parse($log->departure_date)->format('Y-m-d'),
-            'odometer_end' => 'required|integer|min:' . $log->odometer_start,
+            'return_date' => 'required|date|after_or_equal:'.Carbon::parse($log->departure_date)->format('Y-m-d'),
+            'odometer_end' => 'required|integer|min:'.$log->odometer_start,
             'odometer_end_photo' => 'nullable|image|max:10240',
-            'fuel_cost' => 'nullable|numeric|min:0',
-            'toll_cost' => 'nullable|numeric|min:0',
-            'parking_cost' => 'nullable|numeric|min:0',
-            'other_cost' => 'nullable|numeric|min:0',
+            'fuel_cost' => self::RULE_NULL_NUM,
+            'toll_cost' => self::RULE_NULL_NUM,
+            'parking_cost' => self::RULE_NULL_NUM,
+            'other_cost' => self::RULE_NULL_NUM,
             'expense_attachments' => 'nullable|array',
             'expense_attachments.*' => 'image|max:10240',
             'notes' => 'nullable|string',
@@ -174,8 +180,8 @@ class VehicleLogController extends Controller
         $photoPath = $log->odometer_end_photo;
         if ($request->hasFile('odometer_end_photo')) {
             $file = $request->file('odometer_end_photo');
-            $photoPath = 'vehicle-logs/odometer/' . Str::random(40) . '.jpg';
-            
+            $photoPath = 'vehicle-logs/odometer/'.Str::random(40).'.jpg';
+
             $img = Image::decode($file);
             $img->scale(width: 1000);
             Storage::disk('public')->put($photoPath, (string) $img->encodeUsingFileExtension('jpg', 80));
@@ -185,7 +191,7 @@ class VehicleLogController extends Controller
         $attachments = [];
         if ($request->hasFile('expense_attachments')) {
             foreach ($request->file('expense_attachments') as $file) {
-                $path = 'vehicle-logs/expenses/' . Str::random(40) . '.jpg';
+                $path = 'vehicle-logs/expenses/'.Str::random(40).'.jpg';
                 $img = Image::decode($file);
                 $img->scale(width: 1000);
                 Storage::disk('public')->put($path, (string) $img->encodeUsingFileExtension('jpg', 80));
@@ -213,9 +219,9 @@ class VehicleLogController extends Controller
         $this->notify(
             $request->user(),
             'LOG KENDARAAN — SELESAI',
-            "Perjalanan dinas selesai dicatat. Jarak tempuh: {$distance} KM. Total biaya: Rp " . number_format((float)$totalCost, 0, ',', '.') . ". Menunggu validasi admin.",
+            "Perjalanan dinas selesai dicatat. Jarak tempuh: {$distance} KM. Total biaya: Rp ".number_format((float) $totalCost, 0, ',', '.').'. Menunggu validasi admin.',
             'success',
-            '/dashboard/fleet-logs'
+            self::URL_FLEET_LOGS
         );
 
         // Notify Supervisor & approvers
@@ -225,9 +231,9 @@ class VehicleLogController extends Controller
                 $this->notify(
                     $supervisor,
                     'LOG KENDARAAN SELESAI — PERLU VALIDASI',
-                    "Karyawan {$request->user()->name} telah menyelesaikan perjalanan dinas dengan {$log->vehicle_name} ({$log->plate_number}). Jarak: {$distance} KM, Biaya: Rp " . number_format((float)$totalCost, 0, ',', '.') . ". Mohon validasi.",
+                    "Karyawan {$request->user()->name} telah menyelesaikan perjalanan dinas dengan {$log->vehicle_name} ({$log->plate_number}). Jarak: {$distance} KM, Biaya: Rp ".number_format((float) $totalCost, 0, ',', '.').'. Mohon validasi.',
                     'warning',
-                    '/dashboard/fleet-logs'
+                    self::URL_FLEET_LOGS
                 );
             }
         }
@@ -243,9 +249,9 @@ class VehicleLogController extends Controller
             $this->notify(
                 $admin,
                 'LOG KENDARAAN SELESAI (ADMIN)',
-                "Karyawan {$request->user()->name} menyelesaikan perjalanan dengan {$log->vehicle_name}. Jarak: {$distance} KM, Biaya: Rp " . number_format((float)$totalCost, 0, ',', '.'),
+                "Karyawan {$request->user()->name} menyelesaikan perjalanan dengan {$log->vehicle_name}. Jarak: {$distance} KM, Biaya: Rp ".number_format((float) $totalCost, 0, ',', '.'),
                 'warning',
-                '/dashboard/fleet-logs'
+                self::URL_FLEET_LOGS
             );
         }
 
@@ -259,7 +265,7 @@ class VehicleLogController extends Controller
      */
     public function approve(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('approve-vehicle-logs'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('approve-vehicle-logs'), 403, self::MSG_FORBIDDEN);
 
         $log = VehicleLog::with('user')->findOrFail($id);
 
@@ -283,7 +289,7 @@ class VehicleLogController extends Controller
             'LOG KENDARAAN DIVALIDASI',
             $msg,
             'success',
-            '/dashboard/fleet-logs'
+            self::URL_FLEET_LOGS
         );
 
         $this->logActivity('APPROVE_VEHICLE_LOG', "Menyetujui log kendaraan {$log->vehicle_name} dari {$log->user->name}, jarak {$log->distance} KM", $log);
@@ -296,7 +302,7 @@ class VehicleLogController extends Controller
      */
     public function reject(Request $request, $id)
     {
-        abort_if(!$request->user()->hasPermission('approve-vehicle-logs'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('approve-vehicle-logs'), 403, self::MSG_FORBIDDEN);
 
         $log = VehicleLog::with('user')->findOrFail($id);
 
@@ -320,7 +326,7 @@ class VehicleLogController extends Controller
             'LOG KENDARAAN DITOLAK',
             $msg,
             'danger',
-            '/dashboard/fleet-logs'
+            self::URL_FLEET_LOGS
         );
 
         $this->logActivity('REJECT_VEHICLE_LOG', "Menolak log kendaraan {$log->vehicle_name} dari {$log->user->name}", $log);
@@ -336,11 +342,11 @@ class VehicleLogController extends Controller
         $log = VehicleLog::findOrFail($id);
 
         // Only owner can delete their own departure logs, or admin can delete
-        if ($log->user_id !== $request->user()->id && !$request->user()->hasPermission('approve-vehicle-logs')) {
-            return $this->errorResponse('Akses ditolak.', 403);
+        if ($log->user_id !== $request->user()->id && ! $request->user()->hasPermission('approve-vehicle-logs')) {
+            return $this->errorResponse(self::MSG_FORBIDDEN, 403);
         }
 
-        if (!in_array($log->status, ['departure', 'rejected'])) {
+        if (! in_array($log->status, ['departure', 'rejected'])) {
             return $this->errorResponse('Hanya log dengan status keberangkatan atau ditolak yang bisa dihapus.', 403);
         }
 
@@ -358,12 +364,12 @@ class VehicleLogController extends Controller
      */
     public function report(Request $request)
     {
-        abort_if(!$request->user()->hasPermission('view-vehicle-reports'), 403, 'Akses ditolak.');
+        abort_if(! $request->user()->hasPermission('view-vehicle-reports'), 403, self::MSG_FORBIDDEN);
 
         $query = VehicleLog::with('user')
             ->where('status', 'approved');
 
-        if ($request->user()->company_id && !$request->user()->canAccessAllCompanies()) {
+        if ($request->user()->company_id && ! $request->user()->canAccessAllCompanies()) {
             $query->where('company_id', $request->user()->company_id);
         }
 

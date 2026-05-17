@@ -9,7 +9,7 @@ class ProjectContract extends Model
     protected $fillable = [
         'project_id', 'contract_number', 'title', 'vendor_name', 'vendor_contact',
         'contract_value', 'contract_type', 'status', 'start_date', 'end_date',
-        'scope_of_work', 'notes'
+        'scope_of_work', 'notes',
     ];
 
     protected $casts = [

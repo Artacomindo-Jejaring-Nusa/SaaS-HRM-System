@@ -17,7 +17,7 @@ return new class extends Migration
             $table->foreignId('shift_id')->constrained()->onDelete('cascade');
             $table->date('date');
             $table->timestamps();
-            
+
             $table->unique(['user_id', 'date']); // One schedule per day per user
         });
     }

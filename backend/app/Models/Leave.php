@@ -2,9 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
 use App\Traits\BelongsToCompany;
+use Illuminate\Database\Eloquent\Model;
 
 class Leave extends Model
 {
@@ -13,7 +12,7 @@ class Leave extends Model
     protected $fillable = [
         'user_id', 'company_id', 'start_date', 'end_date',
         'type', 'reason', 'status', 'approved_by', 'signature', 'remark',
-        'supervisor_approved_by', 'supervisor_approved_at', 'supervisor_remark'
+        'supervisor_approved_by', 'supervisor_approved_at', 'supervisor_remark',
     ];
 
     public function user()

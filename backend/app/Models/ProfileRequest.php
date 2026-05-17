@@ -12,7 +12,7 @@ class ProfileRequest extends Model
         'old_data',
         'new_data',
         'status',
-        'approved_by'
+        'approved_by',
     ];
 
     protected $casts = [

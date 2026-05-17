@@ -17,19 +17,19 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->onDelete('cascade'); // The employee being reviewed
             $table->foreignId('reviewer_id')->constrained('users')->onDelete('cascade');
             $table->string('period'); // e.g., '2026-03' or '2026-Q1'
-            
+
             // Scores (1-100/100)
             $table->integer('score_discipline')->default(0);
             $table->integer('score_technical')->default(0);
             $table->integer('score_cooperation')->default(0);
             $table->integer('score_attitude')->default(0);
             $table->integer('score_total')->default(0);
-            
+
             $table->text('achievements')->nullable();
             $table->text('improvements')->nullable();
             $table->text('comments')->nullable();
             $table->string('status')->default('draft'); // draft, published
-            
+
             $table->timestamps();
         });
     }

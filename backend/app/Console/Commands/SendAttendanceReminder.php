@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Models\User;
 use App\Models\Attendance;
 use App\Services\WhatsAppService;
 use Carbon\Carbon;
@@ -40,7 +39,8 @@ class SendAttendanceReminder extends Command
             ->get();
 
         if ($attendances->isEmpty()) {
-            $this->info("All employees have checked out or no check-ins found.");
+            $this->info('All employees have checked out or no check-ins found.');
+
             return;
         }
 
@@ -48,13 +48,13 @@ class SendAttendanceReminder extends Command
 
         foreach ($attendances as $attendance) {
             $user = $attendance->user;
-            
-            if (!$user || !$user->phone) {
+
+            if (! $user || ! $user->phone) {
                 continue;
             }
 
             $waService = new WhatsAppService($user->company);
-            
+
             $message = "Halo *{$user->name}*,\n\nKami melihat Anda sudah melakukan Absen Masuk, namun *belum melakukan Absen Keluar* hari ini.\n\nJangan lupa untuk melakukan Absen Keluar di aplikasi HRMS sebelum pulang agar data kehadiran Anda tercatat dengan lengkap. Terima kasih!";
 
             if ($waService->sendMessage($user->phone, $message)) {

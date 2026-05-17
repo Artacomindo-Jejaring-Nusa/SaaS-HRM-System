@@ -2,16 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ProfileRequest;
+use App\Models\Role;
+use App\Models\User;
+use App\Traits\Notifiable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\ValidationException;
-use App\Traits\Notifiable;
 use Illuminate\Support\Str;
 use Intervention\Image\Laravel\Facades\Image;
 
 class ProfileController extends Controller
 {
     use Notifiable;
+
     public function update(Request $request)
     {
         $user = $request->user();
@@ -33,33 +36,33 @@ class ProfileController extends Controller
         $changes = [];
 
         foreach ($newData as $key => $value) {
-            if ($value && $user->$key != $value) {
+            if ($value && $value != $user->$key) {
                 $changes[$key] = $value;
             }
         }
 
-        if (!empty($changes)) {
+        if (! empty($changes)) {
             // Create a request for sensitive fields
-            \App\Models\ProfileRequest::create([
+            ProfileRequest::create([
                 'user_id' => $user->id,
                 'company_id' => $user->company_id,
                 'old_data' => $user->only(array_keys($changes)),
                 'new_data' => $changes,
-                'status' => 'pending'
+                'status' => 'pending',
             ]);
 
             // Notify user
             $this->notify(
                 $user,
                 'PENGAJUAN PERUBAHAN PROFIL',
-                "Permohonan perubahan data profil Anda sedang menunggu persetujuan admin.",
+                'Permohonan perubahan data profil Anda sedang menunggu persetujuan admin.',
                 'info'
             );
 
             // Notify Admins and HR
-            $adminRoles = \App\Models\Role::whereIn('name', ['Super Admin', 'HRD', 'Manager', 'Management'])->pluck('id');
+            $adminRoles = Role::whereIn('name', ['Super Admin', 'HRD', 'Manager', 'Management'])->pluck('id');
 
-            $admins = \App\Models\User::where('company_id', $user->company_id)
+            $admins = User::where('company_id', $user->company_id)
                 ->whereIn('role_id', $adminRoles)
                 ->get();
 
@@ -75,12 +78,12 @@ class ProfileController extends Controller
 
             return $this->successResponse([
                 'user' => $user->fresh()->load('role.permissions'),
-                'needs_approval' => true
+                'needs_approval' => true,
             ], 'Profil diperbarui, namun perubahan nomor telepon/email memerlukan persetujuan admin.');
         }
 
         return $this->successResponse([
-            'user' => $user->fresh()->load('role')
+            'user' => $user->fresh()->load('role'),
         ], 'Profil berhasil diperbarui');
     }
 
@@ -99,27 +102,27 @@ class ProfileController extends Controller
 
         // Compress and store new photo (Avatar size: 400x400)
         $file = $request->file('photo');
-        $path = 'profile-photos/' . Str::random(40) . '.jpg';
-        
+        $path = 'profile-photos/'.Str::random(40).'.jpg';
+
         $img = Image::decode($file);
         $img->cover(400, 400); // Crop and resize to square
         Storage::disk('public')->put($path, (string) $img->encodeUsingFileExtension('jpg', 80));
 
         $user->update([
-            'profile_photo_path' => $path
+            'profile_photo_path' => $path,
         ]);
 
         return $this->successResponse([
-            'profile_photo_url' => asset('storage/' . $path)
+            'profile_photo_url' => asset('storage/'.$path),
         ], 'Foto profil berhasil diperbarui');
     }
-
 
     public function me(Request $request)
     {
         $user = $request->user()->load(['role.permissions', 'office']);
+
         return $this->successResponse([
-            'user' => $user
+            'user' => $user,
         ]);
     }
 }

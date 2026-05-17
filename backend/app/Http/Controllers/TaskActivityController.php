@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Task;
 use App\Models\TaskActivity;
 use App\Models\TaskEvidence;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -24,6 +25,7 @@ class TaskActivityController extends Controller
 
         return $this->successResponse($activities, 'Daftar kegiatan tugas berhasil diambil.');
     }
+
     /**
      * Add activities to a task
      */
@@ -92,7 +94,7 @@ class TaskActivityController extends Controller
         // Upload photo_before (optional)
         if ($request->hasFile('photo_before')) {
             $file = $request->file('photo_before');
-            $path = 'task-evidences/before/' . Str::random(40) . '.jpg';
+            $path = 'task-evidences/before/'.Str::random(40).'.jpg';
 
             $img = Image::decode($file);
             $img->resize(1920, null);
@@ -105,7 +107,7 @@ class TaskActivityController extends Controller
         // Upload photo_after (required)
         if ($request->hasFile('photo_after')) {
             $file = $request->file('photo_after');
-            $path = 'task-evidences/after/' . Str::random(40) . '.jpg';
+            $path = 'task-evidences/after/'.Str::random(40).'.jpg';
 
             $img = Image::decode($file);
             $img->resize(1920, null);
@@ -140,14 +142,14 @@ class TaskActivityController extends Controller
 
         // Send notification to assigner
         if ($task->assigned_by) {
-            $assigner = \App\Models\User::find($task->assigned_by);
+            $assigner = User::find($task->assigned_by);
             if ($assigner) {
                 $this->sendNotification(
                     $assigner->id,
                     'Kegiatan Tugas Selesai ✅',
                     "Kegiatan '{$activity->activity_name}' dari tugas '{$task->title}' telah selesai. Progress: {$progress}%",
                     'info',
-                    '/dashboard/tasks/' . $task->id,
+                    '/dashboard/tasks/'.$task->id,
                     'notif'
                 );
             }
@@ -177,7 +179,7 @@ class TaskActivityController extends Controller
         ]);
 
         $updateData = ['status' => $request->status];
-        
+
         if ($request->status === 'completed') {
             $updateData['completed_at'] = now();
         }
@@ -207,7 +209,7 @@ class TaskActivityController extends Controller
     public function show($activityId)
     {
         $activity = TaskActivity::with(['evidence', 'task.assigner', 'task.user'])->findOrFail($activityId);
-        
+
         return $this->successResponse($activity, 'Detail kegiatan berhasil diambil.');
     }
 

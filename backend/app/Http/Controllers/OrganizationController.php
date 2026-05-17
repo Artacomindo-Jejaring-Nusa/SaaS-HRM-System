@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\User;
+use Illuminate\Http\Request;
 
 class OrganizationController extends Controller
 {
@@ -27,7 +27,7 @@ class OrganizationController extends Controller
                 'supervisor_id' => $user->supervisor_id,
                 'name' => $user->name,
                 'role' => $user->role ? $user->role->name : 'No Role',
-                'photo' => $user->profile_photo_url
+                'photo' => $user->profile_photo_url,
             ];
         });
 
