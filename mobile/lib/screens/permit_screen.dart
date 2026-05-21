@@ -5,6 +5,7 @@ import 'package:signature/signature.dart';
 import 'dart:convert';
 import '../../api/api_service.dart';
 import '../../widgets/skeleton_loading.dart';
+import '../../widgets/loading_overlay.dart';
 
 class PermitScreen extends StatefulWidget {
   @override
@@ -157,10 +158,12 @@ class _PermitScreenState extends State<PermitScreen> {
                       }
                       
                       setModalState(() => _isSubmitting = true);
+                      LoadingDialog.show(context, message: "Mengajukan izin...");
                       
                       try {
                         final sigData = await _sigController.toPngBytes();
                         if (sigData == null) {
+                          LoadingDialog.hide(context);
                           setModalState(() => _isSubmitting = false);
                           return;
                         }
@@ -175,6 +178,7 @@ class _PermitScreenState extends State<PermitScreen> {
                           'signature': 'data:image/png;base64,$base64Sig',
                         });
                         
+                        LoadingDialog.hide(context);
                         if (res['status'] == 'success' || res['id'] != null) {
                           Navigator.pop(ctx);
                           _fetchPermits();
@@ -185,6 +189,7 @@ class _PermitScreenState extends State<PermitScreen> {
                           ScaffoldMessenger.of(stContext).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
                         }
                       } catch (e) {
+                         LoadingDialog.hide(context);
                          setModalState(() => _isSubmitting = false);
                          ScaffoldMessenger.of(stContext).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red));
                       }

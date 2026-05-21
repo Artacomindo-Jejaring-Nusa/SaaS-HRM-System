@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../api/api_service.dart';
 import '../../widgets/skeleton_loading.dart';
+import '../../widgets/loading_overlay.dart';
 
 class ShiftSwapScreen extends StatefulWidget {
   @override
@@ -38,18 +39,24 @@ class _ShiftSwapScreenState extends State<ShiftSwapScreen> with SingleTickerProv
   }
 
   Future<void> _handleAction(int id, String status, {String? remark, bool isManager = false}) async {
-    setState(() => _isLoading = true);
-    Map<String, dynamic> res;
-    if (isManager) {
-      res = await ApiService.approveShiftSwap(id, status);
-    } else {
-      res = await ApiService.respondShiftSwap(id, status, remark: remark);
-    }
+    LoadingDialog.show(context, message: "Memproses respon Anda...");
+    try {
+      Map<String, dynamic> res;
+      if (isManager) {
+        res = await ApiService.approveShiftSwap(id, status);
+      } else {
+        res = await ApiService.respondShiftSwap(id, status, remark: remark);
+      }
 
-    if (res['status'] == 'success' || res['message']?.toString().contains('berhasil') == true) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? "Berhasil diproses"), backgroundColor: Colors.green));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? "Gagal memproses"), backgroundColor: Colors.red));
+      LoadingDialog.hide(context);
+      if (res['status'] == 'success' || res['message']?.toString().contains('berhasil') == true) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? "Berhasil diproses"), backgroundColor: Colors.green));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? "Gagal memproses"), backgroundColor: Colors.red));
+      }
+    } catch (e) {
+      LoadingDialog.hide(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red));
     }
     _loadData();
   }
@@ -442,6 +449,7 @@ class __AddSwapModalState extends State<_AddSwapModal> {
     print("Submitting Shift Swap: Receiver=$_selectedEmployeeId, MySched=$_selectedMySchedId, TargetSched=$_selectedReceiverSchedId");
     
     setState(() => _isSubmitting = true);
+    LoadingDialog.show(context, message: "Mengirim pengajuan tukar shift...");
     try {
       final res = await ApiService.submitShiftSwap({
         'receiver_id': _selectedEmployeeId,
@@ -452,6 +460,7 @@ class __AddSwapModalState extends State<_AddSwapModal> {
       
       print("API Response: $res");
       
+      LoadingDialog.hide(context);
       if (res['status'] == 'success' || res['id'] != null) {
         widget.onSuccess();
       } else {
@@ -461,6 +470,7 @@ class __AddSwapModalState extends State<_AddSwapModal> {
       }
     } catch (e) {
       print("Submit Error: $e");
+      LoadingDialog.hide(context);
       setState(() => _isSubmitting = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red));
     }

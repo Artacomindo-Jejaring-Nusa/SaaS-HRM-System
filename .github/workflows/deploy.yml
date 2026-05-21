@@ -2,31 +2,31 @@ name: 🚀 Production CI/CD
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   deploy:
     name: Deploy to VM via Self-Hosted Runner
-    runs-on: self-hosted # Ini akan memanggil runner yang baru Anda install
-    
+    runs-on: self-hosted # Buat menggil running di vm
+
     steps:
-      - name: 🧹 Pre-cleanup permissions
+      - name: Pre-cleanup permissions
         run: |
           # Perbaiki permission agar runner bisa menghapus file yang dibuat Docker sebelumnya
           sudo chown -R $USER:$USER . || true
 
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: 🔐 Create .env file from Secrets
+      - name: Create .env file from Secrets
         env:
           ENV_PROD_CONTENT: ${{ secrets.ENV_PROD }}
         run: |
           echo "$ENV_PROD_CONTENT" > .env.prod
 
-      - name: 🐋 Deploy with Docker Compose
+      - name: Deploy with Docker Compose
         run: |
           echo "Memulai Deployment di Server..."
           docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
           docker image prune -f
-          echo "✅ Deployment Selesai Berhasil!"
+          echo "Deployment Selesai Berhasil!"

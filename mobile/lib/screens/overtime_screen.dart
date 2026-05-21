@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../api/api_service.dart';
 import '../../widgets/skeleton_loading.dart';
+import '../../widgets/loading_overlay.dart';
 
 class OvertimeScreen extends StatefulWidget {
   @override
@@ -130,6 +131,7 @@ class _OvertimeScreenState extends State<OvertimeScreen> {
                       }
                       
                       setModalState(() => _isSubmitting = true);
+                      LoadingDialog.show(context, message: "Mengajukan lembur...");
                       
                       try {
                         final startStr = "${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}";
@@ -142,6 +144,7 @@ class _OvertimeScreenState extends State<OvertimeScreen> {
                           'reason': _reasonController.text,
                         });
                         
+                        LoadingDialog.hide(context);
                         if (res['status'] == 'success' || res['id'] != null) {
                           Navigator.pop(ctx);
                           _fetchOvertimes();
@@ -152,6 +155,7 @@ class _OvertimeScreenState extends State<OvertimeScreen> {
                           ScaffoldMessenger.of(stContext).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
                         }
                       } catch (e) {
+                         LoadingDialog.hide(context);
                          setModalState(() => _isSubmitting = false);
                          ScaffoldMessenger.of(stContext).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red));
                       }

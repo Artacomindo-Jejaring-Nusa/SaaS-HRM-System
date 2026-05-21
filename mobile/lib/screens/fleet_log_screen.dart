@@ -5,6 +5,7 @@ import '../api/api_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../widgets/skeleton_loading.dart';
+import '../../widgets/loading_overlay.dart';
 
 class FleetLogScreen extends StatefulWidget {
   @override
@@ -470,23 +471,33 @@ class _DepartureFormScreenState extends State<_DepartureFormScreen> {
     }
 
     setState(() => _isSubmitting = true);
-    final data = {
-      'vehicle_name': _vehicleNameController.text,
-      'plate_number': _plateNumberController.text,
-      'destination': _destinationController.text,
-      'purpose': _purposeController.text,
-      'odometer_start': _odometerController.text,
-      'departure_date': _dateController.text,
-    };
+    LoadingDialog.show(context, message: "Mencatat keberangkatan perjalanan...");
+    try {
+      final data = {
+        'vehicle_name': _vehicleNameController.text,
+        'plate_number': _plateNumberController.text,
+        'destination': _destinationController.text,
+        'purpose': _purposeController.text,
+        'odometer_start': _odometerController.text,
+        'departure_date': _dateController.text,
+      };
 
-    final result = await ApiService.submitDeparture(data, _image!.path);
-    setState(() => _isSubmitting = false);
+      final result = await ApiService.submitDeparture(data, _image!.path);
+      LoadingDialog.hide(context);
 
-    if (result['status'] == 'success') {
-      Navigator.pop(context, true);
-    } else {
+      if (result['status'] == 'success') {
+        Navigator.pop(context, true);
+      } else {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? "Gagal menyimpan")),
+        );
+      }
+    } catch (e) {
+      LoadingDialog.hide(context);
+      setState(() => _isSubmitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result['message'] ?? "Gagal menyimpan")),
+        SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
       );
     }
   }
@@ -863,28 +874,38 @@ class _ReturnFormScreenState extends State<_ReturnFormScreen> {
     if (_odometerPhoto == null) return;
 
     setState(() => _isSubmitting = true);
-    final data = {
-      'return_date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
-      'odometer_end': _kmController.text,
-      'fuel_cost': _fuelController.text.isEmpty ? "0" : _fuelController.text,
-      'toll_cost': _tollController.text.isEmpty ? "0" : _tollController.text,
-      'parking_cost': _parkController.text.isEmpty ? "0" : _parkController.text,
-    };
+    LoadingDialog.show(context, message: "Mencatat kepulangan perjalanan...");
+    try {
+      final data = {
+        'return_date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
+        'odometer_end': _kmController.text,
+        'fuel_cost': _fuelController.text.isEmpty ? "0" : _fuelController.text,
+        'toll_cost': _tollController.text.isEmpty ? "0" : _tollController.text,
+        'parking_cost': _parkController.text.isEmpty ? "0" : _parkController.text,
+      };
 
-    final result = await ApiService.submitReturn(
-      widget.logId,
-      data,
-      odometerPhotoPath: _odometerPhoto!.path,
-      expenseFiles: _expensePhotos.map((e) => e.path).toList(),
-    );
+      final result = await ApiService.submitReturn(
+        widget.logId,
+        data,
+        odometerPhotoPath: _odometerPhoto!.path,
+        expenseFiles: _expensePhotos.map((e) => e.path).toList(),
+      );
 
-    setState(() => _isSubmitting = false);
-    if (result['status'] == 'success') {
-      Navigator.pop(context, true);
-    } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(result['message'] ?? "Gagal")));
+      LoadingDialog.hide(context);
+      if (result['status'] == 'success') {
+        Navigator.pop(context, true);
+      } else {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(result['message'] ?? "Gagal")));
+      }
+    } catch (e) {
+      LoadingDialog.hide(context);
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
+      );
     }
   }
 

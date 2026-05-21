@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../api/api_service.dart';
 import '../widgets/skeleton_loading.dart';
+import '../widgets/loading_overlay.dart';
 
 class AttendanceCorrectionScreen extends StatefulWidget {
   @override
@@ -257,43 +258,56 @@ class _AttendanceCorrectionScreenState
                                 }
 
                                 setModalState(() => isSubmitting = true);
+                                LoadingDialog.show(context, message: "Mengajukan koreksi absen...");
 
-                                final payload = <String, dynamic>{
-                                  'attendance_id': selectedAttendance['id'],
-                                  'correction_type': correctionType,
-                                  'corrected_check_out':
-                                      '${correctedCheckOut!.hour.toString().padLeft(2, '0')}:${correctedCheckOut!.minute.toString().padLeft(2, '0')}',
-                                  'reason': reasonController.text.trim(),
-                                };
+                                try {
+                                  final payload = <String, dynamic>{
+                                    'attendance_id': selectedAttendance['id'],
+                                    'correction_type': correctionType,
+                                    'corrected_check_out':
+                                        '${correctedCheckOut!.hour.toString().padLeft(2, '0')}:${correctedCheckOut!.minute.toString().padLeft(2, '0')}',
+                                    'reason': reasonController.text.trim(),
+                                  };
 
-                                if (correctedCheckIn != null &&
-                                    correctionType == 'wrong_time') {
-                                  payload['corrected_check_in'] =
-                                      '${correctedCheckIn!.hour.toString().padLeft(2, '0')}:${correctedCheckIn!.minute.toString().padLeft(2, '0')}';
-                                }
+                                  if (correctedCheckIn != null &&
+                                      correctionType == 'wrong_time') {
+                                    payload['corrected_check_in'] =
+                                        '${correctedCheckIn!.hour.toString().padLeft(2, '0')}:${correctedCheckIn!.minute.toString().padLeft(2, '0')}';
+                                  }
 
-                                final result =
-                                    await ApiService.submitAttendanceCorrection(
-                                        payload);
+                                  final result =
+                                      await ApiService.submitAttendanceCorrection(
+                                          payload);
 
-                                setModalState(() => isSubmitting = false);
+                                  LoadingDialog.hide(context);
 
-                                if (result['status'] == 'success' ||
-                                    result['status'] == true) {
-                                  Navigator.pop(context);
+                                  if (result['status'] == 'success' ||
+                                      result['status'] == true) {
+                                    Navigator.pop(context);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(result['message'] ??
+                                            "Koreksi berhasil diajukan!"),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                    _fetchCorrections();
+                                  } else {
+                                    setModalState(() => isSubmitting = false);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(result['message'] ??
+                                            "Gagal mengajukan koreksi."),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  LoadingDialog.hide(context);
+                                  setModalState(() => isSubmitting = false);
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text(result['message'] ??
-                                          "Koreksi berhasil diajukan!"),
-                                      backgroundColor: Colors.green,
-                                    ),
-                                  );
-                                  _fetchCorrections();
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(result['message'] ??
-                                          "Gagal mengajukan koreksi."),
+                                      content: Text("Error: ${e.toString()}"),
                                       backgroundColor: Colors.red,
                                     ),
                                   );

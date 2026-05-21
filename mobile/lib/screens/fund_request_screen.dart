@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import '../api/api_service.dart';
 import '../widgets/skeleton_loading.dart';
+import '../widgets/loading_overlay.dart';
 
 class FundRequestScreen extends StatefulWidget {
   @override
@@ -178,34 +179,50 @@ class _FundRequestScreenState extends State<FundRequestScreen> {
                             }
 
                             setModalState(() => isSubmitting = true);
+                            LoadingDialog.show(context, message: "Mengirim pengajuan dana...");
 
-                            String? base64Image;
-                            if (pickedFile != null) {
-                              final bytes = await File(pickedFile!.path).readAsBytes();
-                              base64Image = base64Encode(bytes);
-                            }
+                            try {
+                              String? base64Image;
+                              if (pickedFile != null) {
+                                final bytes = await File(pickedFile!.path).readAsBytes();
+                                base64Image = base64Encode(bytes);
+                              }
 
-                            final res = await ApiService.submitFundRequest({
-                              'amount': amountController.text,
-                              'reason': reasonController.text,
-                              'attachment': base64Image,
-                            });
+                              final res = await ApiService.submitFundRequest({
+                                'amount': amountController.text,
+                                'reason': reasonController.text,
+                                'attachment': base64Image,
+                              });
 
-                            if (mounted) {
-                              if (res['status'] == 'success') {
-                                Navigator.pop(context);
-                                _fetchRequests();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text("Pengajuan berhasil dikirim!"),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              } else {
+                              LoadingDialog.hide(context);
+
+                              if (mounted) {
+                                if (res['status'] == 'success') {
+                                  Navigator.pop(context);
+                                  _fetchRequests();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text("Pengajuan berhasil dikirim!"),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                } else {
+                                  setModalState(() => isSubmitting = false);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("Gagal: ${res['message']}"),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            } catch (e) {
+                              LoadingDialog.hide(context);
+                              if (mounted) {
                                 setModalState(() => isSubmitting = false);
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text("Gagal: ${res['message']}"),
+                                    content: Text("Error: ${e.toString()}"),
                                     backgroundColor: Colors.red,
                                   ),
                                 );

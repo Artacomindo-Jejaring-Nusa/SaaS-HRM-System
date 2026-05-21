@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../../api/api_service.dart';
 import '../../widgets/skeleton_loading.dart';
+import '../../widgets/loading_overlay.dart';
 
 class ReimbursementScreen extends StatefulWidget {
   @override
@@ -239,40 +240,54 @@ class _ReimbursementScreenState extends State<ReimbursementScreen> {
                             }
 
                             setModalState(() => isSubmitting = true);
+                            LoadingDialog.show(context, message: "Mengajukan klaim biaya...");
 
-                            final res = await ApiService.submitReimbursement(
-                              {
-                                'title': titleController.text,
-                                'amount': amountController.text,
-                                'description': descController.text,
-                              },
-                              filePaths: pickedFiles
-                                  .map((e) => e.path)
-                                  .toList(),
-                            );
+                            try {
+                              final res = await ApiService.submitReimbursement(
+                                {
+                                  'title': titleController.text,
+                                  'amount': amountController.text,
+                                  'description': descController.text,
+                                },
+                                filePaths: pickedFiles
+                                    .map((e) => e.path)
+                                    .toList(),
+                              );
 
-                            if (mounted) {
-                              if (res['status'] == 'success') {
-                                Navigator.pop(context);
-                                _fetchClaims();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text("Klaim berhasil diajukan!"),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              } else {
-                                setModalState(() => isSubmitting = false);
-                                print("SUBMIT_FAILED: $res");
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      "Gagal: ${res['message'] ?? 'Status Error'}",
+                              LoadingDialog.hide(context);
+
+                              if (mounted) {
+                                if (res['status'] == 'success') {
+                                  Navigator.pop(context);
+                                  _fetchClaims();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text("Klaim berhasil diajukan!"),
+                                      backgroundColor: Colors.green,
                                     ),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
+                                  );
+                                } else {
+                                  setModalState(() => isSubmitting = false);
+                                  print("SUBMIT_FAILED: $res");
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        "Gagal: ${res['message'] ?? 'Status Error'}",
+                                      ),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
                               }
+                            } catch (e) {
+                              LoadingDialog.hide(context);
+                              setModalState(() => isSubmitting = false);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text("Error: ${e.toString()}"),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
                             }
                           },
                     child: isSubmitting

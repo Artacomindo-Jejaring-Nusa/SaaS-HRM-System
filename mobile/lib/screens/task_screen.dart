@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../api/api_service.dart';
 import '../services/fcm_service.dart';
 import '../widgets/skeleton_loading.dart';
+import '../widgets/loading_overlay.dart';
 
 class TaskScreen extends StatefulWidget {
   const TaskScreen({super.key});
@@ -229,22 +230,31 @@ class _TaskScreenState extends State<TaskScreen> with SingleTickerProviderStateM
                         return;
                       }
                       setModalState(() => isSubmitting = true);
-                      
-                      final res = await ApiService.createTask({
-                        'assigned_to': selectedEmployee['id'],
-                        'title': titleController.text,
-                        'description': descController.text,
-                        'due_date': DateFormat('yyyy-MM-dd').format(dueDate),
-                        'priority': priority,
-                      });
+                      LoadingDialog.show(context, message: "Memberikan tugas baru...");
 
-                      setModalState(() => isSubmitting = false);
-                      if (res['status'] == 'success') {
-                        Navigator.pop(context);
-                        _fetchTasks();
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tugas berhasil diberikan!"), backgroundColor: Colors.green));
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? "Gagal memberikan tugas")));
+                      try {
+                        final res = await ApiService.createTask({
+                          'assigned_to': selectedEmployee['id'],
+                          'title': titleController.text,
+                          'description': descController.text,
+                          'due_date': DateFormat('yyyy-MM-dd').format(dueDate),
+                          'priority': priority,
+                        });
+
+                        LoadingDialog.hide(context);
+
+                        if (res['status'] == 'success') {
+                          Navigator.pop(context);
+                          _fetchTasks();
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tugas berhasil diberikan!"), backgroundColor: Colors.green));
+                        } else {
+                          setModalState(() => isSubmitting = false);
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? "Gagal memberikan tugas")));
+                        }
+                      } catch (e) {
+                        LoadingDialog.hide(context);
+                        setModalState(() => isSubmitting = false);
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red));
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -510,11 +520,20 @@ class _TaskScreenState extends State<TaskScreen> with SingleTickerProviderStateM
                     child: ElevatedButton(
                       onPressed: () async {
                         String nextStatus = task['status'] == 'pending' ? 'ongoing' : 'completed';
-                        final res = await ApiService.updateTaskStatus(task['id'], nextStatus);
-                        if (res['status'] == 'success') {
-                          Navigator.pop(context);
-                          _fetchTasks();
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Task diupdate ke $nextStatus"), backgroundColor: Colors.green));
+                        LoadingDialog.show(context, message: "Memperbarui status tugas...");
+                        try {
+                          final res = await ApiService.updateTaskStatus(task['id'], nextStatus);
+                          LoadingDialog.hide(context);
+                          if (res['status'] == 'success') {
+                            Navigator.pop(context);
+                            _fetchTasks();
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Task diupdate ke $nextStatus"), backgroundColor: Colors.green));
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? "Gagal memperbarui status")));
+                          }
+                        } catch (e) {
+                          LoadingDialog.hide(context);
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red));
                         }
                       },
                       style: ElevatedButton.styleFrom(backgroundColor: primaryColor, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
@@ -527,11 +546,20 @@ class _TaskScreenState extends State<TaskScreen> with SingleTickerProviderStateM
                     width: double.infinity,
                     child: OutlinedButton(
                       onPressed: () async {
-                        final res = await ApiService.deleteTask(task['id']);
-                        if (res['status'] == 'success') {
-                          Navigator.pop(context);
-                          _fetchTasks();
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tugas dibatalkan")));
+                        LoadingDialog.show(context, message: "Membatalkan tugas...");
+                        try {
+                          final res = await ApiService.deleteTask(task['id']);
+                          LoadingDialog.hide(context);
+                          if (res['status'] == 'success') {
+                            Navigator.pop(context);
+                            _fetchTasks();
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tugas dibatalkan")));
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? "Gagal membatalkan tugas")));
+                          }
+                        } catch (e) {
+                          LoadingDialog.hide(context);
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red));
                         }
                       },
                       style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
@@ -650,19 +678,27 @@ class _TaskScreenState extends State<TaskScreen> with SingleTickerProviderStateM
             ElevatedButton(
               onPressed: (photoAfter == null || isUploading) ? null : () async {
                 setState(() => isUploading = true);
-                final res = await ApiService.uploadTaskEvidence(
-                  activity['id'],
-                  photoBefore: photoBefore?.path,
-                  photoAfter: photoAfter?.path,
-                  notes: notesController.text,
-                );
-                setState(() => isUploading = false);
-                
-                if (res['status'] == 'success') {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bukti berhasil diupload"), backgroundColor: Colors.green));
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? "Gagal upload bukti")));
+                LoadingDialog.show(context, message: "Mengunggah bukti kegiatan...");
+                try {
+                  final res = await ApiService.uploadTaskEvidence(
+                    activity['id'],
+                    photoBefore: photoBefore?.path,
+                    photoAfter: photoAfter?.path,
+                    notes: notesController.text,
+                  );
+                  LoadingDialog.hide(context);
+                  setState(() => isUploading = false);
+                  
+                  if (res['status'] == 'success') {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bukti berhasil diupload"), backgroundColor: Colors.green));
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? "Gagal upload bukti")));
+                  }
+                } catch (e) {
+                  LoadingDialog.hide(context);
+                  setState(() => isUploading = false);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red));
                 }
               },
               style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
