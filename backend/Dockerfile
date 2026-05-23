@@ -93,7 +93,8 @@ RUN rm -rf \
     .gitignore \
     phpunit.xml \
     docker \
-    storage/logs/*.log
+    storage/logs/*.log \
+    bootstrap/cache/*.php
 
 # Create required directories and set permissions
 RUN mkdir -p \

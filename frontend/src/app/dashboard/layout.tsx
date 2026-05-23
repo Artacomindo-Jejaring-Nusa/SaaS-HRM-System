@@ -147,6 +147,7 @@ const sidebarLinks: SidebarLink[] = [
     permission: 'view-directory',
     submenus: [
       { name: "approvals", href: "/dashboard/approvals", permission: 'manage-approvals' },
+      { name: "approval_workflow", href: "/dashboard/approval-workflow", permission: 'manage-approvals' },
       { name: "tasks", href: "/dashboard/tasks", permission: 'view-tasks' },
       { name: "announcements", href: "/dashboard/announcements", permission: 'view-announcements' },
       { name: "whatsapp_settings", href: "/dashboard/whatsapp", permission: 'manage-company' },

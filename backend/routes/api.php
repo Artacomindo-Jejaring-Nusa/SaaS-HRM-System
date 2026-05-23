@@ -38,6 +38,7 @@ use App\Http\Controllers\TaskActivityController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\VehicleLogController;
+use App\Http\Controllers\ApprovalWorkflowController;
 use App\Http\Middleware\TenantMiddleware;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\DB;
@@ -167,6 +168,12 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::post('/attendance-corrections/{id}/approve', [AttendanceCorrectionController::class, 'approve']);
         Route::post('/attendance-corrections/{id}/reject', [AttendanceCorrectionController::class, 'reject']);
     });
+
+    // Custom Approval Workflows
+    Route::get('/approval-workflows', [ApprovalWorkflowController::class, 'index']);
+    Route::get('/approval-workflows/roles', [ApprovalWorkflowController::class, 'getRoles']);
+    Route::get('/approval-workflows/{moduleKey}', [ApprovalWorkflowController::class, 'show']);
+    Route::post('/approval-workflows', [ApprovalWorkflowController::class, 'store']);
 
     // Leave
     Route::middleware('permission:view-leaves')->group(function () {
