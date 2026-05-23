@@ -31,9 +31,6 @@ php artisan event:cache
 echo "[*] Running database migrations..."
 php artisan migrate --force --no-interaction
 
-# Run seeders
-echo "[*] Seeding database..."
-php artisan db:seed --force --no-interaction
 
 # Storage link
 echo "[*] Creating storage link..."

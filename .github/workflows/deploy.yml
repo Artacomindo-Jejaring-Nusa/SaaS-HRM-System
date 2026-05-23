@@ -4,6 +4,9 @@ on:
   push:
     branches: ["main"]
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Deploy to VM via Self-Hosted Runner
@@ -17,6 +20,10 @@ jobs:
 
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          clean: true
+          persist-credentials: false
 
       - name: Create .env file from Secrets
         env:
