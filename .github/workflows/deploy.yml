@@ -34,6 +34,6 @@ jobs:
       - name: Deploy with Docker Compose
         run: |
           echo "Memulai Deployment di Server..."
-          docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+          docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --remove-orphans
           docker image prune -f
           echo "Deployment Selesai Berhasil!"
