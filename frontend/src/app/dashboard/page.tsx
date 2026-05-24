@@ -319,20 +319,20 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 mb-6">
         
         {/* 1. Welcome Card (Col 1) */}
-        <div className="bg-[#fef2f2] rounded-2xl p-6 flex flex-col items-center justify-between border border-[#fee2e2] text-center h-[420px]">
-          <div className="w-full flex justify-end">
+        <div className="bg-[#fef2f2] rounded-2xl p-6 pb-8 flex flex-col items-center border border-[#fee2e2] text-center h-[420px]">
+          <div className="w-full flex justify-end shrink-0">
             <MoreVertical size={20} className="text-gray-400 cursor-pointer" />
           </div>
-          <div className="flex-1 flex flex-col justify-center items-center -mt-6">
-             <div className="relative w-full flex items-center justify-center mb-4">
-                <Image src="/illustration.jpg" alt="Welcome" width={220} height={180} className="object-contain mix-blend-multiply hover:scale-105 transition-transform duration-300" priority />
+          <div className="flex-1 flex flex-col justify-center items-center min-h-0">
+             <div className="relative w-full flex items-center justify-center mb-3 shrink-0">
+                <Image src="/illustration.jpg" alt="Welcome" width={180} height={140} className="object-contain mix-blend-multiply hover:scale-105 transition-transform duration-300" priority />
              </div>
-             <h2 className="text-xl font-bold text-gray-900 uppercase tracking-wide px-2">HELLO {user?.name}!</h2>
-             <p className="text-sm text-gray-500 mt-2 px-4 leading-relaxed">
+             <h2 className="text-lg font-bold text-gray-900 uppercase tracking-wide px-2 shrink-0">HELLO {user?.name}!</h2>
+             <p className="text-xs text-gray-500 mt-1.5 px-3 leading-relaxed shrink-0">
                Selamat datang di pusat kendali SDM. Pantau kehadiran dan kelola pengajuan karyawan Anda di sini.
              </p>
           </div>
-          <button onClick={() => router.push('/dashboard/live-attendance')} className="w-full max-w-[180px] bg-[#8B0000] text-white py-2.5 rounded-lg font-medium text-sm hover:bg-[#660000] transition mt-4">
+          <button onClick={() => router.push('/dashboard/live-attendance')} className="w-full max-w-[180px] bg-[#8B0000] text-white py-2.5 rounded-lg font-medium text-sm hover:bg-[#660000] transition mt-auto shrink-0">
             Live Records
           </button>
         </div>
@@ -411,51 +411,45 @@ export default function DashboardPage() {
            </div>
         </div>
 
-        {/* 4. Donut Chart (Distribution) */}
+        {/* 4. Employee Distribution (Horizontal Bar) */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6 flex flex-col shadow-sm h-[420px]">
-           <h3 className="font-bold text-gray-900 mb-6 text-sm flex items-center gap-2">
+           <h3 className="font-bold text-gray-900 mb-2 text-sm flex items-center gap-2">
              <div className="w-1.5 h-4 bg-[#8B0000] rounded-full"></div>
              Employee Distribution
            </h3>
-           <div className="h-[200px] w-full relative mb-6">
-             <ResponsiveContainer width="100%" height="100%">
-               <PieChart>
-                 <Pie
-                    data={roleDistribution}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    dataKey="count"
-                    nameKey="role"
-                    isAnimationActive={false}
-                 >
-                   {roleDistribution.map((entry, index) => (
-                     <Cell 
-                        key={`cell-${index}`} 
-                        fill={COLORS[index % COLORS.length]} 
-                        stroke="#fff"
-                        strokeWidth={2}
-                     />
-                   ))}
-                 </Pie>
-                 <Tooltip 
-                   contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }}
-                 />
-               </PieChart>
-             </ResponsiveContainer>
-           </div>
-           
-           <div className="flex flex-col gap-3 mt-auto">
-             {roleDistribution.map((item, idx) => (
-               <div key={idx} className="flex items-center justify-between text-xs">
-                 <div className="flex items-center gap-2">
-                   <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
-                   <span className="font-medium text-gray-600">{item.role}</span>
-                 </div>
-                 <span className="font-bold text-gray-800">{item.count}</span>
-               </div>
-             ))}
+           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
+             {roleDistribution.reduce((sum, r) => sum + r.count, 0)} Total Karyawan
+           </p>
+           <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+             {roleDistribution
+               .sort((a, b) => b.count - a.count)
+               .map((item, idx) => {
+                 const maxCount = Math.max(...roleDistribution.map(r => r.count), 1);
+                 const percentage = Math.round((item.count / roleDistribution.reduce((s, r) => s + r.count, 0)) * 100);
+                 return (
+                   <div key={idx} className="group">
+                     <div className="flex items-center justify-between mb-1.5">
+                       <div className="flex items-center gap-2 min-w-0">
+                         <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
+                         <span className="text-xs font-semibold text-gray-700 truncate">{item.role}</span>
+                       </div>
+                       <div className="flex items-center gap-2 shrink-0">
+                         <span className="text-[10px] font-bold text-gray-400">{percentage}%</span>
+                         <span className="text-xs font-black text-gray-900 w-6 text-right">{item.count}</span>
+                       </div>
+                     </div>
+                     <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                       <div
+                         className="h-full rounded-full transition-all duration-500 ease-out group-hover:opacity-80"
+                         style={{
+                           width: `${(item.count / maxCount) * 100}%`,
+                           backgroundColor: COLORS[idx % COLORS.length],
+                         }}
+                       />
+                     </div>
+                   </div>
+                 );
+               })}
            </div>
         </div>
 
