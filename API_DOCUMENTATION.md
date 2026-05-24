@@ -172,6 +172,42 @@ Seluruh request API harus menyertakan header `Accept: application/json`. Untuk e
 | `PUT` | `/api/offices/{id}` | Update data kantor cabang |
 | `DELETE` | `/api/offices/{id}` | Hapus kantor cabang |
 
+## ⚙️ Alur Persetujuan Dinamis (Approval Workflows)
+| Method | Endpoint | Deskripsi |
+| :--- | :--- | :--- |
+| `GET` | `/api/approval-workflows` | Mengambil semua alur persetujuan kustom aktif |
+| `GET` | `/api/approval-workflows/modules` | List modul yang didukung (cuti, izin, lembur, reimbursement, request dana, koreksi absen) |
+| `GET` | `/api/approval-workflows/roles` | List semua role/jabatan untuk dropdown approver |
+| `GET` | `/api/approval-workflows/users` | List semua user perusahaan untuk dropdown approver |
+| `GET` | `/api/approval-workflows/{moduleKey}` | Detail alur persetujuan modul spesifik |
+| `POST` | `/api/approval-workflows` | Simpan/update alur persetujuan kustom beserta langkah-langkahnya (HRD/Super Admin) |
+
+### Simpan Workflow - Request Body
+```json
+{
+  "module_key": "leave",
+  "name": "Alur Persetujuan Cuti Karyawan",
+  "is_active": true,
+  "flow_json": null,
+  "steps": [
+    {
+      "step_number": 1,
+      "approver_type": "supervisor",
+      "approver_role_id": null,
+      "approver_user_id": null,
+      "sla_hours": 24
+    },
+    {
+      "step_number": 2,
+      "approver_type": "role",
+      "approver_role_id": 3,
+      "approver_user_id": null,
+      "sla_hours": 48
+    }
+  ]
+}
+```
+
 ---
 ## 📡 Real-time WebSockets (Laravel Reverb)
 Aplikasi menggunakan **Laravel Reverb** untuk notifikasi instan. Developer harus melakukan subscribe ke channel berikut setelah login sukses:

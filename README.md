@@ -25,12 +25,8 @@ Aplikasi ini mencakup modul-modul inti HRM yang sudah terintegrasi:
 - **Live Tracking Teknisi**: Pemantauan lokasi dan rute pergerakan teknisi di lapangan secara real-time di latar belakang perangkat (Background Service), dengan dashboard pemetaan interaktif.
 - **Koreksi Absen Mandiri**: Fitur pengajuan koreksi dengan workflow persetujuan (Approval) jika karyawan lupa absen pulang.
 - **Delegasi & Manajemen WFH**: Memberikan izin kepada karyawan tertentu untuk absensi jarak jauh tanpa terpaku radius kantor, lengkap dengan pengumuman otomatis.
-- **Manajemen Cuti & Reimbursement**: Approval berjenjang (Supervisor -> HR) otomatis.
+- **Alur Persetujuan Dinamis (Dynamic Approval Workflows)**: Sistem alur persetujuan berjenjang yang dapat disesuaikan per modul untuk 6 modul utama (Cuti, Izin, Lembur, Reimbursement, Pengajuan Dana, dan Koreksi Absen). Alur ini mendukung kombinasi persetujuan berbasis Jabatan (Role), User Tertentu (Specific User), dan Atasan Langsung (Supervisor-based) dengan mekanisme fallback otomatis ke logika default (Supervisor -> HR) apabila langkah dinamis tidak didefinisikan.
 - **Tukar Shift (Shift Swap)**: Workflow pertukaran jadwal antar rekan kerja dengan notifikasi real-time (FCM) & sistem approval atasan.
-- **Hierarki Atasan (Supervisor)**: Fitur penunjukan atasan langsung untuk alur persetujuan (approval flow) yang lebih tertata dan otomatis.
-- **Enterprise Audit & Reporting**: Laporan audit lengkap untuk aktivitas pertukaran shift dengan filter periode dan fitur Export Excel.
-- **Pengajuan Cuti & Lembur**: Workflow pengajuan cuti & lembur, approval/rejection oleh atasan, dan history lengkap.
-- **Reimbursement**: Pengajuan klaim biaya dengan sistem multiple attachments / lampiran foto sekaligus dan approval bertingkat.
 - **Manajemen Kendaraan (Fleet Logging)**: Pencatatan operasional kendaraan efisien dengan alur 2-step (Keberangkatan & Kepulangan), validasi foto odometer, integrasi modal SOP & SK interaktif, serta notifikasi real-time ke Admin/HR saat kendaraan keluar/masuk.
 - **Portofolio Manager (Mobile)**: Dashboard persetujuan terpadu bagi Manager untuk menyetujui Cuti, Lembur, Reimbursement, dan Log Kendaraan secara mobile.
 - **Performance & Pagination**: Penanganan data skala besar dengan pagination di seluruh API dan proteksi error frontend (Array.isArray).

@@ -105,9 +105,11 @@ void onStart(ServiceInstance service) async {
     }
 
     if (service is AndroidServiceInstance) {
+      final now = DateTime.now();
+      final timeStr = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
       service.setForegroundNotificationInfo(
         title: "Live Tracking Aktif",
-        content: "Lokasi diperbarui pada \${DateTime.now().hour}:\${DateTime.now().minute}",
+        content: "Lokasi diperbarui pada $timeStr",
       );
     }
   });

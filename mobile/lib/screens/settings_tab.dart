@@ -318,10 +318,27 @@ class _SettingsTabState extends State<SettingsTab> {
           _buildSettingItem(
             Icons.help_outline_rounded,
             "Pusat Bantuan",
-            "FAQ dan bantuan penggunaan",
+            "FAQ dan panduan fitur aplikasi",
             onTap: () => _showInfoModal(
               "Pusat Bantuan",
-              "Selamat datang di Pusat Bantuan.\n\nJika Anda mengalami kendala saat melakukan absensi, pastikan GPS Anda aktif dan Anda berada di radius kantor.\n\nKontak Support: ahmad@ajnusa.com - abbas@ajnusa.com",
+              "Selamat datang di Pusat Bantuan OnTime HRMS!\n\n"
+              "1. LOGIN AKUN\n"
+              "• Anda dapat masuk menggunakan email & password terdaftar atau via Google Sign-In.\n\n"
+              "2. ABSENSI GEOFENCING & LIVENESS\n"
+              "• Pastikan GPS perangkat Anda aktif dan memiliki akurasi yang baik.\n"
+              "• Anda harus berada dalam radius kantor cabang yang telah ditentukan.\n"
+              "• Pengenalan wajah (Liveness) digunakan untuk memverifikasi keaslian kehadiran.\n\n"
+              "3. LIVE TRACKING TEKNISI\n"
+              "• Notifikasi 'Live Tracking Aktif' muncul di bilah status karena sistem Android mewajibkan layanan latar belakang (Foreground Service) menampilkan indikator aktif demi privasi dan keamanan data Anda.\n"
+              "• Lokasi Anda hanya akan dicatat saat shift kerja berlangsung untuk keperluan rute perjalanan dinas teknisi.\n\n"
+              "4. ALUR PERSETUJUAN DINAMIS (APPROVALS)\n"
+              "• Pengajuan Cuti, Izin, Lembur, Koreksi Absen, Reimbursement, dan Pengajuan Dana kini diproses melalui alur persetujuan dinamis sesuai kebijakan perusahaan Anda (Atasan Langsung, Role tertentu, atau Manager).\n\n"
+              "5. TUKAR SHIFT & KENDARAAN\n"
+              "• Shift Swap: Ajukan pertukaran jadwal kerja langsung ke rekan kerja Anda lalu tunggu persetujuan atasan.\n"
+              "• Fleet Log: Catat perjalanan kendaraan dinas dengan mengunggah foto odometer keberangkatan & kepulangan.\n\n"
+              "Hubungi tim pengembang jika ada kendala teknis:\n"
+              "• ahmad@ajnusa.com\n"
+              "• abbas@ajnusa.com",
             ),
           ),
           _buildSettingItem(
@@ -330,16 +347,27 @@ class _SettingsTabState extends State<SettingsTab> {
             "Syarat dan ketentuan layanan",
             onTap: () => _showInfoModal(
               "Kebijakan Privasi",
-              "Kebijakan Privasi Aplikasi HRM SaaS.\n\nKerahasiaan data Anda adalah prioritas kami. Kami mengumpulkan data lokasi hanya saat Anda melakukan absensi masuk dan keluar untuk memastikan validitas kehadiran.\n\nData wajah Anda diproses secara lokal untuk verifikasi identitas.",
+              "Kebijakan Privasi Aplikasi OnTime HRMS.\n\n"
+              "Kerahasiaan data Anda adalah prioritas utama kami. Kami mengumpulkan data lokasi latar belakang (background location) hanya ketika fitur Live Tracking diaktifkan untuk melacak rute perjalanan teknisi.\n\n"
+              "Data absensi (wajah dan GPS) hanya digunakan untuk keperluan verifikasi kehadiran di area kantor yang valid.",
             ),
           ),
           _buildSettingItem(
             Icons.info_outline_rounded,
             "Tentang Aplikasi",
-            "Versi 1.9.1",
+            "Versi 1.9.2",
             onTap: () => _showInfoModal(
               "Tentang Aplikasi",
-              "HRM SaaS Mobile Application\nVersi 1.5.2 (Stable)\n\nDeveloped by Ahmad Rizki & Team Enginner.\nCopyright © 2026.",
+              "OnTime HRMS Mobile App\n"
+              "Versi 1.9.2 (Stable)\n\n"
+              "Aplikasi HRMS Enterprise berbasis multi-tenant dengan fitur modern:\n"
+              "• Dynamic Approval Workflows (6 Modul Utama)\n"
+              "• Geofencing & Face Verification (Multi-Office)\n"
+              "• Background Location Live Tracking\n"
+              "• Shift Swap Engine & Fleet Logging\n"
+              "• Slip Gaji Digital Terintegrasi PPh 21 TER\n\n"
+              "Developed by Ahmad Rizki & Team Engineer.\n"
+              "Copyright © 2026 PT. Artacomindo Jejaring Nusa.",
             ),
           ),
 
