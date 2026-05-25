@@ -344,7 +344,8 @@ class AuthController extends Controller
         try {
             // 1. Verifikasi Google ID Token
             // Gunakan Client ID dari Google Cloud Console / Firebase Web Config
-            $client = new \Google_Client(['client_id' => env('GOOGLE_CLIENT_ID')]);
+            $clientId = env('GOOGLE_CLIENT_ID') ?: '1015918555814-0qod31fvuc96odo10a2uqmppoqf9vegi.apps.googleusercontent.com';
+            $client = new \Google_Client(['client_id' => $clientId]);
             $payload = $client->verifyIdToken($request->id_token);
 
             if (! $payload) {
