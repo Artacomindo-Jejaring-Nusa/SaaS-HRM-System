@@ -88,6 +88,9 @@ interface PaginationData {
 
 function EmployeesContent() {
   const { hasPermission, permissions, user: currentUser } = useAuth();
+  const isHRorAdmin = hasPermission('manage-employees') || 
+                      currentUser?.role?.name?.toLowerCase().includes('admin') || 
+                      currentUser?.role?.name?.toLowerCase().includes('hr');
   const searchParams = useSearchParams();
   const urlSearch = searchParams.get("search");
   const urlId = searchParams.get("id");
@@ -724,7 +727,7 @@ function EmployeesContent() {
       </div>
 
       {/* Verification Notice Banner */}
-      {unverifiedCount > 0 && (
+      {unverifiedCount > 0 && isHRorAdmin && (
          <div className="mb-6 bg-blue-50 border border-blue-100 p-4 rounded-2xl flex items-center justify-between animate-in slide-in-from-top-4 duration-500">
             <div className="flex items-center gap-3">
                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
@@ -809,22 +812,24 @@ function EmployeesContent() {
             <table className="w-full text-left border-collapse min-w-[1200px]">
               <thead>
                 <tr className="bg-gray-50/50 border-b border-gray-50">
-                  <th className="px-6 py-5 w-10 sticky left-0 bg-gray-50/50 z-20">
-                    <input 
-                      type="checkbox" 
-                      onChange={handleSelectAll}
-                      checked={selectedIds.length === filteredEmployees.length && filteredEmployees.length > 0}
-                      className="rounded-md border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
-                    />
-                  </th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest sticky left-10 bg-gray-50/50 z-20 min-w-[250px]">Karyawan</th>
+                  {isHRorAdmin && (
+                    <th className="px-6 py-5 w-10 sticky left-0 bg-gray-50/50 z-20">
+                      <input 
+                        type="checkbox" 
+                        onChange={handleSelectAll}
+                        checked={selectedIds.length === filteredEmployees.length && filteredEmployees.length > 0}
+                        className="rounded-md border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                      />
+                    </th>
+                  )}
+                  <th className={`px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest sticky bg-gray-50/50 z-20 min-w-[250px] ${isHRorAdmin ? "left-10" : "left-0"}`}>Karyawan</th>
                   <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest min-w-[200px]">Detail Kontak</th>
                   <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest min-w-[180px]">Posisi / Peran</th>
                   <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center min-w-[150px]">Bergabung</th>
                   <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center min-w-[140px]">Status</th>
                   <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center min-w-[160px]">Lokasi</th>
                   <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center min-w-[180px]">Email Verification</th>
-                  {hasPermission('manage-employees') && (
+                  {isHRorAdmin && (
                     <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right sticky right-0 bg-gray-50/50 z-20 w-16">Opsi</th>
                   )}
                 </tr>
@@ -832,15 +837,17 @@ function EmployeesContent() {
               <tbody className="divide-y divide-gray-50">
                 {filteredEmployees.map((emp) => (
                   <tr key={emp.id} className="group hover:bg-orange-50/10 transition-all">
-                    <td className="px-6 py-4 sticky left-0 bg-white group-hover:bg-orange-50/10 z-10">
-                      <input 
-                        type="checkbox" 
-                        checked={selectedIds.includes(emp.id)}
-                        onChange={() => handleSelectRow(emp.id)}
-                        className="rounded-md border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
-                      />
-                    </td>
-                    <td className="px-6 py-4 sticky left-10 bg-white group-hover:bg-orange-50/10 z-10">
+                    {isHRorAdmin && (
+                      <td className="px-6 py-4 sticky left-0 bg-white group-hover:bg-orange-50/10 z-10">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedIds.includes(emp.id)}
+                          onChange={() => handleSelectRow(emp.id)}
+                          className="rounded-md border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                        />
+                      </td>
+                    )}
+                    <td className={`px-6 py-4 sticky bg-white group-hover:bg-orange-50/10 z-10 ${isHRorAdmin ? "left-10" : "left-0"}`}>
                        <div className="flex items-center gap-4">
                           <div className="relative">
                              <Avatar className="size-11 border-2 border-white shadow-md transition-transform group-hover:scale-110">
@@ -916,7 +923,7 @@ function EmployeesContent() {
                           </div>
                        )}
                     </td>
-                    {hasPermission('manage-employees') && (
+                    {isHRorAdmin && (
                       <td className="px-6 py-4 text-right sticky right-0 bg-white group-hover:bg-orange-50/10 z-10">
                         <div className="relative">
                             <button 
