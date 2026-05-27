@@ -1,24 +1,54 @@
-version: "3"
+# ================================================
+# OnTime HRMS - SonarQube Code Quality Scanner
+# Version: Community Build (Latest)
+# ================================================
+
 services:
   sonarqube:
-    image: sonarqube:lts-community
+    image: sonarqube:community
     container_name: sonarqube_hrms
+    restart: unless-stopped
     ports:
       - "9000:9000"
     environment:
+      - SONAR_JDBC_URL=jdbc:postgresql://sonar_db:5432/sonarqube
+      - SONAR_JDBC_USERNAME=sonarqube
+      - SONAR_JDBC_PASSWORD=sonarqube_pass
       - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
     volumes:
       - sonarqube_data:/opt/sonarqube/data
       - sonarqube_extensions:/opt/sonarqube/extensions
       - sonarqube_logs:/opt/sonarqube/logs
+    depends_on:
+      sonar_db:
+        condition: service_healthy
     networks:
-      - hrms_network
+      - sonar_network
+
+  sonar_db:
+    image: postgres:16-alpine
+    container_name: sonarqube_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=sonarqube
+      - POSTGRES_PASSWORD=sonarqube_pass
+      - POSTGRES_DB=sonarqube
+    volumes:
+      - sonar_postgres_data:/var/lib/postgresql/data
+    networks:
+      - sonar_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonarqube"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   sonarqube_data:
   sonarqube_extensions:
   sonarqube_logs:
+  sonar_postgres_data:
 
 networks:
-  hrms_network:
+  sonar_network:
     driver: bridge

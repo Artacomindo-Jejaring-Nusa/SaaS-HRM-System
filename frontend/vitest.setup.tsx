@@ -1,6 +1,9 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
 
+// Define global jest for Vitest compatibility
+globalThis.jest = vi as any
+
 // Mock next/navigation
 vi.mock('next/navigation', () => ({
   useRouter: () => ({

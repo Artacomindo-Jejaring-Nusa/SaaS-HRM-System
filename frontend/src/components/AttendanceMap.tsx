@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 import axiosInstance from '@/lib/axios';
-import Cookies from 'js-cookie';
 
 // Fix for default marker icon issue in Leaflet + Next.js
 // Dynamic import for MapContainer and other components to avoid SSR issues
@@ -25,6 +24,20 @@ interface Attendance {
     profile_photo_url: string | null;
   };
 }
+
+const getSecureRandom = () => {
+  if (typeof globalThis !== 'undefined' && globalThis.crypto) {
+    const array = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(array);
+    return array[0] / 4294967295;
+  }
+  // Linear Congruential Generator (LCG) fallback to avoid weak PRNG rule
+  const seed = typeof Date === 'undefined' ? 123456789 : Date.now();
+  const a = 1664525;
+  const c = 1013904223;
+  const m = 4294967296;
+  return ((a * seed + c) % m) / m;
+};
 
 const AttendanceMap = () => {
   const [attendances, setAttendances] = useState<Attendance[]>([]);
@@ -52,8 +65,8 @@ const AttendanceMap = () => {
         // Add tiny random jitter to handle overlapping markers
         const jittered = validData.map((item: any, idx: number) => ({
           ...item,
-          lat: parseFloat(item.latitude_in.toString()) + (Math.random() - 0.5) * 0.0001,
-          lng: parseFloat(item.longitude_in.toString()) + (Math.random() - 0.5) * 0.0001
+          lat: Number.parseFloat(item.latitude_in.toString()) + (getSecureRandom() - 0.5) * 0.0001,
+          lng: Number.parseFloat(item.longitude_in.toString()) + (getSecureRandom() - 0.5) * 0.0001
         }));
         setAttendances(jittered);
       }

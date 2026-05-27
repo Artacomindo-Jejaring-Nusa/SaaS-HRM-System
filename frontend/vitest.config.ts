@@ -8,6 +8,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './vitest.setup.tsx',
+    coverage: {
+      reporter: ['text', 'json', 'lcov', 'clover'],
+    },
   },
   resolve: {
     alias: {

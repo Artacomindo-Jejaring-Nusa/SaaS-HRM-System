@@ -40,3 +40,9 @@ private-mvp.md
 PRD_HRMS_Narwasthu_Group.md
 DOKUMENTASI_TEKNIS_HRMS.md
 PAYROLL/
+
+#sonarqube
+sonar-project.properties/
+docker-compose.sonarqube.yml
+.scannerwork/
+sonar-scanner-*/
