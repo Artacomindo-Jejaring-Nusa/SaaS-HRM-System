@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\RefreshToken;
 use App\Models\User;
 use App\Services\WhatsAppService;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -52,6 +53,7 @@ class AuthController extends Controller
                 'company_name' => self::RULE_REQ_STRING,
             ]);
         } catch (ValidationException $e) {
+            AuditLogger::log('login_failed', 'Validation failed during login request', ['errors' => $e->errors()], 'warning');
             return $this->errorResponse(self::MSG_INVALID_CREDS, 401);
         }
 
@@ -60,6 +62,7 @@ class AuthController extends Controller
             ->first();
 
         if (! $company) {
+            AuditLogger::log('login_failed', 'Company not found', ['company_name' => $request->company_name, 'email' => $request->email], 'warning');
             return $this->errorResponse(self::MSG_INVALID_CREDS, 401);
         }
 
@@ -68,6 +71,7 @@ class AuthController extends Controller
             ->first();
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
+            AuditLogger::log('login_failed', 'Invalid credentials or user not found', ['email' => $request->email, 'company_id' => $company->id], 'warning');
             return $this->errorResponse('Invalid credentials', 401);
         }
 
@@ -77,6 +81,7 @@ class AuthController extends Controller
             if (! $user->device_id) {
                 $updateData['device_id'] = $request->device_id;
             } elseif ($user->device_id !== $request->device_id) {
+                AuditLogger::log('device_mismatch', 'User tried to login from a different device', ['email' => $request->email, 'expected_device' => $user->device_id, 'actual_device' => $request->device_id], 'critical');
                 return $this->errorResponse('Akun Anda terkunci pada perangkat lain. Silakan hubungi Admin untuk reset Device ID Anda.', 403);
             }
         }
@@ -113,6 +118,8 @@ class AuthController extends Controller
             'description' => "User {$user->name} berhasil masuk ke sistem.",
         ]);
 
+        AuditLogger::log('login_success', "User {$user->name} logged in successfully", ['email' => $user->email, 'company_id' => $user->company_id]);
+
         return $this->successResponse([
             'access_token' => $accessToken,
             'refresh_token' => $refreshTokenData['plain_token'],
@@ -141,6 +148,7 @@ class AuthController extends Controller
         $refreshToken = RefreshToken::findValidToken($request->refresh_token);
 
         if (! $refreshToken) {
+            AuditLogger::log('refresh_token_failed', 'Invalid or expired refresh token attempted', ['token' => substr($request->refresh_token, 0, 10) . '...'], 'warning');
             return $this->errorResponse('Refresh token tidak valid atau sudah kadaluarsa. Silakan login ulang.', 401);
         }
 
@@ -204,12 +212,13 @@ class AuthController extends Controller
     {
         $request->validate([
             'current_password' => 'required',
-            'new_password' => 'required|min:8|confirmed',
+            'new_password' => 'required|min:12|confirmed',
         ]);
 
         $user = $request->user();
 
         if (! Hash::check($request->current_password, $user->password)) {
+            AuditLogger::log('change_password_failed', 'Incorrect current password provided', ['user_id' => $user->id, 'email' => $user->email], 'warning');
             return $this->errorResponse('Kata sandi saat ini salah.', 422);
         }
 
@@ -224,6 +233,7 @@ class AuthController extends Controller
         $user->tokens()->where('id', '!=', $user->currentAccessToken()->id)->delete();
 
         $this->logActivity('CHANGE_PASSWORD', "User {$user->name} telah mengubah kata sandi akunnya.");
+        AuditLogger::log('change_password_success', 'User changed their password', ['user_id' => $user->id, 'email' => $user->email]);
 
         return $this->successResponse(null, 'Kata sandi berhasil diubah.');
     }
@@ -299,7 +309,7 @@ class AuthController extends Controller
         $request->validate([
             'email' => 'required|email',
             'token' => 'required',
-            'password' => 'required|min:8|confirmed',
+            'password' => 'required|min:12|confirmed',
         ]);
 
         $record = DB::table('password_reset_tokens')
@@ -307,11 +317,13 @@ class AuthController extends Controller
             ->first();
 
         if (! $record || ! Hash::check($request->token, $record->token)) {
+            AuditLogger::log('password_reset_failed', 'Invalid reset token attempted', ['email' => $request->email], 'warning');
             return $this->errorResponse('Token tidak valid atau sudah kadaluarsa.', 400);
         }
 
         // Token is typically valid for 60 minutes
         if (now()->diffInMinutes($record->created_at) > 60) {
+            AuditLogger::log('password_reset_failed', 'Expired reset token attempted', ['email' => $request->email, 'created_at' => $record->created_at], 'warning');
             return $this->errorResponse('Token sudah kadaluarsa.', 400);
         }
 
@@ -330,6 +342,8 @@ class AuthController extends Controller
         DB::table('password_reset_tokens')
             ->where('email', $request->email)
             ->delete();
+
+        AuditLogger::log('password_reset_success', 'User password reset successfully', ['email' => $request->email]);
 
         return $this->successResponse(null, 'Password berhasil direset. Silakan login dengan password baru Anda.');
     }

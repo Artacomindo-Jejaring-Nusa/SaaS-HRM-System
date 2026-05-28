@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 
 class PayrollBatch extends Model
 {
+    use BelongsToCompany;
     protected $fillable = [
         'company_id',
         'period_month',

@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 
 class ProfileRequest extends Model
 {
+    use BelongsToCompany;
     protected $fillable = [
         'user_id',
         'company_id',

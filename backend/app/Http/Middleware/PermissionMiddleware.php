@@ -30,6 +30,7 @@ class PermissionMiddleware
         }
 
         if (! $user->role || ! $user->hasPermission($permission)) {
+            \App\Services\AuditLogger::log('unauthorized_access', "User tried to access unauthorized permission: {$permission}", ['permission' => $permission], 'warning');
             return response()->json([
                 'status' => 'error',
                 'message' => 'You do not have permission to access this resource or perform this action ('.$permission.').',

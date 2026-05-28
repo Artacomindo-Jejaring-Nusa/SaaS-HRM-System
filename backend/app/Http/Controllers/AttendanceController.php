@@ -8,6 +8,7 @@ use App\Models\Office;
 use App\Models\Schedule;
 use App\Models\User;
 use App\Traits\Notifiable;
+use App\Http\Requests\StoreAttendanceRequest;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,7 +20,7 @@ class AttendanceController extends Controller
 {
     use Notifiable;
 
-    public function checkIn(Request $request)
+    public function checkIn(StoreAttendanceRequest $request)
     {
         $user = $request->user();
         $now = now();
@@ -78,7 +79,7 @@ class AttendanceController extends Controller
         return $this->successResponse($attendance, 'Check-in berhasil. Status: '.$status);
     }
 
-    public function checkOut(Request $request)
+    public function checkOut(StoreAttendanceRequest $request)
     {
         $user = $request->user();
 

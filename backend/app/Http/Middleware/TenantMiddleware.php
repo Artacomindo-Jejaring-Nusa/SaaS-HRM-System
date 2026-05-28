@@ -17,6 +17,7 @@ class TenantMiddleware
     public function handle(Request $request, Closure $next): Response
     {
         if (Auth::check() && ! Auth::user()->company_id && Auth::user()->role_id !== 1) {
+            \App\Services\AuditLogger::log('tenant_access_denied', 'User account not associated with any company', [], 'warning');
             return response()->json(['message' => 'Your account is not associated with any company.'], 403);
         }
 

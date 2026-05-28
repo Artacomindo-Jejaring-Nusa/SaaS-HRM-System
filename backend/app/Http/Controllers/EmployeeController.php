@@ -114,7 +114,7 @@ class EmployeeController extends Controller
         $request->validate([
             'name' => 'required|string',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|min:6',
+            'password' => 'required|min:12',
             'role_id' => 'required|exists:roles,id',
             'nik' => self::RULE_NULLABLE_STRING,
             'phone' => self::RULE_NULLABLE_STRING,
@@ -420,8 +420,8 @@ class EmployeeController extends Controller
 
         // Re-send Welcome & Verification Email
         try {
-            // Use the default password set by HR (password123) as confirmed by the user
-            $defaultPassword = 'password123';
+            // Use the default password set by HR (tempPassword123!) as confirmed by the user
+            $defaultPassword = 'tempPassword123!';
 
             Mail::to($employee->email)->send(new WelcomeEmployeeNotification($employee, $defaultPassword));
 
@@ -463,7 +463,7 @@ class EmployeeController extends Controller
         foreach ($employees as $employee) {
             try {
                 // Use the fixed default password confirmed by HR
-                $defaultPassword = 'password123';
+                $defaultPassword = 'tempPassword123!';
 
                 Mail::to($employee->email)->send(new WelcomeEmployeeNotification($employee, $defaultPassword));
                 $count++;

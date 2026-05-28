@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 
 class Project extends Model
 {
+    use BelongsToCompany;
     private const CAST_DECIMAL_2 = 'decimal:2';
 
     protected $fillable = [

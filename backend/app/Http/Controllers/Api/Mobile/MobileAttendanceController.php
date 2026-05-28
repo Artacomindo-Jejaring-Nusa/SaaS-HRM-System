@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\AttendanceController;
 use App\Http\Resources\Mobile\AttendanceResource;
+use App\Http\Requests\StoreAttendanceRequest;
 use App\Models\Attendance;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -63,7 +64,7 @@ class MobileAttendanceController extends AttendanceController
     // but the responses might still be heavy if defined there.
     // Let's override them to return just what mobile needs.
 
-    public function checkIn(Request $request)
+    public function checkIn(StoreAttendanceRequest $request)
     {
         $response = parent::checkIn($request);
 
@@ -81,7 +82,7 @@ class MobileAttendanceController extends AttendanceController
         return $response;
     }
 
-    public function checkOut(Request $request)
+    public function checkOut(StoreAttendanceRequest $request)
     {
         $response = parent::checkOut($request);
 

@@ -68,13 +68,13 @@ Route::get('/health', function () {
 
 // Auth
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
-Route::post('/login-google', [AuthController::class, 'loginWithGoogle']);
-Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
-Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+Route::post('/login-google', [AuthController::class, 'loginWithGoogle'])->middleware('throttle:login');
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:password_reset');
+Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:password_reset');
 Route::get('/companies/search', [AuthController::class, 'searchCompanies']);
 Route::get('/verify-email/{token}', [AuthController::class, 'verifyEmail']);
-Route::post('/send-otp', [AuthController::class, 'sendOtp']);
-Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
+Route::post('/send-otp', [AuthController::class, 'sendOtp'])->middleware('throttle:otp');
+Route::post('/verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:otp');
 Route::post('/refresh-token', [AuthController::class, 'refreshToken'])->middleware('throttle:10,1');
 
 // Broadcast Route

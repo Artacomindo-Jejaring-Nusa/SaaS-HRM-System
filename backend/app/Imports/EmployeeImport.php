@@ -44,7 +44,7 @@ class EmployeeImport implements ToModel, WithHeadingRow
         }
 
         $roleId = $this->getValue($row, 'role_id') ?: 3;
-        $password = $this->getValue($row, 'password') ?: 'password123';
+        $password = $this->getValue($row, 'password') ?: 'tempPassword123!';
 
         $joinDate = $this->parseDate($this->getValue($row, 'tanggal_gabung'), now()->format('Y-m-d'));
         $dob = $this->parseDate($this->getValue($row, 'tanggal_lahir'));
