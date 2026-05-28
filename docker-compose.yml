@@ -15,10 +15,10 @@ services:
     container_name: hrms-mysql-master
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password_placeholder}
       MYSQL_DATABASE: ${DB_DATABASE:-hrm_saas}
-      MYSQL_USER: ${DB_USERNAME:?DB_USERNAME is required}
-      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      MYSQL_USER: ${DB_USERNAME:-hrms_user_placeholder}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-hrms_password_placeholder}
     command: 
       - "--server-id=1"
       - "--log-bin=mysql-bin"
@@ -51,7 +51,7 @@ services:
     container_name: hrms-mysql-slave
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password_placeholder}
     command:
       - "--server-id=2"
       - "--log-bin=mysql-bin"
@@ -79,7 +79,7 @@ services:
     image: redis:7-alpine
     container_name: hrms-redis
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required} --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_password_placeholder} --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     ports:
       - "${REDIS_PORT_EXPOSE:-6379}:6379"
     volumes:
@@ -87,7 +87,7 @@ services:
     networks:
       - hrms-network
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_password_placeholder}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -106,7 +106,7 @@ services:
     environment:
       APP_NAME: HRMS
       APP_ENV: ${APP_ENV:-production}
-      APP_KEY: ${APP_KEY:?APP_KEY is required}
+      APP_KEY: ${APP_KEY:-base64:placeholder_app_key_for_ci_build}
       APP_DEBUG: "false"
       APP_URL: ${APP_URL:-https://ontime.jelantik.com}
       DB_CONNECTION: mysql
@@ -114,32 +114,32 @@ services:
       DB_READ_HOST: mysql-slave
       DB_PORT: 3306
       DB_DATABASE: ${DB_DATABASE:-hrm_saas}
-      DB_USERNAME: ${DB_USERNAME:?DB_USERNAME is required}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_USERNAME: ${DB_USERNAME:-hrms_user_placeholder}
+      DB_PASSWORD: ${DB_PASSWORD:-hrms_password_placeholder}
       SESSION_DRIVER: database
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
       REDIS_HOST: redis
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password_placeholder}
       REDIS_PORT: 6379
       FILESYSTEM_DISK: local
       MAIL_MAILER: smtp
-      MAIL_HOST: ${MAIL_HOST:?MAIL_HOST is required}
+      MAIL_HOST: ${MAIL_HOST:-smtp.mailtrap.io}
       MAIL_PORT: ${MAIL_PORT:-587}
-      MAIL_USERNAME: ${MAIL_USERNAME:?MAIL_USERNAME is required}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:?MAIL_PASSWORD is required}
+      MAIL_USERNAME: ${MAIL_USERNAME:-mail_username_placeholder}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-mail_password_placeholder}
       MAIL_ENCRYPTION: tls
-      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:?MAIL_FROM_ADDRESS is required}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@example.com}
       MAIL_FROM_NAME: "HRMS Narwastu Arthatama"
       FIREBASE_CREDENTIALS: storage/app/firebase-auth.json
       BCRYPT_ROUNDS: 14
       LOG_CHANNEL: stack
       LOG_LEVEL: ${LOG_LEVEL:-warning}
-      REVERB_APP_ID: ${REVERB_APP_ID:?REVERB_APP_ID is required}
-      REVERB_APP_KEY: ${REVERB_APP_KEY:?REVERB_APP_KEY is required}
-      REVERB_APP_SECRET: ${REVERB_APP_SECRET:?REVERB_APP_SECRET is required}
+      REVERB_APP_ID: ${REVERB_APP_ID:-reverb_id_placeholder}
+      REVERB_APP_KEY: ${REVERB_APP_KEY:-reverb_key_placeholder}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-reverb_secret_placeholder}
       REVERB_SCHEME: ${REVERB_SCHEME:-http}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID is required}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-google_client_id_placeholder}
     volumes:
       - ./backend/storage/app/public:/var/www/html/storage/app/public
       - ./backend/storage/logs:/var/www/html/storage/logs
@@ -167,7 +167,7 @@ services:
     environment:
       APP_NAME: HRMS
       APP_ENV: ${APP_ENV:-production}
-      APP_KEY: ${APP_KEY:?APP_KEY is required}
+      APP_KEY: ${APP_KEY:-base64:placeholder_app_key_for_ci_build}
       APP_DEBUG: "false"
       APP_URL: ${APP_URL:-https://ontime.jelantik.com}
       DB_CONNECTION: mysql
@@ -175,32 +175,32 @@ services:
       DB_READ_HOST: mysql-slave
       DB_PORT: 3306
       DB_DATABASE: ${DB_DATABASE:-hrm_saas}
-      DB_USERNAME: ${DB_USERNAME:?DB_USERNAME is required}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_USERNAME: ${DB_USERNAME:-hrms_user_placeholder}
+      DB_PASSWORD: ${DB_PASSWORD:-hrms_password_placeholder}
       SESSION_DRIVER: database
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
       REDIS_HOST: redis
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password_placeholder}
       REDIS_PORT: 6379
       FILESYSTEM_DISK: local
       MAIL_MAILER: smtp
-      MAIL_HOST: ${MAIL_HOST:?MAIL_HOST is required}
+      MAIL_HOST: ${MAIL_HOST:-smtp.mailtrap.io}
       MAIL_PORT: ${MAIL_PORT:-587}
-      MAIL_USERNAME: ${MAIL_USERNAME:?MAIL_USERNAME is required}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:?MAIL_PASSWORD is required}
+      MAIL_USERNAME: ${MAIL_USERNAME:-mail_username_placeholder}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-mail_password_placeholder}
       MAIL_ENCRYPTION: tls
-      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:?MAIL_FROM_ADDRESS is required}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@example.com}
       MAIL_FROM_NAME: "HRMS Narwastu Arthatama"
       FIREBASE_CREDENTIALS: storage/app/firebase-auth.json
       BCRYPT_ROUNDS: 14
       LOG_CHANNEL: stack
       LOG_LEVEL: ${LOG_LEVEL:-warning}
-      REVERB_APP_ID: ${REVERB_APP_ID:?REVERB_APP_ID is required}
-      REVERB_APP_KEY: ${REVERB_APP_KEY:?REVERB_APP_KEY is required}
-      REVERB_APP_SECRET: ${REVERB_APP_SECRET:?REVERB_APP_SECRET is required}
+      REVERB_APP_ID: ${REVERB_APP_ID:-reverb_id_placeholder}
+      REVERB_APP_KEY: ${REVERB_APP_KEY:-reverb_key_placeholder}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-reverb_secret_placeholder}
       REVERB_SCHEME: ${REVERB_SCHEME:-http}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID is required}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-google_client_id_placeholder}
     volumes:
       - ./backend/storage/app/public:/var/www/html/storage/app/public
       - ./backend/storage/logs:/var/www/html/storage/logs
@@ -236,14 +236,14 @@ services:
       DB_READ_HOST: mysql-slave
       DB_PORT: 3306
       DB_DATABASE: ${DB_DATABASE:-hrm_saas}
-      DB_USERNAME: ${DB_USERNAME:?DB_USERNAME is required}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_USERNAME: ${DB_USERNAME:-hrms_user_placeholder}
+      DB_PASSWORD: ${DB_PASSWORD:-hrms_password_placeholder}
       CACHE_STORE: redis
       REDIS_HOST: redis
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      REVERB_APP_ID: ${REVERB_APP_ID:?REVERB_APP_ID is required}
-      REVERB_APP_KEY: ${REVERB_APP_KEY:?REVERB_APP_KEY is required}
-      REVERB_APP_SECRET: ${REVERB_APP_SECRET:?REVERB_APP_SECRET is required}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password_placeholder}
+      REVERB_APP_ID: ${REVERB_APP_ID:-reverb_id_placeholder}
+      REVERB_APP_KEY: ${REVERB_APP_KEY:-reverb_key_placeholder}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-reverb_secret_placeholder}
       REVERB_SCHEME: ${REVERB_SCHEME:-http}
       REVERB_HOST: ${REVERB_HOST:-0.0.0.0}
     depends_on:
