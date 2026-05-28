@@ -3,20 +3,13 @@
 # Multi-stage, Production-Ready Dockerfile
 # ============================================
 
-# ── Stage 1: Dependencies ──────────────────────────────────
-FROM node:22-alpine AS deps
-
-WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm install --only=production --ignore-scripts --no-audit --no-fund && \
-    cp -R node_modules /prod_modules && \
-    npm install --ignore-scripts --no-audit --no-fund
-
-# ── Stage 2: Build ─────────────────────────────────────────
+# ── Stage 1: Build ─────────────────────────────────────────
 FROM node:22-alpine AS builder
 
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json* ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+
 COPY . .
 
 # Build arguments for environment variables
@@ -28,7 +21,7 @@ ENV NODE_ENV=production
 # Build the application
 RUN npm run build
 
-# ── Stage 3: Production Runner ─────────────────────────────
+# ── Stage 2: Production Runner ─────────────────────────────
 FROM node:22-alpine AS runner
 
 LABEL maintainer="Ahmad Rizki <ahmadrizki@narwastuarthatama.com>"
