@@ -11,7 +11,7 @@ pipeline {
         // Target Server Deployment (VM Aplikasi)
         TARGET_VM_IP = '192.168.222.5'
         TARGET_VM_USER = 'root'
-        TARGET_DIR = '/home/hrms/actions-runner'
+        TARGET_DIR = '/home/hrms/actions-runner/_work/SaaS-HRM-System/SaaS-HRM-System'
         
         // Kredensial ID di Jenkins
         SSH_CREDENTIAL_ID = 'vm-app-ssh'
@@ -55,15 +55,15 @@ pipeline {
                     }
                     
                     // 2. Hubungkan SSH dan jalankan proses deployment di VM Aplikasi
-                    sshagent(credentials: ["${SSH_CREDENTIAL_ID}"]) {
+                    withCredentials([sshUserPrivateKey(credentialsId: "${SSH_CREDENTIAL_ID}", keyFileVariable: 'SSH_KEY')]) {
                         // Transfer docker-compose.prod.yml dan .env.prod ke VM Aplikasi
-                        sh "scp -o StrictHostKeyChecking=no docker-compose.prod.yml ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/docker-compose.prod.yml"
-                        sh "scp -o StrictHostKeyChecking=no .env.prod ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/.env.prod"
+                        sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no docker-compose.prod.yml ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/docker-compose.prod.yml"
+                        sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no .env.prod ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/.env.prod"
                         
                         // Eksekusi pull dan up di server target
                         withCredentials([usernamePassword(credentialsId: "${GHCR_AUTH_ID}", usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
                             sh """
-                                ssh -o StrictHostKeyChecking=no ${TARGET_VM_USER}@${TARGET_VM_IP} '
+                                ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no ${TARGET_VM_USER}@${TARGET_VM_IP} '
                                     cd ${TARGET_DIR}
                                     
                                     # Login ke GHCR di VM Aplikasi agar diizinkan pull image
