@@ -79,10 +79,10 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 WORKDIR /var/www/html
 
 # Copy vendor from builder
-COPY --from=vendor /app/vendor ./vendor
+COPY --from=vendor --chown=www-data:www-data /app/vendor ./vendor
 
 # Copy application code
-COPY . .
+COPY --chown=www-data:www-data . .
 
 # Remove dev/unnecessary files
 RUN rm -rf \
@@ -105,7 +105,7 @@ RUN mkdir -p \
     storage/framework/views \
     storage/logs \
     bootstrap/cache \
-    && chown -R www-data:www-data /var/www/html \
+    && chown -R www-data:www-data storage bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
 
 # Create storage symlink
