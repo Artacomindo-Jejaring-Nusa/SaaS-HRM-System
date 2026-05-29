@@ -227,29 +227,22 @@ export function AnnouncementSkeleton() {
 // Roles & Permissions Skeleton
 export function RolesSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 space-y-6">
       <div className="dash-page-header">
         <div>
           <Skeleton className="h-8 w-44 mb-2" />
           <Skeleton className="h-4 w-64" />
         </div>
-        <Skeleton className="h-10 w-36 rounded-xl" />
+        <Skeleton className="h-10 w-36 rounded-lg" />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="dash-table-container p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <Skeleton className="h-5 w-24" />
-              <Skeleton className="h-6 w-16 rounded-full" />
-            </div>
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-3/4" />
-            <div className="flex gap-2 pt-2">
-              <Skeleton className="h-8 w-16 rounded-lg" />
-              <Skeleton className="h-8 w-16 rounded-lg" />
-            </div>
-          </div>
-        ))}
+      <div className="bg-white rounded-xl border border-[#ebedf0] overflow-hidden">
+        <div className="px-5 py-3 border-b border-[#ebedf0] flex items-center gap-3">
+          <Skeleton className="h-9 w-56 rounded-lg" />
+          <Skeleton className="h-4 w-28 ml-auto" />
+        </div>
+        <div className="p-5">
+          <TableSkeleton rows={6} cols={4} />
+        </div>
       </div>
     </div>
   );

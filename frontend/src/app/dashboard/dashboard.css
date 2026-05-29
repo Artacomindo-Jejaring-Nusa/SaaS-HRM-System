@@ -7,12 +7,10 @@
 
 /* === Layout === */
 .dash-layout {
-  display: flex;
+  display: block;
   min-height: 100vh;
   font-family: 'Inter', sans-serif;
   background: #f5f6f8;
-  max-width: 100vw;
-  overflow-x: hidden;
 }
 
 /* === Desktop Sidebar === */
@@ -284,7 +282,6 @@
   flex-direction: column;
   min-height: 100vh;
   min-width: 0;
-  max-width: 100%;
 }
 
 /* Mobile Header */
@@ -386,7 +383,6 @@
   flex: 1;
   padding: 24px;
   min-width: 0;
-  max-width: 100%;
 }
 
 @media (min-width: 768px) {
@@ -399,7 +395,6 @@
   width: 100%;
   margin: 0;
   min-width: 0;
-  max-width: 100%;
 }
 
 /* === Dashboard Page Styles === */

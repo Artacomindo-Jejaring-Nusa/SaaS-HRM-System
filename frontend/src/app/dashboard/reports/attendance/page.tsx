@@ -188,11 +188,11 @@ const LogView = ({ employees, startDate, endDate, selectedUser, onStartDateChang
           </div>
         ) : (
           <div className="w-full overflow-x-auto relative scrollbar-thin">
-            <table className="w-full text-left border-collapse table-fixed">
+            <table className="text-left border-collapse table-fixed" style={{ width: `${220 + dateList.length * 85 + 215}px`, minWidth: '100%' }}>
               <thead>
                 <tr className="bg-[#f9f9fb] border-b border-[#ebedf0]">
                   {/* Sticky left Employee header */}
-                  <th className="sticky left-0 bg-[#f9f9fb] z-30 px-3 md:px-4 py-3 text-xs font-bold text-[#5f6368] uppercase tracking-wider w-[120px] min-w-[120px] max-w-[120px] md:w-[220px] md:min-w-[220px] md:max-w-[220px] border-r border-[#ebedf0] shadow-[2px_0_5px_rgba(0,0,0,0.04)]">
+                  <th className="sticky left-0 bg-[#f9f9fb] z-30 px-4 py-3 text-xs font-bold text-[#5f6368] uppercase tracking-wider min-w-[220px] max-w-[220px] w-[220px] border-r border-[#ebedf0] shadow-[2px_0_5px_rgba(0,0,0,0.04)]">
                     Karyawan
                   </th>
                   
@@ -233,10 +233,10 @@ const LogView = ({ employees, startDate, endDate, selectedUser, onStartDateChang
                   return (
                     <tr key={emp.id} className="hover:bg-[#f9f9fb] transition-colors group">
                       {/* Sticky left Employee body cell */}
-                      <td className="sticky left-0 bg-white group-hover:bg-[#f9f9fb] z-20 px-3 md:px-4 py-3 border-r border-[#ebedf0] shadow-[2px_0_5px_rgba(0,0,0,0.04)] transition-colors w-[120px] min-w-[120px] max-w-[120px] md:w-[220px] md:min-w-[220px] md:max-w-[220px]">
-                        <div className="flex items-center gap-1.5 md:gap-2.5">
+                      <td className="sticky left-0 bg-white group-hover:bg-[#f9f9fb] z-20 px-4 py-3 border-r border-[#ebedf0] shadow-[2px_0_5px_rgba(0,0,0,0.04)] transition-colors min-w-[220px] max-w-[220px] w-[220px]">
+                        <div className="flex items-center gap-2.5">
                           <div 
-                            className="w-6 h-6 md:w-7 md:h-7 rounded-lg flex items-center justify-center text-[9px] md:text-[10px] font-bold text-white shrink-0 shadow-sm"
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-sm"
                             style={{ 
                               background: `hsl(${(rowIdx * 53 + 20) % 360}, 50%, 45%)` 
                             }}
@@ -244,8 +244,8 @@ const LogView = ({ employees, startDate, endDate, selectedUser, onStartDateChang
                             {emp.name.charAt(0).toUpperCase()}
                           </div>
                           <div className="flex flex-col min-w-0">
-                            <span className="font-semibold text-[10px] md:text-xs text-[#1a1a2e] truncate">{emp.name}</span>
-                            <span className="text-[8px] md:text-[9px] text-[#8c8fa3] font-mono leading-none mt-0.5 hidden md:block">NIK: {emp.nik || `EMP${emp.id}`}</span>
+                            <span className="font-semibold text-xs text-[#1a1a2e] truncate">{emp.name}</span>
+                            <span className="text-[9px] text-[#8c8fa3] font-mono leading-none mt-0.5">NIK: {emp.nik || `EMP${emp.id}`}</span>
                           </div>
                         </div>
                       </td>
@@ -450,8 +450,8 @@ const SummaryView = ({ startDate, endDate, selectedUser }: any) => {
        </div>
 
        <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-left min-w-[800px]">
               <thead>
                 <tr className="bg-gray-50/50 border-b border-gray-50">
                   <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Karyawan</th>
@@ -562,8 +562,8 @@ const SuspiciousView = ({ startDate, endDate, selectedUser }: any) => {
                 <p className="text-xs">Semua rekaman absensi terlihat normal pada periode ini.</p>
              </div>
            ) : (
-             <div className="overflow-x-auto">
-                <table className="w-full text-left">
+             <div className="overflow-x-auto scrollbar-thin">
+                <table className="w-full text-left min-w-[800px]">
                   <thead>
                     <tr className="bg-gray-50/50 border-b border-gray-50 text-center">
                       <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Tanggal / Jam</th>
@@ -666,8 +666,8 @@ const CorrectionView = ({ startDate, endDate, selectedUser }: any) => {
                 <p className="text-sm font-black uppercase tracking-widest">Tidak Ada Data Koreksi</p>
              </div>
           ) : (
-             <div className="overflow-x-auto">
-                <table className="w-full text-left">
+             <div className="overflow-x-auto scrollbar-thin">
+                <table className="w-full text-left min-w-[850px]">
                   <thead>
                     <tr className="bg-gray-50/50 border-b border-gray-50">
                       <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Karyawan</th>
@@ -770,8 +770,8 @@ const ShiftView = ({ employees, startDate, endDate, selectedUser }: any) => {
                  <p className="text-sm font-black uppercase tracking-widest">Tidak Ada Jadwal</p>
               </div>
            ) : (
-              <div className="overflow-x-auto">
-                 <table className="w-full text-left">
+              <div className="overflow-x-auto scrollbar-thin">
+                 <table className="w-full text-left min-w-[800px]">
                    <thead>
                      <tr className="bg-gray-50/50 border-b border-gray-50">
                        <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Tanggal</th>
