@@ -7,7 +7,7 @@
 
 /* === Layout === */
 .dash-layout {
-  display: flex;
+  display: block;
   min-height: 100vh;
   font-family: 'Inter', sans-serif;
   background: #f5f6f8;
@@ -281,6 +281,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-width: 0;
 }
 
 /* Mobile Header */
@@ -381,6 +382,7 @@
 .dash-content {
   flex: 1;
   padding: 24px;
+  min-width: 0;
 }
 
 @media (min-width: 768px) {
@@ -392,6 +394,7 @@
 .dash-content-inner {
   width: 100%;
   margin: 0;
+  min-width: 0;
 }
 
 /* === Dashboard Page Styles === */
