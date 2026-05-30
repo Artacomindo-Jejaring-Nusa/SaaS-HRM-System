@@ -86,6 +86,9 @@ pipeline {
                                     echo "Membersihkan Image Lama yang Gantung..."
                                     docker image prune -f
                                     
+                                    echo "Restart hrms-proxy..."
+                                    docker restart hrms-proxy
+                                    
                                     echo "Deployment Sukses!"
                                 '
                             """
