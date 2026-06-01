@@ -249,8 +249,12 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::delete('/documents/{id}', [CompanyDocumentController::class, 'destroy']);
     });
 
-    // Activity Logs
-    Route::middleware('permission:view-activity-logs')->get('/activity-logs', [ActivityLogController::class, 'index']);
+    // Activity Logs / Audit Trail (ISO 27001)
+    Route::middleware('permission:view-activity-logs')->group(function () {
+        Route::get('/activity-logs', [ActivityLogController::class, 'index']);
+        Route::get('/activity-logs/filters', [ActivityLogController::class, 'filters']);
+        Route::get('/activity-logs/export', [ActivityLogController::class, 'export']);
+    });
 
     // Employees (Manage Employee)
     Route::middleware('permission:view-employees')->get('/employees/potential-supervisors', [EmployeeController::class, 'potentialSupervisors']);

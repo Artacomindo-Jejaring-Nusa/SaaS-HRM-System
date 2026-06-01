@@ -29,7 +29,7 @@ abstract class Controller
         ], $code);
     }
 
-    protected function logActivity($action, $description, $model = null)
+    protected function logActivity($action, $description, $model = null, $module = null, $oldValues = null, $newValues = null)
     {
         $user = Auth::user();
         if (! $user) {
@@ -43,6 +43,11 @@ abstract class Controller
             'description' => $description,
             'model_type' => $model ? get_class($model) : null,
             'model_id' => $model ? $model->id : null,
+            'ip_address' => request()->ip(),
+            'user_agent' => substr(request()->userAgent() ?? '', 0, 255),
+            'old_values' => $oldValues,
+            'new_values' => $newValues,
+            'module' => $module,
         ]);
     }
 

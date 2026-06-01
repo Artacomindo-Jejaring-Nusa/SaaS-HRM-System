@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
 use App\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 
 class Overtime extends Model
 {
-    use BelongsToCompany;
+    use BelongsToCompany, Auditable;
 
     protected $fillable = [
         'user_id',

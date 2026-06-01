@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
 use App\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 
 class Leave extends Model
 {
-    use BelongsToCompany;
+    use BelongsToCompany, Auditable;
 
     protected $fillable = [
         'user_id', 'company_id', 'start_date', 'end_date',

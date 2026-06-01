@@ -250,9 +250,24 @@ class PayrollController extends Controller
         $salary->earning_overtime = $overtimeAmount;
         $salary->deduction_bpjs_jht = $bpjs['jht']['employee'] ?? 0;
         $salary->deduction_bpjs_jp = $bpjs['jp']['employee'] ?? 0;
+        $salary->deduction_bpjs_kes = $bpjs['kesehatan']['employee'] ?? 0;
         $salary->deduction_absence = $totalAbsenceDeduction;
         $salary->deduction_late = $totalLateDeduction;
-        $salary->deduction_tax = $this->payrollService->calculatePPh21TER($basicSalary + $overtimeAmount, $user->ptkp_status);
+
+        // Calculate PPh 21 dynamically based on settings tax method (TER, Gross, Gross-Up)
+        $taxGrossSalary = $basicSalary + $overtimeAmount + $salary->earning_attendance_allowance + ($bpjs['kesehatan']['company'] ?? 0);
+        $taxMethod = $settings->tax_method ?? 'TER';
+        $taxResult = $this->payrollService->calculatePPh21($taxGrossSalary, $user->ptkp_status, $taxMethod);
+        
+        $salary->deduction_tax = $taxResult['tax'];
+        
+        // If Gross Up, we need to add the tax allowance as an earning so it offsets the tax deduction!
+        if (strtoupper($taxMethod) === 'GROSS_UP' && $taxResult['tax'] > 0) {
+            // Put tax allowance into earining_others or we can just add it to a separate premium
+            $salary->earning_others = ($salary->earning_others ?? 0) + $taxResult['tax'];
+            $salary->earning_others_note = trim(($salary->earning_others_note ?? '') . ' Tunjangan Pajak (Gross-Up)');
+        }
+
         $salary->bank_name = $user->bank_name ?? '-';
         $salary->bank_account_no = $user->bank_account_no ?? '-';
         $salary->cost_center = $user->cost_center ?? 'PT. Artacomindo Jejaring Nusa';
@@ -261,7 +276,11 @@ class PayrollController extends Controller
         $salary->calculateTotals();
         $salary->details = json_encode([
             'ptkp' => $user->ptkp_status,
-            'tax' => $salary->deduction_tax,
+            'tax' => [
+                'amount' => $salary->deduction_tax,
+                'method' => $taxResult['method'],
+                'details' => $taxResult['details'] ?? [],
+            ],
             'bpjs' => $bpjs,
             'overtime' => $overtimeAmount,
             'total_work_hours' => $totalActualWorkHours,
