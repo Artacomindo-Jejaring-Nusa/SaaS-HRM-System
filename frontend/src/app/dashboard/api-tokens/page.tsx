@@ -526,24 +526,24 @@ export default function ApiTokensPage() {
                             {category.items.map((ability) => {
                               const isChecked = selectedAbilities.includes(ability.key);
                               return (
-                                <label 
+                                <button 
+                                  type="button"
                                   key={ability.key}
-                                  className={`p-4 border rounded-2xl flex gap-3 cursor-pointer select-none transition-all ${isChecked ? 'bg-[#8B0000]/5 border-[#8B0000] text-gray-800' : 'bg-white border-gray-100 hover:border-gray-200 text-gray-500'}`}
+                                  onClick={() => toggleAbility(ability.key)}
+                                  aria-pressed={isChecked}
+                                  className={`text-left p-4 border rounded-2xl flex gap-3 cursor-pointer select-none transition-all ${isChecked ? 'bg-[#8B0000]/5 border-[#8B0000] text-gray-800' : 'bg-white border-gray-100 hover:border-gray-200 text-gray-500'}`}
                                 >
-                                  <div className="pt-0.5">
-                                    <input
-                                      type="checkbox"
-                                      checked={isChecked}
-                                      onChange={() => toggleAbility(ability.key)}
-                                      className="accent-[#8B0000] w-4 h-4"
-                                    />
+                                  <div className="pt-0.5 shrink-0">
+                                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${isChecked ? 'bg-[#8B0000] border-[#8B0000]' : 'bg-white border-gray-300'}`}>
+                                      {isChecked && <Check className="w-3 h-3 text-white stroke-[3]" />}
+                                    </div>
                                   </div>
                                   <div>
                                     <h5 className="text-xs font-bold text-gray-800">{ability.name}</h5>
                                     <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">{ability.desc}</p>
                                     <span className="text-[9px] font-mono text-gray-400 bg-gray-50 px-1 rounded border border-gray-100 mt-2 inline-block">{ability.key}</span>
                                   </div>
-                                </label>
+                                </button>
                               );
                             })}
                           </div>
