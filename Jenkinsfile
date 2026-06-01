@@ -3,10 +3,6 @@ pipeline {
         label 'ontime-hrms'
     }
 
-    tools {
-        sonarRunner 'SonarQubeScanner'
-    }
-
     environment {
         // Konfigurasi Registry GHCR
         REGISTRY = 'ghcr.io'
@@ -36,8 +32,9 @@ pipeline {
         stage('SonarQube Quality Check') {
             steps {
                 script {
+                    def scannerHome = tool 'SonarQubeScanner'
                     withSonarQubeEnv('SonarQube') {
-                        sh 'sonar-scanner'
+                        sh "${scannerHome}/bin/sonar-scanner"
                     }
                 }
             }
