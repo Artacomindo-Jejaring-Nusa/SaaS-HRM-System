@@ -43,7 +43,7 @@ class CompanyDocumentController extends Controller
         $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'file' => 'required|file|mimes:pdf|max:10240', // Max 10MB
+            'file' => 'required|file|mimes:pdf|max:5120', // Max 5MB to comply with safe content length limits
             'type' => 'required|in:sk,regulation',
             'is_published' => 'boolean',
             'published_at' => 'nullable|date',
@@ -114,7 +114,7 @@ class CompanyDocumentController extends Controller
         $request->validate([
             'title' => 'sometimes|string|max:255',
             'description' => 'nullable|string',
-            'file' => 'nullable|file|mimes:pdf|max:10240',
+            'file' => 'nullable|file|mimes:pdf|max:5120', // Max 5MB to comply with safe content length limits
             'type' => 'sometimes|in:sk,regulation',
             'is_published' => 'boolean',
             'published_at' => 'nullable|date',

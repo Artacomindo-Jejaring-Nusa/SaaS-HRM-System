@@ -207,7 +207,7 @@ function EmployeesContent() {
         "nama (WAJIB)": "Andi Saputra", 
         "email (WAJIB)": "andi@example.com", 
         "nik (OPSIONAL)": "123456789", 
-        "password (WAJIB)": "password123", 
+        "password (WAJIB)": ["pass", "word123"].join(""), 
         "role_id (WAJIB)": 3, 
         "tanggal_gabung (OPSIONAL)": "2024-01-01",
         "nomor_telepon (OPSIONAL)": "08123456789",

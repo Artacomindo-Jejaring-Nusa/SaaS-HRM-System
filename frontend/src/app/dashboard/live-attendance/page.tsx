@@ -50,6 +50,8 @@ export default function LiveAttendancePage() {
     }
 
     // 3. Get Geolocation & Match Nearest Office
+    // NOTE: Geolocation usage is required for business logic validation to ensure
+    // employees are physically located within the allowed office geofencing radius.
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
