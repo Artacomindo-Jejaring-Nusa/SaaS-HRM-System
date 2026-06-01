@@ -379,9 +379,9 @@ export default function ApiTokensPage() {
             </div>
             <div className="p-5 overflow-x-auto">
               <pre className="text-xs text-gray-300 font-mono leading-relaxed">
-{`curl -X GET \\
-  ${apiUrl}/directory \\
-  -H "Authorization: Bearer <your_api_token>" \\
+{String.raw`curl -X GET \
+  ${apiUrl}/directory \
+  -H "Authorization: Bearer <your_api_token>" \
   -H "Accept: application/json"`}
               </pre>
             </div>
