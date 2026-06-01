@@ -39,6 +39,7 @@ use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\VehicleLogController;
 use App\Http\Controllers\ApprovalWorkflowController;
+use App\Http\Controllers\ApiTokenController;
 use App\Http\Middleware\TenantMiddleware;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\DB;
@@ -393,6 +394,11 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::post('/profile/update', [ProfileController::class, 'update']);
     Route::post('/profile/upload-photo', [ProfileController::class, 'uploadPhoto']);
     Route::post('/user/change-password', [AuthController::class, 'changePassword']);
+
+    // API Tokens (Integrations)
+    Route::get('/api-tokens', [ApiTokenController::class, 'index']);
+    Route::post('/api-tokens', [ApiTokenController::class, 'store']);
+    Route::delete('/api-tokens/{id}', [ApiTokenController::class, 'destroy']);
 
     // Employee Directory & Org Chart
     // Employee Directory & Org Chart

@@ -211,6 +211,7 @@ const sidebarLinks: SidebarLink[] = [
       { name: "role_management", href: "/dashboard/roles", permission: 'manage-roles' },
       { name: "permissions", href: "/dashboard/permissions", permission: 'manage-roles' },
       { name: "activity_logs", href: "/dashboard/activity-logs", permission: 'view-activity-logs' },
+      { name: "api_tokens", href: "/dashboard/api-tokens", permission: 'manage-roles' },
     ]
   }
 ];
