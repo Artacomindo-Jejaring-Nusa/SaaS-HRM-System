@@ -7,18 +7,24 @@ use Illuminate\Support\Facades\Validator;
 
 class ApiTokenController extends Controller
 {
+    private const TOKEN_PREFIX = 'integration:';
+
     public function index(Request $request)
     {
-        $tokens = $request->user()->tokens()->orderBy('created_at', 'desc')->get()->map(function ($token) {
-            return [
-                'id' => $token->id,
-                'name' => $token->name,
-                'abilities' => $token->abilities,
-                'last_used_at' => $token->last_used_at ? $token->last_used_at->toIso8601String() : null,
-                'created_at' => $token->created_at->toIso8601String(),
-                'expires_at' => $token->expires_at ? $token->expires_at->toIso8601String() : null,
-            ];
-        });
+        $tokens = $request->user()->tokens()
+            ->where('name', 'like', self::TOKEN_PREFIX . '%')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($token) {
+                return [
+                    'id' => $token->id,
+                    'name' => str_replace(self::TOKEN_PREFIX, '', $token->name),
+                    'abilities' => $token->abilities,
+                    'last_used_at' => $token->last_used_at ? $token->last_used_at->toIso8601String() : null,
+                    'created_at' => $token->created_at->toIso8601String(),
+                    'expires_at' => $token->expires_at ? $token->expires_at->toIso8601String() : null,
+                ];
+            });
 
         return $this->successResponse($tokens, 'Tokens retrieved successfully');
     }
@@ -39,13 +45,15 @@ class ApiTokenController extends Controller
         $abilities = $request->input('abilities', ['*']);
         $expiresAt = $request->input('expires_at') ? new \DateTime($request->input('expires_at')) : null;
 
-        $tokenResult = $request->user()->createToken($request->name, $abilities, $expiresAt);
+        // Prefix the token name to distinguish it from SPA session tokens (auth_token)
+        $prefixedName = self::TOKEN_PREFIX . $request->name;
+        $tokenResult = $request->user()->createToken($prefixedName, $abilities, $expiresAt);
 
         $this->logActivity('create_api_token', "Created API Token: {$request->name}");
 
         return $this->successResponse([
             'id' => $tokenResult->accessToken->id,
-            'name' => $tokenResult->accessToken->name,
+            'name' => $request->name,
             'plain_text_token' => $tokenResult->plainTextToken,
             'abilities' => $tokenResult->accessToken->abilities,
             'expires_at' => $tokenResult->accessToken->expires_at ? $tokenResult->accessToken->expires_at->toIso8601String() : null,
@@ -54,13 +62,16 @@ class ApiTokenController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $token = $request->user()->tokens()->find($id);
+        // Only allow revoking tokens that are integration tokens
+        $token = $request->user()->tokens()
+            ->where('name', 'like', self::TOKEN_PREFIX . '%')
+            ->find($id);
 
         if (!$token) {
             return $this->errorResponse('Token not found', 404);
         }
 
-        $tokenName = $token->name;
+        $tokenName = str_replace(self::TOKEN_PREFIX, '', $token->name);
         $token->delete();
 
         $this->logActivity('delete_api_token', "Revoked/Deleted API Token: {$tokenName}");
