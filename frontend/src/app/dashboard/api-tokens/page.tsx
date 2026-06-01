@@ -12,13 +12,11 @@ import {
   Calendar, 
   HelpCircle, 
   Loader2, 
-  Info, 
   AlertTriangle,
   X,
   Lock,
   ArrowRight
 } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { TableSkeleton } from "@/components/Skeleton";
 
@@ -72,7 +70,6 @@ const AVAILABLE_ABILITIES = [
 ];
 
 export default function ApiTokensPage() {
-  const { hasPermission } = useAuth();
   const [tokens, setTokens] = useState<ApiToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -90,12 +87,12 @@ export default function ApiTokensPage() {
 
   useEffect(() => {
     fetchTokens();
-    if (typeof window !== "undefined") {
+    if (globalThis.window !== undefined) {
       const envUrl = process.env.NEXT_PUBLIC_API_URL;
       if (envUrl) {
         setApiUrl(envUrl);
       } else {
-        setApiUrl(`${window.location.origin}/api`);
+        setApiUrl(`${globalThis.location.origin}/api`);
       }
     }
   }, []);
@@ -113,8 +110,10 @@ export default function ApiTokensPage() {
     }
   };
 
-  const handleCreateToken = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateToken = async (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+    }
     if (!tokenName.trim()) {
       toast.error("Nama token wajib diisi.");
       return;
@@ -127,7 +126,7 @@ export default function ApiTokensPage() {
       let expires_at = null;
       if (expiration !== "0") {
         const date = new Date();
-        date.setDate(date.getDate() + parseInt(expiration));
+        date.setDate(date.getDate() + Number.parseInt(expiration, 10));
         expires_at = date.toISOString().split("T")[0]; // YYYY-MM-DD
       }
 
@@ -143,9 +142,12 @@ export default function ApiTokensPage() {
       setGeneratedToken(data.plain_text_token);
       toast.success("API Token berhasil dibuat!");
       fetchTokens();
-    } catch (e: any) {
+    } catch (e) {
       console.error("Gagal membuat API Token", e);
-      toast.error(e.response?.data?.message || "Gagal membuat API Token.");
+      const errorMsg = e && typeof e === "object" && "response" in e
+        ? (e as { response: { data?: { message?: string } } }).response?.data?.message
+        : undefined;
+      toast.error(errorMsg || "Gagal membuat API Token.");
     } finally {
       setIsSubmitting(false);
     }
@@ -207,6 +209,116 @@ export default function ApiTokensPage() {
     return new Date(expiresAt) < new Date();
   };
 
+  const renderTableContent = () => {
+    if (loading) {
+      return (
+        <div className="p-6">
+          <TableSkeleton rows={5} cols={4} />
+        </div>
+      );
+    }
+
+    if (tokens.length === 0) {
+      return (
+        <div className="py-20 flex flex-col items-center justify-center text-center">
+          <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4 text-gray-300">
+            <Key size={40} />
+          </div>
+          <h3 className="text-base font-bold text-gray-800">Tidak ada Token API aktif</h3>
+          <p className="text-sm text-gray-400 max-w-sm mx-auto mt-1">
+            Buat token akses pribadi baru untuk menghubungkan sistem HRMS ini dengan aplikasi luar secara aman.
+          </p>
+          <button 
+            className="mt-6 flex items-center gap-2 bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-bold transition-all"
+            onClick={() => setIsModalOpen(true)}
+          >
+            <Plus size={14} />
+            Buat Token Sekarang
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="dash-table-wrapper">
+        <table className="dash-table border-0! text-left">
+          <thead>
+            <tr>
+              <th className="bg-gray-50/80! py-4! pl-6">Nama Token</th>
+              <th className="bg-gray-50/80! py-4!">Hak Akses (Scopes)</th>
+              <th className="bg-gray-50/80! py-4!">Terakhir Digunakan</th>
+              <th className="bg-gray-50/80! py-4!">Masa Berlaku</th>
+              <th className="bg-gray-50/80! py-4! pr-6 text-right">Aksi</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {tokens.map((token) => {
+              const expired = isTokenExpired(token.expires_at);
+              return (
+                <tr key={token.id} className="hover:bg-gray-50/50 transition-colors group">
+                  <td className="py-5 pl-6">
+                    <div className="flex flex-col">
+                      <span className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                        {token.name}
+                        {expired && (
+                          <span className="px-1.5 py-0.5 text-[9px] font-black uppercase text-red-600 bg-red-50 border border-red-100 rounded">Expired</span>
+                        )}
+                      </span>
+                      <span className="text-[11px] text-gray-400 font-medium mt-0.5">Dibuat pada {formatDateTime(token.created_at)}</span>
+                    </div>
+                  </td>
+                  <td className="py-5 max-w-[300px]">
+                    <div className="flex flex-wrap gap-1">
+                      {token.abilities.includes("*") ? (
+                        <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-50 text-purple-600 border border-purple-100 rounded-md">Full Access (*)</span>
+                      ) : (
+                        token.abilities.map((ability) => (
+                          <span 
+                            key={ability} 
+                            className="px-2 py-0.5 text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 rounded-md"
+                          >
+                            {ability}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-5">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
+                      <Clock size={13} className="text-gray-400" />
+                      {token.last_used_at ? formatDateTime(token.last_used_at) : "Belum pernah"}
+                    </div>
+                  </td>
+                  <td className="py-5">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
+                      <Calendar size={13} className="text-gray-400" />
+                      {token.expires_at ? (
+                        <span className={expired ? "text-red-500 font-bold" : ""}>
+                          {new Date(token.expires_at).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                        </span>
+                      ) : (
+                        <span className="text-emerald-600 font-semibold">Selamanya</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-5 pr-6 text-right">
+                    <button 
+                      onClick={() => handleRevokeToken(token.id, token.name)}
+                      className="p-2 hover:bg-rose-50 text-gray-400 hover:text-rose-600 rounded-xl transition-all cursor-pointer"
+                      title="Revoke/Hapus Token"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Page Header */}
@@ -233,103 +345,7 @@ export default function ApiTokensPage() {
 
       {/* Tokens List Table */}
       <div className="dash-table-container rounded-2xl! p-0! overflow-hidden bg-white border border-[#ebedf0] shadow-sm">
-        {loading ? (
-          <div className="p-6"><TableSkeleton rows={5} cols={4} /></div>
-        ) : tokens.length === 0 ? (
-          <div className="py-20 flex flex-col items-center justify-center text-center">
-            <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4 text-gray-300">
-              <Key size={40} />
-            </div>
-            <h3 className="text-base font-bold text-gray-800">Tidak ada Token API aktif</h3>
-            <p className="text-sm text-gray-400 max-w-sm mx-auto mt-1">
-              Buat token akses pribadi baru untuk menghubungkan sistem HRMS ini dengan aplikasi luar secara aman.
-            </p>
-            <button 
-              className="mt-6 flex items-center gap-2 bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-bold transition-all"
-              onClick={() => setIsModalOpen(true)}
-            >
-              <Plus size={14} />
-              Buat Token Sekarang
-            </button>
-          </div>
-        ) : (
-          <div className="dash-table-wrapper">
-            <table className="dash-table border-0! text-left">
-              <thead>
-                <tr>
-                  <th className="bg-gray-50/80! py-4! pl-6">Nama Token</th>
-                  <th className="bg-gray-50/80! py-4!">Hak Akses (Scopes)</th>
-                  <th className="bg-gray-50/80! py-4!">Terakhir Digunakan</th>
-                  <th className="bg-gray-50/80! py-4!">Masa Berlaku</th>
-                  <th className="bg-gray-50/80! py-4! pr-6 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {tokens.map((token) => {
-                  const expired = isTokenExpired(token.expires_at);
-                  return (
-                    <tr key={token.id} className="hover:bg-gray-50/50 transition-colors group">
-                      <td className="py-5 pl-6">
-                        <div className="flex flex-col">
-                          <span className="font-bold text-gray-800 text-sm flex items-center gap-2">
-                            {token.name}
-                            {expired && (
-                              <span className="px-1.5 py-0.5 text-[9px] font-black uppercase text-red-600 bg-red-50 border border-red-100 rounded">Expired</span>
-                            )}
-                          </span>
-                          <span className="text-[11px] text-gray-400 font-medium mt-0.5">Dibuat pada {formatDateTime(token.created_at)}</span>
-                        </div>
-                      </td>
-                      <td className="py-5 max-w-[300px]">
-                        <div className="flex flex-wrap gap-1">
-                          {token.abilities.includes("*") ? (
-                            <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-50 text-purple-600 border border-purple-100 rounded-md">Full Access (*)</span>
-                          ) : (
-                            token.abilities.map((ability) => (
-                              <span 
-                                key={ability} 
-                                className="px-2 py-0.5 text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 rounded-md"
-                              >
-                                {ability}
-                              </span>
-                            ))
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-5">
-                        <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
-                          <Clock size={13} className="text-gray-400" />
-                          {token.last_used_at ? formatDateTime(token.last_used_at) : "Belum pernah"}
-                        </div>
-                      </td>
-                      <td className="py-5">
-                        <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
-                          <Calendar size={13} className="text-gray-400" />
-                          {token.expires_at ? (
-                            <span className={expired ? "text-red-500 font-bold" : ""}>
-                              {new Date(token.expires_at).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
-                            </span>
-                          ) : (
-                            <span className="text-emerald-600 font-semibold">Selamanya</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-5 pr-6 text-right">
-                        <button 
-                          onClick={() => handleRevokeToken(token.id, token.name)}
-                          className="p-2 hover:bg-rose-50 text-gray-400 hover:text-rose-600 rounded-xl transition-all cursor-pointer"
-                          title="Revoke/Hapus Token"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {renderTableContent()}
       </div>
 
       {/* Integration Guide / Developer Documentation */}
@@ -436,7 +452,7 @@ export default function ApiTokensPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Token Personal Access Anda</label>
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Token Personal Access Anda</span>
                     <div className="flex items-center gap-2 p-4 bg-gray-950 border border-gray-800 rounded-2xl">
                       <div className="flex-1 font-mono text-sm text-emerald-400 select-all overflow-x-auto whitespace-nowrap scrollbar-thin">
                         {generatedToken}
@@ -466,8 +482,9 @@ export default function ApiTokensPage() {
                 <form onSubmit={handleCreateToken} className="space-y-6">
                   {/* Token Name */}
                   <div className="grid gap-2">
-                    <label className="text-sm font-bold text-gray-700">Nama Token / Label</label>
+                    <label htmlFor="tokenNameInput" className="text-sm font-bold text-gray-700">Nama Token / Label</label>
                     <input
+                      id="tokenNameInput"
                       type="text"
                       placeholder="Contoh: Integrasi Aplikasi Accurate Finance"
                       value={tokenName}
@@ -479,8 +496,9 @@ export default function ApiTokensPage() {
 
                   {/* Expiration */}
                   <div className="grid gap-2">
-                    <label className="text-sm font-bold text-gray-700">Masa Berlaku Token</label>
+                    <label htmlFor="tokenExpirationSelect" className="text-sm font-bold text-gray-700">Masa Berlaku Token</label>
                     <select
+                      id="tokenExpirationSelect"
                       value={expiration}
                       onChange={(e) => setExpiration(e.target.value)}
                       className="w-full h-12 px-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-[#8B0000]/5 focus:border-[#8B0000] transition-all outline-none text-sm font-medium"
@@ -496,7 +514,7 @@ export default function ApiTokensPage() {
                   {/* Abilities/Scopes Checkboxes */}
                   <div className="space-y-4">
                     <div>
-                      <label className="text-sm font-bold text-gray-700">Pilih Hak Akses (Scopes)</label>
+                      <span className="text-sm font-bold text-gray-700 block">Pilih Hak Akses (Scopes)</span>
                       <p className="text-[11px] text-gray-400 mt-0.5">Berikan akses seminimal mungkin demi keamanan integrasi (Least Privilege Principle).</p>
                     </div>
 
@@ -508,16 +526,15 @@ export default function ApiTokensPage() {
                             {category.items.map((ability) => {
                               const isChecked = selectedAbilities.includes(ability.key);
                               return (
-                                <div 
+                                <label 
                                   key={ability.key}
-                                  onClick={() => toggleAbility(ability.key)}
                                   className={`p-4 border rounded-2xl flex gap-3 cursor-pointer select-none transition-all ${isChecked ? 'bg-[#8B0000]/5 border-[#8B0000] text-gray-800' : 'bg-white border-gray-100 hover:border-gray-200 text-gray-500'}`}
                                 >
                                   <div className="pt-0.5">
                                     <input
                                       type="checkbox"
                                       checked={isChecked}
-                                      readOnly
+                                      onChange={() => toggleAbility(ability.key)}
                                       className="accent-[#8B0000] w-4 h-4"
                                     />
                                   </div>
@@ -526,7 +543,7 @@ export default function ApiTokensPage() {
                                     <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">{ability.desc}</p>
                                     <span className="text-[9px] font-mono text-gray-400 bg-gray-50 px-1 rounded border border-gray-100 mt-2 inline-block">{ability.key}</span>
                                   </div>
-                                </div>
+                                </label>
                               );
                             })}
                           </div>
