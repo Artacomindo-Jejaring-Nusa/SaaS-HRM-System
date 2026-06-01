@@ -2,12 +2,20 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
 use App\Traits\BelongsToCompany;
+use App\Traits\EncryptsSensitiveFields;
 use Illuminate\Database\Eloquent\Model;
 
 class Salary extends Model
 {
-    use BelongsToCompany;
+    use BelongsToCompany, Auditable, EncryptsSensitiveFields;
+
+    protected array $encryptedFields = ['bank_account_no'];
+
+    protected string $auditModule = 'payroll';
+    protected array $auditMasked = ['bank_account_no', 'net_salary'];
+    protected array $auditExclude = ['updated_at', 'created_at', 'details'];
     protected $fillable = [
         'user_id',
         'company_id',
@@ -43,6 +51,7 @@ class Salary extends Model
         // Deductions
         'deduction_bpjs_jht',
         'deduction_bpjs_jp',
+        'deduction_bpjs_kes',
         'deduction_absence',
         'deduction_late',
         'deduction_tax',
@@ -87,6 +96,7 @@ class Salary extends Model
 
         $this->total_deductions = $this->deduction_bpjs_jht
             + $this->deduction_bpjs_jp
+            + $this->deduction_bpjs_kes
             + $this->deduction_absence
             + $this->deduction_late
             + $this->deduction_tax;

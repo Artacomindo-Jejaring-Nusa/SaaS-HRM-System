@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
 use App\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 
 class PayrollBatch extends Model
 {
-    use BelongsToCompany;
+    use BelongsToCompany, Auditable;
+
+    protected string $auditModule = 'payroll';
     protected $fillable = [
         'company_id',
         'period_month',
