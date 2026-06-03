@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
-import { Plus, Search, Eye, Plane, Printer, ClipboardList, X, Check } from "lucide-react";
+import { Plus, Search, Eye, Plane, Printer, ClipboardList, X, Check, FileDown } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import SignaturePad from "@/components/SignaturePad";
 import { useAuth } from "@/contexts/AuthContext";
@@ -93,6 +93,41 @@ export default function PermitsPage() {
       setIsPrinting(false);
     }, 500);
   };
+
+  const handleDownloadPdf = async (recordId: number, userName: string) => {
+    try {
+      const response = await axiosInstance.get(`/export/permit/${recordId}`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Izin_${userName.replace(/\s+/g, '_')}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    } catch (err) {
+      toast.error("Gagal mendownload PDF.");
+    }
+  };
+
+  const handleDownloadExcel = async (recordId: number, userName: string) => {
+    try {
+      const response = await axiosInstance.get(`/export/permit/${recordId}/excel`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Izin_${userName.replace(/\s+/g, '_')}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    } catch (err) {
+      toast.error("Gagal mendownload Excel.");
+    }
+  };
+
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -329,11 +364,24 @@ export default function PermitsPage() {
                     <Printer size={15} /> Cetak / PDF
                   </button>
                   <button 
+                    onClick={() => handleDownloadPdf(selectedItem.id, selectedItem.user?.name || "Karyawan")}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded transition-colors shadow-sm"
+                  >
+                    <FileDown size={15} /> Unduh PDF Resmi
+                  </button>
+                  <button 
+                    onClick={() => handleDownloadExcel(selectedItem.id, selectedItem.user?.name || "Karyawan")}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-700 bg-white border border-green-200 hover:bg-green-50 rounded transition-colors shadow-sm"
+                  >
+                    <FileDown size={15} /> Unduh Excel
+                  </button>
+                  <button 
                     onClick={() => setIsDetailModalOpen(false)}
                     className="p-1.5 bg-white hover:bg-gray-100 border border-gray-200 rounded text-gray-500 transition-colors"
                   >
                     <X size={18} />
                   </button>
+
                 </div>
               </div>
             )}

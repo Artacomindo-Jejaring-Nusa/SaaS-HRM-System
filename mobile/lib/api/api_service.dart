@@ -158,6 +158,13 @@ class ApiService {
           Map<String, dynamic> data) =>
       OvertimeRepository.submitOvertime(data);
 
+  static Future<Map<String, dynamic>> updateOvertime(
+          int id, Map<String, dynamic> data) =>
+      OvertimeRepository.updateOvertime(id, data);
+
+  static Future<Map<String, dynamic>> deleteOvertime(int id) =>
+      OvertimeRepository.deleteOvertime(id);
+
   // ============ SALARY (GAJI) ============
 
   static Future<List<dynamic>?> getSalaries() =>
@@ -236,6 +243,9 @@ class ApiService {
 
   static Future<void> launchPdf(String type, int id) =>
       ManagerRepository.launchPdf(type, id);
+
+  static Future<void> launchExcel(String type, int id) =>
+      ManagerRepository.launchExcel(type, id);
 
   // ============ SHIFT SWAP ============
 

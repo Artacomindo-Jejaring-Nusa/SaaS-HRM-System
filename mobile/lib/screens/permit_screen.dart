@@ -318,11 +318,23 @@ class _PermitScreenState extends State<PermitScreen> {
                                         child: Text(status.toUpperCase(), style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
                                       ),
                                       if (status == 'approved')
-                                        IconButton(
-                                          constraints: BoxConstraints(),
-                                          padding: EdgeInsets.only(top: 8),
-                                          icon: Icon(Icons.picture_as_pdf, color: primaryColor, size: 20), 
-                                          onPressed: () => ApiService.launchPdf('permit', permit['id']),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              constraints: const BoxConstraints(),
+                                              padding: const EdgeInsets.only(top: 8),
+                                              icon: Icon(Icons.picture_as_pdf, color: primaryColor, size: 20), 
+                                              onPressed: () => ApiService.launchPdf('permit', permit['id']),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            IconButton(
+                                              constraints: const BoxConstraints(),
+                                              padding: const EdgeInsets.only(top: 8),
+                                              icon: const Icon(Icons.table_view, color: Colors.green, size: 20), 
+                                              onPressed: () => ApiService.launchExcel('permit', permit['id']),
+                                            ),
+                                          ],
                                         ),
                                     ],
                                   ),

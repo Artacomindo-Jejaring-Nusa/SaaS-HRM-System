@@ -4,104 +4,353 @@
     <meta charset="utf-8">
     <title>Formulir Lembur - {{ $overtime->user->name }}</title>
     <style>
-        body { font-family: 'Helvetica', sans-serif; color: #333; font-size: 11px; margin: 0; padding: 0; }
-        .header { text-align: center; border-bottom: 2px solid #8B0000; padding: 15px 0; margin-bottom: 25px; }
-        .header img { width: 70px; position: absolute; left: 0; top: 10px; }
-        .header h1 { color: #8B0000; margin: 0; font-size: 18px; text-transform: uppercase; }
-        .header p { color: #666; margin: 3px 0 0; font-size: 11px; }
-        .section-title { font-weight: bold; text-transform: uppercase; margin: 20px 0 10px; border-bottom: 1px solid #eee; padding-bottom: 3px; color: #8B0000; }
-        .content { line-height: 1.5; margin-bottom: 35px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
-        th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; }
-        th { background: #f9f9f9; width: 150px; color: #666; }
-        .status-badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 9px; }
-        .badge-approved { background: #c6f6d5; color: #22543d; }
-        .badge-pending { background: #feebc8; color: #744210; }
-        .badge-rejected { background: #fed7d7; color: #822727; }
-        .footer-table { width: 100%; margin-top: 50px; border: none; }
-        .footer-table td { text-align: center; width: 33.33%; border: none; padding-top: 30px; }
-        .signature { height: 60px; }
+        @page {
+            size: portrait;
+            margin: 12mm 15mm;
+        }
+        body {
+            font-family: 'Calibri', Arial, sans-serif;
+            color: #000;
+            font-size: 11px;
+            line-height: 1.3;
+            margin: 0;
+            padding: 0;
+        }
+        .header-table {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        .header-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #1F4E79;
+            text-decoration: underline;
+        }
+        .header-destination {
+            text-align: right;
+            font-size: 10.5px;
+            line-height: 1.3;
+        }
+        .greeting-section {
+            font-size: 11px;
+            margin-bottom: 15px;
+        }
+        .greeting-text {
+            margin-bottom: 5px;
+        }
+        .period-text {
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        .excel-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        .excel-table th {
+            background-color: #D9E1F2;
+            border: 1px solid #000;
+            padding: 5px;
+            font-size: 10.5px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .excel-table td {
+            border: 1px solid #000;
+            padding: 5px;
+            font-size: 10.5px;
+        }
+        .excel-table tr.item-row {
+            height: 25px;
+        }
+        .center {
+            text-align: center;
+        }
+        .left-align {
+            text-align: left;
+        }
+        .text-muted {
+            color: #777;
+        }
+        .outro-section {
+            font-size: 11px;
+            margin-top: 15px;
+            margin-bottom: 25px;
+        }
+        .outro-note {
+            font-style: italic;
+            font-size: 9.5px;
+            font-weight: bold;
+            color: #555;
+            margin-top: 3px;
+        }
+        .signature-table {
+            width: 100%;
+            margin-top: 30px;
+        }
+        .signature-col {
+            width: 33.33%;
+            text-align: center;
+            vertical-align: bottom;
+        }
+        .signature-title {
+            font-weight: bold;
+            margin-bottom: 45px;
+        }
+        .signature-space {
+            height: 50px;
+            position: relative;
+        }
+        .signature-img {
+            max-height: 50px;
+            max-width: 130px;
+            display: block;
+            margin: 0 auto;
+        }
+        .stamp-container {
+            height: 50px;
+            display: table-cell;
+            vertical-align: middle;
+            text-align: center;
+            width: 100%;
+        }
+        .stamp-verified {
+            border: 2px solid #16a34a;
+            color: #16a34a;
+            border-radius: 4px;
+            padding: 2px 8px;
+            display: inline-block;
+            font-size: 9.5px;
+            font-weight: bold;
+            text-transform: uppercase;
+            background-color: #f0fdf4;
+            transform: rotate(-3deg);
+        }
+        .stamp-approved {
+            border: 2px solid #2563eb;
+            color: #2563eb;
+            border-radius: 4px;
+            padding: 2px 8px;
+            display: inline-block;
+            font-size: 9.5px;
+            font-weight: bold;
+            text-transform: uppercase;
+            background-color: #eff6ff;
+            transform: rotate(-3deg);
+        }
+        .stamp-rejected {
+            border: 2px solid #dc2626;
+            color: #dc2626;
+            border-radius: 4px;
+            padding: 2px 8px;
+            display: inline-block;
+            font-size: 9.5px;
+            font-weight: bold;
+            text-transform: uppercase;
+            background-color: #fef2f2;
+            transform: rotate(-3deg);
+        }
+        .signature-name {
+            font-weight: bold;
+            text-decoration: underline;
+            margin-top: 5px;
+        }
+        .signature-role {
+            font-size: 9.5px;
+            font-weight: bold;
+            color: #555;
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <img src="{{ public_path('logo.png') }}" alt="Logo">
-        <h1>Formulir Pengajuan Lembur</h1>
-        <p>No. Transaksi: OVT/{{ date('Ymd', strtotime($overtime->created_at)) }}/{{ str_pad($overtime->id, 5, '0', STR_PAD_LEFT) }}</p>
-    </div>
 
-    <div class="content">
-        <div class="section-title">Informasi Karyawan</div>
-        <table>
-            <tr>
-                <th>Nama Lengkap</th>
-                <td>: {{ $overtime->user->name }}</td>
-            </tr>
-            <tr>
-                <th>NIK</th>
-                <td>: {{ $overtime->user->nik }}</td>
-            </tr>
-            <tr>
-                <th>Jabatan</th>
-                <td>: {{ $overtime->user->role?->name ?? 'Karyawan' }}</td>
-            </tr>
-        </table>
+    @php
+        $items = $overtime->items;
+        if (($items === null || $items->isEmpty()) && $overtime->date) {
+            // Fallback for legacy single entry
+            $items = collect([
+                (object)[
+                    'date' => $overtime->date,
+                    'start_time' => $overtime->start_time,
+                    'end_time' => $overtime->end_time,
+                    'reason' => $overtime->reason,
+                ]
+            ]);
+        }
+        $itemCount = $items ? $items->count() : 0;
+        $padCount = max(0, 5 - $itemCount);
 
-        <div class="section-title">Rincian Lembur</div>
-        <table>
-            <tr>
-                <th>Tanggal Lembur</th>
-                <td>: {{ date('d F Y', strtotime($overtime->date)) }}</td>
-            </tr>
-            <tr>
-                <th>Waktu Mulai</th>
-                <td>: {{ $overtime->start_time }}</td>
-            </tr>
-            <tr>
-                <th>Waktu Selesai</th>
-                <td>: {{ $overtime->end_time }}</td>
-            </tr>
-            <tr>
-                <th>Total Durasi</th>
-                <td>: {{ $overtime->duration }} Jam</td>
-            </tr>
-            <tr>
-                <th>Tugas / Pekerjaan</th>
-                <td>: {{ $overtime->reason }}</td>
-            </tr>
-            <tr>
-                <th>Status Persetujuan</th>
-                <td>: 
-                    <span class="status-badge badge-{{ $overtime->status }}">
-                        {{ strtoupper($overtime->status) }}
-                    </span>
-                </td>
-            </tr>
-        </table>
-    </div>
+        // Period resolution
+        $period = $overtime->title;
+        if (!$period && $items && $items->isNotEmpty()) {
+            $firstItem = $items->first();
+            if ($firstItem && isset($firstItem->date)) {
+                $date = \Carbon\Carbon::parse($firstItem->date);
+                $months = [
+                    1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei', 6 => 'Juni',
+                    7 => 'Juli', 8 => 'Agustus', 9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+                ];
+                $period = $months[$date->month] . ' ' . $date->year;
+            }
+        }
+        if (!$period) {
+            $date = \Carbon\Carbon::parse($overtime->created_at);
+            $months = [
+                1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei', 6 => 'Juni',
+                7 => 'Juli', 8 => 'Agustus', 9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+            ];
+            $period = $months[$date->month] . ' ' . $date->year;
+        }
+    @endphp
 
-    <table class="footer-table">
+    <!-- === HEADER === -->
+    <table class="header-table">
         <tr>
-            <td>
-                <p>Diajukan oleh,</p>
-                <div class="signature"></div>
-                <p><strong>({{ $overtime->user->name }})</strong></p>
+            <td style="vertical-align: top; width: 50%;">
+                <span class="header-title">Form. Lembur utk {{ $overtime->user->office?->name ?? 'KP Cakung' }}</span>
             </td>
-            <td>
-                <p>Mengetahui,</p>
-                <div class="signature"></div>
-                <p><strong>(Manager)</strong></p>
-            </td>
-            <td>
-                <p>Disetujui oleh,</p>
-                <div class="signature"></div>
-                <p><strong>(HRD Department)</strong></p>
+            <td class="header-destination" style="vertical-align: top; width: 50%;">
+                <strong>Kepada Yth,</strong><br>
+                <strong>HRD - Personalia</strong><br>
+                <strong>PT. Narwastu Group</strong><br>
+                <strong>Di Tempat</strong>
             </td>
         </tr>
     </table>
 
-    <div style="position: fixed; bottom: 0; left: 0; right: 0; text-align: center; color: #ccc; font-size: 8px;">
-        Dokumen ini diterbitkan secara elektronik melalui Sistem HRM - {{ date('d/m/Y H:i:s') }}
+    <!-- === GREETINGS === -->
+    <div class="greeting-section">
+        <div class="greeting-text"><strong>Dengan Hormat,</strong></div>
+        <div class="greeting-text">Bersama ini diberitahukan bahwa kami menugaskan karyawan berikut untuk melakukan kerja lembur :</div>
+        <div class="period-text">Pada hari, Tanggal : {{ $period }}</div>
     </div>
+
+    <!-- === TABLE 1: WAKTU LEMBUR === -->
+    <table class="excel-table">
+        <thead>
+            <tr>
+                <th style="width: 8%;">No</th>
+                <th style="width: 42%;">Nama</th>
+                <th style="width: 25%;">Jam Mulai</th>
+                <th style="width: 25%;">Jam Selesai</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if($items)
+                @foreach($items as $index => $item)
+                    <tr class="item-row">
+                        <td class="center">{{ $index + 1 }}</td>
+                        <td class="left-align" style="font-weight: bold; padding-left: 10px;">{{ $overtime->user->name }}</td>
+                        <td class="center">{{ date('H:i', strtotime($item->start_time)) }}</td>
+                        <td class="center">{{ date('H:i', strtotime($item->end_time)) }}</td>
+                    </tr>
+                @endforeach
+            @endif
+            @for($i = 0; $i < $padCount; $i++)
+                @php $idx = $itemCount + $i; @endphp
+                <tr class="item-row">
+                    <td class="center text-muted">{{ $idx + 1 }}</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            @endfor
+        </tbody>
+    </table>
+
+    <!-- === TABLE 2: PEKERJAAN YANG DILAKUKAN === -->
+    <table class="excel-table">
+        <thead>
+            <tr>
+                <th colspan="2" style="text-align: left; padding-left: 10px;">
+                    Untuk Melakukan Pekerjaan sebagaimana berikut ini :
+                </th>
+            </tr>
+        </thead>
+        <tbody>
+            @if($items)
+                @foreach($items as $index => $item)
+                    <tr class="item-row">
+                        <td class="center" style="width: 8%;">{{ $index + 1 }}</td>
+                        <td class="left-align" style="padding-left: 10px;">
+                            <span style="font-weight: bold;">{{ date('d/m/Y', strtotime($item->date)) }}</span> - {{ $item->reason }}
+                        </td>
+                    </tr>
+                @endforeach
+            @endif
+            @for($i = 0; $i < $padCount; $i++)
+                @php $idx = $itemCount + $i; @endphp
+                <tr class="item-row">
+                    <td class="center text-muted" style="width: 8%;">{{ $idx + 1 }}</td>
+                    <td></td>
+                </tr>
+            @endfor
+        </tbody>
+    </table>
+
+    <!-- === OUTRO === -->
+    <div class="outro-section">
+        <div>Demikian Untuk di ketahui</div>
+        <div class="outro-note">Catatan : Form lembur di berikan ke HRD sebelum melakukan aktifitas</div>
+    </div>
+
+    <!-- === SIGNATURES === -->
+    <table class="signature-table">
+        <tr>
+            <!-- Diketahui by HR -->
+            <td class="signature-col">
+                <div class="signature-title">Diketahui</div>
+                <div class="signature-space">
+                    @if($overtime->status === 'approved')
+                        <div class="stamp-container">
+                            <span class="stamp-verified">VERIFIED</span>
+                        </div>
+                    @else
+                        <span class="text-muted" style="font-size: 9px;">— Belum Diverifikasi —</span>
+                    @endif
+                </div>
+                <div class="signature-name">(Nazirin Nawawi)</div>
+                <div class="signature-role">HR GA</div>
+            </td>
+
+            <!-- Mengetahui by Manager -->
+            <td class="signature-col">
+                <div class="signature-title">Mengetahui</div>
+                <div class="signature-space">
+                    @if($overtime->status === 'approved')
+                        <div class="stamp-container">
+                            <span class="stamp-approved">APPROVED</span>
+                        </div>
+                    @elseif($overtime->status === 'rejected')
+                        <div class="stamp-container">
+                            <span class="stamp-rejected">REJECTED</span>
+                        </div>
+                    @else
+                        <span class="text-muted" style="font-size: 9px;">— Belum Disetujui —</span>
+                    @endif
+                </div>
+                <div class="signature-name">({{ $overtime->approver?->name ?? ($overtime->user->supervisor?->name ?? 'Operasional') }})</div>
+                <div class="signature-role">Operasional</div>
+            </td>
+
+            <!-- Diajukan oleh Employee -->
+            <td class="signature-col">
+                <div class="signature-title" style="margin-bottom: 2px;">
+                    Jakarta, {{ $overtime->created_at ? date('d', strtotime($overtime->created_at)) . ' ' . $months[intval(date('m', strtotime($overtime->created_at)))] . ' ' . date('Y', strtotime($overtime->created_at)) : date('d/m/Y') }}
+                </div>
+                <div style="font-weight: bold; margin-bottom: 10px;">Diajukan oleh:</div>
+                <div class="signature-space">
+                    @if($overtime->signature)
+                        <img src="{{ $overtime->signature }}" class="signature-img" alt="TTD">
+                    @else
+                        <span class="text-muted" style="font-size: 9px;">— Tanpa TTD —</span>
+                    @endif
+                </div>
+                <div class="signature-name">({{ $overtime->user->name }})</div>
+                <div class="signature-role">&nbsp;</div>
+            </td>
+        </tr>
+    </table>
+
 </body>
 </html>

@@ -43,12 +43,24 @@ class ReimbursementController extends Controller
 
     public function store(Request $request)
     {
+        if (is_string($request->items)) {
+            $request->merge([
+                'items' => json_decode($request->items, true)
+            ]);
+        }
+
         $request->validate([
+            'employee_name' => 'nullable|string',
             'title' => 'required|string',
             'amount' => 'required|numeric',
-            'description' => 'required|string',
+            'description' => 'nullable|string',
             'attachments' => 'nullable|array',
             'attachments.*' => 'image|max:10240',
+            'signature' => 'nullable|string',
+            'items' => 'nullable|array',
+            'divisi' => 'nullable|string',
+            'tujuan' => 'nullable|string',
+            'priority' => 'nullable|string',
         ]);
 
         $paths = [];
@@ -73,12 +85,18 @@ class ReimbursementController extends Controller
             $reimbursement = Reimbursement::create([
                 'company_id' => $companyId,
                 'user_id' => $user->id,
+                'employee_name' => $request->employee_name,
                 'title' => $request->title,
                 'amount' => $request->amount,
-                'description' => $request->description,
+                'description' => $request->description ?? '',
                 'attachment' => $paths,
                 'status' => $workflowResult['status'],
                 'current_approval_step' => $workflowResult['current_approval_step'],
+                'signature' => $request->signature,
+                'items' => $request->items,
+                'divisi' => $request->divisi,
+                'tujuan' => $request->tujuan,
+                'priority' => $request->priority ?? 'Normal',
             ]);
 
             $this->notify(
@@ -105,9 +123,14 @@ class ReimbursementController extends Controller
                 'user_id' => $user->id,
                 'title' => $request->title,
                 'amount' => $request->amount,
-                'description' => $request->description,
+                'description' => $request->description ?? '',
                 'attachment' => $paths,
                 'status' => 'pending',
+                'signature' => $request->signature,
+                'items' => $request->items,
+                'divisi' => $request->divisi,
+                'tujuan' => $request->tujuan,
+                'priority' => $request->priority ?? 'Normal',
             ]);
 
             // 1. Notify the Submitting User (Confirmation)
@@ -293,6 +316,18 @@ class ReimbursementController extends Controller
         $this->logActivity('REJECT_REIMBURSEMENT', "Menolak klaim '{$reimbursement->title}' dari {$reimbursement->user->name}", $reimbursement);
 
         return $this->successResponse($reimbursement, 'Klaim ditolak.');
+    }
+
+    public function show(Request $request, $id)
+    {
+        $reimbursement = Reimbursement::with('user')->findOrFail($id);
+        $user = $request->user();
+
+        if (!$user->is_manager && $reimbursement->user_id !== $user->id) {
+            abort(403, self::MSG_FORBIDDEN);
+        }
+
+        return $this->successResponse($reimbursement, 'Detail klaim berhasil diambil.');
     }
 
     public function destroy(Request $request, $id)

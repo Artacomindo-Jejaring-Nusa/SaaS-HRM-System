@@ -10,13 +10,15 @@ class Reimbursement extends Model
     use BelongsToCompany;
 
     protected $fillable = [
-        'company_id', 'user_id', 'title', 'amount',
+        'company_id', 'user_id', 'employee_name', 'title', 'amount',
         'description', 'status', 'current_approval_step',
-        'approved_by', 'attachment', 'remark',
+        'approved_by', 'attachment', 'remark', 'signature',
+        'items', 'divisi', 'tujuan', 'priority',
     ];
 
     protected $casts = [
         'attachment' => 'array',
+        'items' => 'array',
     ];
 
     public function user()

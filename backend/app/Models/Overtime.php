@@ -13,6 +13,7 @@ class Overtime extends Model
     protected $fillable = [
         'user_id',
         'company_id',
+        'title',
         'date',
         'start_time',
         'end_time',
@@ -21,6 +22,7 @@ class Overtime extends Model
         'current_approval_step',
         'approved_by',
         'remark',
+        'signature',
     ];
 
     public function user()
@@ -32,4 +34,10 @@ class Overtime extends Model
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
+
+    public function items()
+    {
+        return $this->hasMany(OvertimeItem::class);
+    }
 }
+

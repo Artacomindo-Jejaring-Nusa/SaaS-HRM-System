@@ -112,4 +112,15 @@ class ManagerRepository {
       throw Exception('Could not launch $url');
     }
   }
+
+  static Future<void> launchExcel(String type, int id) async {
+    final secureStorage = await SecureStorageService.getInstance();
+    String? token = await secureStorage.getAccessToken();
+    final encodedToken = Uri.encodeComponent(token ?? '');
+    final url = Uri.parse('${ApiClient.baseUrl}/export/$type/$id/excel?token=$encodedToken');
+
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      throw Exception('Could not launch $url');
+    }
+  }
 }

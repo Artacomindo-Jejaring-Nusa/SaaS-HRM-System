@@ -205,9 +205,13 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::middleware('permission:view-overtimes')->group(function () {
         Route::get('/overtimes/export', [OvertimeController::class, 'export']);
         Route::get('/overtimes', [OvertimeController::class, 'index']);
+        Route::get('/overtimes/{id}', [OvertimeController::class, 'show']);
         Route::delete('/overtimes/{id}', [OvertimeController::class, 'destroy']);
     });
-    Route::middleware('permission:apply-overtimes')->post('/overtimes', [OvertimeController::class, 'store']);
+    Route::middleware('permission:apply-overtimes')->group(function () {
+        Route::post('/overtimes', [OvertimeController::class, 'store']);
+        Route::put('/overtimes/{id}', [OvertimeController::class, 'update']);
+    });
     Route::middleware('permission:approve-overtimes')->group(function () {
         Route::post('/overtimes/{id}/approve', [OvertimeController::class, 'approve']);
         Route::post('/overtimes/{id}/reject', [OvertimeController::class, 'reject']);
@@ -216,6 +220,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     // Reimbursements
     Route::middleware('permission:view-reimbursements')->group(function () {
         Route::get('/reimbursements', [ReimbursementController::class, 'index']);
+        Route::get('/reimbursements/{id}', [ReimbursementController::class, 'show']);
         Route::delete('/reimbursements/{id}', [ReimbursementController::class, 'destroy']);
     });
     Route::middleware('permission:apply-reimbursements')->post('/reimbursements', [ReimbursementController::class, 'store']);
@@ -486,6 +491,11 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
 // Exports (Authenticated via query token or header inside controller)
 Route::get('/export/kpi/{id}', [ExportController::class, 'kpiPdf']);
 Route::get('/export/leave/{id}', [ExportController::class, 'leavePdf']);
+Route::get('/export/leave/{id}/excel', [ExportController::class, 'leaveExcel']);
 Route::get('/export/reimbursement/{id}', [ExportController::class, 'reimbursementPdf']);
+Route::get('/export/reimbursement/{id}/excel', [ExportController::class, 'reimbursementExcel']);
 Route::get('/export/overtime/{id}', [ExportController::class, 'overtimePdf']);
+Route::get('/export/overtime/{id}/excel', [ExportController::class, 'overtimeExcel']);
 Route::get('/export/permit/{id}', [ExportController::class, 'permitPdf']);
+Route::get('/export/permit/{id}/excel', [ExportController::class, 'permitExcel']);
+

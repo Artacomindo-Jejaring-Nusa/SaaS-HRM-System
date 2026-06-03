@@ -15,9 +15,9 @@ class LeaveController extends Controller
 
     private const TYPE_ANNUAL_LEAVE = 'Cuti Tahunan';
 
-    public function index(Request $request)
+    public function index(Request $request): \Illuminate\Http\JsonResponse
     {
-        $query = Leave::with(['user.supervisor', 'supervisorApprover', 'hrApprover']);
+        $query = Leave::with(['user.supervisor', 'user.company', 'user.role', 'supervisorApprover', 'hrApprover']);
 
         $user = $request->user();
 
@@ -40,7 +40,7 @@ class LeaveController extends Controller
         ]);
     }
 
-    public function calendar(Request $request)
+    public function calendar(Request $request): \Illuminate\Http\JsonResponse
     {
         $query = Leave::with('user')->where('status', 'approved');
 
@@ -63,13 +63,15 @@ class LeaveController extends Controller
         return $this->successResponse($leaves, 'Data kalender cuti berhasil diambil.');
     }
 
-    public function store(Request $request)
+    public function store(Request $request): \Illuminate\Http\JsonResponse
     {
         $request->validate([
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
             'type' => 'required|string',
             'reason' => 'nullable|string',
+            'leave_address' => 'nullable|string|max:500',
+            'emergency_phone' => 'nullable|string|max:30',
             'signature' => 'required|string', // Base64 signature
         ]);
 
@@ -107,6 +109,8 @@ class LeaveController extends Controller
                 'end_date' => $request->end_date,
                 'type' => $request->type,
                 'reason' => $request->reason,
+                'leave_address' => $request->leave_address,
+                'emergency_phone' => $request->emergency_phone,
                 'signature' => $request->signature,
                 'status' => $workflowResult['status'],
                 'current_approval_step' => $workflowResult['current_approval_step'],
@@ -141,6 +145,8 @@ class LeaveController extends Controller
                 'end_date' => $request->end_date,
                 'type' => $request->type,
                 'reason' => $request->reason,
+                'leave_address' => $request->leave_address,
+                'emergency_phone' => $request->emergency_phone,
                 'signature' => $request->signature,
                 'status' => $status,
             ]);
@@ -185,7 +191,7 @@ class LeaveController extends Controller
         return $this->successResponse($leave, 'Permohonan cuti berhasil diajukan.', 201);
     }
 
-    public function approve(Request $request, $id)
+    public function approve(Request $request, $id): \Illuminate\Http\JsonResponse
     {
         $user = $request->user();
         $leave = Leave::where(function ($q) use ($user) {
@@ -323,7 +329,7 @@ class LeaveController extends Controller
         return $this->successResponse(null, 'Permohonan cuti disetujui.');
     }
 
-    public function reject(Request $request, $id)
+    public function reject(Request $request, $id): \Illuminate\Http\JsonResponse
     {
         $user = $request->user();
         $leave = Leave::findOrFail($id);
@@ -394,7 +400,7 @@ class LeaveController extends Controller
         return $this->successResponse(null, 'Permohonan cuti ditolak.');
     }
 
-    public function destroy(Request $request, $id)
+    public function destroy(Request $request, $id): \Illuminate\Http\JsonResponse
     {
         $user = $request->user();
         $leave = Leave::where(function ($q) use ($user) {
