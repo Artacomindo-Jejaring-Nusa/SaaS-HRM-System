@@ -29,6 +29,19 @@ pipeline {
             }
         }
 
+        stage('Generate Frontend Coverage') {
+            steps {
+                script {
+                    echo "Menginstal dependensi dan menjalankan test frontend..."
+                    sh """
+                        cd frontend
+                        npm ci || npm install
+                        npm run test:coverage
+                    """
+                }
+            }
+        }
+
         stage('SonarQube Quality Check') {
             steps {
                 script {
