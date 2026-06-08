@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import axiosInstance from "@/lib/axios";
 import { 
-  Plus, Search, X, Eye, ReceiptCent, Upload, AlertCircle, 
-  Check, ArrowLeft, Printer, Trash2, Save, Send, FileDown 
+  Plus, Search, Eye, ReceiptCent, Upload, 
+  ArrowLeft, Printer, Trash2, Send, FileDown 
 } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,6 +22,7 @@ interface ReimbursementItem {
 
 interface ReimbursementRecord {
   id: number;
+  user_id: number;
   title: string;
   amount: number;
   status: string;
@@ -60,7 +61,6 @@ export default function ReimbursementsPage() {
   const [selectedItem, setSelectedItem] = useState<ReimbursementRecord | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [employees, setEmployees] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
     employee_name: "",
@@ -74,20 +74,6 @@ export default function ReimbursementsPage() {
     signature: "",
     attachments: [] as File[],
   });
-
-  const getStorageUrl = (path: string) => {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replaceAll("/api", "") || "http://localhost:8000";
-    return `${backendUrl}/storage/${path}`;
-  };
-
-  const fetchEmployees = async () => {
-    try {
-      const res = await axiosInstance.get('/employees?per_page=100');
-      setEmployees(res.data.data?.data || res.data.data || []);
-    } catch (err) {
-      console.error("Gagal mendapatkan data karyawan", err);
-    }
-  };
 
   const fetchReimbursements = useCallback(async (pageNumber: number) => {
     try {
@@ -108,8 +94,6 @@ export default function ReimbursementsPage() {
       setLoading(false);
     }
   }, [searchQuery]);
-
-  useEffect(() => { fetchEmployees(); }, []);
 
   useEffect(() => {
     if (user && !formData.employee_name) {
@@ -162,31 +146,22 @@ export default function ReimbursementsPage() {
     }, 0);
   }, [formData.items]);
 
-  const validateForm = () => {
-    if (!formData.title) {
-      toast.warning("Judul/Keperluan pengajuan wajib diisi!");
-      return false;
-    }
-    if (!formData.signature) {
-      toast.warning("Tanda tangan digital wajib diisi!");
-      return false;
-    }
-    if (formData.items.some((i) => !i.spesifikasi || !i.unit || i.qty <= 0 || i.estimasi_harga <= 0)) {
-      toast.warning("Tolong isi spesifikasi, unit, quantity, dan estimasi harga untuk semua baris item.");
-      return false;
-    }
-    return true;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!formData.title || !formData.signature) {
+      toast.warning("Judul dan tanda tangan wajib diisi!");
+      return;
+    }
+    if (formData.items.some((i) => !i.spesifikasi || !i.unit || i.qty <= 0 || i.estimasi_harga <= 0)) {
+      toast.warning("Tolong isi rincian item dengan lengkap.");
+      return;
+    }
 
     setIsSubmitting(true);
     const data = new FormData();
     data.append("title", formData.title);
     data.append("amount", calculatedTotal.toString());
-    data.append("divisi", formData.divisi || (user as any)?.department || "Operasional");
+    data.append("divisi", formData.divisi || "Operasional");
     if (formData.employee_name) data.append("employee_name", formData.employee_name);
     
     data.append("tujuan", formData.tujuan === "Lainnya" ? formData.tujuanLainnya : formData.tujuan);
@@ -195,13 +170,13 @@ export default function ReimbursementsPage() {
     data.append("description", formData.title); 
     data.append("signature", formData.signature);
 
-    if (formData.attachments && formData.attachments.length > 0) {
+    if (formData.attachments) {
       formData.attachments.forEach((file) => data.append("attachments[]", file));
     }
 
     try {
       await axiosInstance.post("/reimbursements", data, { headers: { "Content-Type": "multipart/form-data" } });
-      toast.success("Klaim berhasil diajukan! Menunggu persetujuan.");
+      toast.success("Klaim berhasil diajukan!");
       setViewMode("list");
       setFormData({
         employee_name: user?.name || "",
@@ -217,26 +192,19 @@ export default function ReimbursementsPage() {
       });
       fetchReimbursements(page);
     } catch (err: any) {
-      const msg = err.response?.data?.message || "Gagal mengajukan klaim.";
-      toast.error(msg);
+      toast.error(err.response?.data?.message || "Gagal mengajukan klaim.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const getStatusBadge = (status: string) => {
-    const classes = {
-      pending: 'dash-badge-warning',
-      approved: 'dash-badge-success',
-      rejected: 'dash-badge-danger',
-    }[status] || 'dash-badge-neutral';
+    let classes = 'dash-badge-neutral';
+    let label = status;
+    if (status === 'pending') { classes = 'dash-badge-warning'; label = 'Menunggu'; }
+    else if (status === 'approved') { classes = 'dash-badge-success'; label = 'Disetujui'; }
+    else if (status === 'rejected') { classes = 'dash-badge-danger'; label = 'Ditolak'; }
     
-    const label = {
-      pending: 'Menunggu',
-      approved: 'Disetujui',
-      rejected: 'Ditolak',
-    }[status] || status;
-
     return <span className={`dash-badge ${classes} font-semibold`}>{label}</span>;
   };
 
@@ -306,8 +274,8 @@ export default function ReimbursementsPage() {
   const getRecordItems = (record: ReimbursementRecord | null) => {
     if (!record) return [];
     if (record.items) {
-      const items = typeof record.items === 'string' ? JSON.parse(record.items) : record.items;
-      if (Array.isArray(items)) return items;
+      const itms = typeof record.items === 'string' ? JSON.parse(record.items) : record.items;
+      if (Array.isArray(itms)) return itms;
     }
     return [{ spesifikasi: record.title || "Klaim", unit: "Lbr", qty: 1, estimasi_harga: record.amount || 0, keterangan: record.description || "" }];
   };
@@ -363,7 +331,7 @@ export default function ReimbursementsPage() {
       {viewMode === "create" && (
         <div className="max-w-5xl mx-auto py-8 px-4 no-print">
           <div className="flex items-center gap-3 mb-6">
-            <button onClick={() => setViewMode("list")} className="p-2 hover:bg-gray-100 rounded-full"><ArrowLeft size={20} /></button>
+            <button type="button" onClick={() => setViewMode("list")} className="p-2 hover:bg-gray-100 rounded-full"><ArrowLeft size={20} /></button>
             <h2 className="text-xl font-bold">Form Pengajuan Reimbursement / Dana</h2>
           </div>
           <form onSubmit={handleSubmit} className="bg-white border rounded-xl shadow-sm overflow-hidden p-8 space-y-6">
@@ -372,7 +340,6 @@ export default function ReimbursementsPage() {
                 <label className="text-sm font-bold text-gray-700" htmlFor="employee_name">Nama Pengaju (Karyawan)</label>
                 <div className="flex gap-2">
                   <input id="employee_name" type="text" value={formData.employee_name} onChange={(e) => setFormData({...formData, employee_name: e.target.value})} className="flex-1 h-10 px-3 border rounded-lg" required />
-                  <button type="button" onClick={() => setFormData({...formData, is_custom_employee_name: !formData.is_custom_employee_name})} className="text-xs font-bold text-blue-600">Pilih Karyawan</button>
                 </div>
               </div>
               <div className="space-y-1.5">
@@ -408,15 +375,18 @@ export default function ReimbursementsPage() {
                 <table className="w-full border-collapse">
                   <thead><tr className="bg-gray-50 border-b"><th className="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase">Spesifikasi/Barang</th><th className="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase">Unit</th><th className="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase">Qty</th><th className="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase">Harga Satuan</th><th className="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase w-10"></th></tr></thead>
                   <tbody>
-                    {formData.items.map((it, idx) => (
-                      <tr key={`item-${idx}`} className="border-b">
-                        <td className="p-2"><input type="text" value={it.spesifikasi} onChange={(e) => handleItemChange(idx, 'spesifikasi', e.target.value)} className="w-full border-0 focus:ring-0 text-sm" placeholder="Nama barang..." /></td>
-                        <td className="p-2"><input type="text" value={it.unit} onChange={(e) => handleItemChange(idx, 'unit', e.target.value)} className="w-full border-0 focus:ring-0 text-sm w-16" placeholder="Pcs/Kg" /></td>
-                        <td className="p-2"><input type="number" value={it.qty} onChange={(e) => handleItemChange(idx, 'qty', e.target.value)} className="w-full border-0 focus:ring-0 text-sm w-16" /></td>
-                        <td className="p-2"><input type="number" value={it.estimasi_harga} onChange={(e) => handleItemChange(idx, 'estimasi_harga', e.target.value)} className="w-full border-0 focus:ring-0 text-sm" /></td>
-                        <td className="p-2">{formData.items.length > 1 && <button type="button" onClick={() => setFormData({...formData, items: formData.items.filter((_, i) => i !== idx)})} className="text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>}</td>
-                      </tr>
-                    ))}
+                    {formData.items.map((it, idx) => {
+                      const rowId = `item-${idx}`;
+                      return (
+                        <tr key={rowId} className="border-b">
+                          <td className="p-2"><input aria-label="Spesifikasi" type="text" value={it.spesifikasi} onChange={(e) => handleItemChange(idx, 'spesifikasi', e.target.value)} className="w-full border-0 focus:ring-0 text-sm" placeholder="Nama barang..." /></td>
+                          <td className="p-2"><input aria-label="Unit" type="text" value={it.unit} onChange={(e) => handleItemChange(idx, 'unit', e.target.value)} className="w-full border-0 focus:ring-0 text-sm w-16" placeholder="Pcs/Kg" /></td>
+                          <td className="p-2"><input aria-label="Qty" type="number" value={it.qty} onChange={(e) => handleItemChange(idx, 'qty', e.target.value)} className="w-full border-0 focus:ring-0 text-sm w-16" /></td>
+                          <td className="p-2"><input aria-label="Harga" type="number" value={it.estimasi_harga} onChange={(e) => handleItemChange(idx, 'estimasi_harga', e.target.value)} className="w-full border-0 focus:ring-0 text-sm" /></td>
+                          <td className="p-2">{formData.items.length > 1 && <button type="button" onClick={() => setFormData({...formData, items: formData.items.filter((_, i) => i !== idx)})} className="text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -425,15 +395,15 @@ export default function ReimbursementsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 border-t">
               <div className="space-y-3">
-                <label className="text-sm font-bold text-gray-700">Lampiran Bukti (Opsional)</label>
+                <label className="text-sm font-bold text-gray-700" htmlFor="attachments">Lampiran Bukti (Opsional)</label>
                 <div className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center bg-gray-50">
                   <Upload className="text-gray-400 mb-2" size={24} />
-                  <input type="file" multiple onChange={(e) => setFormData({...formData, attachments: e.target.files ? Array.from(e.target.files) : []})} className="text-xs" />
+                  <input id="attachments" type="file" multiple onChange={(e) => setFormData({...formData, attachments: e.target.files ? Array.from(e.target.files) : []})} className="text-xs" />
                 </div>
               </div>
               <div className="space-y-3">
-                <label className="text-sm font-bold text-gray-700">Tanda Tangan Digital</label>
-                <div className="border border-dashed rounded-lg p-2 bg-white"><SignaturePad onSign={(val) => setFormData({...formData, signature: val})} /></div>
+                <p id="signature-pad-label" className="text-sm font-bold text-gray-700">Tanda Tangan Digital</p>
+                <div className="border border-dashed rounded-lg p-2 bg-white" aria-labelledby="signature-pad-label"><SignaturePad onSign={(val) => setFormData({...formData, signature: val})} /></div>
               </div>
             </div>
 
@@ -475,12 +445,18 @@ export default function ReimbursementsPage() {
               <table className="w-full excel-table text-center uppercase">
                 <thead className="bg-[#D9E1F2]"><tr><th className="w-10">No</th><th>Spesifikasi / Barang</th><th>Unit</th><th>Qty</th><th>Estimasi Harga</th><th>Keterangan</th></tr></thead>
                 <tbody>
-                  {getRecordItems(selectedItem).map((it: any, idx: number) => (
-                    <tr key={`detail-item-${idx}`}><td>{idx + 1}</td><td className="text-left font-bold">{it.spesifikasi}</td><td>{it.unit}</td><td>{it.qty}</td><td>{formatCurrency(it.estimasi_harga)}</td><td>{it.keterangan || "-"}</td></tr>
-                  ))}
-                  {Array.from({ length: Math.max(0, 5 - getRecordItems(selectedItem).length) }).map((_, i) => (
-                    <tr key={`pad-${i}`} className="h-6"><td>{getRecordItems(selectedItem).length + i + 1}</td><td></td><td></td><td></td><td></td><td></td></tr>
-                  ))}
+                  {getRecordItems(selectedItem).map((it: any, idx: number) => {
+                    const itemId = `detail-item-${idx}`;
+                    return (
+                      <tr key={itemId}><td>{idx + 1}</td><td className="text-left font-bold">{it.spesifikasi}</td><td>{it.unit}</td><td>{it.qty}</td><td>{formatCurrency(it.estimasi_harga)}</td><td>{it.keterangan || "-"}</td></tr>
+                    );
+                  })}
+                  {Array.from({ length: Math.max(0, 5 - getRecordItems(selectedItem).length) }).map((_, i) => {
+                    const padId = `pad-${i}`;
+                    return (
+                      <tr key={padId} className="h-6"><td>{getRecordItems(selectedItem).length + i + 1}</td><td></td><td></td><td></td><td></td><td></td></tr>
+                    );
+                  })}
                 </tbody>
                 <tfoot><tr className="bg-gray-100"><td colSpan={4} className="text-right font-black text-gray-700">Total Keseluruhan</td><td className="font-black text-gray-900 bg-amber-50">{formatCurrency(selectedItem.amount)}</td><td className="bg-gray-100"></td></tr></tfoot>
               </table>

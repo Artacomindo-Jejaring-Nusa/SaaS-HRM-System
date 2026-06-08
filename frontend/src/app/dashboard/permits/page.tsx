@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
-import { Plus, Search, Eye, Plane, Printer, ClipboardList, X, Check, FileDown } from "lucide-react";
+import { Plus, Search, Eye, Printer, ClipboardList, X, FileDown } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import SignaturePad from "@/components/SignaturePad";
 import { useAuth } from "@/contexts/AuthContext";
@@ -258,8 +258,9 @@ export default function PermitsPage() {
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-700">Tanggal Mulai</label>
+                  <label htmlFor="start_date" className="text-sm font-semibold text-gray-700">Tanggal Mulai</label>
                   <input
+                    id="start_date"
                     type="date"
                     required
                     value={formData.start_date}
@@ -268,8 +269,9 @@ export default function PermitsPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-700">Tanggal Selesai</label>
+                  <label htmlFor="end_date" className="text-sm font-semibold text-gray-700">Tanggal Selesai</label>
                   <input
+                    id="end_date"
                     type="date"
                     required
                     value={formData.end_date}
@@ -280,8 +282,9 @@ export default function PermitsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-700">Tipe Izin</label>
+                <label htmlFor="permit_type" className="text-sm font-semibold text-gray-700">Tipe Izin</label>
                 <select
+                  id="permit_type"
                   value={formData.type}
                   onChange={(e) => setFormData({...formData, type: e.target.value})}
                   className="w-full h-10 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
@@ -294,8 +297,9 @@ export default function PermitsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-700">Alasan Izin</label>
+                <label htmlFor="reason" className="text-sm font-semibold text-gray-700">Alasan Izin</label>
                 <textarea
+                  id="reason"
                   required
                   rows={3}
                   value={formData.reason}
@@ -306,8 +310,8 @@ export default function PermitsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-700">Tanda Tangan Digital</label>
-                <div className="border border-dashed border-gray-300 rounded-lg p-2 bg-gray-50">
+                <p id="signature-label" className="text-sm font-semibold text-gray-700">Tanda Tangan Digital</p>
+                <div className="border border-dashed border-gray-300 rounded-lg p-2 bg-gray-50" aria-labelledby="signature-label">
                   <SignaturePad onSign={(dataUrl) => setFormData({...formData, signature: dataUrl})} />
                 </div>
               </div>

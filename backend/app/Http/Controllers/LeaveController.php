@@ -235,12 +235,13 @@ class LeaveController extends Controller
 
         if ($result['is_final'] && $result['status'] === 'approved') {
             $this->applyLeaveApprovalSideEffects($leave);
-            return $this->successResponse(null, 'Permohonan cuti disetujui.');
+            $msg = 'Permohonan cuti disetujui.';
+        } else {
+            $this->notifyNextApprovers($leave, $result);
+            $msg = "Di-approve. Menunggu: {$result['step_label']}.";
         }
 
-        $this->notifyNextApprovers($leave, $result);
-
-        return $this->successResponse(null, "Di-approve. Menunggu: {$result['step_label']}.");
+        return $this->successResponse(null, $msg);
     }
 
     private function handleFallbackApproval(Request $request, Leave $leave, $user): \Illuminate\Http\JsonResponse
@@ -264,7 +265,6 @@ class LeaveController extends Controller
                 return $this->successResponse(null, 'Di-approve oleh atasan. Menunggu proses HRD.');
             }
 
-            // HR bypass
             $leave->update([
                 'status' => 'approved',
                 'approved_by' => $user->id,
@@ -276,11 +276,7 @@ class LeaveController extends Controller
             if (!$isHR) {
                 return $this->errorResponse('Hanya HRD.', 403);
             }
-            $leave->update([
-                'status' => 'approved',
-                'approved_by' => $user->id,
-                'remark' => $request->remark,
-            ]);
+            $leave->update(['status' => 'approved', 'approved_by' => $user->id, 'remark' => $request->remark]);
         } else {
             return $this->errorResponse('Status tidak valid.', 400);
         }

@@ -19,6 +19,7 @@ interface OvertimeItem {
 
 interface OvertimeRecord {
   id: number;
+  user_id: number;
   title: string | null;
   status: string;
   user?: { 
@@ -214,21 +215,20 @@ export default function OvertimesPage() {
     }
   };
 
-  const getOvertimePeriod = (ot: OvertimeRecord) => {
-    if (ot.items && ot.items.length > 0) {
-      const dates = ot.items.map(i => i.date).sort();
-      const first = new Date(dates[0]).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-      if (dates.length === 1) return first;
-      const last = new Date(dates[dates.length - 1]).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-      return `${first} s/d ${last}`;
-    }
-    return ot.date ? new Date(ot.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
-  };
-
   const getRecordItems = (ot: OvertimeRecord): OvertimeItem[] => {
     if (ot.items && ot.items.length > 0) return ot.items;
     if (ot.date) return [{ date: ot.date, start_time: ot.start_time || "", end_time: ot.end_time || "", reason: ot.reason || "" }];
     return [];
+  };
+
+  const getOvertimePeriod = (ot: OvertimeRecord) => {
+    const items = getRecordItems(ot);
+    if (items.length === 0) return '-';
+    const sorted = items.map(i => i.date).sort((a, b) => a.localeCompare(b));
+    const first = new Date(sorted[0]).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    if (sorted.length === 1) return first;
+    const last = new Date(sorted.at(-1) || '').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    return `${first} s/d ${last}`;
   };
 
   const getStatusLabel = (status: string) => {
@@ -341,8 +341,8 @@ export default function OvertimesPage() {
 
           <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
             <div className="p-6 border-b bg-gray-50/50">
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Judul Pengajuan (Contoh: Lembur Maret 2026)</label>
-              <input type="text" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:ring-1 focus:ring-blue-500" placeholder="Judul lembur..." />
+              <label htmlFor="form_title" className="block text-sm font-semibold text-gray-700 mb-1.5">Judul Pengajuan (Contoh: Lembur Maret 2026)</label>
+              <input id="form_title" type="text" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:ring-1 focus:ring-blue-500" placeholder="Judul lembur..." />
             </div>
 
             <div className="p-6 space-y-4">
@@ -350,10 +350,22 @@ export default function OvertimesPage() {
               <div className="space-y-3">
                 {formItems.map((it, idx) => (
                   <div key={`${it.id || idx}`} className="grid grid-cols-1 md:grid-cols-[140px_100px_100px_1fr_40px] gap-3 items-end p-3 border rounded-lg bg-gray-50/30">
-                    <div><label className="text-[10px] font-bold text-gray-500 uppercase">Tanggal</label><input type="date" value={it.date} onChange={(e) => updateItem(idx, 'date', e.target.value)} className="w-full text-sm border-0 border-b bg-transparent focus:ring-0" /></div>
-                    <div><label className="text-[10px] font-bold text-gray-500 uppercase">Mulai</label><input type="time" value={it.start_time} onChange={(e) => updateItem(idx, 'start_time', e.target.value)} className="w-full text-sm border-0 border-b bg-transparent focus:ring-0" /></div>
-                    <div><label className="text-[10px] font-bold text-gray-500 uppercase">Selesai</label><input type="time" value={it.end_time} onChange={(e) => updateItem(idx, 'end_time', e.target.value)} className="w-full text-sm border-0 border-b bg-transparent focus:ring-0" /></div>
-                    <div><label className="text-[10px] font-bold text-gray-500 uppercase">Alasan/Pekerjaan</label><input type="text" value={it.reason} onChange={(e) => updateItem(idx, 'reason', e.target.value)} className="w-full text-sm border-0 border-b bg-transparent focus:ring-0" placeholder="Input pekerjaan..." /></div>
+                    <div>
+                      <label htmlFor={`date-${idx}`} className="text-[10px] font-bold text-gray-500 uppercase">Tanggal</label>
+                      <input id={`date-${idx}`} type="date" value={it.date} onChange={(e) => updateItem(idx, 'date', e.target.value)} className="w-full text-sm border-0 border-b bg-transparent focus:ring-0" />
+                    </div>
+                    <div>
+                      <label htmlFor={`start-${idx}`} className="text-[10px] font-bold text-gray-500 uppercase">Mulai</label>
+                      <input id={`start-${idx}`} type="time" value={it.start_time} onChange={(e) => updateItem(idx, 'start_time', e.target.value)} className="w-full text-sm border-0 border-b bg-transparent focus:ring-0" />
+                    </div>
+                    <div>
+                      <label htmlFor={`end-${idx}`} className="text-[10px] font-bold text-gray-500 uppercase">Selesai</label>
+                      <input id={`end-${idx}`} type="time" value={it.end_time} onChange={(e) => updateItem(idx, 'end_time', e.target.value)} className="w-full text-sm border-0 border-b bg-transparent focus:ring-0" />
+                    </div>
+                    <div>
+                      <label htmlFor={`reason-${idx}`} className="text-[10px] font-bold text-gray-500 uppercase">Alasan/Pekerjaan</label>
+                      <input id={`reason-${idx}`} type="text" value={it.reason} onChange={(e) => updateItem(idx, 'reason', e.target.value)} className="w-full text-sm border-0 border-b bg-transparent focus:ring-0" placeholder="Input pekerjaan..." />
+                    </div>
                     <button onClick={() => removeItem(idx)} className="p-2 text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
                   </div>
                 ))}
@@ -361,8 +373,8 @@ export default function OvertimesPage() {
             </div>
 
             <div className="p-6 border-t bg-gray-50/30">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Tanda Tangan Digital</label>
-              <div className="max-w-xs border border-dashed rounded-lg bg-white p-2">
+              <p id="signature-label" className="text-sm font-semibold text-gray-700 mb-2">Tanda Tangan Digital</p>
+              <div className="max-w-xs border border-dashed rounded-lg bg-white p-2" aria-labelledby="signature-label">
                 <SignaturePad onSign={setFormSignature} />
               </div>
             </div>

@@ -767,7 +767,7 @@ export default function LeavesPage() {
                   <div className="font-semibold text-gray-700">Leave eligibility, Current Year</div>
                   <div className="text-gray-400 text-center">:</div>
                   <div className="border-b border-dotted border-gray-500 border-dotted-print text-center text-gray-800 font-semibold h-4">
-                    {selectedItem.user?.leave_balance != null ? (selectedItem.user.leave_balance + (Math.ceil((new Date(selectedItem.end_date).getTime() - new Date(selectedItem.start_date).getTime()) / (1000*60*60*24)) + 1)) : '—'}
+                    {selectedItem.user?.leave_balance == null ? '—' : (selectedItem.user.leave_balance + (Math.ceil((new Date(selectedItem.end_date).getTime() - new Date(selectedItem.start_date).getTime()) / (1000*60*60*24)) + 1))}
                   </div>
                   <div className="text-gray-600 pl-2">days</div>
 
