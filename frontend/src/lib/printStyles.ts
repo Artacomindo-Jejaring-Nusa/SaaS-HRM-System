@@ -1,4 +1,4 @@
-export const commonPrintStyles = `
+export const commonPrintStyles = String.raw`
   @page {
     size: portrait;
     margin: 8mm 10mm !important;
@@ -13,7 +13,7 @@ export const commonPrintStyles = `
     }
     /* Hide sidebar, header, navigation, and everything not related to print */
     aside, .dash-sidebar, .dash-desktop-header, .dash-mobile-header, .dash-overlay,
-    .print\\:hidden, .no-print, header, nav, footer, .dash-page-header, .dash-page-actions {
+    .print\:hidden, .no-print, header, nav, footer, .dash-page-header, .dash-page-actions {
       display: none !important;
     }
     /* Reset dashboard layout wrapper to display: block on print */
@@ -42,7 +42,7 @@ export const commonPrintStyles = `
       border: 1px solid #000 !important;
       padding: 4px 8px !important;
     }
-    .bg-\\[#D9E1F2\\] {
+    .bg-\[#D9E1F2\] {
       background-color: #D9E1F2 !important;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
