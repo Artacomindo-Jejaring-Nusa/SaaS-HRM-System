@@ -3,14 +3,11 @@
 import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
-import { Plus, Search, Eye, Plane, Printer, ArrowLeft, FileDown } from "lucide-react";
+import { Plus, Search, X, Eye, Plane, Printer, Check, ArrowLeft, FileDown } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import SignaturePad from "@/components/SignaturePad";
-import StatusBadge from "@/components/StatusBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { TableSkeleton } from "@/components/Skeleton";
-import { downloadFile } from "@/lib/download";
-import { commonPrintStyles } from "@/lib/printStyles";
 
 export default function LeavesPage() {
   const { hasPermission, user } = useAuth();
@@ -26,6 +23,7 @@ export default function LeavesPage() {
   const [viewMode, setViewMode] = useState<"list" | "create" | "detail">("list");
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const [formData, setFormData] = useState({
     start_date: "",
@@ -96,22 +94,182 @@ export default function LeavesPage() {
 
   const handlePrint = (e: React.MouseEvent) => {
     e.preventDefault();
+    setIsPrinting(true);
     setTimeout(() => {
-      globalThis.print();
+      window.print();
+      setIsPrinting(false);
     }, 500);
   };
 
   const handleDownloadPdf = async (recordId: number, userName: string) => {
-    await downloadFile(`/export/leave/${recordId}`, `Cuti_${userName.replaceAll(/\s+/g, '_')}`, 'pdf');
+    try {
+      const response = await axiosInstance.get(`/export/leave/${recordId}`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Cuti_${userName.replace(/\s+/g, '_')}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    } catch (err) {
+      toast.error("Gagal mendownload PDF.");
+    }
   };
 
   const handleDownloadExcel = async (recordId: number, userName: string) => {
-    await downloadFile(`/export/leave/${recordId}/excel`, `Cuti_${userName.replaceAll(/\s+/g, '_')}`, 'excel');
+    try {
+      const response = await axiosInstance.get(`/export/leave/${recordId}/excel`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Cuti_${userName.replace(/\s+/g, '_')}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    } catch (err) {
+      toast.error("Gagal mendownload Excel.");
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending': 
+      case 'pending_supervisor': return <span className="dash-badge dash-badge-warning">Menunggu Atasan</span>;
+      case 'pending_hr': return <span className="dash-badge dash-badge-warning">Menunggu HRD</span>;
+      case 'approved': return <span className="dash-badge dash-badge-success">Disetujui</span>;
+      case 'rejected': return <span className="dash-badge dash-badge-danger">Ditolak</span>;
+      default: return <span className="dash-badge dash-badge-neutral">{status}</span>;
+    }
   };
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: commonPrintStyles }} />
+      <style dangerouslySetInnerHTML={{ __html: `
+        @page {
+          size: portrait;
+          margin: 8mm 10mm !important;
+        }
+        @media print {
+          body, html {
+            background-color: white !important;
+            color: black !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+          }
+          /* Hide sidebar, header, navigation, and everything not related to print */
+          aside, .dash-sidebar, .dash-desktop-header, .dash-mobile-header, .dash-overlay,
+          .print\\:hidden, .no-print, header, nav, footer, .dash-page-header, .dash-page-actions {
+            display: none !important;
+          }
+          /* Reset dashboard layout wrapper to display: block on print */
+          .dash-layout, .dash-main {
+            display: block !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: none !important;
+          }
+          .print-container {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 2px 6px !important; /* Add small padding to prevent edge border clipping */
+            box-shadow: none !important;
+            border: none !important;
+            background: white !important;
+            font-size: 11px !important;
+          }
+          
+          /* Scale down headers and text on print to fit 1 page */
+          .print-container h1 {
+            font-size: 16px !important;
+          }
+          .print-container p {
+            font-size: 9px !important;
+          }
+          .print-container img {
+            height: 32px !important;
+          }
+          .print-container .text-xs {
+            font-size: 10px !important;
+          }
+          .print-container .text-\\[10px\\] {
+            font-size: 8px !important;
+          }
+          
+          /* Tighten spacing */
+          .print-container .p-4 {
+            padding: 6px 10px !important;
+          }
+          .print-container [class*="space-y-"] > :not([hidden]) ~ :not([hidden]) {
+            margin-top: 2px !important;
+          }
+          .print-container .gap-y-2 {
+            row-gap: 2px !important;
+          }
+          .print-container .mb-4 {
+            margin-bottom: 2px !important;
+          }
+          .print-container .mb-2 {
+            margin-bottom: 1px !important;
+          }
+          /* Shrink the large 40px signature bottom margin */
+          .print-container .mb-10 {
+            margin-bottom: 4px !important;
+          }
+          .print-container .mt-4 {
+            margin-top: 2px !important;
+          }
+          .print-container .mt-3 {
+            margin-top: 2px !important;
+          }
+          .print-container .mt-8 {
+            margin-top: 8px !important;
+          }
+          .print-container .bg-gray-100 {
+            padding-top: 2px !important;
+            padding-bottom: 2px !important;
+          }
+          .print-container .pb-3 {
+            padding-bottom: 2px !important;
+          }
+          
+          /* Allow more height for physical signature */
+          .print-container .signature-space {
+            height: 40px !important;
+            margin-top: 8px !important;
+            margin-bottom: 2px !important;
+          }
+          .print-container [class*="min-w-[150px]"] {
+            min-width: 120px !important;
+          }
+          .print-container .w-10 {
+            width: 32px !important;
+            height: 32px !important;
+          }
+          .print-container .h-10 {
+            width: 32px !important;
+            height: 32px !important;
+          }
+          .print-container svg {
+            width: 18px !important;
+            height: 18px !important;
+          }
+          
+          .border-dotted-print {
+            border-bottom: 1.5px dotted #374151 !important;
+          }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `}} />
 
       {/* ================= LIST VIEW ================= */}
       {viewMode === "list" && (
@@ -199,7 +357,7 @@ export default function LeavesPage() {
                             {leave.reason || "-"}
                           </span>
                         </td>
-                        <td><StatusBadge status={leave.status} /></td>
+                        <td>{getStatusBadge(leave.status)}</td>
                         <td className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             <button 
@@ -534,7 +692,7 @@ export default function LeavesPage() {
               <img src="/artacom.png" alt="Logo" className="h-12 object-contain" />
               <div className="text-right">
                 <h1 className="text-xl font-bold uppercase tracking-wider text-gray-900">Leave Application Form</h1>
-                <p className="text-xs font-mono text-gray-500 mt-1">NO. : HRD-{String(selectedItem.id).padStart(3,'0')}/LF/{new Date(selectedItem.created_at).getMonth()+1}/{new Date(selectedItem.created_at).getFullYear().toString().slice(-2)}</p>
+                <p className="text-xs font-mono text-gray-500 mt-1">NO. : HRD-{selectedItem.id.toString().padStart(3,'0')}/LF/{new Date(selectedItem.created_at).getMonth()+1}/{new Date(selectedItem.created_at).getFullYear().toString().slice(-2)}</p>
               </div>
             </div>
 
@@ -610,7 +768,7 @@ export default function LeavesPage() {
                   <div className="font-semibold text-gray-700">Leave eligibility, Current Year</div>
                   <div className="text-gray-400 text-center">:</div>
                   <div className="border-b border-dotted border-gray-500 border-dotted-print text-center text-gray-800 font-semibold h-4">
-                    {selectedItem.user?.leave_balance == null ? '—' : (selectedItem.user.leave_balance + (Math.ceil((new Date(selectedItem.end_date).getTime() - new Date(selectedItem.start_date).getTime()) / (1000*60*60*24)) + 1))}
+                    {selectedItem.user?.leave_balance != null ? (selectedItem.user.leave_balance + (Math.ceil((new Date(selectedItem.end_date).getTime() - new Date(selectedItem.start_date).getTime()) / (1000*60*60*24)) + 1)) : '—'}
                   </div>
                   <div className="text-gray-600 pl-2">days</div>
 

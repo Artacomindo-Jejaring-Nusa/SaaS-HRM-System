@@ -200,126 +200,133 @@ class LeaveController extends Controller
             }
         })->findOrFail($id);
 
+        // ── Dynamic Workflow Path ──
         if ($leave->current_approval_step !== null) {
-            return $this->handleWorkflowApproval($request, $leave, $user);
+            $result = ApprovalService::processApproval(
+                'leave', $leave->company_id, $user, $leave->user, $leave->current_approval_step, 'approve'
+            );
+
+            if ($result === null) {
+                return $this->errorResponse('Workflow tidak ditemukan.', 400);
+            }
+
+            if (isset($result['error'])) {
+                return $this->errorResponse($result['error'], 403);
+            }
+
+            $updateData = [
+                'status' => $result['status'],
+                'current_approval_step' => $result['current_approval_step'],
+            ];
+
+            if ($result['is_final'] && $result['status'] === 'approved') {
+                $updateData['approved_by'] = $user->id;
+                $updateData['remark'] = $request->remark;
+            }
+
+            $leave->update($updateData);
+
+            if ($result['is_final'] && $result['status'] === 'approved') {
+                // Apply side-effect: deduct leave balance
+                if ($leave->type === self::TYPE_ANNUAL_LEAVE) {
+                    $days = Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1;
+                    $leaveUser = $leave->user;
+                    $leaveUser->leave_balance -= $days;
+                    $leaveUser->save();
+                }
+
+                $this->notify(
+                    $leave->user,
+                    'CUTI DISETUJUI',
+                    "Permohonan cuti Anda untuk tanggal {$leave->start_date} s/d {$leave->end_date} telah DISETUJUI.",
+                    'success'
+                );
+
+                return $this->successResponse(null, 'Permohonan cuti disetujui.');
+            }
+
+            // Not final yet → notify next approvers
+            if (isset($result['approvers'])) {
+                foreach ($result['approvers'] as $nextApprover) {
+                    $this->notify(
+                        $nextApprover,
+                        'CUTI MENUNGGU PERSETUJUAN ANDA',
+                        "Pengajuan cuti {$leave->user->name} ({$leave->type}) menunggu persetujuan Anda. Tahap: {$result['step_label']}.",
+                        'warning',
+                        '/dashboard/approvals'
+                    );
+                }
+            }
+
+            $this->notify(
+                $leave->user,
+                'CUTI DALAM PROSES',
+                "Pengajuan cuti Anda telah disetujui di tahap sebelumnya. Menunggu: {$result['step_label']}.",
+                'info'
+            );
+
+            return $this->successResponse(null, "Di-approve. Menunggu: {$result['step_label']}.");
         }
 
-        return $this->handleFallbackApproval($request, $leave, $user);
-    }
-
-    private function handleWorkflowApproval(Request $request, Leave $leave, $user): \Illuminate\Http\JsonResponse
-    {
-        $result = ApprovalService::processApproval(
-            'leave', $leave->company_id, $user, $leave->user, $leave->current_approval_step, 'approve'
-        );
-
-        if ($result === null) {
-            return $this->errorResponse('Workflow tidak ditemukan.', 400);
-        }
-
-        if (isset($result['error'])) {
-            return $this->errorResponse($result['error'], 403);
-        }
-
-        $updateData = [
-            'status' => $result['status'],
-            'current_approval_step' => $result['current_approval_step'],
-        ];
-
-        if ($result['is_final'] && $result['status'] === 'approved') {
-            $updateData['approved_by'] = $user->id;
-            $updateData['remark'] = $request->remark;
-        }
-
-        $leave->update($updateData);
-
-        if ($result['is_final'] && $result['status'] === 'approved') {
-            $this->applyLeaveApprovalSideEffects($leave);
-            $msg = 'Permohonan cuti disetujui.';
-        } else {
-            $this->notifyNextApprovers($leave, $result);
-            $msg = "Di-approve. Menunggu: {$result['step_label']}.";
-        }
-
-        return $this->successResponse(null, $msg);
-    }
-
-    private function handleFallbackApproval(Request $request, Leave $leave, $user): \Illuminate\Http\JsonResponse
-    {
+        // ── Fallback: Default hardcoded logic ──
         $isSupervisor = $leave->user->supervisor_id === $user->id;
         $isHR = $user->hasPermission('approve-leaves') || $user->role_id === 1;
-        $response = null;
 
         if ($leave->status === 'pending_supervisor') {
-            if (!$isSupervisor && !$isHR) {
-                $response = $this->errorResponse('Anda tidak berhak.', 403);
-            } elseif ($isSupervisor) {
+            if (! $isSupervisor && ! $isHR) {
+                return response()->json(['status' => 'error', 'message' => 'Anda tidak berhak.'], 403);
+            }
+            if ($isSupervisor) {
                 $leave->update([
-                    'status' => 'pending_hr', 'supervisor_approved_by' => $user->id,
-                    'supervisor_approved_at' => now(), 'supervisor_remark' => $request->remark,
+                    'status' => 'pending_hr',
+                    'supervisor_approved_by' => $user->id,
+                    'supervisor_approved_at' => now(),
+                    'supervisor_remark' => $request->remark,
                 ]);
                 $this->notify($leave->user, 'CUTI DI-APPROVE ATASAN', 'Menunggu HRD.', 'info');
-                $response = $this->successResponse(null, 'Di-approve oleh atasan. Menunggu proses HRD.');
-            } else {
-                $leave->update(['status' => 'approved', 'approved_by' => $user->id, 'remark' => $request->remark, 'supervisor_approved_by' => $user->id, 'supervisor_approved_at' => now()]);
+
+                return $this->successResponse(null, 'Di-approve oleh atasan. Menunggu proses HRD.');
+            } elseif ($isHR) {
+                // HR forcefully bypasses supervisor
+                $leave->update([
+                    'status' => 'approved',
+                    'approved_by' => $user->id,
+                    'remark' => $request->remark,
+                    'supervisor_approved_by' => $user->id,
+                    'supervisor_approved_at' => now(),
+                ]);
             }
         } elseif (in_array($leave->status, ['pending_hr', 'pending'])) {
-            if (!$isHR) {
-                $response = $this->errorResponse('Hanya HRD.', 403);
-            } else {
-                $leave->update(['status' => 'approved', 'approved_by' => $user->id, 'remark' => $request->remark]);
+            if (! $isHR) {
+                return response()->json(['status' => 'error', 'message' => 'Hanya HRD.'], 403);
             }
+            $leave->update([
+                'status' => 'approved',
+                'approved_by' => $user->id,
+                'remark' => $request->remark,
+            ]);
         } else {
-            $response = $this->errorResponse('Status tidak valid.', 400);
+            return response()->json(['status' => 'error', 'message' => 'Status tidak valid.'], 400);
         }
 
-        if (!$response) {
-            $this->applyLeaveApprovalSideEffects($leave, true);
-            $response = $this->successResponse(null, 'Permohonan cuti disetujui.');
-        }
-
-        return $response;
-    }
-
-
-    private function applyLeaveApprovalSideEffects(Leave $leave, bool $isFallback = false): void
-    {
-        if ($leave->type === self::TYPE_ANNUAL_LEAVE || $leave->type === 'Cuti Tahunan') {
+        if ($leave->type === 'Cuti Tahunan') {
             $days = Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1;
             $leaveUser = $leave->user;
             $leaveUser->leave_balance -= $days;
             $leaveUser->save();
         }
 
-        $msg = $isFallback ? 'DISETUJUI oleh Admin.' : 'DISETUJUI.';
         $this->notify(
             $leave->user,
             'CUTI DISETUJUI',
-            "Permohonan cuti Anda untuk tanggal {$leave->start_date} s/d {$leave->end_date} telah {$msg}",
+            "Permohonan cuti Anda untuk tanggal {$leave->start_date} s/d {$leave->end_date} telah DISETUJUI oleh Admin.",
             'success'
         );
-    }
 
-    private function notifyNextApprovers(Leave $leave, array $result): void
-    {
-        if (isset($result['approvers'])) {
-            foreach ($result['approvers'] as $nextApprover) {
-                $this->notify(
-                    $nextApprover,
-                    'CUTI MENUNGGU PERSETUJUAN ANDA',
-                    "Pengajuan cuti {$leave->user->name} ({$leave->type}) menunggu persetujuan Anda. Tahap: {$result['step_label']}.",
-                    'warning',
-                    '/dashboard/approvals'
-                );
-            }
-        }
+        // Notification is already handled by $this->notify above.
+        // It now includes Database, FCM, Email, and WhatsApp.
 
-        $this->notify(
-            $leave->user,
-            'CUTI DALAM PROSES',
-            "Pengajuan cuti Anda telah disetujui di tahap sebelumnya. Menunggu: {$result['step_label']}.",
-            'info'
-        );
+        return $this->successResponse(null, 'Permohonan cuti disetujui.');
     }
 
     public function reject(Request $request, $id): \Illuminate\Http\JsonResponse
@@ -327,51 +334,43 @@ class LeaveController extends Controller
         $user = $request->user();
         $leave = Leave::findOrFail($id);
 
+        // ── Dynamic Workflow Path ──
         if ($leave->current_approval_step !== null) {
-            return $this->handleWorkflowRejection($request, $leave, $user);
+            $result = ApprovalService::processApproval(
+                'leave', $leave->company_id, $user, $leave->user, $leave->current_approval_step, 'reject'
+            );
+
+            if ($result === null) {
+                return $this->errorResponse('Workflow tidak ditemukan.', 400);
+            }
+
+            if (isset($result['error'])) {
+                return $this->errorResponse($result['error'], 403);
+            }
+
+            $leave->update([
+                'status' => 'rejected',
+                'current_approval_step' => null,
+                'approved_by' => $user->id,
+                'remark' => $request->remark,
+            ]);
+
+            $this->notify(
+                $leave->user,
+                'CUTI DITOLAK',
+                "Mohon maaf, permohonan cuti Anda untuk tanggal {$leave->start_date} s/d {$leave->end_date} telah DITOLAK.",
+                'danger'
+            );
+
+            return $this->successResponse(null, 'Permohonan cuti ditolak.');
         }
 
-        return $this->handleFallbackRejection($request, $leave, $user);
-    }
-
-    private function handleWorkflowRejection(Request $request, Leave $leave, $user): \Illuminate\Http\JsonResponse
-    {
-        $result = ApprovalService::processApproval(
-            'leave', $leave->company_id, $user, $leave->user, $leave->current_approval_step, 'reject'
-        );
-
-        if ($result === null) {
-            return $this->errorResponse('Workflow tidak ditemukan.', 400);
-        }
-
-        if (isset($result['error'])) {
-            return $this->errorResponse($result['error'], 403);
-        }
-
-        $leave->update([
-            'status' => 'rejected',
-            'current_approval_step' => null,
-            'approved_by' => $user->id,
-            'remark' => $request->remark,
-        ]);
-
-        $this->notify(
-            $leave->user,
-            'CUTI DITOLAK',
-            "Mohon maaf, permohonan cuti Anda untuk tanggal {$leave->start_date} s/d {$leave->end_date} telah DITOLAK.",
-            'danger'
-        );
-
-        return $this->successResponse(null, 'Permohonan cuti ditolak.');
-    }
-
-    private function handleFallbackRejection(Request $request, Leave $leave, $user): \Illuminate\Http\JsonResponse
-    {
+        // ── Fallback: Default hardcoded logic ──
         $isSupervisor = $leave->user->supervisor_id === $user->id;
         $isHR = $user->hasPermission('approve-leaves') || $user->role_id === 1;
 
-        if (!$isSupervisor && !$isHR) {
-            return $this->errorResponse('Akses ditolak.', 403);
+        if (! $isSupervisor && ! $isHR) {
+            abort(403, 'Akses ditolak.');
         }
 
         if ($leave->status === 'pending_supervisor' && $isSupervisor) {
@@ -382,9 +381,6 @@ class LeaveController extends Controller
                 'supervisor_remark' => $request->remark,
             ]);
         } else {
-            if (!$isHR) {
-                return $this->errorResponse('Hanya HRD.', 403);
-            }
             $leave->update([
                 'status' => 'rejected',
                 'approved_by' => $user->id,
@@ -399,9 +395,10 @@ class LeaveController extends Controller
             'danger'
         );
 
+        // Notification is already handled by $this->notify above.
+
         return $this->successResponse(null, 'Permohonan cuti ditolak.');
     }
-
 
     public function destroy(Request $request, $id): \Illuminate\Http\JsonResponse
     {
