@@ -35,7 +35,7 @@ pipeline {
                     echo "Menginstal dependensi dan menjalankan test frontend melalui Docker..."
                     sh """
                         cd frontend
-                        docker run --rm -v \$(pwd):/app -w /app -u \$(id -u):\$(id -g) -e HOME=/tmp node:20-alpine sh -c "npm install && npm run test:coverage"
+                        docker run --rm -v "\$(pwd):/app" -w /app -u \$(id -u):\$(id -g) -e HOME=/tmp node:20-alpine sh -c "npm install && npm run test:coverage"
                     """
                 }
             }
