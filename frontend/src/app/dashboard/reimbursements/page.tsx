@@ -276,6 +276,87 @@ const renderInfoFields = (
   );
 };
 
+const getSizeStyles = (isDetailView: boolean) => {
+  if (isDetailView) {
+    return {
+      sizeHeading: "text-[16px]",
+      sizeLogo: "h-14",
+      sizeLogoText: "text-[11px]",
+      sizeHeaderNo: "text-[10px] w-[180px]",
+      sizeTable: "text-[10px]",
+      sizeRowHeader: "h-8",
+      sizeTerbilangLabel: "text-[10px] mb-1",
+      sizeTerbilangBox: "text-[10px] min-h-[28px] px-3 py-1.5",
+      sizeSigText: "text-[9px]",
+      sizeSigName: "text-[8px]",
+      sizeSigImg: "h-12",
+      wrapperClass: "",
+      noColorClass: ""
+    };
+  }
+  return {
+    sizeHeading: "text-[14px]",
+    sizeLogo: "h-12",
+    sizeLogoText: "text-[10px]",
+    sizeHeaderNo: "text-[9px] w-[150px]",
+    sizeTable: "text-[9px]",
+    sizeRowHeader: "h-7",
+    sizeTerbilangLabel: "text-[8px] mb-0.5",
+    sizeTerbilangBox: "text-[8px] min-h-[24px] px-2 py-1 bg-gray-50/50",
+    sizeSigText: "text-[8px]",
+    sizeSigName: "text-[7px]",
+    sizeSigImg: "h-10",
+    wrapperClass: "p-6 shadow-inner max-w-full overflow-x-auto",
+    noColorClass: "text-gray-400"
+  };
+};
+
+const renderTableBody = (items: ReimbursementItem[], totalAmount: number, isDetailView: boolean) => {
+  const sizeRowBody = isDetailView ? "h-7" : "h-6";
+  const sizeRowTotal = isDetailView ? "h-8" : "h-7";
+  
+  return (
+    <tbody>
+      {items.map((it: ReimbursementItem, idx: number) => {
+        const price = Number(it.estimasi_harga) || 0;
+        const qty = Number(it.qty) || 0;
+        return (
+          <tr key={it.id || it.tempId || idx} className={sizeRowBody}>
+            <td className="border border-black px-1.5 py-0.5 text-center text-black">{idx + 1}</td>
+            <td className="border border-black px-1.5 py-0.5 text-left pl-2 text-black truncate max-w-[120px]">{it.spesifikasi || '—'}</td>
+            <td className="border border-black px-1.5 py-0.5 text-center text-black">{it.unit || '—'}</td>
+            <td className="border border-black px-1.5 py-0.5 text-center text-black">{qty}</td>
+            <td className="border border-black px-1.5 py-0.5 text-right pr-2 text-black">{formatCurrency(price)}</td>
+            <td className="border border-black px-1.5 py-0.5 text-left pl-2 text-black truncate max-w-[120px]">{it.keterangan || ''}</td>
+          </tr>
+        );
+      })}
+      {/* Pad to 8 rows */}
+      {Array.from({ length: Math.max(0, 8 - items.length) }).map((_, i) => {
+        const idx = items.length + i;
+        return (
+          <tr key={`pad-${idx}`} className={sizeRowBody}>
+            <td className="border border-black px-1.5 py-0.5 text-center text-gray-400">{idx + 1}</td>
+            <td className="border border-black px-1.5 py-0.5"></td>
+            <td className="border border-black px-1.5 py-0.5"></td>
+            <td className="border border-black px-1.5 py-0.5"></td>
+            <td className="border border-black px-1.5 py-0.5"></td>
+            <td className="border border-black px-1.5 py-0.5"></td>
+          </tr>
+        );
+      })}
+      {/* TOTAL row */}
+      <tr className={`${sizeRowTotal} font-bold`}>
+        <td colSpan={4} className="border border-black px-1.5 py-0.5 text-right pr-2 text-black font-black" style={{ letterSpacing: '2px' }}>T O T A L</td>
+        <td className="border border-black px-1.5 py-0.5 text-right pr-2 text-black font-black" style={{ backgroundColor: '#FFFFCC' }}>
+          {isDetailView ? `Rp ${totalAmount.toLocaleString('id-ID')}` : formatCurrency(totalAmount)}
+        </td>
+        <td className="border border-black px-1.5 py-0.5"></td>
+      </tr>
+    </tbody>
+  );
+};
+
 const ReimbursementSheetInner = ({
   title,
   employee_name,
@@ -290,33 +371,21 @@ const ReimbursementSheetInner = ({
   status,
   isDetailView = false
 }: ReimbursementSheetInnerProps) => {
-  const sizeHeading = isDetailView ? "text-[16px]" : "text-[14px]";
-  const sizeLogo = isDetailView ? "h-14" : "h-12";
-  const sizeLogoText = isDetailView ? "text-[11px]" : "text-[10px]";
-  const sizeHeaderNo = isDetailView ? "text-[10px] w-[180px]" : "text-[9px] w-[150px]";
-  const sizeTable = isDetailView ? "text-[10px]" : "text-[9px]";
-  const sizeRowHeader = isDetailView ? "h-8" : "h-7";
-  const sizeRowBody = isDetailView ? "h-7" : "h-6";
-  const sizeRowTotal = isDetailView ? "h-8" : "h-7";
-  const sizeTerbilangLabel = isDetailView ? "text-[10px] mb-1" : "text-[8px] mb-0.5";
-  const sizeTerbilangBox = isDetailView ? "text-[10px] min-h-[28px] px-3 py-1.5" : "text-[8px] min-h-[24px] px-2 py-1 bg-gray-50/50";
-  const sizeSigText = isDetailView ? "text-[9px]" : "text-[8px]";
-  const sizeSigName = isDetailView ? "text-[8px]" : "text-[7px]";
-  const sizeSigImg = isDetailView ? "h-12" : "h-10";
+  const styles = getSizeStyles(isDetailView);
 
   return (
     <div 
-      className={`bg-white ${isDetailView ? '' : 'p-6 shadow-inner max-w-full overflow-x-auto'}`}
+      className={`bg-white ${styles.wrapperClass}`}
       style={{ fontFamily: 'Calibri, Arial, sans-serif' }}
     >
       {/* ===== HEADER: Logo left + Date/No right ===== */}
       <div className="flex items-start justify-between mb-2">
         <div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/artacom.png" alt="Artacom Logo" className={`${sizeLogo} mb-1`} />
-          <div className={`${sizeLogoText} font-black text-black tracking-wide`}>PT ARTACOMINDO JEJARING NUSA</div>
+          <img src="/artacom.png" alt="Artacom Logo" className={`${styles.sizeLogo} mb-1`} />
+          <div className={`${styles.sizeLogoText} font-black text-black tracking-wide`}>PT ARTACOMINDO JEJARING NUSA</div>
         </div>
-        <div className={`text-right ${sizeHeaderNo} flex flex-col gap-1`}>
+        <div className={`text-right ${styles.sizeHeaderNo} flex flex-col gap-1`}>
           <div className="flex justify-between items-end">
             <span className="font-bold pr-1">Date :</span>
             <span className="border-b border-black pl-1 pb-0.5 flex-1 text-left">
@@ -325,7 +394,7 @@ const ReimbursementSheetInner = ({
           </div>
           <div className="flex justify-between items-end pt-1">
             <span className="font-bold pr-1">No :</span>
-            <span className={`border-b border-black pl-1 pb-0.5 flex-1 text-left ${isDetailView ? '' : 'text-gray-400'}`}>
+            <span className={`border-b border-black pl-1 pb-0.5 flex-1 text-left ${styles.noColorClass}`}>
               {noStr}
             </span>
           </div>
@@ -334,7 +403,7 @@ const ReimbursementSheetInner = ({
 
       {/* ===== TITLE ===== */}
       <div className="text-center my-3">
-        <h1 className={`${sizeHeading} font-black text-black tracking-[1px]`}>PENGAJUAN UANG MUKA / PERMINTAAN DANA</h1>
+        <h1 className={`${styles.sizeHeading} font-black text-black tracking-[1px]`}>PENGAJUAN UANG MUKA / PERMINTAAN DANA</h1>
       </div>
 
       {/* ===== PRIORITY CHECKBOXES ===== */}
@@ -345,9 +414,9 @@ const ReimbursementSheetInner = ({
 
       {/* ===== ITEMS TABLE (Yellow header like Excel) ===== */}
       <div className="mb-3">
-        <table className={`w-full border-collapse ${sizeTable} excel-table`} style={{ border: '1.5px solid #000' }}>
+        <table className={`w-full border-collapse ${styles.sizeTable} excel-table`} style={{ border: '1.5px solid #000' }}>
           <thead>
-            <tr style={{ backgroundColor: '#FFFFCC' }} className={sizeRowHeader}>
+            <tr style={{ backgroundColor: '#FFFFCC' }} className={styles.sizeRowHeader}>
               <th className="border border-black px-1.5 py-0.5 font-bold text-black w-7">No.</th>
               <th className="border border-black px-1.5 py-0.5 font-bold text-black text-left pl-2">Spesifikasi Barang / Jasa</th>
               <th className="border border-black px-1.5 py-0.5 font-bold text-black w-12">Unit</th>
@@ -356,57 +425,20 @@ const ReimbursementSheetInner = ({
               <th className="border border-black px-1.5 py-0.5 font-bold text-black text-left pl-2 w-28">Tanggal/Keterangan</th>
             </tr>
           </thead>
-          <tbody>
-            {items.map((it: ReimbursementItem, idx: number) => {
-              const price = Number(it.estimasi_harga) || 0;
-              const qty = Number(it.qty) || 0;
-              return (
-                <tr key={it.id || it.tempId || idx} className={sizeRowBody}>
-                  <td className="border border-black px-1.5 py-0.5 text-center text-black">{idx + 1}</td>
-                  <td className="border border-black px-1.5 py-0.5 text-left pl-2 text-black truncate max-w-[120px]">{it.spesifikasi || '—'}</td>
-                  <td className="border border-black px-1.5 py-0.5 text-center text-black">{it.unit || '—'}</td>
-                  <td className="border border-black px-1.5 py-0.5 text-center text-black">{qty}</td>
-                  <td className="border border-black px-1.5 py-0.5 text-right pr-2 text-black">{formatCurrency(price)}</td>
-                  <td className="border border-black px-1.5 py-0.5 text-left pl-2 text-black truncate max-w-[120px]">{it.keterangan || ''}</td>
-                </tr>
-              );
-            })}
-            {/* Pad to 8 rows */}
-            {Array.from({ length: Math.max(0, 8 - items.length) }).map((_, i) => {
-              const idx = items.length + i;
-              return (
-                <tr key={`pad-${idx}`} className={sizeRowBody}>
-                  <td className="border border-black px-1.5 py-0.5 text-center text-gray-400">{idx + 1}</td>
-                  <td className="border border-black px-1.5 py-0.5"></td>
-                  <td className="border border-black px-1.5 py-0.5"></td>
-                  <td className="border border-black px-1.5 py-0.5"></td>
-                  <td className="border border-black px-1.5 py-0.5"></td>
-                  <td className="border border-black px-1.5 py-0.5"></td>
-                </tr>
-              );
-            })}
-            {/* TOTAL row */}
-            <tr className={`${sizeRowTotal} font-bold`}>
-              <td colSpan={4} className="border border-black px-1.5 py-0.5 text-right pr-2 text-black font-black" style={{ letterSpacing: '2px' }}>T O T A L</td>
-              <td className="border border-black px-1.5 py-0.5 text-right pr-2 text-black font-black" style={{ backgroundColor: '#FFFFCC' }}>
-                {isDetailView ? `Rp ${totalAmount.toLocaleString('id-ID')}` : formatCurrency(totalAmount)}
-              </td>
-              <td className="border border-black px-1.5 py-0.5"></td>
-            </tr>
-          </tbody>
+          {renderTableBody(items, totalAmount, isDetailView)}
         </table>
       </div>
 
       {/* ===== TERBILANG BOX ===== */}
       <div className="mb-3">
-        <div className={`${sizeTerbilangLabel} font-bold italic`}>Terbilang</div>
-        <div className={`border border-black font-bold text-black ${sizeTerbilangBox}`} style={{ border: '1.5px solid #000' }}>
+        <div className={`${styles.sizeTerbilangLabel} font-bold italic`}>Terbilang</div>
+        <div className={`border border-black font-bold text-black ${styles.sizeTerbilangBox}`} style={{ border: '1.5px solid #000' }}>
           {terbilang(totalAmount)}
         </div>
       </div>
 
       {/* ===== SIGNATURE GRID (4 columns matching Excel) ===== */}
-      <table className={`w-full border-collapse ${sizeSigText} signature-table`} style={{ border: '1.5px solid #000' }}>
+      <table className={`w-full border-collapse ${styles.sizeSigText} signature-table`} style={{ border: '1.5px solid #000' }}>
         <thead>
           <tr>
             <th className="border border-black text-center font-bold py-1 w-1/4">DIRUT</th>
@@ -430,11 +462,11 @@ const ReimbursementSheetInner = ({
             <td className="border border-black text-center align-middle sig-space">
               {signature ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={signature} alt="TTD" className={`${sizeSigImg} mx-auto object-contain`} />
+                <img src={signature} alt="TTD" className={`${styles.sizeSigImg} mx-auto object-contain`} />
               ) : (
                 <span className="text-gray-400 text-[7px]">— Belum TTD —</span>
               )}
-              <div className={`${sizeSigName} font-bold mt-0.5`}>{employee_name || '—'}</div>
+              <div className={`${styles.sizeSigName} font-bold mt-0.5`}>{employee_name || '—'}</div>
             </td>
           </tr>
           {/* Extra row: Posting Accounting & Procurement */}
