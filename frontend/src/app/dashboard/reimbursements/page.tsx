@@ -179,6 +179,103 @@ interface ReimbursementSheetInnerProps {
   isDetailView?: boolean;
 }
 
+const renderSignatureStatus = (status: string | undefined, type: 'dirut' | 'finance' | 'unit_head') => {
+  if (status === 'approved') {
+    if (type === 'dirut') {
+      return <div className="inline-block border-2 border-blue-600 text-blue-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-blue-50/50">APPROVED</div>;
+    }
+    return <div className="inline-block border-2 border-green-600 text-green-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-green-50/50">VERIFIED</div>;
+  }
+  if (status === 'rejected') {
+    return <div className="inline-block border-2 border-red-600 text-red-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-red-50/50">REJECTED</div>;
+  }
+  if (type === 'dirut') {
+    return <span className="text-gray-400 italic text-[7px]">— Belum Disetujui —</span>;
+  }
+  return <span className="text-gray-400 italic text-[7px]">— Belum Diverifikasi —</span>;
+};
+
+const renderPriorityBoxes = (priority: string, isDetailView: boolean) => {
+  const p = (priority || 'Normal').toLowerCase();
+  const sizePriorityBox = isDetailView ? "w-[11px] h-[11px] text-[8px]" : "w-[10px] h-[10px] text-[7px]";
+  const sizePriority = isDetailView ? "text-[9px]" : "text-[8px]";
+  return (
+    <div className={`flex justify-end mb-2 ${sizePriority}`}>
+      <div className="space-y-0.5">
+        <div className="flex items-center gap-1.5 font-bold">
+          <span className={`inline-flex items-center justify-center border border-black font-black ${sizePriorityBox}`}>
+            {p === 'normal' ? '✓' : ''}
+          </span> NORMAL
+        </div>
+        <div className="flex items-center gap-1.5 font-bold">
+          <span className={`inline-flex items-center justify-center border border-black font-black ${sizePriorityBox}`}>
+            {p === 'urgent' ? '✓' : ''}
+          </span> URGENT
+        </div>
+        <div className="flex items-center gap-1.5 font-bold">
+          <span className={`inline-flex items-center justify-center border border-black font-black ${sizePriorityBox}`}>
+            {['top urgent', 'top_urgent'].includes(p) ? '✓' : ''}
+          </span> TOP URGENT
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const renderInfoFields = (
+  employee_name: string,
+  title: string | null,
+  divisi: string,
+  tujuan: string,
+  isDetailView: boolean
+) => {
+  const sizeText = isDetailView ? "text-[10px]" : "text-[9px]";
+  const sizeTujuanBox = isDetailView ? "w-[10px] h-[10px] text-[7px] leading-[10px]" : "w-[9px] h-[9px] text-[6px] leading-[9px]";
+  const sizeTujuanText = isDetailView ? "text-[9px]" : "text-[8px]";
+  const t = (tujuan || '').toLowerCase();
+
+  return (
+    <div className={`flex justify-between items-start ${sizeText} mb-3 gap-4`}>
+      <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-2">
+        <div className="flex items-center">
+          <span className="font-bold w-[50px] py-1 text-black shrink-0">Nama</span>
+          <span className="w-[8px] py-1 text-black shrink-0">:</span>
+          <span className="border-b border-dotted border-gray-500 py-1 text-black font-semibold flex-1 ml-1 truncate">
+            {employee_name || '—'}
+          </span>
+        </div>
+        <div className="flex items-center">
+          <span className="font-bold w-[50px] py-1 text-black shrink-0">Tujuan</span>
+          <span className="w-[8px] py-1 text-black shrink-0">:</span>
+          <span className="border-b border-dotted border-gray-500 py-1 text-black font-semibold flex-1 ml-1 truncate">
+            {title || '—'}
+          </span>
+        </div>
+        <div className="flex items-center">
+          <span className="font-bold w-[50px] py-1 text-black shrink-0">Div.</span>
+          <span className="w-[8px] py-1 text-black shrink-0">:</span>
+          <span className="border-b border-dotted border-gray-500 py-1 text-black font-semibold flex-1 ml-1 truncate">
+            {divisi || '—'}
+          </span>
+        </div>
+        <div></div>
+      </div>
+      <div className={`${sizeTujuanText} space-y-0.5 flex-shrink-0`}>
+        <div className="flex items-center gap-1 text-black font-semibold">
+          <span className={`inline-block border border-black text-center ${sizeTujuanBox} ${t.includes('pengadaan') ? 'bg-black text-white' : ''}`}>
+            {t.includes('pengadaan') ? '✓' : ''}
+          </span> Pengadaan Baru
+        </div>
+        <div className="flex items-center gap-1 text-black font-semibold">
+          <span className={`inline-block border border-black text-center ${sizeTujuanBox} ${t.includes('gudang') ? 'bg-black text-white' : ''}`}>
+            {t.includes('gudang') ? '✓' : ''}
+          </span> Dari Gudang
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ReimbursementSheetInner = ({
   title,
   employee_name,
@@ -193,15 +290,10 @@ const ReimbursementSheetInner = ({
   status,
   isDetailView = false
 }: ReimbursementSheetInnerProps) => {
-  const sizeText = isDetailView ? "text-[10px]" : "text-[9px]";
   const sizeHeading = isDetailView ? "text-[16px]" : "text-[14px]";
   const sizeLogo = isDetailView ? "h-14" : "h-12";
   const sizeLogoText = isDetailView ? "text-[11px]" : "text-[10px]";
   const sizeHeaderNo = isDetailView ? "text-[10px] w-[180px]" : "text-[9px] w-[150px]";
-  const sizePriority = isDetailView ? "text-[9px]" : "text-[8px]";
-  const sizePriorityBox = isDetailView ? "w-[11px] h-[11px] text-[8px]" : "w-[10px] h-[10px] text-[7px]";
-  const sizeTujuanBox = isDetailView ? "w-[10px] h-[10px] text-[7px] leading-[10px]" : "w-[9px] h-[9px] text-[6px] leading-[9px]";
-  const sizeTujuanText = isDetailView ? "text-[9px]" : "text-[8px]";
   const sizeTable = isDetailView ? "text-[10px]" : "text-[9px]";
   const sizeRowHeader = isDetailView ? "h-8" : "h-7";
   const sizeRowBody = isDetailView ? "h-7" : "h-6";
@@ -233,7 +325,7 @@ const ReimbursementSheetInner = ({
           </div>
           <div className="flex justify-between items-end pt-1">
             <span className="font-bold pr-1">No :</span>
-            <span className={`border-b border-black pl-1 pb-0.5 flex-1 text-left ${!isDetailView ? 'text-gray-400' : ''}`}>
+            <span className={`border-b border-black pl-1 pb-0.5 flex-1 text-left ${isDetailView ? '' : 'text-gray-400'}`}>
               {noStr}
             </span>
           </div>
@@ -245,70 +337,11 @@ const ReimbursementSheetInner = ({
         <h1 className={`${sizeHeading} font-black text-black tracking-[1px]`}>PENGAJUAN UANG MUKA / PERMINTAAN DANA</h1>
       </div>
 
-      {/* ===== PRIORITY CHECKBOXES (right-aligned) ===== */}
-      <div className={`flex justify-end mb-2 ${sizePriority}`}>
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-1.5 font-bold">
-            <span className={`inline-flex items-center justify-center border border-black font-black ${sizePriorityBox}`}>
-              {(priority || 'Normal').toLowerCase() === 'normal' ? '✓' : ''}
-            </span> NORMAL
-          </div>
-          <div className="flex items-center gap-1.5 font-bold">
-            <span className={`inline-flex items-center justify-center border border-black font-black ${sizePriorityBox}`}>
-              {(priority || '').toLowerCase() === 'urgent' ? '✓' : ''}
-            </span> URGENT
-          </div>
-          <div className="flex items-center gap-1.5 font-bold">
-            <span className={`inline-flex items-center justify-center border border-black font-black ${sizePriorityBox}`}>
-              {['top urgent', 'top_urgent'].includes((priority || '').toLowerCase()) ? '✓' : ''}
-            </span> TOP URGENT
-          </div>
-        </div>
-      </div>
+      {/* ===== PRIORITY CHECKBOXES ===== */}
+      {renderPriorityBoxes(priority, isDetailView)}
 
-      {/* ===== INFO FIELDS: Nama / Tujuan / Div + Pengadaan options ===== */}
-      <div className={`flex justify-between items-start ${sizeText} mb-3 gap-4`}>
-        <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-2">
-          {/* Row 1, Col 1: Nama */}
-          <div className="flex items-center">
-            <span className="font-bold w-[50px] py-1 text-black shrink-0">Nama</span>
-            <span className="w-[8px] py-1 text-black shrink-0">:</span>
-            <span className="border-b border-dotted border-gray-500 py-1 text-black font-semibold flex-1 ml-1 truncate">
-              {employee_name || '—'}
-            </span>
-          </div>
-          {/* Row 1, Col 2: Tujuan */}
-          <div className="flex items-center">
-            <span className="font-bold w-[50px] py-1 text-black shrink-0">Tujuan</span>
-            <span className="w-[8px] py-1 text-black shrink-0">:</span>
-            <span className="border-b border-dotted border-gray-500 py-1 text-black font-semibold flex-1 ml-1 truncate">
-              {title || '—'}
-            </span>
-          </div>
-          {/* Row 2, Col 1: Div */}
-          <div className="flex items-center">
-            <span className="font-bold w-[50px] py-1 text-black shrink-0">Div.</span>
-            <span className="w-[8px] py-1 text-black shrink-0">:</span>
-            <span className="border-b border-dotted border-gray-500 py-1 text-black font-semibold flex-1 ml-1 truncate">
-              {divisi || '—'}
-            </span>
-          </div>
-          {/* Row 2, Col 2: Empty spacer */}
-          <div></div>
-        </div>
-        <div className={`${sizeTujuanText} space-y-0.5 flex-shrink-0`}>
-          <div className="flex items-center gap-1 text-black font-semibold">
-            <span className={`inline-block border border-black text-center ${sizeTujuanBox} ${tujuan.toLowerCase().includes('pengadaan') ? 'bg-black text-white' : ''}`}>
-              {tujuan.toLowerCase().includes('pengadaan') ? '✓' : ''}
-            </span> Pengadaan Baru
-          </div>
-          <div className="flex items-center gap-1 text-black font-semibold">
-            <span className={`inline-block border border-black text-center ${sizeTujuanBox} ${tujuan.toLowerCase().includes('gudang') ? 'bg-black text-white' : ''}`}>
-              {tujuan.toLowerCase().includes('gudang') ? '✓' : ''}
-            </span> Dari Gudang
-          </div>
-        </div>
-      </div>
+      {/* ===== INFO FIELDS ===== */}
+      {renderInfoFields(employee_name, title, divisi, tujuan, isDetailView)}
 
       {/* ===== ITEMS TABLE (Yellow header like Excel) ===== */}
       <div className="mb-3">
@@ -386,31 +419,13 @@ const ReimbursementSheetInner = ({
           {/* Signature spaces */}
           <tr>
             <td className="border border-black text-center align-middle sig-space">
-              {status === 'approved' ? (
-                <div className="inline-block border-2 border-blue-600 text-blue-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-blue-50/50">APPROVED</div>
-              ) : status === 'rejected' ? (
-                <div className="inline-block border-2 border-red-600 text-red-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-red-50/50">REJECTED</div>
-              ) : (
-                <span className="text-gray-400 italic text-[7px]">— Belum Disetujui —</span>
-              )}
+              {renderSignatureStatus(status, 'dirut')}
             </td>
             <td className="border border-black text-center align-middle sig-space">
-              {status === 'approved' ? (
-                <div className="inline-block border-2 border-green-600 text-green-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-green-50/50">VERIFIED</div>
-              ) : status === 'rejected' ? (
-                <div className="inline-block border-2 border-red-600 text-red-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-red-50/50">REJECTED</div>
-              ) : (
-                <span className="text-gray-400 italic text-[7px]">— Belum Diverifikasi —</span>
-              )}
+              {renderSignatureStatus(status, 'finance')}
             </td>
             <td className="border border-black text-center align-middle sig-space">
-              {status === 'approved' ? (
-                <div className="inline-block border-2 border-green-600 text-green-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-green-50/50">VERIFIED</div>
-              ) : status === 'rejected' ? (
-                <div className="inline-block border-2 border-red-600 text-red-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-red-50/50">REJECTED</div>
-              ) : (
-                <span className="text-gray-400 italic text-[7px]">— Belum Diverifikasi —</span>
-              )}
+              {renderSignatureStatus(status, 'unit_head')}
             </td>
             <td className="border border-black text-center align-middle sig-space">
               {signature ? (
