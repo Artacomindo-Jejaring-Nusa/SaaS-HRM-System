@@ -129,20 +129,54 @@ interface SectionProps {
   selectedItem?: LeaveRecord | null;
 }
 
-const Part1EmployeeSection = ({ isFormMode, user, formData, setFormData, selectedItem }: Part1EmployeeSectionProps) => {
-  const employee = isFormMode ? user : selectedItem?.user;
-  const name = employee?.name;
-  const position = employee?.role?.name;
-  const department = employee?.office?.name || employee?.company?.name || '-';
-  
-  const reason = isFormMode ? formData?.reason : selectedItem?.reason;
-  const leaveAddress = isFormMode ? formData?.leave_address : selectedItem?.leave_address;
-  const emergencyPhone = isFormMode ? formData?.emergency_phone : selectedItem?.emergency_phone;
-  const signature = isFormMode ? formData?.signature : selectedItem?.signature;
-  const typeVal = isFormMode ? formData?.type : selectedItem?.type;
+const resolvePart1Data = (
+  isFormMode: boolean,
+  user: LeaveRecord['user'] | null | undefined,
+  formData: LeaveSheetInnerProps['formData'] | undefined,
+  selectedItem: LeaveRecord | null | undefined
+) => {
+  if (isFormMode) {
+    return {
+      name: user?.name,
+      position: user?.role?.name,
+      department: user?.office?.name || user?.company?.name || '-',
+      reason: formData?.reason,
+      leaveAddress: formData?.leave_address,
+      emergencyPhone: formData?.emergency_phone,
+      signature: formData?.signature,
+      typeVal: formData?.type,
+      start: formData?.start_date,
+      end: formData?.end_date,
+    };
+  }
+  const emp = selectedItem?.user;
+  return {
+    name: emp?.name,
+    position: emp?.role?.name,
+    department: emp?.office?.name || emp?.company?.name || '-',
+    reason: selectedItem?.reason,
+    leaveAddress: selectedItem?.leave_address,
+    emergencyPhone: selectedItem?.emergency_phone,
+    signature: selectedItem?.signature,
+    typeVal: selectedItem?.type,
+    start: selectedItem?.start_date,
+    end: selectedItem?.end_date,
+  };
+};
 
-  const start = isFormMode ? formData?.start_date : selectedItem?.start_date;
-  const end = isFormMode ? formData?.end_date : selectedItem?.end_date;
+const Part1EmployeeSection = ({ isFormMode, user, formData, setFormData, selectedItem }: Part1EmployeeSectionProps) => {
+  const {
+    name,
+    position,
+    department,
+    reason,
+    leaveAddress,
+    emergencyPhone,
+    signature,
+    typeVal,
+    start,
+    end
+  } = resolvePart1Data(isFormMode, user, formData, selectedItem);
 
   const calculateDays = () => {
     if (start && end) {
