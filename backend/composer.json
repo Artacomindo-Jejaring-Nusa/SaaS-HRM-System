@@ -1,10 +1,10 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/laravel",
+    "name": "artacomindo/ontime-hrms",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
-    "license": "MIT",
+    "description": "OnTime HRMS - Enterprise SaaS Solution",
+    "keywords": ["hrms", "saas", "attendance", "payroll"],
+    "license": "proprietary",
     "require": {
         "php": "^8.3",
         "barryvdh/laravel-dompdf": "^3.1",
