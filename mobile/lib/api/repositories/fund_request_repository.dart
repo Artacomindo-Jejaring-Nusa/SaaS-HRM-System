@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../api_client.dart';
 
@@ -26,17 +27,33 @@ class FundRequestRepository {
   }
 
   static Future<Map<String, dynamic>> submitFundRequest(
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    String? attachmentPath,
+  }) async {
     try {
       final headers = await ApiClient.getHeaders();
-      headers['Content-Type'] = 'application/json';
-      final response = await ApiClient.client.post(
+      final request = http.MultipartRequest(
+        'POST',
         Uri.parse('${ApiClient.baseUrl}/fund-requests'),
-        headers: headers,
-        body: jsonEncode(data),
       );
-      return jsonDecode(response.body);
+
+      // Add auth headers
+      request.headers.addAll(headers);
+
+      // Add form fields
+      request.fields['amount'] = data['amount'].toString();
+      request.fields['reason'] = data['reason'].toString();
+
+      // Add attachment file if provided
+      if (attachmentPath != null && File(attachmentPath).existsSync()) {
+        request.files.add(
+          await http.MultipartFile.fromPath('attachment', attachmentPath),
+        );
+      }
+
+      final streamedResponse = await request.send();
+      final responseBody = await streamedResponse.stream.bytesToString();
+      return jsonDecode(responseBody);
     } catch (e) {
       return {'status': 'error', 'message': 'Koneksi gagal.'};
     }

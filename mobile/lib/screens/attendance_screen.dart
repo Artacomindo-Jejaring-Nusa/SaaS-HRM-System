@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -187,7 +186,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         result = await ApiService.checkIn(
           position.latitude, 
           position.longitude, 
-          image: null, // Kosongkan image
+          imagePath: null, // Kosongkan image
           deviceId: deviceId,
           isMocked: position.isMocked,
         );
@@ -195,7 +194,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         result = await ApiService.checkOut(
           position.latitude, 
           position.longitude, 
-          image: null, // Kosongkan image
+          imagePath: null, // Kosongkan image
           deviceId: deviceId,
           isMocked: position.isMocked,
         );
@@ -227,8 +226,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       }
       
       final XFile image = await _controller!.takePicture();
-      final bytes = await File(image.path).readAsBytes();
-      final base64Image = "data:image/png;base64,${base64Encode(bytes)}";
 
       // 2. Dapatkan Lokasi GPS
       Position position = await _determinePosition();
@@ -242,13 +239,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       // 3. Ambil Device ID
       String deviceId = await ApiService.getDeviceId();
 
-      // 4. Kirim ke API
+      // 4. Kirim ke API (file path, bukan Base64)
       Map<String, dynamic>? result;
       if (widget.isCheckIn) {
         result = await ApiService.checkIn(
           position.latitude, 
           position.longitude, 
-          image: base64Image,
+          imagePath: image.path,
           deviceId: deviceId,
           isMocked: position.isMocked,
         );
@@ -256,7 +253,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         result = await ApiService.checkOut(
           position.latitude, 
           position.longitude, 
-          image: base64Image,
+          imagePath: image.path,
           deviceId: deviceId,
           isMocked: position.isMocked,
         );

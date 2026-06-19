@@ -101,14 +101,14 @@ class ApiService {
       AttendanceRepository.getTodayAttendance();
 
   static Future<Map<String, dynamic>?> checkIn(double lat, double lng,
-          {String? image, String? deviceId, bool isMocked = false}) =>
+          {String? imagePath, String? deviceId, bool isMocked = false}) =>
       AttendanceRepository.checkIn(lat, lng,
-          image: image, deviceId: deviceId, isMocked: isMocked);
+          imagePath: imagePath, deviceId: deviceId, isMocked: isMocked);
 
   static Future<Map<String, dynamic>?> checkOut(double lat, double lng,
-          {String? image, String? deviceId, bool isMocked = false}) =>
+          {String? imagePath, String? deviceId, bool isMocked = false}) =>
       AttendanceRepository.checkOut(lat, lng,
-          image: image, deviceId: deviceId, isMocked: isMocked);
+          imagePath: imagePath, deviceId: deviceId, isMocked: isMocked);
 
   // ============ NOTIFICATIONS ============
 
@@ -322,8 +322,10 @@ class ApiService {
       FundRequestRepository.getFundRequests();
 
   static Future<Map<String, dynamic>> submitFundRequest(
-          Map<String, dynamic> data) =>
-      FundRequestRepository.submitFundRequest(data);
+          Map<String, dynamic> data,
+          {String? attachmentPath}) =>
+      FundRequestRepository.submitFundRequest(data,
+          attachmentPath: attachmentPath);
 
   static Future<Map<String, dynamic>> deleteFundRequest(int id) =>
       FundRequestRepository.deleteFundRequest(id);

@@ -8,6 +8,7 @@ use App\Services\ApprovalService;
 use App\Traits\Notifiable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Intervention\Image\Laravel\Facades\Image;
 
 class FundRequestController extends Controller
@@ -58,19 +59,19 @@ class FundRequestController extends Controller
         $request->validate([
             'amount' => 'required|numeric|min:1',
             'reason' => 'required|string',
-            'attachment' => 'nullable|string', // Base64
+            'attachment' => 'nullable|image|mimes:jpeg,png,jpg|max:5120', // Max 5MB, multipart/form-data
         ]);
 
         $user = $request->user();
         $companyId = $user->company_id;
 
         $attachmentPath = null;
-        if ($request->attachment) {
-            $imageName = 'fund_requests/'.$user->id.'_'.time().'.jpg';
-            $img = Image::decode($request->attachment);
+        if ($request->hasFile('attachment')) {
+            $file = $request->file('attachment');
+            $attachmentPath = 'fund_requests/'.Str::random(40).'.jpg';
+            $img = Image::decode($file);
             $img->scale(width: 800);
-            Storage::disk('public')->put($imageName, (string) $img->encodeUsingFileExtension('jpg', 80));
-            $attachmentPath = $imageName;
+            Storage::disk('public')->put($attachmentPath, (string) $img->encodeUsingFileExtension('jpg', 80));
         }
 
         // ── Dynamic Workflow Check ──

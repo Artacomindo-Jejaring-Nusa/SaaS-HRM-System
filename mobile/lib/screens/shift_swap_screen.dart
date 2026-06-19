@@ -78,6 +78,10 @@ class _ShiftSwapScreenState extends State<ShiftSwapScreen> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
+    final isBlocked = !_isLoading &&
+        (_currentUser?['is_manager'] != true) &&
+        (_currentUser?['attendance_type'] != 'shift');
+
     // Filter logic
     final myRequests = _swaps.where((s) => s['requester_id'] == _currentUser?['id'] || (s['receiver_id'] == _currentUser?['id'] && s['status'] == 'pending_receiver')).toList();
     final managerReview = _swaps.where((s) => s['status'] == 'pending_manager' && _currentUser?['is_manager'] == true).toList();
@@ -89,32 +93,78 @@ class _ShiftSwapScreenState extends State<ShiftSwapScreen> with SingleTickerProv
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 0.5,
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: primaryColor,
-          unselectedLabelColor: Colors.grey,
-          indicatorColor: primaryColor,
-          labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
-          tabs: [
-            const Tab(text: "PERMINTAAN SAYA"),
-            Tab(text: "APPROVAL ${_currentUser?['is_manager'] == true ? '(MANAGER)' : ''}"),
-          ],
-        ),
+        bottom: isBlocked
+            ? null
+            : TabBar(
+                controller: _tabController,
+                labelColor: primaryColor,
+                unselectedLabelColor: Colors.grey,
+                indicatorColor: primaryColor,
+                labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                tabs: [
+                  const Tab(text: "PERMINTAAN SAYA"),
+                  Tab(text: "APPROVAL ${_currentUser?['is_manager'] == true ? '(MANAGER)' : ''}"),
+                ],
+              ),
       ),
-      body: _isLoading 
-          ? const SimpleListSkeleton() 
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildSwapList(myRequests),
-                _buildSwapList(managerReview, isManagerView: true),
-              ],
+      body: _isLoading
+          ? const SimpleListSkeleton()
+          : isBlocked
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(30.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.red[50],
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.lock_person_outlined,
+                            size: 80,
+                            color: Colors.red[800],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          "Akses Terbatas",
+                          style: GoogleFonts.outfit(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[900],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          "Fitur Tukar Shift hanya tersedia untuk karyawan dengan Pola Kehadiran Shift.",
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildSwapList(myRequests),
+                    _buildSwapList(managerReview, isManagerView: true),
+                  ],
+                ),
+      floatingActionButton: isBlocked
+          ? null
+          : FloatingActionButton(
+              onPressed: _showAddSwapDialog,
+              backgroundColor: primaryColor,
+              child: const Icon(Icons.add, color: Colors.white),
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddSwapDialog,
-        backgroundColor: primaryColor,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
     );
   }
 

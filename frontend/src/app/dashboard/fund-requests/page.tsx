@@ -70,21 +70,16 @@ export default function FundRequestsPage() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    let base64Attachment = null;
-    if (formData.attachment) {
-        // Convert File to Base64
-        const reader = new FileReader();
-        base64Attachment = await new Promise((resolve) => {
-            reader.onloadend = () => resolve(reader.result);
-            reader.readAsDataURL(formData.attachment);
-        });
-    }
-
     try {
-      await axiosInstance.post("/fund-requests", {
-          amount: formData.amount,
-          reason: formData.reason,
-          attachment: base64Attachment
+      const payload = new FormData();
+      payload.append("amount", formData.amount);
+      payload.append("reason", formData.reason);
+      if (formData.attachment) {
+        payload.append("attachment", formData.attachment);
+      }
+
+      await axiosInstance.post("/fund-requests", payload, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
       toast.success("Pengajuan dana berhasil dikirim!");
       setIsModalOpen(false);

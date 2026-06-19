@@ -13,6 +13,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Intervention\Image\Laravel\Facades\Image;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -55,10 +56,11 @@ class AttendanceController extends Controller
 
         // Handle Image & Compression
         $imageName = null;
-        if ($request->image) {
-            $imageName = 'attendance/in_'.$user->id.'_'.time().'.jpg';
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+            $imageName = 'attendance/in_'.Str::random(40).'.jpg';
             // Compress and resize image to save storage space (target ~50-80KB)
-            $img = Image::decode($request->image);
+            $img = Image::decode($file);
             $img->scale(width: 800);
             Storage::disk('public')->put($imageName, (string) $img->encodeUsingFileExtension('jpg', 80));
         }
@@ -97,7 +99,7 @@ class AttendanceController extends Controller
             $response = $this->errorResponse('Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli.', 403);
         } elseif ($request->device_id && $user->device_id && $user->device_id !== $request->device_id) {
             $response = $this->errorResponse('HP Anda tidak terdaftar. Gunakan HP yang sama saat absen masuk.', 403);
-        } elseif ($request->image && $user->profile_photo_path && ! $faceMatch) {
+        } elseif ($request->hasFile('image') && $user->profile_photo_path && ! $faceMatch) {
             $response = $this->errorResponse('Wajah tidak cocok dengan profil Anda.', 403);
         } else {
             $response = $this->processCheckOut($attendance, $user, $request);
@@ -110,10 +112,11 @@ class AttendanceController extends Controller
     {
         // Handle Image & Compression
         $imageName = null;
-        if ($request->image) {
-            $imageName = 'attendance/out_'.$user->id.'_'.time().'.jpg';
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+            $imageName = 'attendance/out_'.Str::random(40).'.jpg';
             // Compress and resize image to save storage space
-            $img = Image::decode($request->image);
+            $img = Image::decode($file);
             $img->scale(width: 800);
             Storage::disk('public')->put($imageName, (string) $img->encodeUsingFileExtension('jpg', 80));
         }
@@ -317,7 +320,7 @@ class AttendanceController extends Controller
         }
 
         $faceMatch = true;
-        if ($request->image && $user->profile_photo_path && ! $faceMatch) {
+        if ($request->hasFile('image') && $user->profile_photo_path && ! $faceMatch) {
             return ['message' => 'Wajah tidak cocok dengan profil Anda. Pastikan wajah terlihat jelas!', 'code' => 403];
         }
 

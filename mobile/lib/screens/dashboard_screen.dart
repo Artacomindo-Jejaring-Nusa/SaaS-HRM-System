@@ -41,6 +41,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _userRole = "";
   String? _profilePhotoUrl;
   bool _isManager = false;
+  String? _attendanceType;
 
   // Custom Menu
   List<String> _pinnedMenuIds = ['absen', 'cuti', 'klaim', 'lembur'];
@@ -293,6 +294,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
         _profilePhotoUrl = rawUrl;
         _isManager = userData['is_manager'] ?? false;
+        _attendanceType = userData['attendance_type'];
       });
     }
   }
@@ -328,7 +330,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         result = await ApiService.checkIn(
           position.latitude, 
           position.longitude, 
-          image: null,
+          imagePath: null,
           deviceId: deviceId,
           isMocked: position.isMocked,
         );
@@ -336,7 +338,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         result = await ApiService.checkOut(
           position.latitude, 
           position.longitude, 
-          image: null,
+          imagePath: null,
           deviceId: deviceId,
           isMocked: position.isMocked,
         );
@@ -616,7 +618,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Map<String, Map<String, dynamic>> _getMenuItems() {
-    return {
+    final items = {
       'absen': {
         'icon': Icons.camera_front,
         'label': 'Absen',
@@ -777,6 +779,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'onTap': () => _showUnderDevelopmentAlert(context),
       },
     };
+
+    if (!_isManager && _attendanceType != 'shift') {
+      items.remove('swap');
+    }
+
+    return items;
   }
 
   void _showUnderDevelopmentAlert(BuildContext context) {
@@ -1024,7 +1032,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildHomeContent() {
     final allItems = _getMenuItems();
-    final pinnedItems = _pinnedMenuIds.map((id) => allItems[id]!).toList();
+    final pinnedItems = _pinnedMenuIds
+        .where((id) => allItems.containsKey(id))
+        .map((id) => allItems[id]!)
+        .toList();
     final otherItems = allItems.keys
         .where((id) => !_pinnedMenuIds.contains(id))
         .map((id) => allItems[id]!)

@@ -22,7 +22,7 @@ class StoreAttendanceRequest extends FormRequest
         return [
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
-            'image' => 'nullable|string', // Base64 encoded selfie image
+            'image' => 'nullable|image|mimes:jpeg,png,jpg|max:5120', // Selfie image via multipart/form-data
             'is_mocked' => 'nullable|boolean',
             'device_id' => 'nullable|string|max:255|regex:/^[a-zA-Z0-9_-]+$/',
         ];

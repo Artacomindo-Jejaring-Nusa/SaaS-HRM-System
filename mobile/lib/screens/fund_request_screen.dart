@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'dart:io';
-import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../api/api_service.dart';
 import '../widgets/skeleton_loading.dart';
 import '../widgets/loading_overlay.dart';
@@ -182,17 +181,13 @@ class _FundRequestScreenState extends State<FundRequestScreen> {
                             LoadingDialog.show(context, message: "Mengirim pengajuan dana...");
 
                             try {
-                              String? base64Image;
-                              if (pickedFile != null) {
-                                final bytes = await File(pickedFile!.path).readAsBytes();
-                                base64Image = base64Encode(bytes);
-                              }
-
-                              final res = await ApiService.submitFundRequest({
-                                'amount': amountController.text,
-                                'reason': reasonController.text,
-                                'attachment': base64Image,
-                              });
+                              final res = await ApiService.submitFundRequest(
+                                {
+                                  'amount': amountController.text,
+                                  'reason': reasonController.text,
+                                },
+                                attachmentPath: pickedFile?.path,
+                              );
 
                               LoadingDialog.hide(context);
 

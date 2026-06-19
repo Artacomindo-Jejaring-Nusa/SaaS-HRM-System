@@ -71,6 +71,8 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
   List<_ItemInput> _items = [_ItemInput()];
   List<XFile> _pickedFiles = [];
   bool _isSubmitting = false;
+  bool _isLoadingProfile = true;
+  Map<String, dynamic>? _userProfile;
 
   // Signature
   final SignatureController _signatureCtrl = SignatureController(
@@ -85,6 +87,29 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final profile = await ApiService.getProfile();
+      if (mounted) {
+        setState(() {
+          _userProfile = profile;
+          if (profile != null) {
+            _chosenEmployeeName = profile['name'];
+            if (profile['role'] != null) {
+              _divisiCtrl.text = profile['role']['name'] ?? "Operasional";
+            }
+          }
+          _isLoadingProfile = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingProfile = false);
+      }
+    }
   }
 
   @override
@@ -335,34 +360,25 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
           const SizedBox(height: 8),
           _isCustomEmployee
               ? _textField("Nama Pemohon (Manual)", _empNameCtrl, Icons.person_rounded)
-              : DropdownButtonFormField<String>(
-                  value: _chosenEmployeeName,
-                  decoration: _dropdownDecor("Pilih Karyawan", Icons.person_outline_rounded),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text("-- Pilih Karyawan --")),
-                    ...widget.employees.map((emp) => DropdownMenuItem(
-                          value: emp['name'].toString(),
-                          child: Text(emp['name'].toString()),
-                        )),
-                  ],
-                  onChanged: (val) {
-                    setState(() {
-                      _chosenEmployeeName = val;
-                      if (val != null) {
-                        try {
-                          final emp = widget.employees.firstWhere(
-                            (e) => e['name'].toString() == val,
-                          );
-                          if (emp['role'] != null) {
-                            _divisiCtrl.text = emp['role']['name'] ?? "Operasional";
-                          }
-                        } catch (_) {
-                          // Employee not found, ignore
-                        }
-                      }
-                    });
-                  },
-                ),
+              : _isLoadingProfile
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 10),
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF800000)),
+                        ),
+                      ),
+                    )
+                  : TextFormField(
+                      initialValue: _chosenEmployeeName ?? "-",
+                      key: ValueKey(_chosenEmployeeName),
+                      readOnly: true,
+                      decoration: _dropdownDecor("Nama Karyawan (Otomatis)", Icons.person_outline_rounded).copyWith(
+                        suffixIcon: const Icon(Icons.lock_outline, color: Colors.grey, size: 20),
+                      ),
+                    ),
           Row(
             children: [
               Checkbox(
@@ -371,7 +387,10 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
                 onChanged: (val) => setState(() {
                   _isCustomEmployee = val ?? false;
                   if (!_isCustomEmployee) {
-                    _chosenEmployeeName = null;
+                    _chosenEmployeeName = _userProfile?['name'];
+                    if (_userProfile?['role'] != null) {
+                      _divisiCtrl.text = _userProfile?['role']['name'] ?? "Operasional";
+                    }
                   } else {
                     _empNameCtrl.clear();
                   }
