@@ -22,7 +22,6 @@ class OvertimeController extends Controller
     private const MODEL_OVERTIME = 'App\Models\Overtime';
     private const RULE_REQ_STRING = 'required|string';
     private const NOTIFICATION_OVERTIME_SUCCESS = 'PENGAJUAN LEMBUR BERHASIL';
-    private const ROUTE_APPROVALS = '/dashboard/approvals';
 
     public function index(Request $request)
     {

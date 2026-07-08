@@ -12,6 +12,9 @@ use Illuminate\Support\Facades\Log;
 
 abstract class Controller
 {
+    /** Shared route constant used across approval controllers */
+    protected const ROUTE_APPROVALS = '/dashboard/approvals';
+
     public function successResponse($data, $message = null, $code = 200)
     {
         return response()->json([

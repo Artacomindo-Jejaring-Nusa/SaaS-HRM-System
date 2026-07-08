@@ -14,8 +14,6 @@ class PermitController extends Controller
 {
     use Notifiable;
 
-    private const ROUTE_APPROVALS = '/dashboard/approvals';
-
     public function index(Request $request)
     {
         $query = Permit::with('user');
@@ -274,7 +272,7 @@ class PermitController extends Controller
             // Notify next step
             if (isset($result['approvers'])) {
                 foreach ($result['approvers'] as $nextApprover) {
-                    $this->notify($nextApprover, 'IZIN MENUNGGU PERSETUJUAN', "Pengajuan izin {$permit->user->name} menunggu persetujuan Anda. Tahap: {$result['step_label']}.", 'warning', '/dashboard/approvals');
+                    $this->notify($nextApprover, 'IZIN MENUNGGU PERSETUJUAN', "Pengajuan izin {$permit->user->name} menunggu persetujuan Anda. Tahap: {$result['step_label']}.", 'warning', self::ROUTE_APPROVALS);
                 }
             }
             $this->notify($permit->user, 'IZIN DALAM PROSES', "Pengajuan izin Anda telah disetujui di tahap sebelumnya. Menunggu: {$result['step_label']}.", 'info');
@@ -319,7 +317,7 @@ class PermitController extends Controller
                     'IZIN MENUNGGU PERSETUJUAN HRD',
                     "Izin {$permit->user->name} ({$permit->type}) telah disetujui Supervisor. Mohon segera proses.",
                     'warning',
-                    '/dashboard/approvals'
+                    self::ROUTE_APPROVALS
                 );
             }
 

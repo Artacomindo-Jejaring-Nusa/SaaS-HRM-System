@@ -15,8 +15,6 @@ class LeaveController extends Controller
 
     private const TYPE_ANNUAL_LEAVE = 'Cuti Tahunan';
 
-    private const ROUTE_APPROVALS = '/dashboard/approvals';
-
     public function index(Request $request): \Illuminate\Http\JsonResponse
     {
         $query = Leave::with(['user.supervisor', 'user.company', 'user.role', 'supervisorApprover', 'hrApprover']);
@@ -133,7 +131,7 @@ class LeaveController extends Controller
                     'PENGAJUAN CUTI PERLU PERSETUJUAN',
                     "{$user->name} telah mengajukan cuti ({$request->type}) pada {$request->start_date} s/d {$request->end_date}. Mohon segera tinjau.",
                     'warning',
-                    '/dashboard/approvals'
+                    self::ROUTE_APPROVALS
                 );
             }
         } else {
@@ -169,7 +167,7 @@ class LeaveController extends Controller
                         'PENGAJUAN CUTI BAWAHAN',
                         "{$user->name} telah mengajukan cuti ({$request->type}) pada {$request->start_date}. Mohon segera tinjau.",
                         'warning',
-                        '/dashboard/approvals'
+                        self::ROUTE_APPROVALS
                     );
                 }
             }
@@ -190,7 +188,7 @@ class LeaveController extends Controller
                         'PENGAJUAN CUTI BARU (HRD)',
                         "{$user->name} telah mengajukan cuti ({$request->type}) pada {$request->start_date}. Karyawan tidak memiliki Supervisor, mohon segera tinjau.",
                         'warning',
-                        '/dashboard/approvals'
+                        self::ROUTE_APPROVALS
                     );
                 }
             }
@@ -265,7 +263,7 @@ class LeaveController extends Controller
                         'CUTI MENUNGGU PERSETUJUAN ANDA',
                         "Pengajuan cuti {$leave->user->name} ({$leave->type}) menunggu persetujuan Anda. Tahap: {$result['step_label']}.",
                         'warning',
-                        '/dashboard/approvals'
+                        self::ROUTE_APPROVALS
                     );
                 }
             }
