@@ -15,6 +15,8 @@ class LeaveController extends Controller
 
     private const TYPE_ANNUAL_LEAVE = 'Cuti Tahunan';
 
+    private const ROUTE_APPROVALS = '/dashboard/approvals';
+
     public function index(Request $request): \Illuminate\Http\JsonResponse
     {
         $query = Leave::with(['user.supervisor', 'user.company', 'user.role', 'supervisorApprover', 'hrApprover']);
@@ -284,73 +286,79 @@ class LeaveController extends Controller
     private function approveFallbackWorkflow(Request $request, Leave $leave, $user): \Illuminate\Http\JsonResponse
     {
         $isSupervisor = $leave->user->supervisor_id === $user->id;
-        $isHR = $user->hasPermission('approve-leaves') || $user->role_id === 1;
-
-        $errorResponse = null;
-        $successMsg = null;
+        $isHR         = $user->hasPermission('approve-leaves') || $user->role_id === 1;
 
         if ($leave->status === 'pending_supervisor') {
-            if (! $isSupervisor && ! $isHR) {
-                $errorResponse = response()->json(['status' => 'error', 'message' => 'Anda tidak berhak.'], 403);
-            } elseif ($isSupervisor) {
-                $leave->update([
-                    'status' => 'pending_hr',
-                    'supervisor_approved_by' => $user->id,
-                    'supervisor_approved_at' => now(),
-                    'supervisor_remark' => $request->remark,
-                ]);
-                $this->notify($leave->user, 'CUTI DI-APPROVE ATASAN', "Cuti Anda ({$leave->type}) telah disetujui oleh atasan. Menunggu persetujuan HRD.", 'info');
-
-                // Notify HRD/Admin that leave is now pending their review
-                $hrds = User::where('company_id', $leave->company_id)
-                    ->whereHas('role', function ($q) {
-                        $q->where('name', 'HRD')->orWhere('name', 'Admin');
-                    })
-                    ->get();
-                foreach ($hrds as $hrd) {
-                    $this->notify(
-                        $hrd,
-                        'CUTI MENUNGGU PERSETUJUAN HRD',
-                        "Cuti {$leave->user->name} ({$leave->type}) telah disetujui Supervisor. Mohon segera proses.",
-                        'warning',
-                        '/dashboard/approvals'
-                    );
-                }
-                $successMsg = 'Di-approve oleh atasan. Menunggu proses HRD.';
-
-            } else {
-                $leave->update([
-                    'status' => 'approved',
-                    'approved_by' => $user->id,
-                    'remark' => $request->remark,
-                    'supervisor_approved_by' => $user->id,
-                    'supervisor_approved_at' => now(),
-                ]);
-            }
-        } elseif (in_array($leave->status, ['pending_hr', 'pending'])) {
-            if (! $isHR) {
-                $errorResponse = response()->json(['status' => 'error', 'message' => 'Hanya HRD.'], 403);
-            } else {
-                $leave->update([
-                    'status' => 'approved',
-                    'approved_by' => $user->id,
-                    'remark' => $request->remark,
-                ]);
-            }
-        } else {
-            $errorResponse = response()->json(['status' => 'error', 'message' => 'Status tidak valid.'], 400);
+            return $this->handlePendingSupervisorApproval($request, $leave, $user, $isSupervisor, $isHR);
         }
 
-        if ($errorResponse) {
-            return $errorResponse;
+        if (in_array($leave->status, ['pending_hr', 'pending'])) {
+            return $this->handlePendingHrApproval($request, $leave, $user, $isHR);
         }
 
-        if ($successMsg) {
-            return $this->successResponse(null, $successMsg);
+        return response()->json(['status' => 'error', 'message' => 'Status tidak valid.'], 400);
+    }
+
+    /**
+     * Handle approval when leave is in pending_supervisor state.
+     */
+    private function handlePendingSupervisorApproval(Request $request, Leave $leave, $user, bool $isSupervisor, bool $isHR): \Illuminate\Http\JsonResponse
+    {
+        if (! $isSupervisor && ! $isHR) {
+            return response()->json(['status' => 'error', 'message' => 'Anda tidak berhak.'], 403);
         }
 
-        if ($leave->type === 'Cuti Tahunan') {
-            $days = Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1;
+        if ($isSupervisor) {
+            $leave->update([
+                'status'                => 'pending_hr',
+                'supervisor_approved_by'=> $user->id,
+                'supervisor_approved_at'=> now(),
+                'supervisor_remark'     => $request->remark,
+            ]);
+
+            $this->notify($leave->user, 'CUTI DI-APPROVE ATASAN', "Cuti Anda ({$leave->type}) telah disetujui oleh atasan. Menunggu persetujuan HRD.", 'info');
+            $this->notifyHrdsAfterSupervisorApprove($leave);
+
+            return $this->successResponse(null, 'Di-approve oleh atasan. Menunggu proses HRD.');
+        }
+
+        // HR overrides directly to approved
+        $leave->update([
+            'status'                => 'approved',
+            'approved_by'           => $user->id,
+            'remark'                => $request->remark,
+            'supervisor_approved_by'=> $user->id,
+            'supervisor_approved_at'=> now(),
+        ]);
+
+        return $this->finalizeLeaveApproval($leave);
+    }
+
+    /**
+     * Handle approval when leave is in pending_hr or pending state.
+     */
+    private function handlePendingHrApproval(Request $request, Leave $leave, $user, bool $isHR): \Illuminate\Http\JsonResponse
+    {
+        if (! $isHR) {
+            return response()->json(['status' => 'error', 'message' => 'Hanya HRD.'], 403);
+        }
+
+        $leave->update([
+            'status'     => 'approved',
+            'approved_by'=> $user->id,
+            'remark'     => $request->remark,
+        ]);
+
+        return $this->finalizeLeaveApproval($leave);
+    }
+
+    /**
+     * Deduct annual leave balance and notify submitter after full approval.
+     */
+    private function finalizeLeaveApproval(Leave $leave): \Illuminate\Http\JsonResponse
+    {
+        if ($leave->type === self::TYPE_ANNUAL_LEAVE) {
+            $days      = Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1;
             $leaveUser = $leave->user;
             $leaveUser->leave_balance -= $days;
             $leaveUser->save();
@@ -364,6 +372,26 @@ class LeaveController extends Controller
         );
 
         return $this->successResponse(null, 'Permohonan cuti disetujui.');
+    }
+
+    /**
+     * Notify all HRD/Admin users that a leave is now pending their review.
+     */
+    private function notifyHrdsAfterSupervisorApprove(Leave $leave): void
+    {
+        $hrds = User::where('company_id', $leave->company_id)
+            ->whereHas('role', fn ($q) => $q->where('name', 'HRD')->orWhere('name', 'Admin'))
+            ->get();
+
+        foreach ($hrds as $hrd) {
+            $this->notify(
+                $hrd,
+                'CUTI MENUNGGU PERSETUJUAN HRD',
+                "Cuti {$leave->user->name} ({$leave->type}) telah disetujui Supervisor. Mohon segera proses.",
+                'warning',
+                self::ROUTE_APPROVALS
+            );
+        }
     }
 
     public function reject(Request $request, $id): \Illuminate\Http\JsonResponse
