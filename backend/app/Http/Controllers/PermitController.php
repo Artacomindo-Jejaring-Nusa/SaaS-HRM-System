@@ -148,23 +148,36 @@ class PermitController extends Controller
                 'info'
             );
 
-            // Notify Admins
-            $admins = User::where('company_id', $companyId)
-                ->where(function ($q) {
-                    $q->where('role_id', '>', 1)
-                        ->whereHas('role', function ($q2) {
-                            $q2->where('name', 'HRD')->orWhere('name', 'Admin');
-                        });
-                })
-                ->get();
+            // 1. Notify the User's Immediate Supervisor first
+            if ($user->supervisor_id) {
+                $supervisor = $user->supervisor;
+                if ($supervisor) {
+                    $this->notify(
+                        $supervisor,
+                        'PENGAJUAN IZIN PERLU PERSETUJUAN',
+                        "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}. Mohon segera tinjau.",
+                        'warning',
+                        '/dashboard/approvals'
+                    );
+                }
+            } else {
+                // 2. Notify HRD/Admin ONLY if user has no supervisor
+                $hrds = User::where('company_id', $companyId)
+                    ->where('id', '!=', $user->id)
+                    ->whereHas('role', function ($q) {
+                        $q->where('name', 'HRD')->orWhere('name', 'Admin');
+                    })
+                    ->get();
 
-            foreach ($admins as $admin) {
-                $this->notify(
-                    $admin,
-                    'PENGAJUAN IZIN BARU (ADMIN)',
-                    "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}.",
-                    'warning'
-                );
+                foreach ($hrds as $hrd) {
+                    $this->notify(
+                        $hrd,
+                        'PENGAJUAN IZIN BARU (HRD)',
+                        "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}. Karyawan tidak memiliki Supervisor, mohon segera tinjau.",
+                        'warning',
+                        '/dashboard/approvals'
+                    );
+                }
             }
         }
 
@@ -251,7 +264,51 @@ class PermitController extends Controller
             return $this->successResponse(null, "Di-approve. Menunggu: {$result['step_label']}.");
         }
 
-        // ── Fallback: Default logic ──
+        // ── Fallback: Default logic (Supervisor → HRD flow) ──
+        $isSupervisor = $permit->user->supervisor_id === $user->id;
+        $isHR = $user->hasPermission('approve-permits') || $user->hasPermission('approve-leaves') || $user->role_id === 1;
+
+        // Check if user has HRD/Admin role
+        if (! $isHR && $user->role) {
+            $isHR = in_array($user->role->name, ['HRD', 'Admin', 'Super Admin']);
+        }
+
+        if ($permit->status === 'pending' && $isSupervisor && ! $isHR) {
+            // Supervisor approves → forward to HRD
+            $permit->update(array_merge($overrideData, [
+                'status' => 'pending_hr',
+                'supervisor_approved_by' => $user->id,
+                'supervisor_approved_at' => now(),
+                'supervisor_remark' => $request->remark,
+            ]));
+
+            $this->notify(
+                $permit->user,
+                'IZIN DI-APPROVE ATASAN',
+                "Izin ({$permit->type}) Anda telah disetujui oleh atasan. Menunggu persetujuan HRD.",
+                'info'
+            );
+
+            // Notify HRD/Admin
+            $hrds = User::where('company_id', $permit->company_id)
+                ->whereHas('role', function ($q) {
+                    $q->where('name', 'HRD')->orWhere('name', 'Admin');
+                })
+                ->get();
+            foreach ($hrds as $hrd) {
+                $this->notify(
+                    $hrd,
+                    'IZIN MENUNGGU PERSETUJUAN HRD',
+                    "Izin {$permit->user->name} ({$permit->type}) telah disetujui Supervisor. Mohon segera proses.",
+                    'warning',
+                    '/dashboard/approvals'
+                );
+            }
+
+            return $this->successResponse(null, 'Di-approve oleh atasan. Menunggu proses HRD.');
+        }
+
+        // HRD/Admin or no-supervisor flow → directly approve
         $permit->update(array_merge($overrideData, [
             'status' => 'approved',
             'approved_by' => $request->user()->id,
@@ -272,6 +329,7 @@ class PermitController extends Controller
         );
 
         return $this->successResponse(null, 'Permohonan izin disetujui.');
+
     }
 
     public function reject(Request $request, $id)
