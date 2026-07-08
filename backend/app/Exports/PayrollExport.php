@@ -17,7 +17,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithMapping, WithStyles, WithTitle
 {
-    private const RANGE_HEADERS = 'A2:Z3';
+    private const RANGE_HEADERS = 'A2:AB3';
 
     protected $companyId;
 
@@ -50,7 +50,7 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
             $query->where('month', $this->month);
         }
 
-        if ($this->year) {
+        if ($this->year && $this->year !== 'all') {
             $query->where('year', $this->year);
         }
 
@@ -62,21 +62,21 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
         return [
             [
                 'NO', 'Nama', 'Bagian', 'Gaji', 'Status', 'HH',
-                'Premi BPJS-Kes', 'Jumlah (Gaji+Premi)', 'Pot. JHT-TK (2%)', 'Pot. JP-TK (1%)',
+                'Premi BPJS-Kes', 'Jumlah (Gaji+Premi)', 'Potongan', '',
                 'Tunjangan', '', '',
                 'kyw shift 24 jam', '',
                 'Others-Tambahan lainnya', '', '', '', '',
                 'Jumlah', 'Pot. Absensi', 'THP',
-                'Pembayaran ke :', '', 'Cost Center',
+                'Pembayaran ke :', '', 'Cost Center', '', '',
             ],
             [
                 '', '', '', '', '', '',
-                '', '', '', '',
+                '', '', 'JHT-TK (2%)', 'JP-TK (1%)',
                 'Jabatan', 'Kehadiran', 'Pulsa',
                 'Premi Shift', 'UM Shift-Malam',
                 'OT-Lembur', 'Operasional', 'Kerajinan', 'Rapel', 'Others',
                 '', '', '',
-                'Bank', 'No. Rek.', '',
+                'Bank', 'No. Rek.', 'Artacomindo', 'Narwasthu', 'AJNusa',
             ],
         ];
     }
@@ -84,6 +84,11 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
     public function map($salary): array
     {
         $this->rowNumber++;
+        $row = $this->rowNumber + 3; // Row 1 is title, rows 2-3 are headers. Data starts at row 4.
+        $cc = strtolower($salary->cost_center ?? '');
+        $artacomindoVal = (str_contains($cc, 'artacomindo')) ? "=W{$row}" : "";
+        $narwasthuVal = (str_contains($cc, 'narwastu') || str_contains($cc, 'narwasthu')) ? "=W{$row}" : "";
+        $ajnusaVal = (str_contains($cc, 'ajnusa')) ? "=W{$row}" : "";
 
         return [
             $this->rowNumber,
@@ -93,9 +98,9 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
             $salary->user->ptkp_status ?? '-',
             $salary->working_days,
             $salary->earning_bpjs_kes_premium,
-            $salary->basic_salary + $salary->earning_bpjs_kes_premium,
-            $salary->deduction_bpjs_jht,
-            $salary->deduction_bpjs_jp,
+            "=D{$row}+G{$row}", // Col H: Jumlah (Gaji+Premi)
+            "=D{$row}*2%",      // Col I: Pot. JHT-TK (2%)
+            "=D{$row}*1%",      // Col J: Pot. JP-TK (1%)
             $salary->earning_position_allowance,
             $salary->earning_attendance_allowance,
             $salary->earning_communication_allowance,
@@ -106,12 +111,14 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
             $salary->earning_diligence_bonus,
             $salary->earning_backpay,
             $salary->earning_others,
-            $salary->total_earnings,
+            "=SUM(H{$row}:T{$row})-I{$row}-J{$row}", // Col U: Jumlah
             $salary->deduction_absence,
-            $salary->net_salary,
+            "=U{$row}-I{$row}-J{$row}-V{$row}", // Col W: THP
             $salary->bank_name ?? '-',
             $salary->bank_account_no ?? '-',
-            $salary->cost_center ?? '-',
+            $artacomindoVal,  // Col Z
+            $narwasthuVal,    // Col AA
+            $ajnusaVal,       // Col AB
         ];
     }
 
@@ -121,21 +128,26 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
         $sheet->insertNewRowBefore(1, 1);
         $month = $this->month ?? 'All';
         $year = $this->year ?? date('Y');
-        $sheet->setCellValue('A1', "Perhitungan {$month} {$year} - Confidential");
-        $sheet->mergeCells('A1:Z1');
+        $sheet->setCellValue('A1', "Perhitungan {$month} {$year}-Confidential");
+        $sheet->mergeCells('A1:AB1');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
 
         // Merge Headers (Rows 2 and 3)
-        foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'U', 'V', 'W', 'Z'] as $col) {
+        // Note: 'I' and 'J' are intentionally excluded here — they now form
+        // the "Potongan" group header (merged only across row 2), matching
+        // the same pattern used by Tunjangan / kyw shift 24 jam / Others.
+        foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'U', 'V', 'W'] as $col) {
             $sheet->mergeCells("{$col}2:{$col}3");
         }
-        $sheet->mergeCells('K2:M2'); // Tunjangan
-        $sheet->mergeCells('N2:O2'); // kyw shift 24 jam
-        $sheet->mergeCells('P2:T2'); // Others-Tambahan lainnya
-        $sheet->mergeCells('X2:Y2'); // Pembayaran ke
+        $sheet->mergeCells('I2:J2');   // Potongan
+        $sheet->mergeCells('K2:M2');   // Tunjangan
+        $sheet->mergeCells('N2:O2');   // kyw shift 24 jam
+        $sheet->mergeCells('P2:T2');   // Others-Tambahan lainnya
+        $sheet->mergeCells('X2:Y2');   // Pembayaran ke
+        $sheet->mergeCells('Z2:AB2');  // Cost Center (Artacomindo, Narwasthu, AJNusa)
 
         // Base Style for Headers
-        $sheet->getStyle(self::RANGE_HEADERS)->getFont()->setBold(true)->setSize(9);
+        $sheet->getStyle(self::RANGE_HEADERS)->getFont()->setBold(true)->setSize(10);
         $sheet->getStyle(self::RANGE_HEADERS)->getAlignment()
             ->setHorizontal(Alignment::HORIZONTAL_CENTER)
             ->setVertical(Alignment::VERTICAL_CENTER)
@@ -149,7 +161,8 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
         $sheet->getStyle('P2:T3')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFA9D08E');
 
         // Column Auto-Size
-        foreach (range('A', 'Z') as $col) {
+        $allCols = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB'];
+        foreach ($allCols as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
@@ -157,24 +170,22 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
         $lastRow = $this->rowNumber + 3;
 
         // Format numeric columns and borders for data
-        if ($this->rowNumber > 0) {
-            $sheet->getStyle("A4:Z{$lastRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+        $numericCols = ['D', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'Z', 'AA', 'AB'];
+        $rupiahFormat = '_("Rp"* #,##0_);_("Rp"* \(#,##0\);_("Rp"* "-"_);_(@_)';
 
-            $numericCols = ['D', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W'];
-            $rupiahFormat = '_("Rp"* #,##0_);_("Rp"* \(#,##0\);_("Rp"* "-"_);_(@_)';
+        if ($this->rowNumber > 0) {
+            $sheet->getStyle("A4:AB{$lastRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+
             foreach ($numericCols as $col) {
                 $sheet->getStyle("{$col}4:{$col}{$lastRow}")->getNumberFormat()->setFormatCode($rupiahFormat);
             }
-        } else {
-            $numericCols = ['D', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W'];
-            $rupiahFormat = '_("Rp"* #,##0_);_("Rp"* \(#,##0\);_("Rp"* "-"_);_(@_)';
         }
 
         // --- Add Total Row ---
         $totalRow = $lastRow + 1;
         $sheet->setCellValue("C{$totalRow}", 'Jumlah');
         $sheet->getStyle("C{$totalRow}")->getFont()->setBold(true);
-        $sheet->getStyle("A{$totalRow}:Z{$totalRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+        $sheet->getStyle("A{$totalRow}:AB{$totalRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
         foreach ($numericCols as $col) {
             $sheet->setCellValue("{$col}{$totalRow}", "=SUM({$col}4:{$col}{$lastRow})");
@@ -195,6 +206,27 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
 
     public function drawings()
     {
+        // Check multiple possible paths for the signature image
+        $possiblePaths = [
+            storage_path('app/public/signature.png'),
+            base_path('PAYROLL/Picture1.png'),
+            'c:\laragon\www\SaaS\PAYROLL\Picture1.png',
+        ];
+
+        $signaturePath = null;
+        foreach ($possiblePaths as $path) {
+            if (file_exists($path)) {
+                $signaturePath = $path;
+                break;
+            }
+        }
+
+        // If no signature file found, return empty (no drawing)
+        if (! $signaturePath) {
+            return [];
+        }
+
+
         $count = $this->collection()->count();
         $lastRow = $count + 3; // rows 1, 2, 3 are headers
         $totalRow = $lastRow + 1;
@@ -203,7 +235,7 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
         $drawing = new Drawing;
         $drawing->setName('Signature');
         $drawing->setDescription('Signature');
-        $drawing->setPath('c:\laragon\www\SaaS\PAYROLL\Picture1.png');
+        $drawing->setPath($signaturePath);
         $drawing->setHeight(60);
         // Position it just below "Dibuat oleh," which is sigRow + 1
         $drawing->setCoordinates('A'.($sigRow + 2));

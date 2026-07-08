@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\ApprovalService;
 use App\Services\FCMService;
 use App\Traits\Notifiable;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class PermitController extends Controller
@@ -57,6 +58,7 @@ class PermitController extends Controller
             'start_date' => 'required|date',
             'end_date' => 'nullable|date|after_or_equal:start_date',
             'type' => 'required|string',
+            'category' => 'required|string|in:I,S,L',  // Karyawan tidak bisa pilih A
             'reason' => 'nullable|string',
             'signature' => 'required|string', // Base64 signature
         ]);
@@ -64,8 +66,28 @@ class PermitController extends Controller
         $user = $request->user();
         $companyId = $user->company_id;
 
+        // ── Determine category & deduction ──
+        $category = $request->category;
+        $isDeducted = false;
+
+        // Auto-Alpha rule: Jika izin diajukan setelah jam 13:00 untuk hari ini
+        $now = Carbon::now();
+        $startDate = Carbon::parse($request->start_date);
+        if ($startDate->isToday() && $now->hour >= 13) {
+            $category = 'A';
+            $isDeducted = true;
+        }
+
+        // Kategori S (Sakit) tanpa surat = potong (default, HRD bisa override nanti)
+        if ($category === 'S') {
+            $isDeducted = true; // Default potong, HRD bisa set has_doctor_note=true saat approve
+        }
+
         // ── Dynamic Workflow Check ──
         $workflowResult = ApprovalService::initApproval('permit', $companyId, $user);
+
+        $categoryLabels = ['I' => 'Izin', 'A' => 'Alpha/Mangkir', 'S' => 'Sakit', 'L' => 'Lainnya'];
+        $categoryLabel = $categoryLabels[$category] ?? $category;
 
         if ($workflowResult) {
             $permit = Permit::create([
@@ -74,16 +96,21 @@ class PermitController extends Controller
                 'start_date' => $request->start_date,
                 'end_date' => $request->end_date,
                 'type' => $request->type,
+                'category' => $category,
+                'has_doctor_note' => false,
+                'is_deducted' => $isDeducted,
                 'reason' => $request->reason,
                 'signature' => $request->signature,
                 'status' => $workflowResult['status'],
                 'current_approval_step' => $workflowResult['current_approval_step'],
             ]);
 
+            $alphaNote = $category === 'A' ? ' ⚠️ Otomatis dikategorikan Alpha (pengajuan setelah jam 13:00).' : '';
+
             $this->notify(
                 $user,
                 'PENGAJUAN IZIN BERHASIL',
-                "Permohonan izin ({$request->type}) Anda telah diajukan. Menunggu: {$workflowResult['step_label']}.",
+                "Permohonan izin [{$categoryLabel}] ({$request->type}) Anda telah diajukan. Menunggu: {$workflowResult['step_label']}.{$alphaNote}",
                 'info'
             );
 
@@ -91,7 +118,7 @@ class PermitController extends Controller
                 $this->notify(
                     $approver,
                     'PENGAJUAN IZIN PERLU PERSETUJUAN',
-                    "{$user->name} telah mengajukan izin ({$request->type}) pada {$request->start_date}. Mohon segera tinjau.",
+                    "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}. Mohon segera tinjau.",
                     'warning',
                     '/dashboard/approvals'
                 );
@@ -104,15 +131,20 @@ class PermitController extends Controller
                 'start_date' => $request->start_date,
                 'end_date' => $request->end_date,
                 'type' => $request->type,
+                'category' => $category,
+                'has_doctor_note' => false,
+                'is_deducted' => $isDeducted,
                 'reason' => $request->reason,
                 'signature' => $request->signature,
                 'status' => 'pending',
             ]);
 
+            $alphaNote = $category === 'A' ? ' ⚠️ Otomatis dikategorikan Alpha (pengajuan setelah jam 13:00).' : '';
+
             $this->notify(
                 $user,
                 'PENGAJUAN IZIN BERHASIL',
-                "Permohonan izin ({$request->type}) Anda telah diajukan dan sedang menunggu persetujuan.",
+                "Permohonan izin [{$categoryLabel}] ({$request->type}) Anda telah diajukan dan sedang menunggu persetujuan.{$alphaNote}",
                 'info'
             );
 
@@ -130,7 +162,7 @@ class PermitController extends Controller
                 $this->notify(
                     $admin,
                     'PENGAJUAN IZIN BARU (ADMIN)',
-                    "{$user->name} telah mengajukan izin ({$request->type}) pada {$request->start_date}.",
+                    "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}.",
                     'warning'
                 );
             }
@@ -148,6 +180,29 @@ class PermitController extends Controller
             }
         })->findOrFail($id);
 
+        // ── HRD/Admin Override: kategori, surat dokter, potongan ──
+        $overrideData = [];
+        if ($request->has('category') && in_array($request->category, ['I', 'A', 'S', 'L'])) {
+            $overrideData['category'] = $request->category;
+        }
+        if ($request->has('has_doctor_note')) {
+            $overrideData['has_doctor_note'] = (bool) $request->has_doctor_note;
+        }
+
+        // Recalculate is_deducted based on final category & doctor note
+        $finalCategory = $overrideData['category'] ?? $permit->category;
+        $finalDoctorNote = $overrideData['has_doctor_note'] ?? $permit->has_doctor_note;
+
+        if ($finalCategory === 'A') {
+            $overrideData['is_deducted'] = true;  // Alpha selalu potong
+        } elseif ($finalCategory === 'S') {
+            $overrideData['is_deducted'] = !$finalDoctorNote;  // Sakit + surat = tidak potong
+        } elseif ($finalCategory === 'I') {
+            $overrideData['is_deducted'] = false;  // Izin biasa tidak potong
+        } else {
+            $overrideData['is_deducted'] = false;  // Lainnya tidak potong
+        }
+
         // ── Dynamic Workflow Path ──
         if ($permit->current_approval_step !== null) {
             $result = ApprovalService::processApproval(
@@ -161,10 +216,10 @@ class PermitController extends Controller
                 return $this->errorResponse($result['error'], 403);
             }
 
-            $updateData = [
+            $updateData = array_merge($overrideData, [
                 'status' => $result['status'],
                 'current_approval_step' => $result['current_approval_step'],
-            ];
+            ]);
 
             if ($result['is_final'] && $result['status'] === 'approved') {
                 $updateData['approved_by'] = $user->id;
@@ -197,11 +252,11 @@ class PermitController extends Controller
         }
 
         // ── Fallback: Default logic ──
-        $permit->update([
+        $permit->update(array_merge($overrideData, [
             'status' => 'approved',
             'approved_by' => $request->user()->id,
             'remark' => $request->remark,
-        ]);
+        ]));
 
         $this->notify(
             $permit->user,

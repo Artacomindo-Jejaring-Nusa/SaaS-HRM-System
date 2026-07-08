@@ -1,40 +1,94 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
 import { 
-  Download, Search, Calendar, User, Clock, Filter, Eye, 
-  XCircle, FileSpreadsheet, CheckSquare, Square 
+  Download, Search, Calendar, User, Clock, Filter, 
+  XCircle, FileSpreadsheet, AlertCircle
 } from "lucide-react";
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { ReportSkeleton } from "@/components/Skeleton";
+
+interface Employee {
+  id: number;
+  name: string;
+  nik?: string;
+}
+
+interface Overtime {
+  id: number;
+  user_id: number;
+  date: string;
+  start_time: string;
+  end_time: string;
+  reason?: string;
+  status: string;
+  remark?: string;
+  user?: Employee;
+}
+
+interface DocWithInternal {
+  internal: {
+    getNumberOfPages: () => number;
+  };
+}
 
 export default function OvertimeReportsPage() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<Overtime[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  
+  // Date Filters
+  const [startDate, setStartDate] = useState(
+    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+  );
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedUser, setSelectedUser] = useState("");
+
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<any>(null);
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedItem, setSelectedItem] = useState<Overtime | null>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchInitialData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await axiosInstance.get("/overtimes");
+      const res = await axiosInstance.get("/employees?per_page=100");
+      setEmployees(res.data.data?.data || res.data.data || []);
+    } catch (e) {
+      console.error("Gagal mengambil data karyawan", e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setDataLoading(true);
+      const response = await axiosInstance.get(
+        `/overtimes?per_page=1000&start_date=${startDate}&end_date=${endDate}${
+          selectedUser ? `&user_id=${selectedUser}` : ""
+        }${statusFilter !== 'all' ? `&status=${statusFilter}` : ""}`
+      );
       setData(response.data.data?.data || response.data.data || []);
     } catch (e) {
       console.error("Gagal ambil data lembur", e);
     } finally {
-      setLoading(false);
+      setDataLoading(false);
     }
-  };
+  }, [startDate, endDate, selectedUser, statusFilter]);
+
+  useEffect(() => {
+    fetchInitialData();
+  }, [fetchInitialData]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -45,43 +99,70 @@ export default function OvertimeReportsPage() {
     }
   };
 
-  const filteredData = data.filter(item => {
-    const matchSearch = item.reason?.toLowerCase().includes(search.toLowerCase()) || 
-                      item.user?.name?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'all' || item.status === statusFilter;
-    return matchSearch && matchStatus;
+  const getOvertimeHours = (record: Overtime | null | undefined) => {
+    if (!record || !record.start_time || !record.end_time) return 0;
+    const [sh, sm] = record.start_time.split(':').map(Number);
+    const [eh, em] = record.end_time.split(':').map(Number);
+    const diff = (eh * 60 + em) - (sh * 60 + sm);
+    return parseFloat((diff / 60).toFixed(1));
+  };
+
+  // Helper to format local date key "YYYY-MM-DD"
+  const getLocalDateKey = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  // Generate date list between startDate and endDate
+  const dateList: Date[] = [];
+  if (startDate && endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const temp = new Date(start);
+    let limit = 0;
+    while (temp <= end && limit < 45) { // Limit to 45 days max to prevent horizontal explosion
+      dateList.push(new Date(temp));
+      temp.setDate(temp.getDate() + 1);
+      limit++;
+    }
+  }
+
+  // Group overtimes in memory for fast lookup O(1)
+  const overtimeMap: Record<string, Overtime> = {};
+  data.forEach((record: Overtime) => {
+    if (record.date) {
+      const key = `${record.user_id}_${record.date}`;
+      overtimeMap[key] = record;
+    }
   });
 
-  const selectedData = filteredData.filter(item => selectedIds.includes(item.id));
-
-  const toggleSelect = (id: number) => {
-    setSelectedIds(prev => 
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    );
+  const getIndoDayName = (date: Date) => {
+    const days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+    return days[date.getDay()];
   };
 
-  const toggleSelectAll = () => {
-    if (selectedIds.length === filteredData.length && filteredData.length > 0) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(filteredData.map(item => item.id));
-    }
-  };
+  // Filter employees
+  const filteredEmployees = employees.filter((emp: Employee) => {
+    const matchesSearch = emp.name.toLowerCase().includes(search.toLowerCase());
+    const matchesUser = selectedUser ? String(emp.id) === String(selectedUser) : true;
+    return matchesSearch && matchesUser;
+  });
 
   const exportToExcel = () => {
-    const dataToExport = selectedIds.length > 0 ? selectedData : filteredData;
-
-    if (dataToExport.length === 0) {
+    if (data.length === 0) {
       toast.warning("Tidak ada data untuk diexport!");
       return;
     }
 
-    const exportData = dataToExport.map((item, index) => ({
+    const exportData = data.map((item, index) => ({
       "No": index + 1,
       "Nama Karyawan": item.user?.name || "Karyawan",
       "Tanggal Lembur": item.date,
-      "Waktu Mulai": item.start_time.substring(0,5),
-      "Waktu Selesai": item.end_time.substring(0,5),
+      "Waktu Mulai": item.start_time.substring(0, 5),
+      "Waktu Selesai": item.end_time.substring(0, 5),
+      "Durasi (Jam)": getOvertimeHours(item),
       "Alasan Lembur": item.reason || "-",
       "Status": item.status === 'approved' ? 'Disetujui' : item.status === 'rejected' ? 'Ditolak' : 'Menunggu',
       "Catatan Admin": item.remark || "-"
@@ -90,7 +171,7 @@ export default function OvertimeReportsPage() {
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     worksheet['!cols'] = [
       { wch: 5 },  { wch: 25 }, { wch: 15 }, { wch: 15 }, 
-      { wch: 15 }, { wch: 40 }, { wch: 15 }, { wch: 30 }
+      { wch: 15 }, { wch: 15 }, { wch: 40 }, { wch: 15 }, { wch: 30 }
     ];
 
     const workbook = XLSX.utils.book_new();
@@ -99,9 +180,7 @@ export default function OvertimeReportsPage() {
   };
 
   const generatePDF = async () => {
-    const dataToPrint = selectedIds.length > 0 ? selectedData : filteredData;
-
-    if (dataToPrint.length === 0) {
+    if (data.length === 0) {
       toast.warning("Tidak ada data untuk dicetak!");
       return;
     }
@@ -140,22 +219,23 @@ export default function OvertimeReportsPage() {
 
     doc.setFontSize(9);
     doc.setTextColor(50);
-    doc.text(`Status Filter: ${statusFilter.toUpperCase()}`, 15, 45);
-    doc.text(`Total Baris: ${dataToPrint.length}`, 170, 45);
+    doc.text(`Periode: ${startDate} s.d. ${endDate}`, 15, 45);
+    doc.text(`Total Baris: ${data.length}`, 170, 45);
 
     // Table
-    const tableData = dataToPrint.map((item, index) => [
+    const tableData = data.map((item, index) => [
       index + 1,
       item.user?.name || "Karyawan",
       item.date,
-      `${item.start_time.substring(0,5)} - ${item.end_time.substring(0,5)}`,
+      `${item.start_time.substring(0, 5)} - ${item.end_time.substring(0, 5)}`,
+      getOvertimeHours(item) + " jam",
       item.reason || "-",
       item.status?.toUpperCase()
     ]);
 
     autoTable(doc, {
       startY: 50,
-      head: [['NO', 'KARYAWAN', 'TANGGAL', 'JAM LEMBUR', 'ALASAN', 'STATUS']],
+      head: [['NO', 'KARYAWAN', 'TANGGAL', 'JAM LEMBUR', 'DURASI', 'ALASAN', 'STATUS']],
       body: tableData,
       headStyles: { 
         fillColor: [139, 0, 0], 
@@ -167,13 +247,14 @@ export default function OvertimeReportsPage() {
         0: { halign: 'center', cellWidth: 10 },
         2: { halign: 'center', cellWidth: 25 },
         3: { halign: 'center', cellWidth: 35 },
-        5: { halign: 'center' }
+        4: { halign: 'center', cellWidth: 20 },
+        6: { halign: 'center' }
       },
       styles: { fontSize: 8, cellPadding: 3 },
       alternateRowStyles: { fillColor: [252, 252, 252] },
     });
 
-    const pageCount = (doc as any).internal.getNumberOfPages();
+    const pageCount = (doc as unknown as DocWithInternal).internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
         doc.setFontSize(8);
@@ -184,23 +265,169 @@ export default function OvertimeReportsPage() {
     doc.save(`Laporan_Lembur_${new Date().getTime()}.pdf`);
   };
 
+  const renderPivotContent = () => {
+    if (dataLoading) {
+      return (
+        <div className="p-32 text-center flex flex-col items-center justify-center">
+          <div className="w-10 h-10 border-4 border-gray-100 border-t-[#8B0000] rounded-full animate-spin mb-4" />
+          <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Mempersiapkan Pivot Table...</p>
+        </div>
+      );
+    }
+
+    if (filteredEmployees.length === 0) {
+      return (
+        <div className="p-24 text-center flex flex-col items-center opacity-40">
+           <AlertCircle size={64} className="mb-4 text-[#8B0000]/20" />
+           <h3 className="font-bold text-gray-900 tracking-wider uppercase">Data Kosong</h3>
+           <p className="text-xs">Tidak ada karyawan yang cocok.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full overflow-x-auto relative scrollbar-thin">
+        <table className="text-left border-collapse table-fixed" style={{ width: `${220 + dateList.length * 85 + 160}px`, minWidth: '100%' }}>
+          <thead>
+            <tr className="bg-[#f9f9fb] border-b border-[#ebedf0]">
+              {/* Sticky left Employee header */}
+              <th className="sticky left-0 bg-[#f9f9fb] z-30 px-4 py-3 text-xs font-bold text-[#5f6368] uppercase tracking-wider min-w-[220px] max-w-[220px] w-[220px] border-r border-[#ebedf0] shadow-[2px_0_5px_rgba(0,0,0,0.04)]">
+                Karyawan
+              </th>
+              
+              {/* Date Column headers */}
+              {dateList.map((date) => {
+                const isWk = date.getDay() === 0 || date.getDay() === 6;
+                return (
+                  <th 
+                    key={date.toISOString()} 
+                    className={`px-2 py-2 text-center text-[10px] font-bold uppercase tracking-tighter min-w-[85px] max-w-[85px] w-[85px] border-r border-[#ebedf0] leading-tight ${isWk ? 'bg-rose-50/40 text-rose-600' : 'text-[#5f6368]'}`}
+                  >
+                    <div>{date.getDate()} {getIndoDayName(date)}</div>
+                    <div className="text-[8px] text-gray-400 font-normal mt-0.5">
+                      {date.toLocaleString('id-ID', { month: 'short' })}
+                    </div>
+                  </th>
+                );
+              })}
+
+              {/* Summary columns */}
+              <th className="px-3 py-3 text-center text-[10px] font-bold text-[#03543f] uppercase tracking-wider min-w-[80px] max-w-[80px] w-[80px] bg-[#def7ec]/30 border-r border-[#ebedf0]">
+                Total Hari
+              </th>
+              <th className="px-3 py-3 text-center text-[10px] font-bold text-[#723b13] uppercase tracking-wider min-w-[80px] max-w-[80px] w-[80px] bg-[#fdf6b2]/30">
+                Total Jam
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#ebedf0]">
+            {filteredEmployees.map((emp: Employee, rowIdx: number) => {
+              let totalDays = 0;
+              let totalHours = 0;
+
+              dateList.forEach((date) => {
+                const dateStr = getLocalDateKey(date);
+                const key = `${emp.id}_${dateStr}`;
+                const record = overtimeMap[key];
+                if (record && record.status === 'approved') {
+                  totalDays++;
+                  totalHours += getOvertimeHours(record);
+                }
+              });
+
+              return (
+                <tr key={emp.id} className="hover:bg-[#f9f9fb] transition-colors group">
+                  {/* Sticky left Employee cell */}
+                  <td className="sticky left-0 bg-white group-hover:bg-[#f9f9fb] z-20 px-4 py-3 border-r border-[#ebedf0] shadow-[2px_0_5px_rgba(0,0,0,0.04)] transition-colors min-w-[220px] max-w-[220px] w-[220px]">
+                    <div className="flex items-center gap-2.5">
+                      <div 
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-sm"
+                        style={{ 
+                          background: `hsl(${(rowIdx * 53 + 20) % 360}, 50%, 45%)` 
+                        }}
+                      >
+                        {emp.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-semibold text-xs text-[#1a1a2e] truncate">{emp.name}</span>
+                        <span className="text-[9px] text-[#8c8fa3] font-mono leading-none mt-0.5">NIK: {emp.nik || `EMP${emp.id}`}</span>
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Render Overtime cells */}
+                  {dateList.map((date) => {
+                    const dateStr = getLocalDateKey(date);
+                    const key = `${emp.id}_${dateStr}`;
+                    const record = overtimeMap[key];
+                    const isWk = date.getDay() === 0 || date.getDay() === 6;
+
+                    const hours = getOvertimeHours(record);
+                    const range = record ? `${record.start_time.substring(0, 5)} - ${record.end_time.substring(0, 5)}` : "";
+
+                    const cellClickHandler = record ? () => {
+                      setSelectedItem(record);
+                      setIsDetailModalOpen(true);
+                    } : undefined;
+
+                    return (
+                      <td 
+                        key={date.toISOString()}
+                        onClick={cellClickHandler}
+                        className={`px-1 py-1.5 text-center text-[10px] border-r border-[#ebedf0] align-middle select-none transition-all ${record ? 'cursor-pointer hover:brightness-95 hover:scale-95' : ''} ${isWk && !record ? 'bg-gray-50/40' : ''}`}
+                      >
+                        {record ? (
+                          <div className={`py-1 px-1 flex flex-col items-center justify-center font-bold font-mono tracking-tighter rounded-md border text-[9px] ${
+                            record.status === 'approved' 
+                              ? 'bg-amber-50 text-amber-800 border-amber-100/70 shadow-[inset_0_0_0_1px_rgba(217,119,6,0.1)]' 
+                              : record.status === 'rejected'
+                              ? 'bg-rose-50 text-rose-800 border-rose-100/70 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.1)]'
+                              : 'bg-gray-50 text-gray-800 border-gray-100/70 shadow-[inset_0_0_0_1px_rgba(156,163,175,0.1)]'
+                          }`}>
+                            <span className="leading-tight">{hours} Jam</span>
+                            <span className="text-[7.5px] leading-tight opacity-65 mt-0.5">{range}</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-300 font-normal">
+                            {isWk ? <span className="text-[9px] text-gray-300">Off</span> : "-"}
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
+
+                  {/* Summary Columns */}
+                  <td className="px-2 py-3 text-center text-xs font-bold text-[#03543f] bg-[#def7ec]/15 border-r border-[#ebedf0]">
+                    {totalDays} Hari
+                  </td>
+                  <td className="px-2 py-3 text-center text-xs font-bold text-[#723b13] bg-[#fdf6b2]/15">
+                    {totalHours.toFixed(1)} Jam
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  if (loading) return <ReportSkeleton />;
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 w-full">
       <div className="dash-page-header">
-        <div>
-          <h1 className="dash-page-title">Riwayat & Laporan Lembur</h1>
-          <p className="dash-page-desc">Data komprehensif riwayat pengajuan lembur seluruh karyawan.</p>
+        <div className="flex items-center gap-4">
+           <div className="w-14 h-14 rounded-2xl bg-[#8B0000] text-white flex items-center justify-center shadow-xl shadow-rose-100/50 group transition-transform hover:rotate-3 border-4 border-rose-50/50 shrink-0">
+              <Clock size={26} />
+           </div>
+           <div>
+              <h1 className="dash-page-title text-[#8B0000] font-black tracking-tight">Riwayat & Laporan Lembur</h1>
+              <p className="dash-page-desc font-medium text-gray-500">Data komprehensif riwayat pengajuan lembur seluruh karyawan.</p>
+           </div>
         </div>
         <div className="dash-page-actions">
-           <div className="bg-gray-100 px-4 py-2 rounded-xl flex items-center gap-2">
-              <span className="text-[10px] font-black text-gray-400 uppercase">
-                {selectedIds.length > 0 ? `${selectedIds.length} Terpilih` : 'Total Data:'}
-              </span>
-              <span className="text-sm font-bold text-[#8B0000]">
-                {selectedIds.length > 0 ? selectedIds.length : filteredData.length} Baris
-              </span>
-           </div>
-          <button className="dash-btn dash-btn-primary bg-[#107c41] hover:bg-[#0c6130] text-white!" onClick={exportToExcel}>
+          <button className="dash-btn shadow-lg shadow-rose-100 bg-[#107c41] hover:bg-[#0c6130] text-white flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all" onClick={exportToExcel}>
             <FileSpreadsheet size={15} />
             Export Excel
           </button>
@@ -211,108 +438,80 @@ export default function OvertimeReportsPage() {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+      {/* Filters Toolbar */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6 bg-white p-4 rounded-xl border border-[#ebedf0] shadow-sm">
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+            <Calendar size={12} className="text-[#8B0000]" /> Dari Tanggal
+          </label>
+          <input 
+            type="date" 
+            className="w-full px-3 py-2 text-sm rounded-lg border border-[#ebedf0] bg-[#f9f9fb] focus:outline-none focus:ring-2 focus:ring-[#8B0000]/15" 
+            value={startDate} 
+            onChange={(e) => setStartDate(e.target.value)} 
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+            <Calendar size={12} className="text-[#8B0000]" /> Sampai Tanggal
+          </label>
+          <input 
+            type="date" 
+            className="w-full px-3 py-2 text-sm rounded-lg border border-[#ebedf0] bg-[#f9f9fb] focus:outline-none focus:ring-2 focus:ring-[#8B0000]/15" 
+            value={endDate} 
+            onChange={(e) => setEndDate(e.target.value)} 
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+            <User size={12} className="text-[#8B0000]" /> Pilih Karyawan
+          </label>
+          <select 
+            className="w-full px-3 py-2 text-sm rounded-lg border border-[#ebedf0] bg-[#f9f9fb] focus:outline-none focus:ring-2 focus:ring-[#8B0000]/15 font-medium" 
+            value={selectedUser} 
+            onChange={(e) => setSelectedUser(e.target.value)}
+          >
+            <option value="">Semua Karyawan</option>
+            {employees.map((emp: Employee) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+            <Filter size={12} className="text-[#8B0000]" /> Status
+          </label>
+          <select 
+            className="w-full px-3 py-2 text-sm rounded-lg border border-[#ebedf0] bg-[#f9f9fb] focus:outline-none focus:ring-2 focus:ring-[#8B0000]/15 font-medium" 
+            value={statusFilter} 
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">Semua Status</option>
+            <option value="pending">Menunggu</option>
+            <option value="approved">Disetujui</option>
+            <option value="rejected">Ditolak</option>
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+            <Search size={12} className="text-[#8B0000]" /> Cari Nama
+          </label>
           <input 
             type="text" 
-            placeholder="Cari karyawan atau alasan lembur..." 
-            className="w-full pl-11 pr-4 h-12 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-[#8B0000]/20 transition-all font-medium"
+            placeholder="Cari nama karyawan..." 
+            className="w-full px-3 py-2 text-sm rounded-lg border border-[#ebedf0] bg-[#f9f9fb] focus:outline-none focus:ring-2 focus:ring-[#8B0000]/15" 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex gap-2">
-            <select 
-                title="Status Filter"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-12 bg-gray-50 border-none rounded-xl text-sm px-4 focus:ring-2 focus:ring-[#8B0000]/20 font-bold text-gray-600 appearance-none min-w-[140px]"
-            >
-                <option value="all">Semua Status</option>
-                <option value="pending">Menunggu</option>
-                <option value="approved">Disetujui</option>
-                <option value="rejected">Ditolak</option>
-            </select>
-        </div>
       </div>
 
-      <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden mb-10">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-4 py-4 w-10">
-                   <button 
-                      title="Select All"
-                      onClick={toggleSelectAll}
-                      className="text-gray-400 hover:text-[#8B0000] transition-colors"
-                   >
-                     {selectedIds.length === filteredData.length && filteredData.length > 0 ? <CheckSquare size={18} /> : <Square size={18} />}
-                   </button>
-                </th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Karyawan</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Tanggal</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Waktu</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Alasan</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {loading ? (
-                  <tr><td colSpan={7} className="px-6 py-12 text-center text-gray-400 font-bold italic">Memuat data laporan...</td></tr>
-              ) : filteredData.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-20 text-center text-gray-400 font-bold">Tidak ada riwayat lembur yang ditemukan.</td>
-                  </tr>
-              ) : filteredData.map((item) => (
-                <tr key={item.id} className={`hover:bg-gray-50/50 transition-colors group ${selectedIds.includes(item.id) ? 'bg-red-50/30' : ''}`}>
-                  <td className="px-4 py-5">
-                    <button 
-                      title="Select Row"
-                      onClick={() => toggleSelect(item.id)}
-                      className={`${selectedIds.includes(item.id) ? 'text-[#8B0000]' : 'text-gray-300'} hover:text-[#8B0000] transition-colors`}
-                    >
-                      {selectedIds.includes(item.id) ? <CheckSquare size={18} /> : <Square size={18} />}
-                    </button>
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-[#8B0000]/5 text-[#8B0000] flex items-center justify-center text-xs font-black shadow-sm uppercase italic">
-                        {item.user?.name?.charAt(0) || "K"}
-                      </div>
-                      <span className="text-sm font-bold text-gray-900">{item.user?.name || "Karyawan"}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5 text-sm text-gray-700 font-medium">
-                    {item.date}
-                  </td>
-                  <td className="px-6 py-5 text-sm text-gray-700 font-medium">
-                    {item.start_time.substring(0,5)} - {item.end_time.substring(0,5)}
-                  </td>
-                  <td className="px-6 py-5">
-                    <span className="text-sm text-gray-600 block line-clamp-1">{item.reason || "-"}</span>
-                  </td>
-                  <td className="px-6 py-5">{getStatusBadge(item.status)}</td>
-                  <td className="px-6 py-5 text-center">
-                    <button 
-                        onClick={() => { setSelectedItem(item); setIsDetailModalOpen(true); }}
-                        className="p-2 text-gray-400 hover:text-[#8B0000] hover:bg-red-50 rounded-lg transition-all"
-                    >
-                        <Eye size={18} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* Grid Pivot Table Spreadsheet */}
+      <div className="bg-white rounded-xl border border-[#ebedf0] overflow-hidden shadow-sm min-h-[400px]">
+        {renderPivotContent()}
       </div>
 
-       {/* Detail Modal */}
-       {isDetailModalOpen && selectedItem && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+      {/* Detail Modal */}
+      {isDetailModalOpen && selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="font-bold text-gray-900 text-lg">Detail Laporan Lembur</h3>
@@ -332,7 +531,7 @@ export default function OvertimeReportsPage() {
                     </div>
                     <div>
                         <p className="text-sm font-bold text-gray-900 leading-tight">{selectedItem.user?.name || "Karyawan"}</p>
-                        <p className="text-xs text-gray-500 mt-1 uppercase font-bold tracking-widest">{selectedItem.status}</p>
+                        <div className="mt-1">{getStatusBadge(selectedItem.status)}</div>
                     </div>
                  </div>
 
@@ -343,13 +542,13 @@ export default function OvertimeReportsPage() {
                     </div>
                     <div className="p-4 border border-gray-100 rounded-2xl bg-white shadow-sm">
                         <p className="text-[10px] uppercase font-black text-gray-400 mb-1">DURASI</p>
-                        <p className="text-sm font-bold text-gray-900">{selectedItem.start_time.substring(0,5)} - {selectedItem.end_time.substring(0,5)}</p>
+                        <p className="text-sm font-bold text-gray-900">{selectedItem.start_time.substring(0, 5)} - {selectedItem.end_time.substring(0, 5)} ({getOvertimeHours(selectedItem)} Jam)</p>
                     </div>
                  </div>
 
                  <div className="p-5 bg-gray-50 border border-gray-100 rounded-2xl shadow-inner-sm">
                     <p className="text-[10px] uppercase font-black text-gray-400 mb-2 tracking-widest">ALASAN LEMBUR</p>
-                    <p className="text-sm text-gray-600 leading-relaxed italic font-medium">"{selectedItem.reason || '-'}"</p>
+                    <p className="text-sm text-gray-600 leading-relaxed italic font-medium">&quot;{selectedItem.reason || '-'}&quot;</p>
                  </div>
 
                  {selectedItem.remark && (
@@ -367,11 +566,11 @@ export default function OvertimeReportsPage() {
                   className="w-full py-3.5 text-sm font-bold text-white bg-gray-900 rounded-xl hover:bg-black transition shadow-lg active:scale-95"
                 >
                   Tutup Laporan
-                </button>
+               </button>
             </div>
           </div>
         </div>
-       )}
+      )}
     </div>
   );
 }

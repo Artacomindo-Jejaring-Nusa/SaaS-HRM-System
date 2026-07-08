@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
 
 import { useRouter } from "next/navigation";
@@ -46,7 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  const fetchUser = async () => {
+  const fetchUser = useCallback(async () => {
     try {
       const response = await axiosInstance.get("/user");
       // Handle both { data: { user: ... } } and { data: ... }
@@ -54,7 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (userData) {
         setUser(userData);
-        const slugs = userData.role?.permissions?.map((p: any) => p.slug) || [];
+        const slugs = userData.role?.permissions?.map((p: { slug: string }) => p.slug) || [];
         setPermissions(slugs);
       }
     } catch (e) {
@@ -62,13 +62,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const logout = async () => {
     // Call backend to revoke server-side tokens
     try {
       await axiosInstance.post("/logout");
-    } catch (e) {
+    } catch {
       // Ignore errors — still clear local tokens
     }
     Cookies.remove("token");
@@ -78,7 +78,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     fetchUser();
-  }, []);
+  }, [fetchUser]);
 
   const hasPermission = (permission?: string) => {
     if (!permission) return true;

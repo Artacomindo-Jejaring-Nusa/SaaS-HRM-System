@@ -14,6 +14,9 @@ class Permit extends Model
         'start_date',
         'end_date',
         'type',
+        'category',        // I=Izin, A=Alpha/Mangkir, S=Sakit, L=Lainnya
+        'has_doctor_note',  // Khusus kategori S — ditentukan oleh HRD
+        'is_deducted',      // Potong gaji atau tidak
         'reason',
         'status',
         'current_approval_step',
@@ -21,6 +24,11 @@ class Permit extends Model
         'remark',
         'signature',
         'attachment',
+    ];
+
+    protected $casts = [
+        'has_doctor_note' => 'boolean',
+        'is_deducted' => 'boolean',
     ];
 
     public function user()

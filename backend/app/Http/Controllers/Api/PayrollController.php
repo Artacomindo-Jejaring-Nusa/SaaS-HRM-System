@@ -90,26 +90,34 @@ class PayrollController extends Controller
             return response()->json(['message' => 'Silakan konfigurasi payroll settings terlebih dahulu.'], 422);
         }
 
+        $cutoffDay = $settings->cutoff_day ?? 20;
+
+        if ($cutoffDay >= 28 || $cutoffDay <= 0) {
+            $startDate = Carbon::createFromDate($year, $monthNum, 1)->startOfDay();
+            $endDate = $startDate->copy()->endOfMonth()->endOfDay();
+        } else {
+            $endDate = Carbon::createFromDate($year, $monthNum, $cutoffDay)->endOfDay();
+            $startDate = $endDate->copy()->subMonth()->addDay()->startOfDay();
+        }
+
         // Load employees with attendance & overtime data
         $users = User::where('company_id', $companyId)
-            ->with(['role', 'attendances' => function ($q) use ($monthNum, $year) {
-                $q->whereMonth('check_in', $monthNum)->whereYear('check_in', $year);
+            ->with(['role', 'attendances' => function ($q) use ($startDate, $endDate) {
+                $q->whereBetween('check_in', [$startDate, $endDate]);
             }])
-            ->with(['overtimes' => function ($q) use ($monthNum, $year) {
-                $q->where('status', 'approved')->whereMonth('date', $monthNum)->whereYear('date', $year);
+            ->with(['overtimes' => function ($q) use ($startDate, $endDate) {
+                $q->where('status', 'approved')->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()]);
             }])
-            ->with(['permits' => function ($q) use ($monthNum, $year) {
+            ->with(['permits' => function ($q) use ($startDate, $endDate) {
                 $q->where('status', 'approved')
-                    ->where(function ($query) use ($monthNum, $year) {
-                        $query->whereMonth('start_date', $monthNum)->whereYear('start_date', $year)
-                            ->orWhereMonth('end_date', $monthNum)->whereYear('end_date', $year);
+                    ->where(function ($query) use ($startDate, $endDate) {
+                        $query->whereBetween('start_date', [$startDate->toDateString(), $endDate->toDateString()])
+                            ->orWhereBetween('end_date', [$startDate->toDateString(), $endDate->toDateString()]);
                     });
             }])
             ->get();
 
-        // Calculate total working days in this month (weekdays)
-        $startDate = Carbon::createFromDate($year, $monthNum, 1);
-        $endDate = $startDate->copy()->endOfMonth();
+        // Calculate total working days in this period (weekdays)
         $totalWorkingDays = 0;
         for ($d = $startDate->copy(); $d->lte($endDate); $d->addDay()) {
             if (! $d->isWeekend()) {
@@ -117,10 +125,9 @@ class PayrollController extends Controller
             }
         }
 
-        // Fetch holidays for the month
+        // Fetch holidays for the period
         $holidays = Holiday::where('company_id', $companyId)
-            ->whereMonth('date', $monthNum)
-            ->whereYear('date', $year)
+            ->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()])
             ->pluck('date')
             ->toArray();
 
@@ -270,7 +277,7 @@ class PayrollController extends Controller
 
         $salary->bank_name = $user->bank_name ?? '-';
         $salary->bank_account_no = $user->bank_account_no ?? '-';
-        $salary->cost_center = $user->cost_center ?? 'PT. Artacomindo Jejaring Nusa';
+        $salary->cost_center = $user->cost_center ?? 'PT. Artacomindotama';
         $salary->status = 'draft';
 
         $salary->calculateTotals();

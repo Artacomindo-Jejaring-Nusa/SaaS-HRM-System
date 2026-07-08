@@ -55,7 +55,11 @@ class RealCompanySeeder extends Seeder
             'CEO / Direktur Utama' => Permission::all()->pluck('id'),
 
             // HRD Manager (Full HR Authority)
-            'HRD Manager' => Permission::whereIn('group', ['Pegawai', 'Cuti', 'Perizinan', 'Pengaturan', 'Payroll'])->pluck('id'),
+            'HRD Manager' => Permission::whereIn('group', [
+                'Pegawai', 'Cuti', 'Perizinan', 'Pengaturan', 'Payroll', 'Reimbursement', 
+                'Lembur', 'Operasional', 'Performa', 'Kehadiran', 'Tukar Shift', 'Tugas', 
+                'Dokumen', 'Keuangan'
+            ])->pluck('id'),
 
             // HRD (Staff level - Can view & entry but limited approval/deletion)
             'HRD' => Permission::whereIn('slug', [
@@ -63,7 +67,7 @@ class RealCompanySeeder extends Seeder
                 'approve-permits', 'view-vehicle-logs',
             ])->pluck('id'),
 
-            'Finance Manager' => Permission::whereIn('group', ['Reimbursement', 'Payroll'])->pluck('id'),
+            'Finance Manager' => Permission::whereIn('group', ['Reimbursement', 'Payroll', 'Keuangan'])->pluck('id'),
             'IT Manager' => Permission::whereIn('group', ['Tugas', 'Pengaturan'])->pluck('id'),
             'Supervisor Operational' => Permission::whereIn('slug', ['approve-leaves', 'approve-overtimes', 'view-employees', 'manage-tasks'])->pluck('id'),
             'Staff Karyawan' => Permission::whereIn('slug', ['view-directory', 'view-announcements'])->pluck('id'),
@@ -86,6 +90,13 @@ class RealCompanySeeder extends Seeder
                 'role_id' => $roleObjects['CEO / Direktur Utama']->id,
                 'nik' => 'CEO001',
                 'join_date' => '2020-01-01',
+                'basic_salary' => 15000000,
+                'fixed_allowance' => 1500000,
+                'ptkp_status' => 'K/0',
+                'bank_name' => 'BCA',
+                'bank_account_no' => '1234567890',
+                'cost_center' => 'PT. Artacomindotama',
+                'payroll_type' => 'monthly',
             ]
         );
 
@@ -100,6 +111,13 @@ class RealCompanySeeder extends Seeder
                 'supervisor_id' => $ceo->id,
                 'nik' => 'HRM001',
                 'join_date' => '2021-02-15',
+                'basic_salary' => 9500000,
+                'fixed_allowance' => 950000,
+                'ptkp_status' => 'TK/0',
+                'bank_name' => 'BCA',
+                'bank_account_no' => '1234567891',
+                'cost_center' => 'PT. Narwastu',
+                'payroll_type' => 'monthly',
             ]
         );
 
@@ -115,6 +133,13 @@ class RealCompanySeeder extends Seeder
                 'nik' => 'STF002',
                 'join_date' => '2022-03-10',
                 'leave_balance' => 12,
+                'basic_salary' => 5500000,
+                'fixed_allowance' => 550000,
+                'ptkp_status' => 'TK/0',
+                'bank_name' => 'BCA',
+                'bank_account_no' => '1234567892',
+                'cost_center' => 'AJNusa',
+                'payroll_type' => 'monthly',
             ]
         );
 
@@ -127,6 +152,13 @@ class RealCompanySeeder extends Seeder
                 'role_id' => $roleObjects['Finance Manager']->id,
                 'supervisor_id' => $ceo->id,
                 'nik' => 'FIN001',
+                'basic_salary' => 10000000,
+                'fixed_allowance' => 1000000,
+                'ptkp_status' => 'TK/0',
+                'bank_name' => 'BCA',
+                'bank_account_no' => '1234567893',
+                'cost_center' => 'PT. Artacomindotama',
+                'payroll_type' => 'monthly',
             ]
         );
 
@@ -139,6 +171,13 @@ class RealCompanySeeder extends Seeder
                 'role_id' => $roleObjects['Supervisor Operational']->id,
                 'supervisor_id' => $ceo->id,
                 'nik' => 'SUP001',
+                'basic_salary' => 7500000,
+                'fixed_allowance' => 750000,
+                'ptkp_status' => 'K/1',
+                'bank_name' => 'BCA',
+                'bank_account_no' => '1234567894',
+                'cost_center' => 'PT. Narwastu',
+                'payroll_type' => 'monthly',
             ]
         );
 
@@ -152,6 +191,13 @@ class RealCompanySeeder extends Seeder
                 'supervisor_id' => $supervisor->id,
                 'nik' => 'STF001',
                 'leave_balance' => 12,
+                'basic_salary' => 5000000,
+                'fixed_allowance' => 500000,
+                'ptkp_status' => 'TK/0',
+                'bank_name' => 'BCA',
+                'bank_account_no' => '1234567895',
+                'cost_center' => 'AJNusa',
+                'payroll_type' => 'monthly',
             ]
         );
 
@@ -163,6 +209,13 @@ class RealCompanySeeder extends Seeder
                 'company_id' => $company->id,
                 'role_id' => $roleObjects['Super Admin']->id,
                 'nik' => 'ADMIN01',
+                'basic_salary' => 6000000,
+                'fixed_allowance' => 600000,
+                'ptkp_status' => 'TK/0',
+                'bank_name' => 'BCA',
+                'bank_account_no' => '1234567896',
+                'cost_center' => 'PT. Artacomindotama',
+                'payroll_type' => 'monthly',
             ]
         );
     }

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, Suspense, useCallback } from "react";
+import { useEffect, useState, Suspense } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
-import { Plus, Search, Edit2, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, ArrowRightLeft, UserX, ShieldAlert, CreditCard, Mail, MapPin, Phone, Building2, Calendar, BadgeCheck, Clock, Eye } from "lucide-react";
+import { Plus, Search, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, ArrowRightLeft, UserX, ShieldAlert, CreditCard, Mail, MapPin, Phone, Building2, BadgeCheck, Clock, Eye, Key } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
 import { PermissionGuard } from "@/components/PermissionGuard";
@@ -49,6 +49,7 @@ interface Employee {
   device_id?: string;
   office_id?: number;
   office?: { id: number; name: string };
+  cost_center?: string;
 }
 
 interface EmployeeFormData {
@@ -77,6 +78,7 @@ interface EmployeeFormData {
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   office_id?: number | null;
+  cost_center?: string;
 }
 
 interface PaginationData {
@@ -147,7 +149,7 @@ function EmployeesContent() {
       toast.success(`Tindakan disiplin untuk ${disciplinedEmployee?.name} berhasil dicatat.`);
       setDisciplineModalOpen(false);
       setDisciplineNote("");
-    } catch (e) {
+    } catch {
       toast.error("Gagal mencatat tindakan disiplin");
     } finally {
       setIsSubmitting(false);
@@ -172,6 +174,7 @@ function EmployeesContent() {
       if (searchQuery !== debouncedSearch) setPage(1);
     }, 500);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
 
   // Handle Dynamic Page Length based on Device
@@ -198,11 +201,12 @@ function EmployeesContent() {
       fetchRoles();
     }
     fetchOffices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, page, urlSearch, urlId, permissions, activeFilter, perPage]);
 
   const downloadTemplate = () => {
     // Definisi data contoh dengan label kolom yang ramah user
-    const templateData: any[] = [
+    const templateData: Record<string, string | number | null | undefined>[] = [
       { 
         "nama (WAJIB)": "Andi Saputra", 
         "email (WAJIB)": "andi@example.com", 
@@ -332,9 +336,10 @@ function EmployeesContent() {
       setErrorMessage(res.data.message || "Import berhasil! Data karyawan sedang diproses.");
       setErrorModalOpen(true);
       fetchEmployees(1);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Menghapus console.error agar Next.js tidak memunculkan overlay hitam di mode Dev
-      let msg = err.response?.data?.message || err.response?.data?.error || "Gagal mengimpor file. Pastikan format sesuai template.";
+      const errorResponse = err as { response?: { data?: { message?: string; error?: string } } };
+      let msg = errorResponse.response?.data?.message || errorResponse.response?.data?.error || "Gagal mengimpor file. Pastikan format sesuai template.";
       if (typeof msg === 'object') msg = JSON.stringify(msg, null, 2);
       setModalType("error");
       setErrorMessage(msg);
@@ -361,9 +366,10 @@ function EmployeesContent() {
       setErrorMessage(res.data.message);
       setErrorModalOpen(true);
       fetchEmployees(1);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorResponse = err as { response?: { data?: { message?: string } } };
       setModalType("error");
-      setErrorMessage(err.response?.data?.message || "Gagal mengimpor data payroll.");
+      setErrorMessage(errorResponse.response?.data?.message || "Gagal mengimpor data payroll.");
       setErrorModalOpen(true);
     } finally {
       setLoading(false);
@@ -461,7 +467,8 @@ function EmployeesContent() {
       employment_status: 'Permanent',
       work_location: 'Kantor Pusat',
       attendance_type: 'office_hour',
-      office_id: null
+      office_id: null,
+      cost_center: ""
     });
     fetchPotentialSupervisors();
     setIsModalOpen(true);
@@ -493,6 +500,7 @@ function EmployeesContent() {
       emergency_contact_name: emp.emergency_contact_name || "",
       emergency_contact_phone: emp.emergency_contact_phone || "",
       office_id: emp.office_id || null,
+      cost_center: emp.cost_center || "",
     });
     fetchPotentialSupervisors(emp.id);
     setPhotoPreview(emp.profile_photo_url || null);
@@ -511,7 +519,7 @@ function EmployeesContent() {
     try {
       const data = new FormData();
       Object.keys(formData).forEach(key => {
-        const val = (formData as any)[key];
+        const val = formData[key as keyof EmployeeFormData];
         if (val !== undefined) {
           if (key === 'photo') {
             if (val instanceof File) data.append('photo', val);
@@ -536,9 +544,10 @@ function EmployeesContent() {
       }
       handleCloseModal();
       fetchEmployees(pagination?.current_page || 1);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      toast.error(error.response?.data?.message || "Terjadi kesalahan saat menyimpan data.");
+      const errorResponse = error as { response?: { data?: { message?: string } } };
+      toast.error(errorResponse.response?.data?.message || "Terjadi kesalahan saat menyimpan data.");
     } finally {
       setIsSubmitting(false);
     }
@@ -568,8 +577,9 @@ function EmployeesContent() {
           toast.success(`Berhasil mengirim ulang ${idsToResend.length} email verifikasi.`);
           setSelectedIds([]);
         }
-      } catch (e: any) {
-        toast.error(e.response?.data?.message || "Gagal mengirim ulang verifikasi.");
+      } catch (e: unknown) {
+        const errorResponse = e as { response?: { data?: { message?: string } } };
+        toast.error(errorResponse.response?.data?.message || "Gagal mengirim ulang verifikasi.");
       } finally {
         setIsSubmitting(false);
         setActionMenuId(null);
@@ -600,7 +610,7 @@ function EmployeesContent() {
             await axiosInstance.delete(`/employees/${id}`);
             toast.success("Karyawan berhasil dihapus.");
             fetchEmployees(pagination?.current_page || 1);
-          } catch (e) {
+          } catch {
             toast.error("Gagal menghapus data karyawan.");
           } finally {
             setIsSubmitting(false);
@@ -624,8 +634,9 @@ function EmployeesContent() {
             toast.success(`${selectedIds.length} karyawan berhasil dihapus.`);
             setSelectedIds([]);
             fetchEmployees(pagination?.current_page || 1);
-          } catch (e: any) {
-            toast.error(e.response?.data?.message || "Gagal menghapus beberapa data karyawan.");
+          } catch (e: unknown) {
+            const errorResponse = e as { response?: { data?: { message?: string } } };
+            toast.error(errorResponse.response?.data?.message || "Gagal menghapus beberapa data karyawan.");
           } finally {
             setIsSubmitting(false);
           }
@@ -645,8 +656,9 @@ function EmployeesContent() {
             await axiosInstance.post(`/employees/${id}/reset-device`);
             toast.success("Device ID berhasil direset!");
             fetchEmployees(pagination?.current_page || 1);
-          } catch (e: any) {
-            toast.error(e.response?.data?.message || "Gagal mereset Device ID.");
+          } catch (e: unknown) {
+            const errorResponse = e as { response?: { data?: { message?: string } } };
+            toast.error(errorResponse.response?.data?.message || "Gagal mereset Device ID.");
           } finally {
             setIsSubmitting(false);
           }
@@ -656,14 +668,29 @@ function EmployeesContent() {
     setActionMenuId(null);
   };
 
-  const getRoleBadgeColor = (roleName?: string) => {
-    if (!roleName) return "dash-badge-neutral";
-    const name = roleName.toLowerCase();
-    if (name.includes("hr") || name.includes("admin") || name.includes("superdmin")) return "dash-badge-warning";
-    if (name.includes("manager")) return "dash-badge-success";
-    if (name.includes("supervisor")) return "dash-badge-info";
-    return "dash-badge-neutral";
+  const handleResetPassword = async (id: number, name: string) => {
+    toast(`Apakah Anda yakin ingin meriset password untuk ${name}?`, {
+      description: "Password akan diubah kembali menjadi default 'password'.",
+      action: {
+        label: "Reset",
+        onClick: async () => {
+          setIsSubmitting(true);
+          try {
+            await axiosInstance.post(`/employees/${id}/reset-password`);
+            toast.success(`Password ${name} berhasil direset menjadi 'password'!`);
+            fetchEmployees(pagination?.current_page || 1);
+          } catch (e: unknown) {
+            const errorResponse = e as { response?: { data?: { message?: string } } };
+            toast.error(errorResponse.response?.data?.message || "Gagal mereset password.");
+          } finally {
+            setIsSubmitting(false);
+          }
+        }
+      }
+    });
+    setActionMenuId(null);
   };
+
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "-";
@@ -884,6 +911,11 @@ function EmployeesContent() {
                              <Building2 size={10} className="text-gray-400" />
                              <span className="text-[10px] font-black text-gray-700 uppercase">{emp.role?.name || "Member"}</span>
                           </div>
+                          {emp.cost_center && (
+                            <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md w-fit uppercase tracking-wider">
+                               CC: {emp.cost_center.includes("Artacomindo") ? "Artacomindo" : emp.cost_center.includes("Narwastu") ? "Narwastu" : emp.cost_center}
+                            </span>
+                          )}
                           {emp.supervisor && (
                             <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-md w-fit">
                                Atasan: {emp.supervisor.name}
@@ -1008,6 +1040,19 @@ function EmployeesContent() {
                                         <div>
                                           <p className="text-sm font-black text-gray-900">Tindakan Disiplin</p>
                                           <p className="text-[10px] text-gray-400 font-medium">Catat pelanggaran atau SP</p>
+                                        </div>
+                                    </button>
+
+                                    <button 
+                                      onClick={() => handleResetPassword(emp.id, emp.name)}
+                                      className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors group/item"
+                                    >
+                                        <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
+                                          <Key size={18} />
+                                        </div>
+                                        <div>
+                                          <p className="text-sm font-black text-orange-600">Reset Password</p>
+                                          <p className="text-[10px] text-gray-400 font-medium">Ubah sandi menjadi &apos;password&apos;</p>
                                         </div>
                                     </button>
 
@@ -1324,6 +1369,19 @@ function EmployeesContent() {
                           <option value="shift">Shift / Jadwal Khusus</option>
                         </select>
                       </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-gray-700">Cost Center</label>
+                        <select 
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                          value={formData.cost_center || ""}
+                          onChange={(e) => setFormData({...formData, cost_center: e.target.value})}
+                        >
+                          <option value="">Pilih Cost Center</option>
+                          <option value="PT. Artacomindotama">PT. Artacomindotama</option>
+                          <option value="PT. Narwastu">PT. Narwastu</option>
+                          <option value="AJNusa">AJNusa</option>
+                        </select>
+                      </div>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
@@ -1398,7 +1456,7 @@ function EmployeesContent() {
                  </Avatar>
                  <div>
                    <h3 className="font-extrabold text-lg text-gray-900 leading-none">{viewedEmployee.name}</h3>
-                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest text-[#1a1a2e]">EMP-{viewedEmployee.id.toString().padStart(4, '0')}</span>
+                   <span className="text-xs font-semibold uppercase tracking-widest text-[#1a1a2e]">EMP-{viewedEmployee.id.toString().padStart(4, '0')}</span>
                  </div>
               </div>
               <button 

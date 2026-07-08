@@ -135,6 +135,7 @@ class EmployeeController extends Controller
             'emergency_contact_name' => self::RULE_NULLABLE_STRING,
             'emergency_contact_phone' => self::RULE_NULLABLE_STRING,
             'office_id' => 'nullable|exists:offices,id',
+            'cost_center' => self::RULE_NULLABLE_STRING,
         ]);
 
         $path = null;
@@ -167,6 +168,7 @@ class EmployeeController extends Controller
         $employee->emergency_contact_name = $request->emergency_contact_name;
         $employee->emergency_contact_phone = $request->emergency_contact_phone;
         $employee->office_id = $request->office_id;
+        $employee->cost_center = $request->cost_center;
         $employee->save();
 
         // Send Welcome & Verification Email
@@ -215,6 +217,7 @@ class EmployeeController extends Controller
             'emergency_contact_name' => self::RULE_NULLABLE_STRING,
             'emergency_contact_phone' => self::RULE_NULLABLE_STRING,
             'office_id' => 'nullable|exists:offices,id',
+            'cost_center' => self::RULE_NULLABLE_STRING,
         ]);
 
         if ($request->hasFile('photo')) {
@@ -448,6 +451,19 @@ class EmployeeController extends Controller
         $this->logActivity('RESET_DEVICE_ID', "Mereset Device ID untuk karyawan: {$employee->name} (Old ID: {$oldDeviceId})", $employee);
 
         return $this->successResponse(null, 'Device ID berhasil direset. Karyawan sekarang bisa login di perangkat baru.');
+    }
+
+    public function resetPassword(Request $request, $id)
+    {
+        abort_if(! $request->user()->hasPermission('edit-employees'), 403, self::MSG_FORBIDDEN);
+
+        $employee = User::findOrFail($id);
+        $employee->password = Hash::make('password');
+        $employee->save();
+
+        $this->logActivity('RESET_PASSWORD', "Mereset password untuk karyawan: {$employee->name}", $employee);
+
+        return $this->successResponse(null, "Password berhasil direset menjadi 'password'.");
     }
 
     public function bulkResendVerification(Request $request)

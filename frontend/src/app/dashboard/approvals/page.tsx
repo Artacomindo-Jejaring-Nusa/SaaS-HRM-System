@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
-import { CheckCircle, XCircle, Clock, Calendar, DollarSign, User, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle, XCircle, Clock, ExternalLink, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
 import { ListPageSkeleton } from "@/components/Skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,74 @@ interface ApprovalItem {
   status: "pending" | "approved" | "rejected";
   attachment?: string;
   created_at: string;
+  // Permit-specific fields for I/A/S/L
+  permit_category?: string;
+  permit_has_doctor_note?: boolean;
+  permit_is_deducted?: boolean;
+}
+
+interface RawLeave {
+  id: number;
+  reason: string;
+  type: string;
+  start_date: string;
+  end_date: string;
+  status: "pending" | "approved" | "rejected" | "pending_supervisor" | "pending_hr";
+  created_at: string;
+  user?: {
+    name?: string;
+    supervisor_id?: number;
+  };
+}
+
+interface RawReimbursement {
+  id: number;
+  description: string;
+  amount: string;
+  status: "pending" | "approved" | "rejected" | "waiting_approval";
+  attachment?: string;
+  created_at: string;
+  user?: {
+    name?: string;
+  };
+}
+
+interface RawOvertime {
+  id: number;
+  reason: string;
+  start_time: string;
+  end_time: string;
+  status: "pending" | "approved" | "rejected" | "waiting_approval";
+  created_at: string;
+  user?: {
+    name?: string;
+  };
+}
+
+interface RawProfileRequest {
+  id: number;
+  new_data: Record<string, unknown>;
+  status: "pending" | "approved" | "rejected" | "waiting_approval";
+  created_at: string;
+  user?: {
+    name?: string;
+  };
+}
+
+interface RawPermit {
+  id: number;
+  reason: string;
+  type: string;
+  category?: string;
+  has_doctor_note?: boolean;
+  is_deducted?: boolean;
+  start_date: string;
+  end_date: string;
+  status: "pending" | "approved" | "rejected" | "waiting_approval";
+  created_at: string;
+  user?: {
+    name?: string;
+  };
 }
 
 const typeLabel: Record<string, string> = {
@@ -48,25 +116,23 @@ export default function ApprovalsPage() {
   const itemsPerPage = 10;
 
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [selectedItem, setSelectedItem] = useState<ApprovalItem | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   const [actionModal, setActionModal] = useState<{isOpen: boolean, action: "approve" | "reject" | null, item: ApprovalItem | null}>({isOpen: false, action: null, item: null});
   const [remarkInput, setRemarkInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // HRD override state for permit approvals
+  const [permitOverrideCategory, setPermitOverrideCategory] = useState<string>('I');
+  const [permitOverrideDoctorNote, setPermitOverrideDoctorNote] = useState(false);
+
   const getStorageUrl = (path: string) => {
     const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:8000";
     return `${backendUrl}/storage/${path}`;
   };
 
-  useEffect(() => {
-    fetchApprovals();
-    const interval = setInterval(fetchApprovals, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchApprovals = async () => {
+  const fetchApprovals = useCallback(async () => {
     try {
       setLoading(true);
       const [leaveRes, reimRes, profileRes, overtimeRes, permitRes] = await Promise.all([
@@ -76,26 +142,25 @@ export default function ApprovalsPage() {
         axiosInstance.get("/overtimes?status=pending"),
         axiosInstance.get("/permits?status=pending")
       ]);
-
       const lData = leaveRes.data.data;
-      const leaves = (Array.isArray(lData) ? lData : (lData?.data || [])).map((l: any) => ({
+      const leaves = (Array.isArray(lData) ? lData : (lData?.data || [])).map((l: RawLeave) => ({
         id: l.id,
-        type: "leave",
+        type: "leave" as const,
         user_name: l.user?.name || "Karyawan",
         description: l.reason,
         category: l.type,
         start_date: l.start_date,
         end_date: l.end_date,
         status: l.status,
-        attachment: null,
+        attachment: undefined,
         created_at: l.created_at,
         target_supervisor_id: l.user?.supervisor_id
       }));
 
       const rData = reimRes.data.data;
-      const reimbursements = (Array.isArray(rData) ? rData : (rData?.data || [])).map((r: any) => ({
+      const reimbursements = (Array.isArray(rData) ? rData : (rData?.data || [])).map((r: RawReimbursement) => ({
         id: r.id,
-        type: "reimbursement",
+        type: "reimbursement" as const,
         user_name: r.user?.name || "Karyawan",
         description: r.description,
         category: "Reimbursement",
@@ -106,43 +171,46 @@ export default function ApprovalsPage() {
       }));
 
       const oData = overtimeRes.data.data;
-      const overtimes = (Array.isArray(oData) ? oData : (oData?.data || [])).map((o: any) => ({
+      const overtimes = (Array.isArray(oData) ? oData : (oData?.data || [])).map((o: RawOvertime) => ({
         id: o.id,
-        type: "overtime",
+        type: "overtime" as const,
         user_name: o.user?.name || "Karyawan",
         description: o.reason,
         category: "Lembur",
         start_date: o.start_time,
         end_date: o.end_time,
         status: o.status,
-        attachment: null,
+        attachment: undefined,
         created_at: o.created_at
       }));
 
       const pData = profileRes.data.data;
-      const profiles = (Array.isArray(pData) ? pData : (pData?.data || [])).map((p: any) => ({
+      const profiles = (Array.isArray(pData) ? pData : (pData?.data || [])).map((p: RawProfileRequest) => ({
         id: p.id,
-        type: "profile",
+        type: "profile" as const,
         user_name: p.user?.name || "Karyawan",
         description: `Update data: ${Object.keys(p.new_data).join(", ")}`,
         category: "Perubahan Profil",
         status: p.status,
-        attachment: null,
+        attachment: undefined,
         created_at: p.created_at
       }));
 
       const peData = permitRes.data.data;
-      const permits = (Array.isArray(peData) ? peData : (peData?.data || [])).map((pe: any) => ({
+      const permits = (Array.isArray(peData) ? peData : (peData?.data || [])).map((pe: RawPermit) => ({
         id: pe.id,
-        type: "permit",
+        type: "permit" as const,
         user_name: pe.user?.name || "Karyawan",
         description: pe.reason,
-        category: pe.type,
+        category: `[${pe.category || 'I'}] ${pe.type || 'Izin'}`,
         start_date: pe.start_date,
         end_date: pe.end_date,
         status: pe.status,
-        attachment: null,
-        created_at: pe.created_at
+        attachment: undefined,
+        created_at: pe.created_at,
+        permit_category: pe.category || 'I',
+        permit_has_doctor_note: pe.has_doctor_note || false,
+        permit_is_deducted: pe.is_deducted || false,
       }));
 
       const roleName = currentUser?.role?.name?.toLowerCase() || "";
@@ -178,11 +246,22 @@ export default function ApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser, hasPermission]);
+
+  useEffect(() => {
+    fetchApprovals();
+    const interval = setInterval(fetchApprovals, 30000);
+    return () => clearInterval(interval);
+  }, [fetchApprovals]);
 
   const handleActionClick = (item: ApprovalItem, action: "approve" | "reject") => {
     setActionModal({ isOpen: true, action, item });
     setRemarkInput("");
+    // Initialize permit override from current data
+    if (item.type === 'permit') {
+      setPermitOverrideCategory(item.permit_category || 'I');
+      setPermitOverrideDoctorNote(item.permit_has_doctor_note || false);
+    }
   };
 
   const executeAction = async () => {
@@ -206,28 +285,37 @@ export default function ApprovalsPage() {
       else if (item.type === 'permit') endpoint = '/permits';
 
       console.log(`Processing ${action} for ${item.type} ID: ${item.id}`);
-      await axiosInstance.post(`${endpoint}/${item.id}/${action}`, { remark: remarkInput });
+      
+      // Build payload with permit override data
+      const payload: Record<string, unknown> = { remark: remarkInput };
+      if (item.type === 'permit' && action === 'approve') {
+        payload.category = permitOverrideCategory;
+        payload.has_doctor_note = permitOverrideDoctorNote;
+      }
+      
+      await axiosInstance.post(`${endpoint}/${item.id}/${action}`, payload);
       
       // Play a satisfying 'success' sound on the Admin side
       try {
           const audio = new window.Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
           audio.volume = 0.8;
-          audio.play().catch(e => console.log(e));
-      } catch (e) {}
+          audio.play().catch(err => console.log(err));
+      } catch {}
 
       toast.success(`Berhasil ${action === 'approve' ? 'menyetujui' : 'menolak'} pengajuan.`);
       setActionModal({ isOpen: false, action: null, item: null });
       await fetchApprovals();
-    } catch (e: any) {
-      console.error("Error processing approval:", e);
-      toast.error("Gagal memproses pengajuan: " + (e.response?.data?.message || "Terjadi kesalahan server"));
+    } catch (error) {
+      console.error("Error processing approval:", error);
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error("Gagal memproses pengajuan: " + (err.response?.data?.message || "Terjadi kesalahan server"));
     } finally {
       setIsSubmitting(false);
       setProcessingId(null);
     }
   };
 
-  const handleViewDetail = (item: any) => {
+  const handleViewDetail = (item: ApprovalItem) => {
     setSelectedItem(item);
     setIsDetailModalOpen(true);
   };
@@ -485,7 +573,7 @@ export default function ApprovalsPage() {
                 <div>
                   <p className="text-[10px] uppercase font-black text-gray-400 mb-2 px-1">DESKRIPSI / ALASAN</p>
                   <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                    <p className="text-sm text-gray-600 italic">"{selectedItem.description || 'Tidak ada keterangan tambahan'}"</p>
+                    <p className="text-sm text-gray-600 italic">&ldquo;{selectedItem.description || 'Tidak ada keterangan tambahan'}&rdquo;</p>
                   </div>
                 </div>
 
@@ -498,7 +586,7 @@ export default function ApprovalsPage() {
                             alt="Evidence" 
                             className="w-full h-auto max-h-[300px] object-contain mx-auto"
                             onError={(e) => {
-                                (e.target as any).src = 'https://placehold.co/600x400?text=Bukti+Gagal+Dimuat';
+                                (e.target as HTMLImageElement).src = 'https://placehold.co/600x400?text=Bukti+Gagal+Dimuat';
                             }}
                         />
                         <a 
@@ -563,7 +651,7 @@ export default function ApprovalsPage() {
                     alt="Receipt" 
                     className="w-full h-auto max-h-[250px] object-contain mx-auto"
                     onError={(e) => {
-                        (e.target as any).src = 'https://placehold.co/600x400?text=Bukti+Gagal+Dimuat';
+                        (e.target as HTMLImageElement).src = 'https://placehold.co/600x400?text=Bukti+Gagal+Dimuat';
                     }}
                   />
                 </div>
@@ -578,6 +666,51 @@ export default function ApprovalsPage() {
                 onChange={(e) => setRemarkInput(e.target.value)}
                 autoFocus
               />
+
+              {/* HRD Override for Permit Approvals */}
+              {actionModal.item.type === 'permit' && actionModal.action === 'approve' && (
+                <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-xl space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle size={16} className="text-purple-600" />
+                    <p className="text-xs font-bold text-purple-700 uppercase tracking-wider">Override Kategori Izin (HRD)</p>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-gray-600">Kategori</label>
+                    <select 
+                      className="w-full border border-gray-200 rounded-lg p-2 text-sm bg-white focus:ring-1 focus:ring-purple-400"
+                      value={permitOverrideCategory}
+                      onChange={(e) => setPermitOverrideCategory(e.target.value)}
+                    >
+                      <option value="I">[I] Izin — Tidak Potong</option>
+                      <option value="A">[A] Alpha/Mangkir — Potong</option>
+                      <option value="S">[S] Sakit</option>
+                      <option value="L">[L] Lainnya — Tidak Potong</option>
+                    </select>
+                  </div>
+                  {permitOverrideCategory === 'S' && (
+                    <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-100">
+                      <input 
+                        type="checkbox" 
+                        id="doctor-note-toggle"
+                        checked={permitOverrideDoctorNote}
+                        onChange={(e) => setPermitOverrideDoctorNote(e.target.checked)}
+                        className="w-4 h-4 text-purple-600 rounded"
+                      />
+                      <label htmlFor="doctor-note-toggle" className="text-sm text-gray-700 cursor-pointer">
+                        <span className="font-semibold">Dengan Surat Dokter</span>
+                        <span className="block text-[11px] text-gray-400">
+                          {permitOverrideDoctorNote 
+                            ? '✓ Tidak dipotong gaji' 
+                            : '✗ Akan dipotong gaji (default)'}
+                        </span>
+                      </label>
+                    </div>
+                  )}
+                  {permitOverrideCategory === 'A' && (
+                    <p className="text-[11px] text-red-500 font-medium">⚠️ Alpha selalu dipotong gaji.</p>
+                  )}
+                </div>
+              )}
             </div>
             <div className="p-6 bg-gray-50/50 border-t border-gray-100 flex gap-3">
                 <button 

@@ -39,11 +39,26 @@ class OvertimeController extends Controller
         }
 
         // Optionally filter by status
-        if ($request->filled('status')) {
+        if ($request->filled('status') && $request->status !== 'all') {
             $query->where('status', $request->status);
         }
 
-        $overtimes = $query->orderBy('id', 'desc')->paginate(10);
+        // Filter by date range
+        if ($request->filled('start_date')) {
+            $query->whereDate('date', '>=', $request->start_date);
+        }
+
+        if ($request->filled('end_date')) {
+            $query->whereDate('date', '<=', $request->end_date);
+        }
+
+        // Filter by user ID
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->user_id);
+        }
+
+        $perPage = $request->get('per_page', 10);
+        $overtimes = $query->orderBy('date', 'desc')->paginate($perPage);
 
         return $this->successResponse($overtimes, 'Data lembur berhasil diambil.');
     }

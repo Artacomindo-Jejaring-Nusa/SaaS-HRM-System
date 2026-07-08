@@ -8,7 +8,13 @@ import { toast } from "sonner";
 
 export default function WhatsAppSettingsPage() {
   const { hasPermission } = useAuth();
-  const [company, setCompany] = useState<any>(null);
+  interface CompanySettings {
+    watzap_api_key?: string | null;
+    watzap_number_key?: string | null;
+    watzap_base_url?: string | null;
+  }
+
+  const [company, setCompany] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -32,6 +38,7 @@ export default function WhatsAppSettingsPage() {
   };
 
   const handleSave = async () => {
+    if (!company) return;
     try {
       setIsSubmitting(true);
       const payload = {
@@ -40,13 +47,14 @@ export default function WhatsAppSettingsPage() {
         watzap_base_url: company.watzap_base_url || "https://api.watzap.id/v1/"
       };
 
-      await axiosInstance.put("/company/update", payload);
+      await axiosInstance.post("/company/update", payload);
       
       toast.success("Pengaturan WhatsApp berhasil disimpan!");
       fetchCompany();
-    } catch (e: any) {
-      console.error("Error updating WhatsApp settings:", e.response?.data || e);
-      toast.error(e.response?.data?.message || "Gagal menyimpan pengaturan.");
+    } catch (e) {
+      const err = e as { response?: { data?: { message?: string } } };
+      console.error("Error updating WhatsApp settings:", err.response?.data || err);
+      toast.error(err.response?.data?.message || "Gagal menyimpan pengaturan.");
     } finally {
       setIsSubmitting(false);
     }

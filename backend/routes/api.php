@@ -278,6 +278,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::middleware('permission:edit-employees')->post('/employees/bulk-resend-verification', [EmployeeController::class, 'bulkResendVerification']);
     Route::middleware('permission:edit-employees')->post('/employees/{id}/resend-verification', [EmployeeController::class, 'resendVerification']);
     Route::middleware('permission:edit-employees')->post('/employees/{id}/reset-device', [EmployeeController::class, 'resetDeviceId']);
+    Route::middleware('permission:edit-employees')->post('/employees/{id}/reset-password', [EmployeeController::class, 'resetPassword']);
     Route::middleware('permission:manage-wfh')->post('/employees/bulk-wfh', [EmployeeController::class, 'bulkWfh']);
 
     // Schedules & Shift

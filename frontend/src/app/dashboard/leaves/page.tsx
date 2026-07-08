@@ -671,7 +671,7 @@ const LeaveSheetInner = ({
 };
 
 export default function LeavesPage() {
-  const { hasPermission, user } = useAuth();
+  const { hasPermission, user, refreshUser } = useAuth();
   const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -698,6 +698,12 @@ export default function LeavesPage() {
   useEffect(() => {
     fetchLeaves(page);
   }, [page]);
+
+  useEffect(() => {
+    if (viewMode === "create") {
+      refreshUser();
+    }
+  }, [viewMode, refreshUser]);
 
   const fetchLeaves = async (pageNumber: number) => {
     try {

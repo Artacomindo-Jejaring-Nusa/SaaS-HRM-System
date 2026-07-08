@@ -1,20 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import axiosInstance from "@/lib/axios";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Loader2, Users, ZoomIn, ZoomOut, Maximize, AlertCircle } from "lucide-react";
-import Image from "next/image";
 
 // Tipe Data Employee Node
-type EmployeeNode = {
+interface EmployeeNode {
   id: number;
   supervisor_id: number | null;
   name: string;
   role: string;
   photo: string | null;
   children?: EmployeeNode[];
-};
+}
 
 export default function OrganizationChartPage() {
   const { t } = useLanguage();
@@ -23,30 +22,14 @@ export default function OrganizationChartPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [zoom, setZoom] = useState(1);
 
-  // Fungsi Fetch API
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await axiosInstance.get('/organization-chart');
-        const flatData: EmployeeNode[] = res.data.data;
-        setData(flatData);
-        
-        // Build Tree
-        const builtTree = buildTree(flatData);
-        setTreeTree(builtTree);
-      } catch (error) {
-        console.error("Failed to fetch organization chart", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+  // Drag-to-scroll refs
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
 
-  // Konversi Flat array ke Tree (Berjenjang)
-  const buildTree = (flatList: EmployeeNode[]): EmployeeNode[] => {
-    let tree: EmployeeNode[] = [];
-    let lookup: { [key: number]: EmployeeNode } = {};
+  const buildTree = useCallback((flatList: EmployeeNode[]): EmployeeNode[] => {
+    const tree: EmployeeNode[] = [];
+    const lookup: { [key: number]: EmployeeNode } = {};
 
     // Inisialisasi Lookup Table
     flatList.forEach((item) => {
@@ -64,11 +47,66 @@ export default function OrganizationChartPage() {
     });
 
     return tree;
-  };
+  }, []);
+
+  // Fungsi Fetch API
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await axiosInstance.get('/organization-chart');
+      const flatData: EmployeeNode[] = res.data.data;
+      setData(flatData);
+      
+      // Build Tree
+      const builtTree = buildTree(flatData);
+      setTreeTree(builtTree);
+    } catch (error) {
+      console.error("Failed to fetch organization chart", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [buildTree]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.1, 2));
   const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.1, 0.5));
   const handleZoomReset = () => setZoom(1);
+
+  // Mouse Drag handlers
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return; // Only left click
+    const target = e.target as HTMLElement;
+    // Skip if clicking nodes or buttons
+    if (target.closest('.org-node') || target.closest('button')) {
+      return;
+    }
+    const container = containerRef.current;
+    if (!container) return;
+    setIsDragging(true);
+    dragStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop
+    };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    const container = containerRef.current;
+    if (!container) return;
+    e.preventDefault();
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    container.scrollLeft = dragStart.current.scrollLeft - dx;
+    container.scrollTop = dragStart.current.scrollTop - dy;
+  };
+
+  const handleMouseUpOrLeave = () => {
+    setIsDragging(false);
+  };
 
   // Recursive Node Renderer
   const renderNode = (node: EmployeeNode) => {
@@ -166,7 +204,14 @@ export default function OrganizationChartPage() {
           </p>
         </div>
       ) : (
-        <div className="flex-1 bg-white rounded-3xl border border-gray-100 shadow-sm overflow-auto relative p-8">
+        <div 
+          ref={containerRef}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUpOrLeave}
+          onMouseLeave={handleMouseUpOrLeave}
+          className={`flex-1 bg-white rounded-3xl border border-gray-100 shadow-sm overflow-auto relative p-8 select-none transition-all ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        >
             {/* Wrapper CSS Organization Chart */}
             <style dangerouslySetInnerHTML={{__html: `
               .org-tree, .org-tree * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -254,6 +299,7 @@ export default function OrganizationChartPage() {
               }
               .chart-container::-webkit-scrollbar-thumb:hover {
                   background: #94a3b8;
+                  border-radius: 8px;
               }
             `}} />
 

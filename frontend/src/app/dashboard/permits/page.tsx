@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
 import { downloadFile, sanitizeFileName } from "@/lib/downloadHelper";
-import { Plus, Search, Eye, Printer, ClipboardList, X, Check, FileDown } from "lucide-react";
+import { Plus, Search, Eye, Printer, ClipboardList, X, Check, FileDown, AlertTriangle, Ban } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import SignaturePad from "@/components/SignaturePad";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,6 +16,9 @@ interface PermitRecord {
     name?: string;
   };
   type?: string;
+  category?: string;  // I, A, S, L
+  has_doctor_note?: boolean;
+  is_deducted?: boolean;
   start_date?: string;
   end_date?: string;
   reason?: string;
@@ -25,6 +28,26 @@ interface PermitRecord {
   created_at?: string;
   approved_by?: string;
 }
+
+const CATEGORY_LABELS: Record<string, string> = {
+  I: 'Izin',
+  A: 'Alpha/Mangkir',
+  S: 'Sakit',
+  L: 'Lainnya',
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  I: 'bg-blue-100 text-blue-700 border-blue-200',
+  A: 'bg-red-100 text-red-700 border-red-200',
+  S: 'bg-amber-100 text-amber-700 border-amber-200',
+  L: 'bg-gray-100 text-gray-700 border-gray-200',
+};
+
+const SUB_TYPES: Record<string, string[]> = {
+  I: ['Izin Terlambat', 'Izin Pulang Cepat', 'Keperluan Pribadi'],
+  S: ['Sakit'],
+  L: ['Duka Cita', 'Menikah', 'Lainnya'],
+};
 
 export default function PermitsPage() {
   const { hasPermission } = useAuth();
@@ -46,7 +69,8 @@ export default function PermitsPage() {
   const [formData, setFormData] = useState({
     start_date: "",
     end_date: "",
-    type: "Sakit",
+    category: "I" as string,
+    type: "Izin Terlambat",
     reason: "",
     signature: ""
   });
@@ -86,7 +110,7 @@ export default function PermitsPage() {
       await axiosInstance.post("/permits", formData);
       toast.success("Pengajuan Izin berhasil! Menunggu persetujuan.");
       setIsModalOpen(false);
-      setFormData({ start_date: "", end_date: "", type: "Sakit", reason: "", signature: "" });
+      setFormData({ start_date: "", end_date: "", category: "I", type: "Izin Terlambat", reason: "", signature: "" });
       fetchpermits(page);
     } catch (error) {
       const err = error as { response?: { data?: { message?: string } } };
@@ -144,9 +168,10 @@ export default function PermitsPage() {
           <thead>
             <tr>
               <th>Info Karyawan</th>
+              <th>Kategori</th>
               <th>Tipe Izin</th>
-              <th>Tanggal Pelaksanaan</th>
-              <th>Alasan</th>
+              <th>Tanggal</th>
+              <th>Potong</th>
               <th>Status</th>
               <th className="text-right">Aksi</th>
             </tr>
@@ -158,9 +183,20 @@ export default function PermitsPage() {
                   <span className="font-semibold text-gray-900">{permit.user?.name || "Karyawan"}</span>
                 </td>
                 <td>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-bold rounded border ${CATEGORY_COLORS[permit.category || 'I']}`}>
+                    {permit.category === 'A' && <AlertTriangle size={12} />}
+                    [{permit.category || 'I'}] {CATEGORY_LABELS[permit.category || 'I']}
+                  </span>
+                  {permit.category === 'S' && (
+                    <span className={`block text-[10px] mt-0.5 ${permit.has_doctor_note ? 'text-green-600' : 'text-orange-500'}`}>
+                      {permit.has_doctor_note ? '✓ Dengan Surat Dokter' : '✗ Tanpa Surat Dokter'}
+                    </span>
+                  )}
+                </td>
+                <td>
                   <span className="text-sm font-medium text-gray-700 capitalize flex items-center gap-1.5">
                     <ClipboardList size={14} className="text-gray-400" />
-                    {permit.type || "Sakit"}
+                    {permit.type || "-"}
                   </span>
                 </td>
                 <td>
@@ -170,9 +206,15 @@ export default function PermitsPage() {
                   </div>
                 </td>
                 <td>
-                  <span className="text-xs text-gray-500 block truncate max-w-[150px]">
-                    {permit.reason || "-"}
-                  </span>
+                  {permit.is_deducted ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded bg-red-50 text-red-600 border border-red-200">
+                      <Ban size={12} /> Potong
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded bg-green-50 text-green-600 border border-green-200">
+                      <Check size={12} /> Tidak
+                    </span>
+                  )}
                 </td>
                 <td>{getStatusBadge(permit.status || '')}</td>
                 <td className="text-right">
@@ -261,21 +303,40 @@ export default function PermitsPage() {
             {/* Removed balance widget for Izin */}
 
             <form onSubmit={handleSubmit} className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="space-y-1">
-                <label htmlFor="permit-type" className="text-sm font-medium text-gray-700">Tipe Izin</label>
-                <select 
-                  id="permit-type"
-                  className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  value={formData.type}
-                  onChange={(e) => setFormData({...formData, type: e.target.value})}
-                  required
-                >
-                  <option value="Sakit">Sakit</option>
-                  <option value="Izin Terlambat">Izin Terlambat</option>
-                  <option value="Izin Pulang Cepat">Izin Pulang Cepat</option>
-                  <option value="Keperluan Pribadi">Keperluan Pribadi</option>
-                  <option value="Lainnya">Lainnya</option>
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label htmlFor="permit-category" className="text-sm font-medium text-gray-700">Kategori Izin</label>
+                  <select 
+                    id="permit-category"
+                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    value={formData.category}
+                    onChange={(e) => {
+                      const cat = e.target.value;
+                      const subTypes = SUB_TYPES[cat] || ['Lainnya'];
+                      setFormData({...formData, category: cat, type: subTypes[0]});
+                    }}
+                    required
+                  >
+                    <option value="I">[I] Izin</option>
+                    <option value="S">[S] Sakit</option>
+                    <option value="L">[L] Lainnya</option>
+                  </select>
+                  <p className="text-[11px] text-gray-400">Keterangan: A (Alpha) akan otomatis ditentukan sistem jika izin diajukan setelah jam 13:00.</p>
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="permit-type" className="text-sm font-medium text-gray-700">Detail Tipe</label>
+                  <select 
+                    id="permit-type"
+                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    value={formData.type}
+                    onChange={(e) => setFormData({...formData, type: e.target.value})}
+                    required
+                  >
+                    {(SUB_TYPES[formData.category] || ['Lainnya']).map((st) => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               
               <div className="grid grid-cols-2 gap-4">

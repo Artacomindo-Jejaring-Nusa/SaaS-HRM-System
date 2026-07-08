@@ -589,7 +589,7 @@ export default function PayrollApprovalPage() {
                         className="w-full h-12 bg-gray-50 border-none rounded-xl px-4 text-gray-900 focus:ring-2 focus:ring-[#8B0000]/20"
                       >
                         <option value="">-- Pilih --</option>
-                        <option value="PT. Artacomindo Jejaring Nusa">PT. Artacomindo Jejaring Nusa</option>
+                        <option value="PT. Artacomindotama">PT. Artacomindotama</option>
                         <option value="PT. Narwastu">PT. Narwastu</option>
                         <option value="AJNusa">AJNusa</option>
                       </select>

@@ -48,6 +48,7 @@ RUN apk add --no-cache \
     mbstring \
     xml \
     bcmath \
+    calendar \
     opcache \
     pcntl \
     && rm -rf /var/cache/apk/*

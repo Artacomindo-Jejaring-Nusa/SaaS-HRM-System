@@ -3,6 +3,10 @@
 <head>
     <meta charset="utf-8">
     <style>
+        @page {
+            size: a5 landscape;
+            margin: 10px 15px;
+        }
         * { 
             margin: 0; 
             padding: 0; 
@@ -10,66 +14,66 @@
             -webkit-print-color-adjust: exact !important; 
             print-color-adjust: exact !important; 
         }
-        body { font-family: 'Helvetica', 'Arial', sans-serif; color: #222; font-size: 11px; line-height: 1.5; background: #fff; }
+        body { font-family: 'Helvetica', 'Arial', sans-serif; color: #222; font-size: 9px; line-height: 1.25; background: #fff; }
 
-        .slip-container { max-width: 750px; margin: 0 auto; padding: 30px 35px; }
+        .slip-container { max-width: 100%; margin: 0; padding: 0; }
 
         /* Confidential Banner */
         .confidential-banner {
-            border: 1.5px solid #333;
+            border: 1px solid #333;
             text-align: center;
-            padding: 8px 20px;
-            margin-bottom: 20px;
+            padding: 2px 8px;
+            margin-bottom: 4px;
             display: inline-block;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
         }
         .confidential-banner span {
-            font-size: 14px;
+            font-size: 10px;
             font-weight: bold;
             color: #E53935;
-            letter-spacing: 1px;
+            letter-spacing: 0.3px;
         }
 
         /* Header with logo */
         .header-row {
             display: table;
             width: 100%;
-            margin-bottom: 5px;
+            margin-bottom: 2px;
         }
         .header-left {
             display: table-cell;
-            vertical-align: top;
+            vertical-align: middle;
             width: 70%;
         }
         .header-right {
             display: table-cell;
-            vertical-align: top;
+            vertical-align: middle;
             text-align: right;
             width: 30%;
         }
         .header-right img {
-            max-height: 60px;
-            max-width: 140px;
+            max-height: 35px;
+            max-width: 100px;
         }
         .company-name {
-            font-size: 15px;
+            font-size: 11.5px;
             font-weight: bold;
             color: #222;
-            margin-bottom: 2px;
+            margin-bottom: 1px;
         }
 
         /* Slip Info */
         .slip-info {
-            margin-bottom: 15px;
+            margin-bottom: 4px;
         }
         .slip-info .title {
-            font-size: 13px;
+            font-size: 10.5px;
             font-weight: bold;
-            margin-bottom: 2px;
+            margin-bottom: 1px;
         }
         .slip-info .period {
-            font-size: 12px;
+            font-size: 9px;
             font-weight: bold;
             color: #222;
         }
@@ -78,17 +82,17 @@
         .emp-details {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin-bottom: 6px;
         }
         .emp-details td {
-            padding: 3px 0;
-            font-size: 11px;
+            padding: 1.5px 0;
+            font-size: 8.5px;
             vertical-align: top;
         }
         .emp-details .label {
             font-weight: normal;
             color: #444;
-            width: 110px;
+            width: 75px;
         }
         .emp-details .sep {
             width: 10px;
@@ -101,27 +105,27 @@
         .emp-details .label-r {
             font-weight: normal;
             color: #444;
-            width: 130px;
-            padding-left: 30px;
+            width: 95px;
+            padding-left: 15px;
         }
 
         /* Two column salary layout */
         .salary-columns {
             display: table;
             width: 100%;
-            margin-bottom: 15px;
+            margin-bottom: 6px;
         }
         .salary-col-left {
             display: table-cell;
             width: 49%;
             vertical-align: top;
-            padding-right: 8px;
+            padding-right: 5px;
         }
         .salary-col-right {
             display: table-cell;
             width: 49%;
             vertical-align: top;
-            padding-left: 8px;
+            padding-left: 5px;
         }
 
         /* Section Tables */
@@ -134,20 +138,20 @@
             background: #E53935;
             color: #fff;
             font-weight: bold;
-            font-size: 11px;
-            padding: 7px 10px;
+            font-size: 8.5px;
+            padding: 4px 6px;
         }
         .section-table .section-header-right {
             background: #E53935;
             color: #fff;
             font-weight: bold;
-            font-size: 11px;
-            padding: 7px 10px;
+            font-size: 8.5px;
+            padding: 4px 6px;
             text-align: right;
         }
         .section-table td {
-            padding: 5px 10px;
-            font-size: 10.5px;
+            padding: 3px 6px;
+            font-size: 8.5px;
             border-bottom: 1px solid #f0f0f0;
         }
         .section-table .item-label {
@@ -162,27 +166,27 @@
         .section-table .total-row td {
             border-top: 1.5px solid #E53935;
             font-weight: bold;
-            font-size: 11px;
-            padding: 7px 10px;
+            font-size: 8.5px;
+            padding: 4px 6px;
             background: #fff5f5;
         }
 
         /* Footer Section */
         .footer-section {
-            margin-top: 15px;
+            margin-top: 4px;
         }
         .footer-table {
             width: 100%;
             border-collapse: collapse;
         }
         .footer-table td {
-            padding: 3px 0;
-            font-size: 11px;
+            padding: 1.5px 0;
+            font-size: 8.5px;
             vertical-align: top;
         }
         .footer-table .label {
             color: #444;
-            width: 140px;
+            width: 95px;
         }
         .footer-table .sep {
             width: 10px;
@@ -193,7 +197,7 @@
             color: #222;
         }
         .thp-highlight {
-            margin-top: 5px;
+            margin-top: 2px;
             padding: 0;
         }
         .thp-highlight .label {
@@ -202,14 +206,14 @@
         .thp-highlight .val {
             font-weight: bold;
             color: #E53935;
-            font-size: 13px;
+            font-size: 10.5px;
         }
 
         /* Separator */
         .section-divider {
             border: none;
             border-top: 1px solid #ddd;
-            margin: 12px 0;
+            margin: 4px 0;
         }
 
         /* Print Specific Rules */
@@ -244,48 +248,48 @@
 
         /* Responsive Tweaks */
         @media only screen and (max-width: 600px) {
-            .slip-container { padding: 15px 20px; }
+            .slip-container { padding: 8px 12px; }
             .salary-columns, .salary-col-left, .salary-col-right {
                 display: block !important;
                 width: 100% !important;
                 padding: 0 !important;
                 margin: 0 !important;
             }
-            .salary-col-right { margin-top: 15px !important; }
+            .salary-col-right { margin-top: 8px !important; }
             .header-left, .header-right {
                 display: block !important;
                 width: 100% !important;
                 text-align: left !important;
             }
-            .header-right { margin-top: 10px; }
+            .header-right { margin-top: 4px; }
             .emp-details td { display: block; width: 100% !important; padding-left: 0 !important; }
             .emp-details .sep { display: none; }
-            .emp-details .label-r { margin-top: 5px; }
+            .emp-details .label-r { margin-top: 2px; }
             .footer-table td { display: block; width: 100% !important; padding-left: 0 !important; }
             .footer-table .sep { display: none; }
         }
 
         /* Signature */
         .signature-section {
-            margin-top: 30px;
+            margin-top: 6px;
             text-align: right;
         }
         .signature-box {
             display: inline-block;
-            width: 240px;
+            width: 160px;
             text-align: center;
         }
         .signature-space {
-            height: 55px;
+            height: 25px;
         }
 
         /* Disclaimer */
         .disclaimer {
-            font-size: 8.5px;
+            font-size: 7px;
             color: #aaa;
             font-style: italic;
-            margin-top: 20px;
-            padding-top: 8px;
+            margin-top: 6px;
+            padding-top: 2px;
             border-top: 1px solid #eee;
         }
     </style>
@@ -299,18 +303,32 @@
         </div>
 
         {{-- ═══ HEADER WITH LOGO ═══ --}}
+        @php
+            $cc = strtolower($salary->cost_center ?? '');
+            
+            if (str_contains($cc, 'artacomindotama')) {
+                $logoFile = 'ARTACOMINDOTAMA-LOGO.png';
+                $companyName = 'Artacomindotama';
+            } elseif (str_contains($cc, 'narwastu') || str_contains($cc, 'narwasthu')) {
+                $logoFile = 'Narwasthu Artha Tama.png';
+                $companyName = 'Narwasthu Artha Tama';
+            } else {
+                // AJNusa or fallback
+                $logoFile = 'ARTACOM-LOGO.png';
+                $companyName = 'Artacomindo Jejaring Nusa';
+            }
+            
+            $logoPath = public_path($logoFile);
+            $logoBase64 = '';
+            if (file_exists($logoPath)) {
+                $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+            }
+        @endphp
         <div class="header-row">
             <div class="header-left">
-                <div class="company-name">{{ $salary->user->company->name ?? 'Narwasthu Artha Tama Group' }}</div>
+                <div class="company-name">{{ $companyName }}</div>
             </div>
             <div class="header-right">
-                @php
-                    $logoPath = public_path('logo.png');
-                    $logoBase64 = '';
-                    if (file_exists($logoPath)) {
-                        $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
-                    }
-                @endphp
                 @if($logoBase64)
                     <img src="{{ $logoBase64 }}" alt="Logo">
                 @endif
@@ -331,7 +349,7 @@
 
                 // Calculate period range
                 $monthNum = array_search($salary->month, array_keys($monthNames)) + 1;
-                $lastDay = cal_days_in_month(CAL_GREGORIAN, $monthNum, $salary->year);
+                $lastDay = \Carbon\Carbon::createFromDate($salary->year, $monthNum, 1)->daysInMonth;
                 $periodStart = "01 {$monthId} {$salary->year}";
                 $periodEnd = "{$lastDay} {$monthId} {$salary->year}";
             @endphp
@@ -383,15 +401,11 @@
             // Build earnings list
             $earningItems = [];
             $earningItems[] = ['label' => 'Gaji Pokok', 'value' => $salary->basic_salary];
-            if ($salary->earning_position_allowance > 0) {
-                $earningItems[] = ['label' => 'Tunjangan Jabatan', 'value' => $salary->earning_position_allowance];
-            }
+            $earningItems[] = ['label' => 'Tunjangan Jabatan', 'value' => $salary->earning_position_allowance ?? 0];
             if ($salary->earning_attendance_allowance > 0) {
                 $earningItems[] = ['label' => 'Tunjangan Kehadiran', 'value' => $salary->earning_attendance_allowance];
             }
-            if ($salary->earning_communication_allowance > 0) {
-                $earningItems[] = ['label' => 'Tunjangan Pulsa', 'value' => $salary->earning_communication_allowance];
-            }
+            $earningItems[] = ['label' => 'Tunjangan Pulsa', 'value' => $salary->earning_communication_allowance ?? 0];
             if ($salary->earning_shift_premium > 0) {
                 $earningItems[] = ['label' => 'Premi Shift', 'value' => $salary->earning_shift_premium];
             }
@@ -413,9 +427,7 @@
             if ($salary->earning_bpjs_kes_premium > 0) {
                 $earningItems[] = ['label' => 'Premi BPJS Kesehatan', 'value' => $salary->earning_bpjs_kes_premium];
             }
-            if ($salary->earning_others > 0) {
-                $earningItems[] = ['label' => $salary->earning_others_note ?? 'Lainnya', 'value' => $salary->earning_others];
-            }
+            $earningItems[] = ['label' => $salary->earning_others_note ?? 'Tunjangan Lain-lain', 'value' => $salary->earning_others ?? 0];
 
             // Build deductions list
             $deductionItems = [];
@@ -429,7 +441,7 @@
                 $deductionItems[] = ['label' => 'Potongan Absensi', 'value' => $salary->deduction_absence];
             }
             if ($salary->deduction_tax > 0) {
-                $deductionItems[] = ['label' => 'PPh 21', 'value' => $salary->deduction_tax];
+                $deductionItems[] = ['label' => 'PPh 21 (Dibayarkan Perusahaan)', 'value' => $salary->deduction_tax];
             }
         @endphp
 
@@ -499,7 +511,7 @@
                     <td class="val">{{ $salary->bank_name ?? $salary->user->bank_name ?? '-' }}</td>
                     <td class="label" style="padding-left:30px;">Take Home Pay</td>
                     <td class="sep">:</td>
-                    <td class="val" style="color:#E53935; font-size:13px;">Rp {{ number_format($salary->net_salary, 0, ',', '.') }}</td>
+                    <td class="val" style="color:#E53935; font-size:11px;">Rp {{ number_format($salary->net_salary, 0, ',', '.') }}</td>
                 </tr>
                 <tr>
                     <td class="label">Nomor Rekening</td>
