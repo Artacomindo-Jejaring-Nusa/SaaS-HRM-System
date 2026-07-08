@@ -113,7 +113,7 @@ class ReimbursementController extends Controller
                     'KLAIM REIMBURSEMENT PERLU PERSETUJUAN',
                     "Karyawan {$user->name} mengajukan klaim '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'. Mohon segera tinjau.',
                     'warning',
-                    '/dashboard/approvals'
+                    self::ROUTE_APPROVALS
                 );
             }
         } else {
@@ -151,7 +151,7 @@ class ReimbursementController extends Controller
                         'KLAIM REIMBURSEMENT BAWAHAN',
                         "Karyawan {$user->name} mengajukan klaim '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'. Mohon segera tinjau.',
                         'warning',
-                        '/dashboard/approvals'
+                        self::ROUTE_APPROVALS
                     );
                 }
             }
@@ -170,7 +170,7 @@ class ReimbursementController extends Controller
                     'KLAIM REIMBURSEMENT BARU (ADMIN)',
                     "Karyawan {$user->name} mengajukan klaim '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'.',
                     'warning',
-                    '/dashboard/approvals'
+                    self::ROUTE_APPROVALS
                 );
             }
         }
@@ -223,7 +223,7 @@ class ReimbursementController extends Controller
 
             if (isset($result['approvers'])) {
                 foreach ($result['approvers'] as $nextApprover) {
-                    $this->notify($nextApprover, 'REIMBURSEMENT MENUNGGU PERSETUJUAN', "Klaim '{$reimbursement->title}' dari {$reimbursement->user->name} menunggu persetujuan Anda. Tahap: {$result['step_label']}.", 'warning', '/dashboard/approvals');
+                    $this->notify($nextApprover, 'REIMBURSEMENT MENUNGGU PERSETUJUAN', "Klaim '{$reimbursement->title}' dari {$reimbursement->user->name} menunggu persetujuan Anda. Tahap: {$result['step_label']}.", 'warning', self::ROUTE_APPROVALS);
                 }
             }
             $this->notify($reimbursement->user, 'REIMBURSEMENT DALAM PROSES', "Klaim '{$reimbursement->title}' Anda disetujui di tahap sebelumnya. Menunggu: {$result['step_label']}.", 'info');

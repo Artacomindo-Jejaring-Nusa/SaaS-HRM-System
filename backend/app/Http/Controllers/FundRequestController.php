@@ -94,7 +94,7 @@ class FundRequestController extends Controller
                 'PENGAJUAN DANA BERHASIL',
                 "Pengajuan dana Anda sebesar Rp ".number_format($request->amount, 0, ',', '.')." telah diajukan. Menunggu: {$workflowResult['step_label']}.",
                 'info',
-                '/dashboard/approvals'
+                self::ROUTE_APPROVALS
             );
 
             foreach ($workflowResult['approvers'] as $approver) {
@@ -103,7 +103,7 @@ class FundRequestController extends Controller
                     'PENGAJUAN DANA PERLU PERSETUJUAN',
                     "{$user->name} mengajukan dana sebesar Rp ".number_format($request->amount, 0, ',', '.').'. Mohon segera tinjau.',
                     'warning',
-                    '/dashboard/approvals'
+                    self::ROUTE_APPROVALS
                 );
             }
         } else {
@@ -127,7 +127,7 @@ class FundRequestController extends Controller
                         'PENGAJUAN DANA BARU',
                         "{$user->name} mengajukan dana sebesar Rp ".number_format($request->amount, 0, ',', '.').'. Mohon tinjau.',
                         'warning',
-                        '/dashboard/approvals'
+                        self::ROUTE_APPROVALS
                     );
                 }
             }
@@ -191,7 +191,7 @@ class FundRequestController extends Controller
             // Notify next step
             if (isset($result['approvers'])) {
                 foreach ($result['approvers'] as $nextApprover) {
-                    $this->notify($nextApprover, 'PENGAJUAN DANA MENUNGGU PERSETUJUAN', "Pengajuan dana {$fundRequest->user->name} menunggu persetujuan Anda. Tahap: {$result['step_label']}.", 'warning', '/dashboard/approvals');
+                    $this->notify($nextApprover, 'PENGAJUAN DANA MENUNGGU PERSETUJUAN', "Pengajuan dana {$fundRequest->user->name} menunggu persetujuan Anda. Tahap: {$result['step_label']}.", 'warning', self::ROUTE_APPROVALS);
                 }
             }
             $this->notify($fundRequest->user, 'PENGAJUAN DANA DALAM PROSES', "Pengajuan dana Anda disetujui di tahap sebelumnya. Menunggu: {$result['step_label']}.", 'info');
@@ -227,7 +227,7 @@ class FundRequestController extends Controller
                     'PERSETUJUAN DANA (TAHAP HRD)',
                     "Pengajuan dana {$fundRequest->user->name} telah disetujui Supervisor. Menunggu persetujuan akhir Anda.",
                     'warning',
-                    '/dashboard/approvals'
+                    self::ROUTE_APPROVALS
                 );
             }
 
