@@ -172,19 +172,25 @@ class LeaveController extends Controller
                 }
             }
 
-            // 2. Notify Admins and HR (Fallback or Additional)
-            $admins = User::where('company_id', $companyId)
-                ->where('role_id', '>', 1)
-                ->where('id', '!=', $user->supervisor_id)
-                ->get();
+            // 2. Notify HRD/Admin ONLY if user has no supervisor
+            // If supervisor exists, HRD will be notified after supervisor approves
+            if (! $user->supervisor_id) {
+                $hrds = User::where('company_id', $companyId)
+                    ->where('id', '!=', $user->id)
+                    ->whereHas('role', function ($q) {
+                        $q->where('name', 'HRD')->orWhere('name', 'Admin');
+                    })
+                    ->get();
 
-            foreach ($admins as $admin) {
-                $this->notify(
-                    $admin,
-                    'PENGAJUAN CUTI BARU (ADMIN)',
-                    "{$user->name} telah mengajukan cuti ({$request->type}) pada {$request->start_date}.",
-                    'warning'
-                );
+                foreach ($hrds as $hrd) {
+                    $this->notify(
+                        $hrd,
+                        'PENGAJUAN CUTI BARU (HRD)',
+                        "{$user->name} telah mengajukan cuti ({$request->type}) pada {$request->start_date}. Karyawan tidak memiliki Supervisor, mohon segera tinjau.",
+                        'warning',
+                        '/dashboard/approvals'
+                    );
+                }
             }
         }
 
@@ -293,8 +299,25 @@ class LeaveController extends Controller
                     'supervisor_approved_at' => now(),
                     'supervisor_remark' => $request->remark,
                 ]);
-                $this->notify($leave->user, 'CUTI DI-APPROVE ATASAN', 'Menunggu HRD.', 'info');
+                $this->notify($leave->user, 'CUTI DI-APPROVE ATASAN', "Cuti Anda ({$leave->type}) telah disetujui oleh atasan. Menunggu persetujuan HRD.", 'info');
+
+                // Notify HRD/Admin that leave is now pending their review
+                $hrds = User::where('company_id', $leave->company_id)
+                    ->whereHas('role', function ($q) {
+                        $q->where('name', 'HRD')->orWhere('name', 'Admin');
+                    })
+                    ->get();
+                foreach ($hrds as $hrd) {
+                    $this->notify(
+                        $hrd,
+                        'CUTI MENUNGGU PERSETUJUAN HRD',
+                        "Cuti {$leave->user->name} ({$leave->type}) telah disetujui Supervisor. Mohon segera proses.",
+                        'warning',
+                        '/dashboard/approvals'
+                    );
+                }
                 $successMsg = 'Di-approve oleh atasan. Menunggu proses HRD.';
+
             } else {
                 $leave->update([
                     'status' => 'approved',
