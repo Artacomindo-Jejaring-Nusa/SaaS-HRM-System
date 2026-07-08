@@ -14,6 +14,8 @@ class PermitController extends Controller
 {
     use Notifiable;
 
+    private const ROUTE_APPROVALS = '/dashboard/approvals';
+
     public function index(Request $request)
     {
         $query = Permit::with('user');
@@ -56,132 +58,148 @@ class PermitController extends Controller
     {
         $request->validate([
             'start_date' => 'required|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
-            'type' => 'required|string',
-            'category' => 'required|string|in:I,S,L',  // Karyawan tidak bisa pilih A
-            'reason' => 'nullable|string',
-            'signature' => 'required|string', // Base64 signature
+            'end_date'   => 'nullable|date|after_or_equal:start_date',
+            'type'       => 'required|string',
+            'category'   => 'required|string|in:I,S,L', // Karyawan tidak bisa pilih A
+            'reason'     => 'nullable|string',
+            'signature'  => 'required|string',           // Base64 signature
         ]);
 
-        $user = $request->user();
+        $user      = $request->user();
         $companyId = $user->company_id;
 
-        // ── Determine category & deduction ──
-        $category = $request->category;
-        $isDeducted = false;
-
-        // Auto-Alpha rule: Jika izin diajukan setelah jam 13:00 untuk hari ini
-        $now = Carbon::now();
-        $startDate = Carbon::parse($request->start_date);
-        if ($startDate->isToday() && $now->hour >= 13) {
-            $category = 'A';
-            $isDeducted = true;
-        }
-
-        // Kategori S (Sakit) tanpa surat = potong (default, HRD bisa override nanti)
-        if ($category === 'S') {
-            $isDeducted = true; // Default potong, HRD bisa set has_doctor_note=true saat approve
-        }
-
-        // ── Dynamic Workflow Check ──
-        $workflowResult = ApprovalService::initApproval('permit', $companyId, $user);
+        [$category, $isDeducted] = $this->resolveCategoryAndDeduction($request);
 
         $categoryLabels = ['I' => 'Izin', 'A' => 'Alpha/Mangkir', 'S' => 'Sakit', 'L' => 'Lainnya'];
-        $categoryLabel = $categoryLabels[$category] ?? $category;
+        $categoryLabel  = $categoryLabels[$category] ?? $category;
+        $alphaNote      = $category === 'A' ? ' ⚠️ Otomatis dikategorikan Alpha (pengajuan setelah jam 13:00).' : '';
+
+        $workflowResult = ApprovalService::initApproval('permit', $companyId, $user);
+
+        $permit = $this->createPermitRecord($request, $user, $companyId, $category, $isDeducted, $workflowResult);
 
         if ($workflowResult) {
-            $permit = Permit::create([
-                'user_id' => $user->id,
-                'company_id' => $companyId,
-                'start_date' => $request->start_date,
-                'end_date' => $request->end_date,
-                'type' => $request->type,
-                'category' => $category,
-                'has_doctor_note' => false,
-                'is_deducted' => $isDeducted,
-                'reason' => $request->reason,
-                'signature' => $request->signature,
-                'status' => $workflowResult['status'],
-                'current_approval_step' => $workflowResult['current_approval_step'],
-            ]);
-
-            $alphaNote = $category === 'A' ? ' ⚠️ Otomatis dikategorikan Alpha (pengajuan setelah jam 13:00).' : '';
-
-            $this->notify(
-                $user,
-                'PENGAJUAN IZIN BERHASIL',
-                "Permohonan izin [{$categoryLabel}] ({$request->type}) Anda telah diajukan. Menunggu: {$workflowResult['step_label']}.{$alphaNote}",
-                'info'
-            );
-
-            foreach ($workflowResult['approvers'] as $approver) {
-                $this->notify(
-                    $approver,
-                    'PENGAJUAN IZIN PERLU PERSETUJUAN',
-                    "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}. Mohon segera tinjau.",
-                    'warning',
-                    '/dashboard/approvals'
-                );
-            }
+            $this->notifyDynamicWorkflow($user, $request, $categoryLabel, $alphaNote, $workflowResult);
         } else {
-            // ── Fallback: Default logic ──
-            $permit = Permit::create([
-                'user_id' => $user->id,
-                'company_id' => $companyId,
-                'start_date' => $request->start_date,
-                'end_date' => $request->end_date,
-                'type' => $request->type,
-                'category' => $category,
-                'has_doctor_note' => false,
-                'is_deducted' => $isDeducted,
-                'reason' => $request->reason,
-                'signature' => $request->signature,
-                'status' => 'pending',
-            ]);
-
-            $alphaNote = $category === 'A' ? ' ⚠️ Otomatis dikategorikan Alpha (pengajuan setelah jam 13:00).' : '';
-
-            $this->notify(
-                $user,
-                'PENGAJUAN IZIN BERHASIL',
-                "Permohonan izin [{$categoryLabel}] ({$request->type}) Anda telah diajukan dan sedang menunggu persetujuan.{$alphaNote}",
-                'info'
-            );
-
-            // 1. Notify the User's Immediate Supervisor first
-            if ($user->supervisor_id) {
-                $supervisor = $user->supervisor;
-                if ($supervisor) {
-                    $this->notify(
-                        $supervisor,
-                        'PENGAJUAN IZIN PERLU PERSETUJUAN',
-                        "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}. Mohon segera tinjau.",
-                        'warning',
-                        '/dashboard/approvals'
-                    );
-                }
-            } else {
-                // 2. Notify HRD/Admin ONLY if user has no supervisor
-                $hrds = User::where('company_id', $companyId)
-                    ->where('id', '!=', $user->id)
-                    ->whereHas('role', function ($q) {
-                        $q->where('name', 'HRD')->orWhere('name', 'Admin');
-                    })
-                    ->get();
-
-                foreach ($hrds as $hrd) {
-                    $this->notify(
-                        $hrd,
-                        'PENGAJUAN IZIN BARU (HRD)',
-                        "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}. Karyawan tidak memiliki Supervisor, mohon segera tinjau.",
-                        'warning',
-                        '/dashboard/approvals'
-                    );
-                }
-            }
+            $this->notifyFallbackWorkflow($user, $request, $companyId, $categoryLabel, $alphaNote);
         }
 
         return $this->successResponse($permit, 'Permohonan izin berhasil diajukan.', 201);
+    }
+
+    /**
+     * Determine the final category and whether salary should be deducted.
+     */
+    private function resolveCategoryAndDeduction(Request $request): array
+    {
+        $category   = $request->category;
+        $isDeducted = false;
+
+        // Auto-Alpha: izin diajukan setelah jam 13:00 untuk hari ini
+        $now       = Carbon::now();
+        $startDate = Carbon::parse($request->start_date);
+        if ($startDate->isToday() && $now->hour >= 13) {
+            return ['A', true];
+        }
+
+        // Sakit tanpa surat dokter → potong gaji (HRD bisa override saat approve)
+        if ($category === 'S') {
+            $isDeducted = true;
+        }
+
+        return [$category, $isDeducted];
+    }
+
+    /**
+     * Create and persist the Permit record.
+     */
+    private function createPermitRecord(
+        Request $request,
+        $user,
+        int $companyId,
+        string $category,
+        bool $isDeducted,
+        ?array $workflowResult
+    ): Permit {
+        $data = [
+            'user_id'              => $user->id,
+            'company_id'           => $companyId,
+            'start_date'           => $request->start_date,
+            'end_date'             => $request->end_date,
+            'type'                 => $request->type,
+            'category'             => $category,
+            'has_doctor_note'      => false,
+            'is_deducted'          => $isDeducted,
+            'reason'               => $request->reason,
+            'signature'            => $request->signature,
+            'status'               => $workflowResult ? $workflowResult['status'] : 'pending',
+            'current_approval_step'=> $workflowResult ? $workflowResult['current_approval_step'] : null,
+        ];
+
+        return Permit::create($data);
+    }
+
+    /**
+     * Send notifications when a dynamic workflow is active.
+     */
+    private function notifyDynamicWorkflow($user, Request $request, string $categoryLabel, string $alphaNote, array $workflowResult): void
+    {
+        $this->notify(
+            $user,
+            'PENGAJUAN IZIN BERHASIL',
+            "Permohonan izin [{$categoryLabel}] ({$request->type}) Anda telah diajukan. Menunggu: {$workflowResult['step_label']}.{$alphaNote}",
+            'info'
+        );
+
+        foreach ($workflowResult['approvers'] as $approver) {
+            $this->notify(
+                $approver,
+                'PENGAJUAN IZIN PERLU PERSETUJUAN',
+                "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}. Mohon segera tinjau.",
+                'warning',
+                self::ROUTE_APPROVALS
+            );
+        }
+    }
+
+    /**
+     * Send notifications when using the hardcoded fallback workflow.
+     */
+    private function notifyFallbackWorkflow($user, Request $request, int $companyId, string $categoryLabel, string $alphaNote): void
+    {
+        $this->notify(
+            $user,
+            'PENGAJUAN IZIN BERHASIL',
+            "Permohonan izin [{$categoryLabel}] ({$request->type}) Anda telah diajukan dan sedang menunggu persetujuan.{$alphaNote}",
+            'info'
+        );
+
+        if ($user->supervisor_id && $user->supervisor) {
+            $this->notify(
+                $user->supervisor,
+                'PENGAJUAN IZIN PERLU PERSETUJUAN',
+                "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}. Mohon segera tinjau.",
+                'warning',
+                self::ROUTE_APPROVALS
+            );
+            return;
+        }
+
+        // No supervisor → notify HRD/Admin directly
+        $hrds = User::where('company_id', $companyId)
+            ->where('id', '!=', $user->id)
+            ->whereHas('role', fn ($q) => $q->where('name', 'HRD')->orWhere('name', 'Admin'))
+            ->get();
+
+        foreach ($hrds as $hrd) {
+            $this->notify(
+                $hrd,
+                'PENGAJUAN IZIN BARU (HRD)',
+                "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}. Karyawan tidak memiliki Supervisor, mohon segera tinjau.",
+                'warning',
+                self::ROUTE_APPROVALS
+            );
+        }
     }
 
     public function approve(Request $request, $id)
