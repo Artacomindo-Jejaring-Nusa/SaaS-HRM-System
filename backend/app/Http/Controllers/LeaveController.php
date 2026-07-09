@@ -119,8 +119,8 @@ class LeaveController extends Controller
             // Notify the submitter
             $this->notify(
                 $user,
-                'PENGAJUAN CUTI BERHASIL',
-                "Permohonan cuti ({$request->type}) Anda dari tanggal {$request->start_date} s/d {$request->end_date} telah diajukan. Menunggu: {$workflowResult['step_label']}.",
+                'Pengajuan Cuti Berhasil',
+                "Halo, permohonan cuti Anda ({$request->type}) untuk tanggal {$request->start_date} s/d {$request->end_date} telah berhasil diajukan. Status: Menunggu {$workflowResult['step_label']}.",
                 'info'
             );
 
@@ -128,8 +128,8 @@ class LeaveController extends Controller
             foreach ($workflowResult['approvers'] as $approver) {
                 $this->notify(
                     $approver,
-                    'PENGAJUAN CUTI PERLU PERSETUJUAN',
-                    "{$user->name} telah mengajukan cuti ({$request->type}) pada {$request->start_date} s/d {$request->end_date}. Mohon segera tinjau.",
+                    'Persetujuan Cuti Karyawan',
+                    "Halo Bapak/Ibu, ada permohonan cuti baru dari {$user->name} ({$request->type}) untuk tanggal {$request->start_date} s/d {$request->end_date}. Mohon kesediaannya untuk meninjau pengajuan ini. Terima kasih.",
                     'warning',
                     self::ROUTE_APPROVALS
                 );
@@ -153,8 +153,8 @@ class LeaveController extends Controller
 
             $this->notify(
                 $user,
-                'PENGAJUAN CUTI BERHASIL',
-                "Permohonan cuti ({$request->type}) Anda dari tanggal {$request->start_date} s/d {$request->end_date} telah diajukan dan sedang menunggu persetujuan.",
+                'Pengajuan Cuti Berhasil',
+                "Halo, permohonan cuti Anda ({$request->type}) untuk tanggal {$request->start_date} s/d {$request->end_date} telah berhasil diajukan dan saat ini sedang menunggu persetujuan. Terima kasih.",
                 'info'
             );
 
@@ -164,8 +164,8 @@ class LeaveController extends Controller
                 if ($supervisor) {
                     $this->notify(
                         $supervisor,
-                        'PENGAJUAN CUTI BAWAHAN',
-                        "{$user->name} telah mengajukan cuti ({$request->type}) pada {$request->start_date}. Mohon segera tinjau.",
+                        'Persetujuan Cuti Bawahan',
+                        "Halo Bapak/Ibu, ada permohonan cuti baru dari {$user->name} ({$request->type}) mulai tanggal {$request->start_date}. Mohon kesediaannya untuk meninjau pengajuan ini. Terima kasih.",
                         'warning',
                         self::ROUTE_APPROVALS
                     );
@@ -173,7 +173,6 @@ class LeaveController extends Controller
             }
 
             // 2. Notify HRD/Admin ONLY if user has no supervisor
-            // If supervisor exists, HRD will be notified after supervisor approves
             if (! $user->supervisor_id) {
                 $hrds = User::where('company_id', $companyId)
                     ->where('id', '!=', $user->id)
@@ -185,8 +184,8 @@ class LeaveController extends Controller
                 foreach ($hrds as $hrd) {
                     $this->notify(
                         $hrd,
-                        'PENGAJUAN CUTI BARU (HRD)',
-                        "{$user->name} telah mengajukan cuti ({$request->type}) pada {$request->start_date}. Karyawan tidak memiliki Supervisor, mohon segera tinjau.",
+                        'Pengajuan Cuti Baru (HRD)',
+                        "Halo tim HRD, ada permohonan cuti baru dari {$user->name} ({$request->type}) mulai tanggal {$request->start_date}. Dikarenakan karyawan tidak memiliki Supervisor langsung, mohon kesediaannya untuk memeriksa pengajuan ini. Terima kasih.",
                         'warning',
                         self::ROUTE_APPROVALS
                     );
@@ -314,7 +313,7 @@ class LeaveController extends Controller
                 'supervisor_remark'     => $request->remark,
             ]);
 
-            $this->notify($leave->user, 'CUTI DI-APPROVE ATASAN', "Cuti Anda ({$leave->type}) telah disetujui oleh atasan. Menunggu persetujuan HRD.", 'info');
+            $this->notify($leave->user, 'Cuti Disetujui Atasan', "Kabar baik, permohonan cuti Anda ({$leave->type}) telah disetujui oleh atasan langsung Anda. Saat ini pengajuan sedang diteruskan ke tim HRD untuk persetujuan akhir.", 'info');
             $this->notifyHrdsAfterSupervisorApprove($leave);
 
             return $this->successResponse(null, 'Di-approve oleh atasan. Menunggu proses HRD.');
@@ -364,8 +363,8 @@ class LeaveController extends Controller
 
         $this->notify(
             $leave->user,
-            'CUTI DISETUJUI',
-            "Permohonan cuti Anda untuk tanggal {$leave->start_date} s/d {$leave->end_date} telah DISETUJUI oleh Admin.",
+            'Pengajuan Cuti Disetujui',
+            "Selamat! Permohonan cuti Anda untuk tanggal {$leave->start_date} s/d {$leave->end_date} telah disetujui sepenuhnya oleh manajemen. Semoga liburan Anda menyenangkan!",
             'success'
         );
 
@@ -384,8 +383,8 @@ class LeaveController extends Controller
         foreach ($hrds as $hrd) {
             $this->notify(
                 $hrd,
-                'CUTI MENUNGGU PERSETUJUAN HRD',
-                "Cuti {$leave->user->name} ({$leave->type}) telah disetujui Supervisor. Mohon segera proses.",
+                'Persetujuan Cuti Baru (HRD)',
+                "Halo tim HRD, permohonan cuti dari {$leave->user->name} ({$leave->type}) telah disetujui oleh Supervisor dan saat ini memerlukan persetujuan akhir dari Anda. Terima kasih.",
                 'warning',
                 self::ROUTE_APPROVALS
             );

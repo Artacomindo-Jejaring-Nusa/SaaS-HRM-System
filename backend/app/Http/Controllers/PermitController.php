@@ -144,16 +144,16 @@ class PermitController extends Controller
     {
         $this->notify(
             $user,
-            'PENGAJUAN IZIN BERHASIL',
-            "Permohonan izin [{$categoryLabel}] ({$request->type}) Anda telah diajukan. Menunggu: {$workflowResult['step_label']}.{$alphaNote}",
+            'Pengajuan Izin Berhasil',
+            "Halo, permohonan izin [{$categoryLabel}] ({$request->type}) Anda telah berhasil diajukan. Status: Menunggu {$workflowResult['step_label']}.{$alphaNote}",
             'info'
         );
 
         foreach ($workflowResult['approvers'] as $approver) {
             $this->notify(
                 $approver,
-                'PENGAJUAN IZIN PERLU PERSETUJUAN',
-                "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}. Mohon segera tinjau.",
+                'Persetujuan Izin Karyawan',
+                "Halo Bapak/Ibu, ada permohonan izin baru dari {$user->name} [{$categoryLabel}] ({$request->type}) pada {$request->start_date}. Mohon kesediaannya untuk meninjau pengajuan ini. Terima kasih.",
                 'warning',
                 self::ROUTE_APPROVALS
             );
@@ -167,16 +167,16 @@ class PermitController extends Controller
     {
         $this->notify(
             $user,
-            'PENGAJUAN IZIN BERHASIL',
-            "Permohonan izin [{$categoryLabel}] ({$request->type}) Anda telah diajukan dan sedang menunggu persetujuan.{$alphaNote}",
+            'Pengajuan Izin Berhasil',
+            "Halo, permohonan izin [{$categoryLabel}] ({$request->type}) Anda telah berhasil diajukan dan saat ini sedang menunggu persetujuan.{$alphaNote}",
             'info'
         );
 
         if ($user->supervisor_id && $user->supervisor) {
             $this->notify(
                 $user->supervisor,
-                'PENGAJUAN IZIN PERLU PERSETUJUAN',
-                "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}. Mohon segera tinjau.",
+                'Persetujuan Izin Bawahan',
+                "Halo Bapak/Ibu, ada permohonan izin baru [{$categoryLabel}] ({$request->type}) dari {$user->name} pada {$request->start_date}. Mohon kesediaannya untuk meninjau pengajuan ini. Terima kasih.",
                 'warning',
                 self::ROUTE_APPROVALS
             );
@@ -192,8 +192,8 @@ class PermitController extends Controller
         foreach ($hrds as $hrd) {
             $this->notify(
                 $hrd,
-                'PENGAJUAN IZIN BARU (HRD)',
-                "{$user->name} telah mengajukan izin [{$categoryLabel}] ({$request->type}) pada {$request->start_date}. Karyawan tidak memiliki Supervisor, mohon segera tinjau.",
+                'Pengajuan Izin Baru (HRD)',
+                "Halo tim HRD, ada permohonan izin baru [{$categoryLabel}] ({$request->type}) dari {$user->name} pada {$request->start_date}. Dikarenakan karyawan tidak memiliki Supervisor langsung, mohon kesediaannya untuk memeriksa pengajuan ini. Terima kasih.",
                 'warning',
                 self::ROUTE_APPROVALS
             );
@@ -260,8 +260,8 @@ class PermitController extends Controller
             if ($result['is_final'] && $result['status'] === 'approved') {
                 $this->notify(
                     $permit->user,
-                    'IZIN DISETUJUI',
-                    "Permohonan izin ({$permit->type}) Anda untuk tanggal {$permit->start_date} telah DISETUJUI.",
+                    'Pengajuan Izin Disetujui',
+                    "Selamat! Permohonan izin ({$permit->type}) Anda untuk tanggal {$permit->start_date} telah disetujui sepenuhnya oleh manajemen.",
                     'success'
                 );
                 FCMService::sendNotification($permit->user, 'Permohonan Izin Disetujui', 'Izin Anda telah DISETUJUI.');
@@ -272,10 +272,10 @@ class PermitController extends Controller
             // Notify next step
             if (isset($result['approvers'])) {
                 foreach ($result['approvers'] as $nextApprover) {
-                    $this->notify($nextApprover, 'IZIN MENUNGGU PERSETUJUAN', "Pengajuan izin {$permit->user->name} menunggu persetujuan Anda. Tahap: {$result['step_label']}.", 'warning', self::ROUTE_APPROVALS);
+                    $this->notify($nextApprover, 'Persetujuan Izin Karyawan', "Pengajuan izin {$permit->user->name} menunggu persetujuan Anda. Tahap: {$result['step_label']}.", 'warning', self::ROUTE_APPROVALS);
                 }
             }
-            $this->notify($permit->user, 'IZIN DALAM PROSES', "Pengajuan izin Anda telah disetujui di tahap sebelumnya. Menunggu: {$result['step_label']}.", 'info');
+            $this->notify($permit->user, 'Pengajuan Izin Diproses', "Pengajuan izin Anda telah disetujui di tahap sebelumnya. Status saat ini: Menunggu {$result['step_label']}.", 'info');
 
             return $this->successResponse(null, "Di-approve. Menunggu: {$result['step_label']}.");
         }
@@ -300,8 +300,8 @@ class PermitController extends Controller
 
             $this->notify(
                 $permit->user,
-                'IZIN DI-APPROVE ATASAN',
-                "Izin ({$permit->type}) Anda telah disetujui oleh atasan. Menunggu persetujuan HRD.",
+                'Izin Disetujui Atasan',
+                "Kabar baik, permohonan izin ({$permit->type}) Anda telah disetujui oleh atasan langsung. Saat ini pengajuan sedang diteruskan ke tim HRD untuk persetujuan akhir.",
                 'info'
             );
 
@@ -314,8 +314,8 @@ class PermitController extends Controller
             foreach ($hrds as $hrd) {
                 $this->notify(
                     $hrd,
-                    'IZIN MENUNGGU PERSETUJUAN HRD',
-                    "Izin {$permit->user->name} ({$permit->type}) telah disetujui Supervisor. Mohon segera proses.",
+                    'Persetujuan Izin Baru (HRD)',
+                    "Halo tim HRD, permohonan izin dari {$permit->user->name} ({$permit->type}) telah disetujui oleh Supervisor dan saat ini memerlukan persetujuan akhir dari Anda. Terima kasih.",
                     'warning',
                     self::ROUTE_APPROVALS
                 );
@@ -333,8 +333,8 @@ class PermitController extends Controller
 
         $this->notify(
             $permit->user,
-            'IZIN DISETUJUI',
-            "Permohonan izin ({$permit->type}) Anda untuk tanggal {$permit->start_date} telah DISETUJUI.",
+            'Pengajuan Izin Disetujui',
+            "Selamat! Permohonan izin ({$permit->type}) Anda untuk tanggal {$permit->start_date} telah disetujui sepenuhnya oleh manajemen.",
             'success'
         );
 

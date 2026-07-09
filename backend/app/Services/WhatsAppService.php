@@ -72,10 +72,13 @@ class WhatsAppService
         // Ensure base URL ends with / and appends send
         $url = rtrim($this->baseUrl, '/').'/send';
 
+        // Anti-spam: Tambahkan suffix referensi unik agar setiap pesan terbaca berbeda oleh WhatsApp
+        $formattedMessage = $message . "\n\n_(Ref: " . now()->format('Ymd-His') . ")_";
+
         try {
             $payload = [
                 'target' => $phone,
-                'message' => $message,
+                'message' => $formattedMessage,
                 'countryCode' => '62',
             ];
 
