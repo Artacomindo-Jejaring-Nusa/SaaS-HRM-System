@@ -152,6 +152,21 @@ class User extends Authenticatable
         return $this->role_id === 1;
     }
 
+    /**
+     * Scope a query to only include HRD or Admin users (or users with specific permission).
+     */
+    public function scopeWhereHrdOrAdmin($query, string $permissionSlug)
+    {
+        return $query->where(function ($q) use ($permissionSlug) {
+            $q->whereHas('role', function ($r) {
+                $r->where('name', 'like', '%HRD%')
+                  ->orWhere('name', 'like', '%Admin%');
+            })->orWhereHas('role.permissions', function ($p) use ($permissionSlug) {
+                $p->where('slug', $permissionSlug);
+            });
+        });
+    }
+
     public function salaries()
     {
         return $this->hasMany(Salary::class);
