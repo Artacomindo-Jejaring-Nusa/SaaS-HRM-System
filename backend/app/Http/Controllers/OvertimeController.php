@@ -231,12 +231,20 @@ class OvertimeController extends Controller
             }
 
             $admins = User::where('company_id', $companyId)
-                ->where('role_id', '>', 1)
+                ->where('id', '!=', $user->id)
                 ->where('id', '!=', $user->supervisor_id)
+                ->where(function ($query) {
+                    $query->whereHas('role', function ($q) {
+                        $q->where('name', 'like', '%HRD%')
+                          ->orWhere('name', 'like', '%Admin%');
+                    })->orWhereHas('role.permissions', function ($q) {
+                        $q->where('slug', 'approve-overtimes');
+                    });
+                })
                 ->get();
 
             foreach ($admins as $admin) {
-                $this->notify($admin, 'PENGAJUAN LEMBUR BARU (ADMIN)', "{$user->name} telah mengajukan lembur.", 'warning');
+                $this->notify($admin, 'PENGAJUAN LEMBUR BARU (ADMIN)', "{$user->name} telah mengajukan lembur.", 'warning', self::ROUTE_APPROVALS);
             }
 
             $this->notify($user, self::NOTIFICATION_OVERTIME_SUCCESS, "Permohonan lembur Anda sedang menunggu persetujuan.", 'info');
