@@ -233,14 +233,7 @@ class OvertimeController extends Controller
             $admins = User::where('company_id', $companyId)
                 ->where('id', '!=', $user->id)
                 ->where('id', '!=', $user->supervisor_id)
-                ->where(function ($query) {
-                    $query->whereHas('role', function ($q) {
-                        $q->where('name', 'like', '%HRD%')
-                          ->orWhere('name', 'like', '%Admin%');
-                    })->orWhereHas('role.permissions', function ($q) {
-                        $q->where('slug', 'approve-overtimes');
-                    });
-                })
+                ->whereHrdOrAdmin('approve-overtimes')
                 ->get();
 
             foreach ($admins as $admin) {
