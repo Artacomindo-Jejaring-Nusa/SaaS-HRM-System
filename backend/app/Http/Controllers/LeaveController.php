@@ -176,8 +176,13 @@ class LeaveController extends Controller
             if (! $user->supervisor_id) {
                 $hrds = User::where('company_id', $companyId)
                     ->where('id', '!=', $user->id)
-                    ->whereHas('role', function ($q) {
-                        $q->where('name', 'HRD')->orWhere('name', 'Admin');
+                    ->where(function ($query) {
+                        $query->whereHas('role', function ($q) {
+                            $q->where('name', 'like', '%HRD%')
+                              ->orWhere('name', 'like', '%Admin%');
+                        })->orWhereHas('role.permissions', function ($q) {
+                            $q->where('slug', 'approve-leaves');
+                        });
                     })
                     ->get();
 
@@ -377,7 +382,14 @@ class LeaveController extends Controller
     private function notifyHrdsAfterSupervisorApprove(Leave $leave): void
     {
         $hrds = User::where('company_id', $leave->company_id)
-            ->whereHas('role', fn ($q) => $q->where('name', 'HRD')->orWhere('name', 'Admin'))
+            ->where(function ($query) {
+                $query->whereHas('role', function ($q) {
+                    $q->where('name', 'like', '%HRD%')
+                      ->orWhere('name', 'like', '%Admin%');
+                })->orWhereHas('role.permissions', function ($q) {
+                    $q->where('slug', 'approve-leaves');
+                });
+            })
             ->get();
 
         foreach ($hrds as $hrd) {

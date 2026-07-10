@@ -359,6 +359,7 @@ class DynamicApprovalFlowTest extends TestCase
             'start_date' => '2026-06-01',
             'end_date' => '2026-06-02',
             'type' => 'Izin Sakit',
+            'category' => 'S',
             'reason' => 'Demam',
             'signature' => 'data:image/png;base64,mocksignaturedata',
         ];

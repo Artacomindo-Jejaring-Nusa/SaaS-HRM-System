@@ -186,7 +186,14 @@ class PermitController extends Controller
         // No supervisor → notify HRD/Admin directly
         $hrds = User::where('company_id', $companyId)
             ->where('id', '!=', $user->id)
-            ->whereHas('role', fn ($q) => $q->where('name', 'HRD')->orWhere('name', 'Admin'))
+            ->where(function ($query) {
+                $query->whereHas('role', function ($q) {
+                    $q->where('name', 'like', '%HRD%')
+                      ->orWhere('name', 'like', '%Admin%');
+                })->orWhereHas('role.permissions', function ($q) {
+                    $q->where('slug', 'approve-permits');
+                });
+            })
             ->get();
 
         foreach ($hrds as $hrd) {
@@ -307,8 +314,13 @@ class PermitController extends Controller
 
             // Notify HRD/Admin
             $hrds = User::where('company_id', $permit->company_id)
-                ->whereHas('role', function ($q) {
-                    $q->where('name', 'HRD')->orWhere('name', 'Admin');
+                ->where(function ($query) {
+                    $query->whereHas('role', function ($q) {
+                        $q->where('name', 'like', '%HRD%')
+                          ->orWhere('name', 'like', '%Admin%');
+                    })->orWhereHas('role.permissions', function ($q) {
+                        $q->where('slug', 'approve-permits');
+                    });
                 })
                 ->get();
             foreach ($hrds as $hrd) {
