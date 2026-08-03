@@ -271,7 +271,7 @@ export default function OrganizationChartPage() {
     }
 
     return (
-      <div className="flex-1 bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden relative min-h-[500px]">
+      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden relative" style={{ height: 'calc(100vh - 220px)' }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
