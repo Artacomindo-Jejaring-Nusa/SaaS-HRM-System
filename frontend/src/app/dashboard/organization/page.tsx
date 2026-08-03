@@ -239,6 +239,78 @@ export default function OrganizationChartPage() {
     return "#8B0000";
   }, []);
 
+  // Render content based on state (extracted to avoid nested ternary — SonarQube S3358)
+  const renderContent = () => {
+    if (isLoading) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center min-h-[400px]">
+          <Loader2 className="animate-spin text-[#8B0000] mb-4" size={40} />
+          <p className="font-bold text-gray-500 animate-pulse uppercase tracking-widest text-sm">
+            Menghimpun Data Struktur...
+          </p>
+        </div>
+      );
+    }
+
+    if (flatData.length === 0) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center bg-white border border-gray-100 border-dashed rounded-3xl p-12 text-center my-8">
+          <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+            <AlertCircle className="text-gray-400" size={32} />
+          </div>
+          <h3 className="text-lg font-bold text-gray-900 mb-2">
+            Bagan Organisasi Kosong
+          </h3>
+          <p className="text-sm text-gray-500 max-w-sm mx-auto">
+            Belum ada data relasi hirarki antar karyawan yang ditemukan. Mohon
+            lengkapi profil `supervisor` (atasan) pada masing-masing data
+            karyawan.
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex-1 bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden relative min-h-[500px]">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          nodeTypes={nodeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.3, maxZoom: 1.2 }}
+          minZoom={0.1}
+          maxZoom={2}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          proOptions={{ hideAttribution: true }}
+          className="org-chart-flow"
+        >
+          <Controls
+            showInteractive={false}
+            className="!bg-white !border !border-gray-200 !rounded-xl !shadow-lg"
+          />
+          <MiniMap
+            nodeColor={minimapNodeColor}
+            nodeStrokeWidth={3}
+            maskColor="rgba(0,0,0,0.08)"
+            className="!bg-gray-50 !border !border-gray-200 !rounded-xl !shadow-lg"
+            pannable
+            zoomable
+          />
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={24}
+            size={1}
+            color="#e5e7eb"
+          />
+        </ReactFlow>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full bg-gray-50/30 rounded-3xl overflow-hidden p-6 animate-in fade-in zoom-in-95 duration-500">
       {/* Header */}
@@ -264,66 +336,7 @@ export default function OrganizationChartPage() {
       </div>
 
       {/* Content Area */}
-      {isLoading ? (
-        <div className="flex-1 flex flex-col items-center justify-center min-h-[400px]">
-          <Loader2 className="animate-spin text-[#8B0000] mb-4" size={40} />
-          <p className="font-bold text-gray-500 animate-pulse uppercase tracking-widest text-sm">
-            Menghimpun Data Struktur...
-          </p>
-        </div>
-      ) : flatData.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center bg-white border border-gray-100 border-dashed rounded-3xl p-12 text-center my-8">
-          <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-            <AlertCircle className="text-gray-400" size={32} />
-          </div>
-          <h3 className="text-lg font-bold text-gray-900 mb-2">
-            Bagan Organisasi Kosong
-          </h3>
-          <p className="text-sm text-gray-500 max-w-sm mx-auto">
-            Belum ada data relasi hirarki antar karyawan yang ditemukan. Mohon
-            lengkapi profil `supervisor` (atasan) pada masing-masing data
-            karyawan.
-          </p>
-        </div>
-      ) : (
-        <div className="flex-1 bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden relative min-h-[500px]">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            nodeTypes={nodeTypes}
-            fitView
-            fitViewOptions={{ padding: 0.3, maxZoom: 1.2 }}
-            minZoom={0.1}
-            maxZoom={2}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            elementsSelectable={false}
-            proOptions={{ hideAttribution: true }}
-            className="org-chart-flow"
-          >
-            <Controls
-              showInteractive={false}
-              className="!bg-white !border !border-gray-200 !rounded-xl !shadow-lg"
-            />
-            <MiniMap
-              nodeColor={minimapNodeColor}
-              nodeStrokeWidth={3}
-              maskColor="rgba(0,0,0,0.08)"
-              className="!bg-gray-50 !border !border-gray-200 !rounded-xl !shadow-lg"
-              pannable
-              zoomable
-            />
-            <Background
-              variant={BackgroundVariant.Dots}
-              gap={24}
-              size={1}
-              color="#e5e7eb"
-            />
-          </ReactFlow>
-        </div>
-      )}
+      {renderContent()}
     </div>
   );
 }
