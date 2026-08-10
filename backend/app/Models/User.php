@@ -33,6 +33,7 @@ class User extends Authenticatable
         'ptkp_status', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no',
         'bank_name', 'bank_account_no', 'bank_account_name', 'cost_center', 'basic_salary',
         'fixed_allowance', 'working_days_per_week', 'payroll_type',
+        'leave_period_start', 'leave_accrued', 'leave_used', 'leave_expand_used', 'leave_expand_last_month',
     ];
 
     protected $hidden = [
@@ -40,7 +41,7 @@ class User extends Authenticatable
         'remember_token',
     ];
 
-    protected $appends = ['profile_photo_url', 'is_manager'];
+    protected $appends = ['profile_photo_url', 'is_manager', 'kemnaker_leave_balance', 'is_eligible_for_leave'];
 
     public function getProfilePhotoUrlAttribute()
     {
@@ -75,6 +76,7 @@ class User extends Authenticatable
             'wfh_start_date' => 'date',
             'wfh_end_date' => 'date',
             'date_of_birth' => 'date',
+            'leave_expand_last_month' => 'date',
         ];
     }
 
@@ -185,5 +187,98 @@ class User extends Authenticatable
     public function permits()
     {
         return $this->hasMany(Permit::class);
+    }
+
+    // ── Kemnaker Leave Helpers & Accessors ──
+
+    public function getIsEligibleForLeaveAttribute(): bool
+    {
+        if (!$this->join_date) {
+            return false;
+        }
+        return \Carbon\Carbon::parse($this->join_date)->diffInYears(now()) >= 1;
+    }
+
+    public function getCurrentLeavePeriod(): array
+    {
+        if (!$this->join_date) {
+            return ['start' => null, 'end' => null];
+        }
+        $joinDate = \Carbon\Carbon::parse($this->join_date);
+        $currentYear = now()->year;
+        
+        // Anniversary date in the current year
+        $anniversaryThisYear = \Carbon\Carbon::create($currentYear, $joinDate->month, $joinDate->day);
+        
+        if (now()->lt($anniversaryThisYear)) {
+            // Anniversary is later this year, so active period started last year
+            $start = \Carbon\Carbon::create($currentYear - 1, $joinDate->month, $joinDate->day)->startOfDay();
+            $end = \Carbon\Carbon::create($currentYear, $joinDate->month, $joinDate->day)->subDay()->endOfDay();
+        } else {
+            // Anniversary was already reached this year
+            $start = $anniversaryThisYear->copy()->startOfDay();
+            $end = $anniversaryThisYear->copy()->addYear()->subDay()->endOfDay();
+        }
+        
+        return [
+            'start' => $start,
+            'end' => $end
+        ];
+    }
+
+    public function getAccruedLeaveCount(): int
+    {
+        if (!$this->is_eligible_for_leave) {
+            return 0;
+        }
+        $period = $this->getCurrentLeavePeriod();
+        if (!$period['start']) {
+            return 0;
+        }
+        
+        // Months elapsed in current period
+        $months = $period['start']->diffInMonths(now());
+        
+        // Cap at 12 days per period. Accrues 1 day per month (including the first month)
+        return min(12, $months + 1);
+    }
+
+    public function getKemnakerLeaveBalanceAttribute(): int
+    {
+        if (!$this->is_eligible_for_leave) {
+            return 0;
+        }
+        
+        $accrued = $this->getAccruedLeaveCount();
+        
+        // Total approved annual leaves in current period
+        $period = $this->getCurrentLeavePeriod();
+        $used = $this->leaves()
+            ->where('type', 'Cuti Tahunan')
+            ->where('status', 'approved')
+            ->whereBetween('start_date', [$period['start'], $period['end']])
+            ->get()
+            ->sum(function ($l) {
+                return \Carbon\Carbon::parse($l->start_date)->diffInDays(\Carbon\Carbon::parse($l->end_date)) + 1;
+            });
+            
+        return max(0, $accrued - $used);
+    }
+
+    public function canUseExpandMendadak(): bool
+    {
+        if (!$this->is_eligible_for_leave) {
+            return false;
+        }
+        
+        // If they have not used the expand in the current month, they can use it
+        if ($this->leave_expand_last_month) {
+            $last = \Carbon\Carbon::parse($this->leave_expand_last_month);
+            if ($last->year === now()->year && $last->month === now()->month) {
+                return false;
+            }
+        }
+        
+        return true;
     }
 }

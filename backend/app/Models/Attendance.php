@@ -17,10 +17,15 @@ class Attendance extends Model
         'latitude_out', 'longitude_out',
         'image_in', 'image_out',
         'status', 'is_suspicious', 'suspicious_reason',
+        'attendance_type', 'dinas_luar_destination', 'dinas_luar_notes',
+        'dinas_luar_status', 'approved_by_spv', 'approved_at_spv',
+        'approved_by_hr', 'approved_at_hr', 'rejection_reason',
     ];
 
     protected $casts = [
         'is_suspicious' => 'boolean',
+        'approved_at_spv' => 'datetime',
+        'approved_at_hr' => 'datetime',
     ];
 
     protected $appends = ['date', 'check_in_time', 'check_out_time', 'check_in_location', 'image_in_url', 'image_out_url'];
@@ -38,6 +43,26 @@ class Attendance extends Model
     public function office()
     {
         return $this->belongsTo(Office::class);
+    }
+
+    public function spvApprover()
+    {
+        return $this->belongsTo(User::class, 'approved_by_spv');
+    }
+
+    public function hrApprover()
+    {
+        return $this->belongsTo(User::class, 'approved_by_hr');
+    }
+
+    public function isDinasLuar(): bool
+    {
+        return $this->attendance_type === 'dinas_luar';
+    }
+
+    public function isDinasLuarApproved(): bool
+    {
+        return $this->dinas_luar_status === 'approved_hr';
     }
 
     public function getDateAttribute()

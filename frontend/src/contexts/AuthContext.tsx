@@ -13,6 +13,7 @@ interface User {
   role_id: number;
   company_id?: number;
   leave_balance?: number;
+  kemnaker_leave_balance?: number;
   profile_photo_url?: string;
   is_manager?: boolean;
   office?: {

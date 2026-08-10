@@ -170,6 +170,12 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::post('/attendance-corrections/{id}/reject', [AttendanceCorrectionController::class, 'reject']);
     });
 
+    // Dinas Luar Approval
+    Route::get('/attendance/dinas-luar/pending', [AttendanceController::class, 'pendingDinasLuar']);
+    Route::post('/attendance/dinas-luar/{id}/approve-spv', [AttendanceController::class, 'approveDinasLuarSpv']);
+    Route::post('/attendance/dinas-luar/{id}/approve-hr', [AttendanceController::class, 'approveDinasLuarHr']);
+    Route::post('/attendance/dinas-luar/{id}/reject', [AttendanceController::class, 'rejectDinasLuar']);
+
     // Custom Approval Workflows
     Route::get('/approval-workflows', [ApprovalWorkflowController::class, 'index']);
     Route::get('/approval-workflows/modules', [ApprovalWorkflowController::class, 'getModuleKeys']);
@@ -179,6 +185,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::post('/approval-workflows', [ApprovalWorkflowController::class, 'store']);
 
     // Leave
+    Route::get('/leave/types', [LeaveController::class, 'getLeaveTypes']);
     Route::middleware('permission:view-leaves')->group(function () {
         Route::get('/leave', [LeaveController::class, 'index']);
         Route::get('/leave/calendar', [LeaveController::class, 'calendar']);

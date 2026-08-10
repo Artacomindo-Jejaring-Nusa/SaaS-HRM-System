@@ -15,6 +15,21 @@ class LeaveController extends Controller
 
     private const TYPE_ANNUAL_LEAVE = 'Cuti Tahunan';
 
+    private const KEMNAKER_LEAVE_TYPES = [
+        'Cuti Tahunan' => ['days' => 12, 'paid' => true, 'article' => 'Pasal 79 UU No. 13/2003', 'uses_quota' => true],
+        'Cuti Sakit' => ['days' => 0, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
+        'Cuti Melahirkan' => ['days' => 90, 'paid' => true, 'article' => 'Pasal 82 UU No. 13/2003', 'uses_quota' => false],
+        'Cuti Keguguran' => ['days' => 45, 'paid' => true, 'article' => 'Pasal 82 UU No. 13/2003', 'uses_quota' => false],
+        'Cuti Menikah' => ['days' => 3, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
+        'Menikahkan Anak' => ['days' => 2, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
+        'Khitanan/Baptis Anak' => ['days' => 2, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
+        'Istri Melahirkan/Keguguran' => ['days' => 2, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
+        'Kematian Keluarga Inti' => ['days' => 2, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
+        'Kematian Keluarga Serumah' => ['days' => 1, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
+        'Haid (Hari 1 & 2)' => ['days' => 2, 'paid' => true, 'article' => 'Pasal 81 UU No. 13/2003', 'uses_quota' => false],
+        'Cuti Besar/Panjang' => ['days' => 0, 'paid' => false, 'article' => 'Pasal 79 UU No. 13/2003', 'uses_quota' => false],
+    ];
+
     public function index(Request $request): \Illuminate\Http\JsonResponse
     {
         $query = Leave::with(['user.supervisor', 'user.company', 'user.role', 'supervisorApprover', 'hrApprover']);
@@ -36,7 +51,8 @@ class LeaveController extends Controller
             'status' => 'success',
             'message' => 'Data cuti berhasil diambil.',
             'data' => $leaves,
-            'leave_balance' => $user->leave_balance,
+            'leave_balance' => $user->kemnaker_leave_balance,
+            'is_eligible_for_leave' => $user->is_eligible_for_leave,
         ]);
     }
 
@@ -75,10 +91,40 @@ class LeaveController extends Controller
             'signature' => 'required|string', // Base64 signature
         ]);
 
-        if ($request->type === self::TYPE_ANNUAL_LEAVE) {
-            $requestedDays = Carbon::parse($request->start_date)->diffInDays(Carbon::parse($request->end_date)) + 1;
+        $user = $request->user();
+        $companyId = $user->company_id;
 
-            $pendingDays = Leave::where('user_id', $request->user()->id)
+        // Check if leave type is valid under Kemnaker
+        $typeMeta = self::KEMNAKER_LEAVE_TYPES[$request->type] ?? null;
+        if (!$typeMeta) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tipe cuti tidak valid menurut ketentuan ketenagakerjaan.',
+            ], 400);
+        }
+
+        $requestedDays = Carbon::parse($request->start_date)->diffInDays(Carbon::parse($request->end_date)) + 1;
+
+        // Check if duration exceeds maximum Kemnaker limit (for non-zero configurations)
+        if ($typeMeta['days'] > 0 && $requestedDays > $typeMeta['days']) {
+            return response()->json([
+                'status' => 'error',
+                'message' => "Durasi cuti {$request->type} melebihi batas maksimal UU Ketenagakerjaan ({$typeMeta['days']} hari).",
+            ], 400);
+        }
+
+        $isExpandUsed = false;
+
+        // Eligibility and Balance Validation for Cuti Tahunan
+        if ($request->type === self::TYPE_ANNUAL_LEAVE) {
+            if (!$user->is_eligible_for_leave) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Anda belum berhak mengambil Cuti Tahunan karena masa kerja kurang dari 1 tahun.',
+                ], 400);
+            }
+
+            $pendingDays = Leave::where('user_id', $user->id)
                 ->where('type', self::TYPE_ANNUAL_LEAVE)
                 ->whereIn('status', ['pending', 'pending_supervisor', 'pending_hr'])
                 ->get()
@@ -86,35 +132,48 @@ class LeaveController extends Controller
                     return Carbon::parse($l->start_date)->diffInDays(Carbon::parse($l->end_date)) + 1;
                 });
 
-            if ($request->user()->leave_balance < ($requestedDays + $pendingDays)) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Sisa cuti tahunan Anda tidak mencukupi (termasuk cuti yang masih pending/menunggu).',
-                ], 400);
+            $availableBalance = $user->kemnaker_leave_balance;
+            $requiredBalance = $requestedDays + $pendingDays;
+
+            if ($availableBalance < $requiredBalance) {
+                // Check if they are short by exactly 1 day and can use "expand mendadak"
+                $shortfall = $requiredBalance - $availableBalance;
+                if ($shortfall == 1 && $user->canUseExpandMendadak()) {
+                    $isExpandUsed = true;
+                } else {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Sisa cuti tahunan Anda tidak mencukupi (termasuk cuti yang masih pending/menunggu).',
+                    ], 400);
+                }
             }
         }
 
-        $user = $request->user();
-        $companyId = $user->company_id;
+        // Create attributes
+        $leaveAttributes = [
+            'user_id' => $user->id,
+            'company_id' => $companyId,
+            'start_date' => $request->start_date,
+            'end_date' => $request->end_date,
+            'type' => $request->type,
+            'reason' => $request->reason,
+            'leave_address' => $request->leave_address,
+            'emergency_phone' => $request->emergency_phone,
+            'signature' => $request->signature,
+            'duration_days' => $requestedDays,
+            'is_paid' => $typeMeta['paid'],
+            'kemnaker_article' => $typeMeta['article'],
+        ];
 
         // ── Dynamic Workflow Check ──
         $workflowResult = ApprovalService::initApproval('leave', $companyId, $user);
 
         if ($workflowResult) {
             // Dynamic workflow is active
-            $leave = Leave::create([
-                'user_id' => $user->id,
-                'company_id' => $companyId,
-                'start_date' => $request->start_date,
-                'end_date' => $request->end_date,
-                'type' => $request->type,
-                'reason' => $request->reason,
-                'leave_address' => $request->leave_address,
-                'emergency_phone' => $request->emergency_phone,
-                'signature' => $request->signature,
-                'status' => $workflowResult['status'],
-                'current_approval_step' => $workflowResult['current_approval_step'],
-            ]);
+            $leaveAttributes['status'] = $workflowResult['status'];
+            $leaveAttributes['current_approval_step'] = $workflowResult['current_approval_step'];
+            
+            $leave = Leave::create($leaveAttributes);
 
             // Notify the submitter
             $this->notify(
@@ -137,19 +196,9 @@ class LeaveController extends Controller
         } else {
             // ── Fallback: Default hardcoded logic ──
             $status = $user->supervisor_id ? 'pending_supervisor' : 'pending_hr';
+            $leaveAttributes['status'] = $status;
 
-            $leave = Leave::create([
-                'user_id' => $user->id,
-                'company_id' => $companyId,
-                'start_date' => $request->start_date,
-                'end_date' => $request->end_date,
-                'type' => $request->type,
-                'reason' => $request->reason,
-                'leave_address' => $request->leave_address,
-                'emergency_phone' => $request->emergency_phone,
-                'signature' => $request->signature,
-                'status' => $status,
-            ]);
+            $leave = Leave::create($leaveAttributes);
 
             $this->notify(
                 $user,
@@ -189,6 +238,14 @@ class LeaveController extends Controller
                     );
                 }
             }
+        }
+
+        // If emergency expand was used, record it on the user object
+        if ($isExpandUsed) {
+            $user->update([
+                'leave_expand_last_month' => now()->toDateString(),
+                'leave_expand_used' => $user->leave_expand_used + 1
+            ]);
         }
 
         return $this->successResponse($leave, 'Permohonan cuti berhasil diajukan.', 201);
@@ -240,7 +297,8 @@ class LeaveController extends Controller
             if ($leave->type === self::TYPE_ANNUAL_LEAVE) {
                 $days = Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1;
                 $leaveUser = $leave->user;
-                $leaveUser->leave_balance -= $days;
+                $leaveUser->leave_balance = max(0, $leaveUser->leave_balance - $days);
+                $leaveUser->leave_used += $days;
                 $leaveUser->save();
             }
 
@@ -355,7 +413,8 @@ class LeaveController extends Controller
         if ($leave->type === self::TYPE_ANNUAL_LEAVE) {
             $days      = Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1;
             $leaveUser = $leave->user;
-            $leaveUser->leave_balance -= $days;
+            $leaveUser->leave_balance = max(0, $leaveUser->leave_balance - $days);
+            $leaveUser->leave_used += $days;
             $leaveUser->save();
         }
 
@@ -482,5 +541,13 @@ class LeaveController extends Controller
         $leave->delete();
 
         return $this->successResponse(null, 'Cuti berhasil dihapus.');
+    }
+
+    public function getLeaveTypes(Request $request): \Illuminate\Http\JsonResponse
+    {
+        return response()->json([
+            'status' => 'success',
+            'data' => self::KEMNAKER_LEAVE_TYPES,
+        ]);
     }
 }

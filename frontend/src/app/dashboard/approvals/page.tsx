@@ -11,14 +11,14 @@ import { Button } from "@/components/ui/button";
 
 interface ApprovalItem {
   id: number;
-  type: "leave" | "reimbursement" | "profile" | "overtime" | "permit";
+  type: "leave" | "reimbursement" | "profile" | "overtime" | "permit" | "dinas_luar";
   user_name: string;
   category: string; // "Cuti Tahunan", "Bensin", etc.
   description: string;
   amount?: string;
   start_date?: string;
   end_date?: string;
-  status: "pending" | "approved" | "rejected";
+  status: string;
   attachment?: string;
   created_at: string;
   // Permit-specific fields for I/A/S/L
@@ -97,6 +97,7 @@ const typeLabel: Record<string, string> = {
   overtime: "Lembur",
   permit: "Izin",
   profile: "Profil",
+  dinas_luar: "Dinas Luar",
 };
 
 const typeColor: Record<string, string> = {
@@ -105,13 +106,14 @@ const typeColor: Record<string, string> = {
   overtime: "bg-amber-50 text-amber-700 border-amber-200",
   permit: "bg-purple-50 text-purple-700 border-purple-200",
   profile: "bg-orange-50 text-orange-700 border-orange-200",
+  dinas_luar: "bg-rose-50 text-rose-700 border-rose-200",
 };
 
 export default function ApprovalsPage() {
   const { user: currentUser, hasPermission } = useAuth();
   const [items, setItems] = useState<ApprovalItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "leave" | "reimbursement" | "profile" | "overtime" | "permit">("all");
+  const [filter, setFilter] = useState<"all" | "leave" | "reimbursement" | "profile" | "overtime" | "permit" | "dinas_luar">("all");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -135,12 +137,13 @@ export default function ApprovalsPage() {
   const fetchApprovals = useCallback(async () => {
     try {
       setLoading(true);
-      const [leaveRes, reimRes, profileRes, overtimeRes, permitRes] = await Promise.all([
+      const [leaveRes, reimRes, profileRes, overtimeRes, permitRes, dinasRes] = await Promise.all([
         axiosInstance.get("/leave?status=pending"),
         axiosInstance.get("/reimbursements?status=pending"),
         axiosInstance.get("/profile-requests?status=pending"),
         axiosInstance.get("/overtimes?status=pending"),
-        axiosInstance.get("/permits?status=pending")
+        axiosInstance.get("/permits?status=pending"),
+        axiosInstance.get("/attendance/dinas-luar/pending")
       ]);
       const lData = leaveRes.data.data;
       const leaves = (Array.isArray(lData) ? lData : (lData?.data || [])).map((l: RawLeave) => ({
@@ -213,13 +216,29 @@ export default function ApprovalsPage() {
         permit_is_deducted: pe.is_deducted || false,
       }));
 
+      const dData = dinasRes.data.data;
+      const dinasLuars = (Array.isArray(dData) ? dData : (dData?.data || [])).map((d: any) => ({
+        id: d.id,
+        type: "dinas_luar" as const,
+        user_name: d.user?.name || "Karyawan",
+        description: `Tujuan: ${d.dinas_luar_destination}. Keterangan: ${d.dinas_luar_notes || '-'}`,
+        category: "Dinas Luar",
+        start_date: d.check_in ? new Date(d.check_in).toLocaleString('id-ID') : undefined,
+        end_date: undefined,
+        status: d.dinas_luar_status === 'pending' ? 'pending' : (d.dinas_luar_status === 'approved_spv' ? 'waiting_approval' : d.dinas_luar_status),
+        attachment: d.image_in_url ? d.image_in_url.replace(/.*\/storage\//, '') : undefined,
+        created_at: d.created_at,
+        dinas_luar_status: d.dinas_luar_status,
+        target_supervisor_id: d.user?.supervisor_id
+      }));
+
       const roleName = currentUser?.role?.name?.toLowerCase() || "";
       const isHR = currentUser?.role_id === 1 || 
                    hasPermission('approve-leaves') || 
                    roleName.includes("hrd") || 
                    roleName.includes("admin");
 
-      const merged = [...leaves, ...reimbursements, ...profiles, ...overtimes, ...permits]
+      const merged = [...leaves, ...reimbursements, ...profiles, ...overtimes, ...permits, ...dinasLuars]
         .filter(item => {
            if (item.type === 'leave') {
               if (item.status === 'pending_supervisor') {
@@ -235,6 +254,15 @@ export default function ApprovalsPage() {
            }
            if (item.type === 'permit') {
                return isHR && item.status === "pending";
+           }
+           if (item.type === 'dinas_luar') {
+               if (item.dinas_luar_status === 'pending') {
+                   return item.target_supervisor_id === currentUser?.id || isHR;
+               }
+               if (item.dinas_luar_status === 'approved_spv') {
+                   return isHR;
+               }
+               return false;
            }
            return item.status === "pending" || item.status === "waiting_approval";
         })
@@ -286,14 +314,32 @@ export default function ApprovalsPage() {
 
       console.log(`Processing ${action} for ${item.type} ID: ${item.id}`);
       
-      // Build payload with permit override data
-      const payload: Record<string, unknown> = { remark: remarkInput };
+      // Build payload
+      let payload: Record<string, unknown> = { remark: remarkInput };
+      if (item.type === 'dinas_luar' && action === 'reject') {
+        payload = { reason: remarkInput };
+      }
       if (item.type === 'permit' && action === 'approve') {
         payload.category = permitOverrideCategory;
         payload.has_doctor_note = permitOverrideDoctorNote;
       }
       
-      await axiosInstance.post(`${endpoint}/${item.id}/${action}`, payload);
+      if (item.type === 'dinas_luar') {
+        const isHR = currentUser?.role_id === 1 || 
+                     (currentUser?.role?.name?.toLowerCase() || "").includes("hrd") || 
+                     (currentUser?.role?.name?.toLowerCase() || "").includes("admin");
+        
+        let actionSuffix = "";
+        if (action === 'reject') {
+          actionSuffix = 'reject';
+        } else {
+          // If approved by SPV previously, HR approves it next. Otherwise, SPV approves it.
+          actionSuffix = (isHR && item.status === 'waiting_approval') ? 'approve-hr' : 'approve-spv';
+        }
+        await axiosInstance.post(`/attendance/dinas-luar/${item.id}/${actionSuffix}`, payload);
+      } else {
+        await axiosInstance.post(`${endpoint}/${item.id}/${action}`, payload);
+      }
       
       // Play a satisfying 'success' sound on the Admin side
       try {
@@ -341,13 +387,14 @@ export default function ApprovalsPage() {
           <h1 className="dash-page-title">Persetujuan Pending</h1>
           <p className="dash-page-desc">Review dan proses pengajuan karyawan yang memerlukan persetujuan Anda.</p>
         </div>
-        <div className="flex bg-gray-100 p-1 rounded-xl shadow-sm border border-gray-150/50">
+        <div className="flex bg-gray-100 p-1 rounded-xl shadow-sm border border-gray-150/50 flex-wrap gap-1">
           <button onClick={() => setFilter("all")} className={`px-4 py-2 text-sm font-bold rounded-lg transition ${filter === 'all' ? 'bg-[#8B0000] text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>Semua</button>
           <button onClick={() => setFilter("leave")} className={`px-4 py-2 text-sm font-bold rounded-lg transition ${filter === 'leave' ? 'bg-[#8B0000] text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>Cuti</button>
           <button onClick={() => setFilter("reimbursement")} className={`px-4 py-2 text-sm font-bold rounded-lg transition ${filter === 'reimbursement' ? 'bg-[#8B0000] text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>Klaim</button>
           <button onClick={() => setFilter("overtime")} className={`px-4 py-2 text-sm font-bold rounded-lg transition ${filter === 'overtime' ? 'bg-[#8B0000] text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>Lembur</button>
           <button onClick={() => setFilter("permit")} className={`px-4 py-2 text-sm font-bold rounded-lg transition ${filter === 'permit' ? 'bg-[#8B0000] text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>Izin</button>
           <button onClick={() => setFilter("profile")} className={`px-4 py-2 text-sm font-bold rounded-lg transition ${filter === 'profile' ? 'bg-[#8B0000] text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>Profil</button>
+          <button onClick={() => setFilter("dinas_luar")} className={`px-4 py-2 text-sm font-bold rounded-lg transition ${filter === 'dinas_luar' ? 'bg-[#8B0000] text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>Dinas Luar</button>
         </div>
       </div>
 
