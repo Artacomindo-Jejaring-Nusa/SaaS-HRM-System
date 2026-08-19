@@ -218,16 +218,19 @@ class ApprovalService
     {
         switch ($step->approver_type) {
             case 'supervisor':
-                return 'Persetujuan Atasan Langsung';
+                return 'Checked by - Diperiksa (Atasan Langsung)';
             case 'role':
-                $roleName = $step->role ? $step->role->name : 'Unknown Role';
-                return "Persetujuan {$roleName}";
+                $roleName = $step->role ? $step->role->name : 'Management';
+                if ($step->step_number === 2) {
+                    return "Acknowledge - Diketahui ({$roleName})";
+                }
+                return "Approved by - Disetujui ({$roleName})";
             case 'user':
                 if ($step->approver_user_id) {
                     $user = User::find($step->approver_user_id);
-                    return $user ? "Persetujuan {$user->name}" : 'Persetujuan User';
+                    return $user ? "Approved by - Disetujui ({$user->name})" : 'Approved by - Disetujui (User)';
                 }
-                return 'Persetujuan User';
+                return 'Approved by - Disetujui (User)';
             default:
                 return "Tahap {$step->step_number}";
         }

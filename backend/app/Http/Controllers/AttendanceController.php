@@ -27,6 +27,7 @@ class AttendanceController extends Controller
         $now = now();
         $today = Carbon::today()->toDateString();
         $response = null;
+        $isDinasLuar = $request->attendance_type === 'dinas_luar';
 
         $attendance = Attendance::where('user_id', $user->id)
             ->whereDate('check_in', $today)
@@ -36,6 +37,9 @@ class AttendanceController extends Controller
             $response = $this->errorResponse('Anda sudah check-in hari ini.', 400);
         } elseif ($securityError = $this->validateDeviceAndSecurity($user, $request)) {
             $response = $this->errorResponse($securityError['message'], $securityError['code']);
+        } elseif ($isDinasLuar) {
+            // Dinas Luar: skip geofence, but still requires selfie (validated by request rules)
+            $response = $this->processCheckIn($user, $request, null, $now, $today);
         } elseif (!($geoResult = $this->validateGeofencing($user, $request))['success']) {
             $response = $this->errorResponse($geoResult['message'], $geoResult['status']);
         } else {
@@ -47,17 +51,19 @@ class AttendanceController extends Controller
 
     private function processCheckIn(User $user, StoreAttendanceRequest $request, $matchedOffice, Carbon $now, string $today)
     {
+        $isDinasLuar = $request->attendance_type === 'dinas_luar';
+
         $schedule = Schedule::with('shift')
             ->where('user_id', $user->id)
             ->where('date', $today)
             ->first();
 
-        $status = $this->determineCheckInStatus($user, $schedule, $now);
+        $status = $isDinasLuar ? 'dinas_luar' : $this->determineCheckInStatus($user, $schedule, $now);
 
         // Handle Image & Compression
         $imageName = null;
-        if ($request->hasFile('image')) {
-            $file = $request->file('image');
+        $file = $request->hasFile('image') ? $request->file('image') : ($request->image instanceof \Symfony\Component\HttpFoundation\File\UploadedFile ? $request->image : null);
+        if ($file) {
             $imageName = 'attendance/in_'.Str::random(40).'.jpg';
             // Compress and resize image to save storage space (target ~50-80KB)
             $img = Image::decode($file);
@@ -65,7 +71,7 @@ class AttendanceController extends Controller
             Storage::disk('public')->put($imageName, (string) $img->encodeUsingFileExtension('jpg', 80));
         }
 
-        $attendance = Attendance::create([
+        $attendanceData = [
             'user_id' => $user->id,
             'company_id' => $user->company_id,
             'check_in' => $now,
@@ -74,11 +80,29 @@ class AttendanceController extends Controller
             'image_in' => $imageName,
             'status' => $status,
             'office_id' => $matchedOffice ? $matchedOffice->id : null,
-        ]);
+            'attendance_type' => $isDinasLuar ? 'dinas_luar' : 'office',
+        ];
 
-        $this->sendCheckInNotifications($user, $status, $now);
+        // Add dinas luar specific fields
+        if ($isDinasLuar) {
+            $attendanceData['dinas_luar_destination'] = $request->dinas_luar_destination;
+            $attendanceData['dinas_luar_notes'] = $request->dinas_luar_notes;
+            $attendanceData['dinas_luar_status'] = 'pending';
+        }
 
-        return $this->successResponse($attendance, 'Check-in berhasil. Status: '.$status);
+        $attendance = Attendance::create($attendanceData);
+
+        if ($isDinasLuar) {
+            $this->sendDinasLuarNotifications($user, $attendance);
+        } else {
+            $this->sendCheckInNotifications($user, $status, $now);
+        }
+
+        $message = $isDinasLuar
+            ? 'Absen Dinas Luar berhasil tercatat. Menunggu persetujuan Supervisor.'
+            : 'Check-in berhasil. Status: '.$status;
+
+        return $this->successResponse($attendance, $message);
     }
 
     public function checkOut(StoreAttendanceRequest $request)
@@ -93,8 +117,25 @@ class AttendanceController extends Controller
 
         $faceMatch = true;
 
+        // Check minimum clock-out time (Default: 17:00 WIB / 5 PM, or Shift End Time)
+        $now = now();
+        $today = Carbon::today()->toDateString();
+        $minCheckOutTime = Carbon::today()->setHour(17)->setMinute(0)->setSecond(0);
+
+        $schedule = Schedule::with('shift')
+            ->where('user_id', $user->id)
+            ->where('date', $today)
+            ->first();
+
+        if ($schedule && $schedule->shift && $schedule->shift->end_time) {
+            $minCheckOutTime = Carbon::parse($today . ' ' . $schedule->shift->end_time);
+        }
+
         if (! $attendance) {
             $response = $this->errorResponse('Anda belum check-in atau sudah check-out.', 400);
+        } elseif ($now->lt($minCheckOutTime) && $user->role_id !== 1 && ! $request->boolean('allow_early_checkout')) {
+            $formattedTime = $minCheckOutTime->format('H:i');
+            $response = $this->errorResponse("Belum jam pulang kerja! Absen pulang baru dapat dilakukan mulai pukul {$formattedTime} WIB.", 400);
         } elseif ($request->is_mocked) {
             $response = $this->errorResponse('Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli.', 403);
         } elseif ($request->device_id && $user->device_id && $user->device_id !== $request->device_id) {
@@ -112,8 +153,8 @@ class AttendanceController extends Controller
     {
         // Handle Image & Compression
         $imageName = null;
-        if ($request->hasFile('image')) {
-            $file = $request->file('image');
+        $file = $request->hasFile('image') ? $request->file('image') : ($request->image instanceof \Symfony\Component\HttpFoundation\File\UploadedFile ? $request->image : null);
+        if ($file) {
             $imageName = 'attendance/out_'.Str::random(40).'.jpg';
             // Compress and resize image to save storage space
             $img = Image::decode($file);
@@ -459,5 +500,160 @@ class AttendanceController extends Controller
         $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
 
         return round($earthRadius * $c);
+    }
+
+    // ── Dinas Luar Notifications ──
+
+    private function sendDinasLuarNotifications(User $user, Attendance $attendance)
+    {
+        // Notify the employee
+        $this->notify(
+            $user,
+            'ABSEN DINAS LUAR TERCATAT',
+            "Absensi Dinas Luar Anda ke {$attendance->dinas_luar_destination} telah tercatat pada pukul ".now()->format('H:i').' WIB. Menunggu persetujuan Supervisor.',
+            'info',
+            null,
+            'notif',
+            false
+        );
+
+        // Notify the supervisor
+        if ($user->supervisor_id) {
+            $supervisor = User::find($user->supervisor_id);
+            if ($supervisor) {
+                $this->notify(
+                    $supervisor,
+                    'PENGAJUAN DINAS LUAR BAWAHAN',
+                    "Karyawan {$user->name} mengajukan absen Dinas Luar ke {$attendance->dinas_luar_destination}. Mohon untuk meninjau dan menyetujui pengajuan ini.",
+                    'warning',
+                    '/dashboard/approvals'
+                );
+            }
+        }
+    }
+
+    // ── Dinas Luar Approval Endpoints ──
+
+    public function pendingDinasLuar(Request $request)
+    {
+        $user = $request->user();
+        $query = Attendance::with(['user', 'spvApprover', 'hrApprover'])
+            ->where('company_id', $user->company_id)
+            ->where('attendance_type', 'dinas_luar');
+
+        // Filter by status
+        if ($request->status) {
+            $query->where('dinas_luar_status', $request->status);
+        } else {
+            $query->whereIn('dinas_luar_status', ['pending', 'approved_spv']);
+        }
+
+        // SPV only sees their subordinates
+        if (! $user->is_manager && ! $user->hasPermission('manage-attendance-corrections')) {
+            $query->whereHas('user', fn ($q) => $q->where('supervisor_id', $user->id));
+        }
+
+        $records = $query->orderBy('check_in', 'desc')->paginate(15);
+
+        return $this->successResponse($records, 'Data dinas luar berhasil diambil.');
+    }
+
+    public function approveDinasLuarSpv(Request $request, $id)
+    {
+        $user = $request->user();
+        $attendance = Attendance::where('company_id', $user->company_id)
+            ->where('attendance_type', 'dinas_luar')
+            ->where('dinas_luar_status', 'pending')
+            ->findOrFail($id);
+
+        // Verify the approver is the employee's supervisor
+        $employee = $attendance->user;
+        if ($employee->supervisor_id !== $user->id && ! $user->hasPermission('manage-attendance-corrections')) {
+            return $this->errorResponse('Anda bukan supervisor karyawan ini.', 403);
+        }
+
+        $attendance->update([
+            'dinas_luar_status' => 'approved_spv',
+            'approved_by_spv' => $user->id,
+            'approved_at_spv' => now(),
+        ]);
+
+        // Notify employee
+        $this->notify(
+            $employee,
+            'DINAS LUAR DISETUJUI SUPERVISOR',
+            "Pengajuan dinas luar Anda ke {$attendance->dinas_luar_destination} telah disetujui oleh Supervisor {$user->name}. Menunggu persetujuan HRD.",
+            'success'
+        );
+
+        // Notify HR users
+        $hrUsers = User::where('company_id', $user->company_id)
+            ->whereHas('role', fn ($q) => $q->where('name', 'like', '%HRD%')->orWhere('name', 'like', '%HR%'))
+            ->get();
+
+        foreach ($hrUsers as $hr) {
+            $this->notify(
+                $hr,
+                'PERSETUJUAN DINAS LUAR (HRD)',
+                "Dinas luar {$employee->name} ke {$attendance->dinas_luar_destination} telah disetujui Supervisor. Mohon persetujuan akhir dari HRD.",
+                'warning',
+                '/dashboard/approvals'
+            );
+        }
+
+        return $this->successResponse($attendance->fresh(), 'Dinas luar disetujui oleh Supervisor.');
+    }
+
+    public function approveDinasLuarHr(Request $request, $id)
+    {
+        $user = $request->user();
+        $attendance = Attendance::where('company_id', $user->company_id)
+            ->where('attendance_type', 'dinas_luar')
+            ->where('dinas_luar_status', 'approved_spv')
+            ->findOrFail($id);
+
+        $attendance->update([
+            'dinas_luar_status' => 'approved_hr',
+            'approved_by_hr' => $user->id,
+            'approved_at_hr' => now(),
+            'status' => 'present', // Final status: hadir
+        ]);
+
+        $employee = $attendance->user;
+        $this->notify(
+            $employee,
+            'DINAS LUAR DISETUJUI HRD',
+            "Selamat! Pengajuan dinas luar Anda ke {$attendance->dinas_luar_destination} telah disetujui sepenuhnya oleh HRD {$user->name}.",
+            'success'
+        );
+
+        return $this->successResponse($attendance->fresh(), 'Dinas luar disetujui oleh HRD.');
+    }
+
+    public function rejectDinasLuar(Request $request, $id)
+    {
+        $request->validate(['reason' => 'required|string|max:500']);
+
+        $user = $request->user();
+        $attendance = Attendance::where('company_id', $user->company_id)
+            ->where('attendance_type', 'dinas_luar')
+            ->whereIn('dinas_luar_status', ['pending', 'approved_spv'])
+            ->findOrFail($id);
+
+        $attendance->update([
+            'dinas_luar_status' => 'rejected',
+            'rejection_reason' => $request->reason,
+            'status' => 'alfa', // Ditolak = dianggap tidak hadir
+        ]);
+
+        $employee = $attendance->user;
+        $this->notify(
+            $employee,
+            'DINAS LUAR DITOLAK',
+            "Pengajuan dinas luar Anda ke {$attendance->dinas_luar_destination} telah ditolak. Alasan: {$request->reason}",
+            'danger'
+        );
+
+        return $this->successResponse($attendance->fresh(), 'Dinas luar ditolak.');
     }
 }

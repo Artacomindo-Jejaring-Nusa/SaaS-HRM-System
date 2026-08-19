@@ -57,9 +57,27 @@ export default function AttendancePage() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (record: any) => {
+    const status = record.status;
+    if (record.attendance_type === 'dinas_luar') {
+      const spvStatus = record.dinas_luar_status;
+      if (spvStatus === 'pending') {
+        return <span className="dash-badge bg-rose-50 text-rose-700 border border-rose-200"><Clock size={13} className="mr-1"/> DL: Menunggu SPV</span>;
+      }
+      if (spvStatus === 'approved_spv') {
+        return <span className="dash-badge bg-rose-50 text-rose-700 border border-rose-200"><Clock size={13} className="mr-1"/> DL: Menunggu HRD</span>;
+      }
+      if (spvStatus === 'approved_hr') {
+        return <span className="dash-badge bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle size={13} className="mr-1"/> Dinas Luar (Selesai)</span>;
+      }
+      if (spvStatus === 'rejected') {
+        return <span className="dash-badge bg-red-50 text-red-700 border border-red-200"><X size={13} className="mr-1"/> Dinas Luar (Ditolak)</span>;
+      }
+      return <span className="dash-badge bg-rose-50 text-rose-700 border border-rose-200">Dinas Luar</span>;
+    }
     if (status === 'present') return <span className="dash-badge dash-badge-success"><CheckCircle size={13} className="mr-1"/> Tepat Waktu</span>;
     if (status === 'late') return <span className="dash-badge dash-badge-danger"><Clock size={13} className="mr-1"/> Terlambat</span>;
+    if (status === 'alfa') return <span className="dash-badge dash-badge-danger"><Clock size={13} className="mr-1"/> Alfa/Mangkir</span>;
     return <span className="dash-badge dash-badge-neutral">{status}</span>;
   };
 
@@ -162,7 +180,7 @@ export default function AttendancePage() {
                     <td><span className="text-sm text-gray-600 font-medium">{record.date}</span></td>
                     <td><span className="text-sm font-bold text-gray-900">{record.check_in_time || "-"}</span></td>
                     <td><span className="text-sm font-bold text-gray-900">{record.check_out_time || "-"}</span></td>
-                    <td>{getStatusBadge(record.status)}</td>
+                    <td>{getStatusBadge(record)}</td>
                     <td>
                       <span className="text-xs text-gray-500 block truncate max-w-[150px]">
                         {record.check_in_location || "Sistem web"}
@@ -275,8 +293,12 @@ export default function AttendancePage() {
                      <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Status</p>
                         <div className="flex items-center gap-2">
-                           <div className={`w-2 h-2 rounded-full ${selectedRecord.status === 'present' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                           <p className="text-xs font-bold text-gray-900">{selectedRecord.status === 'present' ? 'Hadir Tepat Waktu' : 'Terlambat'}</p>
+                           <div className={`w-2 h-2 rounded-full ${selectedRecord.attendance_type === 'dinas_luar' ? 'bg-rose-500' : (selectedRecord.status === 'present' ? 'bg-emerald-500' : 'bg-red-500')}`}></div>
+                           <p className="text-xs font-bold text-gray-900">
+                             {selectedRecord.attendance_type === 'dinas_luar' 
+                               ? `Dinas Luar (${selectedRecord.dinas_luar_status?.toUpperCase()})` 
+                               : (selectedRecord.status === 'present' ? 'Hadir Tepat Waktu' : 'Terlambat')}
+                           </p>
                         </div>
                      </div>
                      <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
@@ -288,6 +310,27 @@ export default function AttendancePage() {
                         <p className="text-[10px] font-medium italic">Verified by Face & GPS</p>
                      </div>
                   </div>
+
+                  {selectedRecord.attendance_type === 'dinas_luar' && (
+                     <div className="mt-6 p-4 bg-rose-50/30 border border-rose-100 rounded-2xl col-span-full">
+                        <p className="text-[10px] font-black text-rose-800 uppercase tracking-widest mb-2">Detail Dinas Luar</p>
+                        <div className="space-y-2 text-xs">
+                           <div>
+                              <span className="font-bold text-gray-700">Tujuan: </span>
+                              <span className="text-gray-900 font-semibold">{selectedRecord.dinas_luar_destination}</span>
+                           </div>
+                           <div>
+                              <span className="font-bold text-gray-700">Keterangan: </span>
+                              <span className="text-gray-900 font-medium italic">{selectedRecord.dinas_luar_notes || '-'}</span>
+                           </div>
+                           {selectedRecord.rejection_reason && (
+                              <div className="mt-2 p-2 bg-red-50 text-red-700 rounded-lg font-medium">
+                                 <strong>Alasan Penolakan: </strong> {selectedRecord.rejection_reason}
+                              </div>
+                           )}
+                        </div>
+                     </div>
+                  )}
                </div>
 
                <div className="p-6 bg-gray-50/50 border-t border-gray-100 flex justify-end">

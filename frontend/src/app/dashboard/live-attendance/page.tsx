@@ -19,6 +19,9 @@ export default function LiveAttendancePage() {
   const [statusMsg, setStatusMsg] = useState("Menyiapkan Sistem...");
   const [loading, setLoading] = useState(false);
   const [officeConfig, setOfficeConfig] = useState<any>(null);
+  const [attendanceType, setAttendanceType] = useState<'office' | 'dinas_luar'>('office');
+  const [destination, setDestination] = useState("");
+  const [notes, setNotes] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -173,7 +176,13 @@ export default function LiveAttendancePage() {
       
     } catch (error: any) {
       setStatusMsg("Gagal melakukan absensi.");
-      toast.error(error.response?.data?.message || "Terjadi kesalahan sistem.");
+      const errData = error.response?.data;
+      if (errData?.errors) {
+        const fieldErrors = Object.values(errData.errors).flat().join(', ');
+        toast.error(fieldErrors || errData?.message || "Terjadi kesalahan sistem.");
+      } else {
+        toast.error(errData?.message || "Terjadi kesalahan sistem.");
+      }
     } finally {
       setLoading(false);
     }
@@ -190,8 +199,15 @@ export default function LiveAttendancePage() {
       return;
     }
 
-    if (distance !== null && officeConfig && distance > officeConfig.radius) {
+    const isDinasLuar = attendanceType === 'dinas_luar';
+
+    if (!isDinasLuar && distance !== null && officeConfig && distance > officeConfig.radius) {
       toast.error(`Akses Ditolak: Anda berada ${Math.round(distance - officeConfig.radius)}m di luar radius kantor!`);
+      return;
+    }
+
+    if (isDinasLuar && !destination.trim()) {
+      toast.error("Tujuan Dinas Luar wajib diisi!");
       return;
     }
     
@@ -205,9 +221,11 @@ export default function LiveAttendancePage() {
         const canvas = canvasRef.current!;
         const context = canvas.getContext('2d');
 
-        // Set dimensions match video
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        // Resize to max 640px width to reduce payload size
+        const maxWidth = 640;
+        const scale = Math.min(maxWidth / video.videoWidth, 1);
+        canvas.width = video.videoWidth * scale;
+        canvas.height = video.videoHeight * scale;
 
         // Draw current frame to canvas
         if (context) {
@@ -217,12 +235,16 @@ export default function LiveAttendancePage() {
           context.drawImage(video, 0, 0, canvas.width, canvas.height);
         }
 
-        const selfieBase64 = canvas.toDataURL('image/png');
+        // Use JPEG at 70% quality (~100KB) instead of PNG (~5MB+)
+        const selfieBase64 = canvas.toDataURL('image/jpeg', 0.7);
 
         const payload = {
           latitude: location.lat,
           longitude: location.lng,
-          image: selfieBase64
+          image: selfieBase64,
+          attendance_type: attendanceType,
+          dinas_luar_destination: isDinasLuar ? destination : null,
+          dinas_luar_notes: isDinasLuar ? notes : null,
         };
 
         const res = await axiosInstance.post(`/attendance/${type}`, payload);
@@ -233,7 +255,14 @@ export default function LiveAttendancePage() {
         
       } catch (error: any) {
         setStatusMsg("Gagal melakukan absensi.");
-        toast.error(error.response?.data?.message || "Terjadi kesalahan sistem.");
+        const errData = error.response?.data;
+        if (errData?.errors) {
+          // Show detailed validation errors
+          const fieldErrors = Object.values(errData.errors).flat().join(', ');
+          toast.error(fieldErrors || errData?.message || "Terjadi kesalahan sistem.");
+        } else {
+          toast.error(errData?.message || "Terjadi kesalahan sistem.");
+        }
       } finally {
         setLoading(false);
       }
@@ -355,10 +384,69 @@ export default function LiveAttendancePage() {
                 </div>
               </div>
               
-              {distance !== null && officeConfig && distance > officeConfig.radius && (
-                 <p className="text-xs text-[#8B0000] font-bold mt-3 bg-[#fef2f2] p-3 rounded-xl border border-red-200 animate-pulse">
-                   <strong>AKSES DIBLOKIR:</strong> Anda terdeteksi berada {Math.round(distance - officeConfig.radius)} meter di luar area Radius Kantor yang diizinkan. Silakan mendekat ke area kantor untuk melakukan absensi.
-                 </p>
+              {attendanceType === 'office' && distance !== null && officeConfig && distance > officeConfig.radius && (
+                  <p className="text-xs text-[#8B0000] font-bold mt-3 bg-[#fef2f2] p-3 rounded-xl border border-red-200 animate-pulse">
+                    <strong>AKSES DIBLOKIR:</strong> Anda terdeteksi berada {Math.round(distance - officeConfig.radius)} meter di luar area Radius Kantor yang diizinkan. Silakan mendekat ke area kantor untuk melakukan absensi.
+                  </p>
+              )}
+
+              {/* Notice Jam Pulang Kerja (17:00 WIB) */}
+              {user?.role?.id !== 1 && new Date().getHours() < 17 && (
+                <p className="text-xs text-amber-800 font-bold mt-3 bg-amber-50 p-3 rounded-xl border border-amber-200 flex items-center gap-2">
+                  <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                  <span>
+                    <strong>JAM PULANG:</strong> Absen pulang baru dapat dilakukan mulai pukul 17:00 WIB.
+                  </span>
+                </p>
+              )}
+            </div>
+
+            <hr className="border-gray-100" />
+
+            {/* Tipe Absensi Section */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Tipe Absensi</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAttendanceType('office')}
+                  className={`py-2 px-3 rounded-xl font-bold text-xs uppercase transition-all ${attendanceType === 'office' ? 'bg-gray-900 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                >
+                  🏢 Hadir di Kantor
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAttendanceType('dinas_luar')}
+                  className={`py-2 px-3 rounded-xl font-bold text-xs uppercase transition-all ${attendanceType === 'dinas_luar' ? 'bg-[#8B0000] text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                >
+                  🚗 Dinas Luar
+                </button>
+              </div>
+
+              {attendanceType === 'dinas_luar' && (
+                <div className="space-y-3 p-4 bg-red-50/50 border border-red-100 rounded-2xl animate-in slide-in-from-top-2 duration-300">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tujuan Dinas Luar *</label>
+                    <input
+                      type="text"
+                      value={destination}
+                      onChange={(e) => setDestination(e.target.value)}
+                      placeholder="Contoh: Kantor Cabang BRI Sudirman"
+                      className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#8B0000] font-medium"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Keterangan / Aktivitas</label>
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Contoh: Rapat koordinasi proyek dan maintenance server"
+                      rows={2}
+                      className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#8B0000] font-medium"
+                    />
+                  </div>
+                </div>
               )}
             </div>
 
@@ -368,7 +456,7 @@ export default function LiveAttendancePage() {
             <div className="grid grid-cols-2 gap-4 mt-auto">
                <button 
                  onClick={() => handleAttendance('check-in')}
-                 disabled={loading || !streamActive || !location || (distance !== null && officeConfig && distance > officeConfig.radius)}
+                 disabled={loading || !streamActive || !location || (attendanceType === 'office' && distance !== null && officeConfig && distance > officeConfig.radius) || (attendanceType === 'dinas_luar' && !destination.trim())}
                  className="bg-[#107c41] hover:bg-[#0c6130] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex flex-col items-center justify-center gap-2 group"
                >
                  <ScanFace size={24} className="group-hover:scale-110 transition-transform" />
@@ -377,29 +465,11 @@ export default function LiveAttendancePage() {
                
                <button 
                  onClick={() => handleAttendance('check-out')}
-                 disabled={loading || !streamActive || !location || (distance !== null && officeConfig && distance > officeConfig.radius)}
+                 disabled={loading || !streamActive || !location || (user?.role?.id !== 1 && new Date().getHours() < 17) || (attendanceType === 'office' && distance !== null && officeConfig && distance > officeConfig.radius) || (attendanceType === 'dinas_luar' && !destination.trim())}
                  className="bg-[#8B0000] hover:bg-[#660000] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex flex-col items-center justify-center gap-2 group"
                >
                  <ScanFace size={24} className="group-hover:scale-110 transition-transform" />
                  <span className="text-xs uppercase tracking-wider">Clock Out (Selfie)</span>
-               </button>
-
-               <button 
-                 onClick={() => handleAttendanceWithoutPhoto('check-in')}
-                 disabled={loading || !location}
-                 className="bg-white border-2 border-[#107c41] text-[#107c41] hover:bg-emerald-50 disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-200 font-bold py-3 rounded-2xl transition-all flex flex-col items-center justify-center gap-1"
-               >
-                 <CheckCircle size={18} />
-                 <span className="text-[10px] uppercase tracking-wider">Clock In (Tombol)</span>
-               </button>
-
-               <button 
-                 onClick={() => handleAttendanceWithoutPhoto('check-out')}
-                 disabled={loading || !location}
-                 className="bg-white border-2 border-[#8B0000] text-[#8B0000] hover:bg-red-50 disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-200 font-bold py-3 rounded-2xl transition-all flex flex-col items-center justify-center gap-1"
-               >
-                 <AlertCircle size={18} />
-                 <span className="text-[10px] uppercase tracking-wider">Clock Out (Tombol)</span>
                </button>
             </div>
             

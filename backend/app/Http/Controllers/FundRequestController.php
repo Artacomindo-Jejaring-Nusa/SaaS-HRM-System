@@ -57,9 +57,17 @@ class FundRequestController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'amount' => 'required|numeric|min:1',
-            'reason' => 'required|string',
-            'attachment' => 'nullable|image|mimes:jpeg,png,jpg|max:5120', // Max 5MB, multipart/form-data
+            'amount' => 'nullable|numeric|min:0',
+            'reason' => 'nullable|string',
+            'title' => 'nullable|string',
+            'employee_name' => 'nullable|string',
+            'divisi' => 'nullable|string',
+            'tujuan' => 'nullable|string',
+            'priority' => 'nullable|string',
+            'signature' => 'nullable|string',
+            'items' => 'nullable',
+            'attachment' => 'nullable|file|max:10240',
+            'attachments.*' => 'nullable|file|max:10240',
         ]);
 
         $user = $request->user();
@@ -68,31 +76,63 @@ class FundRequestController extends Controller
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
             $file = $request->file('attachment');
-            $attachmentPath = 'fund_requests/'.Str::random(40).'.jpg';
-            $img = Image::decode($file);
-            $img->scale(width: 800);
-            Storage::disk('public')->put($attachmentPath, (string) $img->encodeUsingFileExtension('jpg', 80));
+            $attachmentPath = $file->store('fund_requests', 'public');
+        } elseif ($request->hasFile('attachments')) {
+            $files = $request->file('attachments');
+            if (is_array($files) && count($files) > 0) {
+                $attachmentPath = $files[0]->store('fund_requests', 'public');
+            }
         }
+
+        $items = $request->items;
+        if (is_string($items)) {
+            $items = json_decode($items, true);
+        }
+
+        $amount = (float) ($request->amount ?? 0);
+        if (is_array($items) && count($items) > 0) {
+            $calcTotal = 0;
+            foreach ($items as $it) {
+                $qty = (float) ($it['qty'] ?? 1);
+                $price = (float) ($it['estimasi_harga'] ?? 0);
+                $calcTotal += ($qty * $price);
+            }
+            if ($calcTotal > 0) {
+                $amount = $calcTotal;
+            }
+        }
+
+        $reason = $request->reason ?? $request->title ?? 'Pengajuan Uang Muka / Permintaan Dana';
 
         // ── Dynamic Workflow Check ──
         $workflowResult = ApprovalService::initApproval('fund_request', $companyId, $user);
 
+        $fundRequestData = [
+            'company_id' => $companyId,
+            'user_id' => $user->id,
+            'employee_name' => $request->employee_name ?? $user->name,
+            'title' => $request->title ?? $reason,
+            'amount' => $amount,
+            'reason' => $reason,
+            'divisi' => $request->divisi ?? 'Operasional',
+            'tujuan' => $request->tujuan ?? 'Pengadaan Baru',
+            'priority' => $request->priority ?? 'Normal',
+            'signature' => $request->signature,
+            'items' => $items,
+            'attachment' => $attachmentPath,
+            'supervisor_id' => $user->supervisor_id,
+        ];
+
         if ($workflowResult) {
-            $fundRequest = FundRequest::create([
-                'company_id' => $companyId,
-                'user_id' => $user->id,
-                'amount' => $request->amount,
-                'reason' => $request->reason,
-                'attachment' => $attachmentPath,
-                'status' => $workflowResult['status'],
-                'current_approval_step' => $workflowResult['current_approval_step'],
-                'supervisor_id' => $user->supervisor_id,
-            ]);
+            $fundRequestData['status'] = $workflowResult['status'];
+            $fundRequestData['current_approval_step'] = $workflowResult['current_approval_step'];
+
+            $fundRequest = FundRequest::create($fundRequestData);
 
             $this->notify(
                 $user,
                 'PENGAJUAN DANA BERHASIL',
-                "Pengajuan dana Anda sebesar Rp ".number_format($request->amount, 0, ',', '.')." telah diajukan. Menunggu: {$workflowResult['step_label']}.",
+                "Pengajuan dana Anda sebesar Rp ".number_format($amount, 0, ',', '.')." telah diajukan. Menunggu: {$workflowResult['step_label']}.",
                 'info',
                 self::ROUTE_APPROVALS
             );
@@ -101,22 +141,14 @@ class FundRequestController extends Controller
                 $this->notify(
                     $approver,
                     'PENGAJUAN DANA PERLU PERSETUJUAN',
-                    "{$user->name} mengajukan dana sebesar Rp ".number_format($request->amount, 0, ',', '.').'. Mohon segera tinjau.',
+                    "{$user->name} mengajukan dana sebesar Rp ".number_format($amount, 0, ',', '.').'. Mohon segera tinjau.',
                     'warning',
                     self::ROUTE_APPROVALS
                 );
             }
         } else {
-            // ── Fallback: Default logic ──
-            $fundRequest = FundRequest::create([
-                'company_id' => $companyId,
-                'user_id' => $user->id,
-                'amount' => $request->amount,
-                'reason' => $request->reason,
-                'attachment' => $attachmentPath,
-                'status' => 'pending',
-                'supervisor_id' => $user->supervisor_id,
-            ]);
+            $fundRequestData['status'] = 'pending';
+            $fundRequest = FundRequest::create($fundRequestData);
 
             // Notify Supervisor
             if ($user->supervisor_id) {
@@ -125,7 +157,7 @@ class FundRequestController extends Controller
                     $this->notify(
                         $supervisor,
                         'PENGAJUAN DANA BARU',
-                        "{$user->name} mengajukan dana sebesar Rp ".number_format($request->amount, 0, ',', '.').'. Mohon tinjau.',
+                        "{$user->name} mengajukan dana sebesar Rp ".number_format($amount, 0, ',', '.').'. Mohon tinjau.',
                         'warning',
                         self::ROUTE_APPROVALS
                     );

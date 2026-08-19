@@ -18,6 +18,7 @@ export const translations = {
     permit_requests: "Permohonan Izin",
     permit_report: "Laporan Perizinan",
     announcements: "Pengumuman",
+    birthday_schedule: "Jadwal Ulang Tahun",
     holidays: "Hari Libur",
     employees: "Pegawai",
     roles: "Jabatan",

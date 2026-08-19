@@ -137,12 +137,12 @@ export default function ApprovalWorkflowPage() {
     if (selected === "leave") {
       return {
         nodes: [
-          { id: "submit", x: 60, y: 200, label: "Karyawan Submit", sub: "Mengajukan Cuti", type: "trigger", icon: "📝" },
-          { id: "spv", x: 310, y: 120, label: "Review Supervisor", sub: "Atasan Langsung", type: "supervisor", icon: "👔" },
-          { id: "hr", x: 560, y: 200, label: "Review HRD", sub: "Final Approval", type: "hrd", icon: "🏢" },
-          { id: "ok", x: 810, y: 140, label: "Disetujui", sub: "Cuti Berlaku", type: "approved", icon: "✅" },
-          { id: "no1", x: 310, y: 340, label: "Ditolak SPV", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
-          { id: "no2", x: 660, y: 340, label: "Ditolak HRD", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
+          { id: "submit", x: 60, y: 200, label: "Requition (Pemohon)", sub: "Mengajukan Cuti", type: "trigger", icon: "📝" },
+          { id: "spv", x: 310, y: 120, label: "Checked by (Diperiksa)", sub: "Atasan Langsung", type: "supervisor", icon: "👔" },
+          { id: "hr", x: 560, y: 200, label: "Acknowledge (Diketahui)", sub: "Admin VP / HRD", type: "hrd", icon: "🏢" },
+          { id: "ok", x: 810, y: 140, label: "Approved by (Disetujui)", sub: "CEO / Cuti Berlaku", type: "approved", icon: "✅" },
+          { id: "no1", x: 310, y: 340, label: "Ditolak (Checked by)", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
+          { id: "no2", x: 660, y: 340, label: "Ditolak (Acknowledge)", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
         ],
         edges: [
           { id: "e1", from: "submit", to: "spv", color: "#3B82F6", animated: true },
@@ -156,12 +156,12 @@ export default function ApprovalWorkflowPage() {
     if (selected === "fund_request") {
       return {
         nodes: [
-          { id: "submit", x: 60, y: 200, label: "Karyawan Ajukan", sub: "Pengajuan Dana", type: "trigger", icon: "💰" },
-          { id: "spv", x: 310, y: 120, label: "Review Supervisor", sub: "Atasan Langsung", type: "supervisor", icon: "👔" },
-          { id: "hr", x: 560, y: 200, label: "Review HRD", sub: "Final Approval", type: "hrd", icon: "🏢" },
-          { id: "ok", x: 810, y: 140, label: "Dana Dicairkan", sub: "Transfer Selesai", type: "approved", icon: "✅" },
-          { id: "no1", x: 310, y: 340, label: "Ditolak SPV", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
-          { id: "no2", x: 660, y: 340, label: "Ditolak HRD", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
+          { id: "submit", x: 60, y: 200, label: "Requition (Pemohon)", sub: "Pengajuan Dana / Kasbon", type: "trigger", icon: "💰" },
+          { id: "spv", x: 310, y: 120, label: "Checked by (Diperiksa)", sub: "Atasan Langsung", type: "supervisor", icon: "👔" },
+          { id: "hr", x: 560, y: 200, label: "Acknowledge (Diketahui)", sub: "Admin VP / Kadiv", type: "hrd", icon: "🏢" },
+          { id: "ok", x: 810, y: 140, label: "Approved by (Disetujui)", sub: "CEO / Dana Dicairkan", type: "approved", icon: "✅" },
+          { id: "no1", x: 310, y: 340, label: "Ditolak (Checked by)", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
+          { id: "no2", x: 660, y: 340, label: "Ditolak (Acknowledge)", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
         ],
         edges: [
           { id: "e1", from: "submit", to: "spv", color: "#3B82F6", animated: true },
@@ -175,12 +175,12 @@ export default function ApprovalWorkflowPage() {
     if (selected === "shift_swap") {
       return {
         nodes: [
-          { id: "submit", x: 40, y: 200, label: "Karyawan Ajukan", sub: "Request Tukar", type: "trigger", icon: "🔄" },
-          { id: "peer", x: 260, y: 120, label: "Konfirmasi Rekan", sub: "Receiver Accept?", type: "peer", icon: "🤝" },
-          { id: "mgr", x: 490, y: 200, label: "Approval Manager", sub: "Supervisor / Atasan", type: "supervisor", icon: "👔" },
-          { id: "ok", x: 730, y: 140, label: "Shift Tertukar", sub: "Jadwal Updated", type: "approved", icon: "✅" },
-          { id: "no1", x: 260, y: 340, label: "Rekan Menolak", sub: "Swap Batal", type: "rejected", icon: "❌" },
-          { id: "no2", x: 580, y: 340, label: "Manager Tolak", sub: "Swap Batal", type: "rejected", icon: "❌" },
+          { id: "submit", x: 40, y: 200, label: "Requition (Pemohon)", sub: "Request Tukar Shift", type: "trigger", icon: "🔄" },
+          { id: "peer", x: 260, y: 120, label: "Checked by (Rekan)", sub: "Receiver Accept?", type: "peer", icon: "🤝" },
+          { id: "mgr", x: 490, y: 200, label: "Acknowledge (Manager)", sub: "Supervisor / Atasan", type: "supervisor", icon: "👔" },
+          { id: "ok", x: 730, y: 140, label: "Approved by (Disetujui)", sub: "Jadwal Updated", type: "approved", icon: "✅" },
+          { id: "no1", x: 260, y: 340, label: "Ditolak (Rekan)", sub: "Swap Batal", type: "rejected", icon: "❌" },
+          { id: "no2", x: 580, y: 340, label: "Ditolak (Manager)", sub: "Swap Batal", type: "rejected", icon: "❌" },
         ],
         edges: [
           { id: "e1", from: "submit", to: "peer", color: "#3B82F6", animated: true },
@@ -202,10 +202,10 @@ export default function ApprovalWorkflowPage() {
     const l = labels[selected] || labels.overtime;
     return {
       nodes: [
-        { id: "submit", x: 100, y: 200, label: `Karyawan ${l.title}`, sub: l.sub, type: "trigger", icon: l.icon },
-        { id: "hr", x: 420, y: 200, label: "Review HRD/Admin", sub: "Evaluasi & Keputusan", type: "hrd", icon: "🏢" },
-        { id: "ok", x: 720, y: 140, label: l.okLabel, sub: "Selesai", type: "approved", icon: "✅" },
-        { id: "no", x: 720, y: 300, label: "Ditolak", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
+        { id: "submit", x: 100, y: 200, label: "Requition (Pemohon)", sub: l.sub, type: "trigger", icon: l.icon },
+        { id: "hr", x: 420, y: 200, label: "Checked by (Diperiksa)", sub: "Evaluasi & Keputusan", type: "hrd", icon: "🏢" },
+        { id: "ok", x: 720, y: 140, label: "Approved by (Disetujui)", sub: "Selesai", type: "approved", icon: "✅" },
+        { id: "no", x: 720, y: 300, label: "Ditolak (Checked by)", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
       ],
       edges: [
         { id: "e1", from: "submit", to: "hr", color: "#3B82F6", animated: true },
@@ -226,45 +226,66 @@ export default function ApprovalWorkflowPage() {
 
     // Start trigger node
     const triggerLabel = modules.find(m => m.key === selected)?.label || "Pengajuan";
-    nodes.push({ id: "submit", x: 60, y: 200, label: `Karyawan Submit`, sub: `Ajukan ${triggerLabel}`, type: "trigger", icon: "📝" });
+    nodes.push({ id: "submit", x: 60, y: 200, label: "Requition (Pemohon)", sub: `Ajukan ${triggerLabel}`, type: "trigger", icon: "📝" });
 
     // Middle step approval nodes
     steps.forEach((step, idx) => {
       const stepId = `step_${step.step_number}`;
       const x = 60 + (idx + 1) * 250;
       
-      let label = "Reviewer";
-      let icon = "👥";
+      let stageTitle = "Checked by (Diperiksa)";
+      let subText = `SLA: ${step.sla_hours} Jam`;
+      let icon = "👔";
       let type = "supervisor";
 
       if (step.approver_type === "supervisor") {
-        label = "Supervisor";
+        stageTitle = idx === 0 ? "Checked by (Diperiksa)" : "Acknowledge (Diketahui)";
+        subText = "Atasan Langsung (SPV)";
         icon = "👔";
         type = "supervisor";
       } else if (step.approver_type === "role") {
         const matchingRole = roles.find(r => r.id === step.approver_role_id);
-        label = matchingRole ? matchingRole.name : `Review ${step.approver_role_id}`;
+        const roleName = matchingRole ? matchingRole.name : `Role ${step.approver_role_id}`;
+        
+        if (idx === 0) {
+          stageTitle = `Checked by (${roleName})`;
+        } else if (idx === steps.length - 1) {
+          stageTitle = `Approved by (${roleName})`;
+        } else {
+          stageTitle = `Acknowledge (${roleName})`;
+        }
+        subText = `Role: ${roleName}`;
         icon = "🏢";
         type = "hrd";
+      } else if (step.approver_type === "user") {
+        stageTitle = idx === steps.length - 1 ? "Approved by (User)" : "Acknowledge (User)";
+        subText = "Spesifik Karyawan";
+        icon = "👤";
+        type = "peer";
       }
 
       nodes.push({
         id: stepId,
         x,
         y: 120,
-        label,
-        sub: `SLA: ${step.sla_hours} Jam`,
+        label: stageTitle,
+        sub: subText,
         type,
         icon,
       });
 
-      // Reject Node for this level
+      // Reject Node for this level using Excel terminology
       const rejectId = `reject_${step.step_number}`;
+      let rejectLabel = `Ditolak Step ${step.step_number}`;
+      if (idx === 0) rejectLabel = "Ditolak (Checked by)";
+      else if (idx === steps.length - 1) rejectLabel = "Ditolak (Approved by)";
+      else rejectLabel = "Ditolak (Acknowledge)";
+
       nodes.push({
         id: rejectId,
         x,
         y: 340,
-        label: `Ditolak Step ${step.step_number}`,
+        label: rejectLabel,
         sub: "Alasan Tertera",
         type: "rejected",
         icon: "❌",
@@ -294,7 +315,7 @@ export default function ApprovalWorkflowPage() {
     // Final approved node
     const lastStepId = `step_${steps[steps.length - 1].step_number}`;
     const finalX = 60 + (steps.length + 1) * 250;
-    nodes.push({ id: "ok", x: finalX, y: 140, label: "Disetujui", sub: "Proses Selesai", type: "approved", icon: "✅" });
+    nodes.push({ id: "ok", x: finalX, y: 140, label: "Approved by (Disetujui)", sub: "Proses Selesai", type: "approved", icon: "✅" });
 
     edges.push({
       id: "e-final-approve",

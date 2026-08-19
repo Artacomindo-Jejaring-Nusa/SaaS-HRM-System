@@ -240,29 +240,34 @@ const Part1EmployeeSection = ({ isFormMode, user, formData, setFormData, selecte
           <span className="w-40 font-semibold text-gray-700 shrink-0">Purpose</span>
           <span className="mr-2 text-gray-400">:</span>
           <div className="flex items-center gap-4 flex-wrap flex-1 pl-1">
-            {["Cuti Tahunan", "Cuti Melahirkan", "Cuti Alasan Penting", "Lainnya"].map((type) => {
-              const isStandardType = ["Cuti Tahunan", "Cuti Melahirkan", "Cuti Alasan Penting"].includes(typeVal || "");
-              const isChecked = isFormMode 
-                ? typeVal === type 
-                : (typeVal === type || (type === "Lainnya" && !isStandardType));
-                
-              return (
-                <label key={type} className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-700 select-none">
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    readOnly={!isFormMode}
-                    onChange={() => {
-                      if (isFormMode && setFormData && formData) {
-                        setFormData({ ...formData, type });
-                      }
-                    }}
-                    className="w-3.5 h-3.5 rounded border-gray-400 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span>{type}</span>
-                </label>
-              );
-            })}
+            {isFormMode ? (
+              <select
+                value={typeVal || "Cuti Tahunan"}
+                onChange={(e) => {
+                  if (setFormData && formData) {
+                    setFormData({ ...formData, type: e.target.value });
+                  }
+                }}
+                className="border-0 border-b border-dotted border-gray-500 bg-transparent px-1 py-0.5 text-xs text-gray-800 focus:outline-none font-bold focus:ring-0 focus:border-blue-500"
+              >
+                <option value="Cuti Tahunan">Cuti Tahunan (Pasal 79 - 12 Hari)</option>
+                <option value="Cuti Sakit">Cuti Sakit (Pasal 93 - Sesuai Surat Dokter)</option>
+                <option value="Cuti Melahirkan">Cuti Melahirkan (Pasal 82 - 90 Hari)</option>
+                <option value="Cuti Keguguran">Cuti Keguguran (Pasal 82 - 45 Hari)</option>
+                <option value="Cuti Menikah">Cuti Menikah (Pasal 93 - 3 Hari)</option>
+                <option value="Menikahkan Anak">Menikahkan Anak (Pasal 93 - 2 Hari)</option>
+                <option value="Khitanan/Baptis Anak">Khitanan/Baptis Anak (Pasal 93 - 2 Hari)</option>
+                <option value="Istri Melahirkan/Keguguran">Istri Melahirkan/Keguguran (Pasal 93 - 2 Hari)</option>
+                <option value="Kematian Keluarga Inti">Kematian Keluarga Inti (Pasal 93 - 2 Hari)</option>
+                <option value="Kematian Keluarga Serumah">Kematian Keluarga Serumah (Pasal 93 - 1 Hari)</option>
+                <option value="Haid (Hari 1 & 2)">Haid (Hari 1 & 2) (Pasal 81 - 2 Hari)</option>
+                <option value="Cuti Besar/Panjang">Cuti Besar/Panjang (Pasal 79 - Sesuai Kebijakan)</option>
+              </select>
+            ) : (
+              <span className="border-b border-dotted border-gray-500 border-dotted-print px-1 py-0.5 text-gray-800 font-bold uppercase tracking-wide">
+                [X] {typeVal || "Cuti Tahunan"}
+              </span>
+            )}
           </div>
         </div>
 
@@ -1037,7 +1042,7 @@ export default function LeavesPage() {
             </button>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase bg-amber-50 border border-amber-200 text-amber-800 px-3 py-1 rounded">
-                Sisa Cuti: {user?.leave_balance ?? 0} Hari
+                Sisa Cuti: {user?.kemnaker_leave_balance ?? user?.leave_balance ?? 0} Hari
               </span>
             </div>
           </div>

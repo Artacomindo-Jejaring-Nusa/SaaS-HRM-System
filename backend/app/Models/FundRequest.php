@@ -13,8 +13,15 @@ class FundRequest extends Model
     protected $fillable = [
         'company_id',
         'user_id',
+        'employee_name',
+        'title',
         'amount',
         'reason',
+        'divisi',
+        'tujuan',
+        'priority',
+        'signature',
+        'items',
         'status',
         'current_approval_step',
         'supervisor_id',
@@ -24,6 +31,10 @@ class FundRequest extends Model
         'rejected_at',
         'reject_reason',
         'attachment',
+    ];
+
+    protected $casts = [
+        'items' => 'array',
     ];
 
     public function user()
