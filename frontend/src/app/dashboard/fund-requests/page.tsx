@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
 import { 
-  Plus, Search, X, Eye, ReceiptCent, Upload, AlertCircle, 
-  ArrowLeft, Printer, Trash2, Send, FileDown 
+  Plus, Search, X, Eye, Upload, 
+  ArrowLeft, Printer, Send, FileDown 
 } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import { useAuth } from "@/contexts/AuthContext";
@@ -374,7 +374,7 @@ const FundRequestSheetInner = ({
               const item = items[idx];
               const isLast = idx === rowsToRender.length - 1;
               return (
-                <tr key={idx} className={`border-b border-gray-300 text-black ${isLast ? 'border-b-2 border-black' : ''} h-[24px]`}>
+                <tr key={`item-row-${idx}`} className={`border-b border-gray-300 text-black ${isLast ? 'border-b-2 border-black' : ''} h-[24px]`}>
                   <td className="border-r border-black text-center font-bold text-gray-700">{idx + 1}</td>
                   <td className="border-r border-black px-2 font-medium truncate max-w-[200px]">
                     {item?.spesifikasi || (idx === 0 ? title : '')}
@@ -717,13 +717,13 @@ export default function FundRequestsPage() {
   };
 
   const handlePrint = () => {
-    window.print();
+    globalThis.print();
   };
 
   const handleDownloadPdf = () => {
     toast.info("Mempersiapkan dokumen PDF untuk dicetak...");
     setTimeout(() => {
-      window.print();
+      globalThis.print();
     }, 500);
   };
 
@@ -808,69 +808,75 @@ export default function FundRequestsPage() {
             </div>
           </div>
 
-          {loading ? (
-            <div className="p-6"><TableSkeleton rows={6} cols={6} /></div>
-          ) : filteredRequests.length === 0 ? (
-            <div className="p-12 text-center text-gray-500 text-sm">
-              Tidak ada pengajuan dana yang ditemukan.
-            </div>
-          ) : (
-            <div className="dash-table-wrapper">
-              <table className="dash-table">
-                <thead>
-                  <tr>
-                    <th>Karyawan</th>
-                    <th>Keperluan / Judul</th>
-                    <th>Divisi</th>
-                    <th>Tanggal</th>
-                    <th>Nominal</th>
-                    <th>Status</th>
-                    <th className="text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRequests.map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-gray-900">{item.employee_name || item.user?.name || "Karyawan"}</span>
-                          <span className="text-[10px] text-gray-400 uppercase">{item.user?.role?.name || 'Staff'}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span className="text-sm font-medium text-gray-800 block truncate max-w-[220px]" title={item.title || item.reason}>
-                          {item.title || item.reason || "Pengajuan Uang Muka"}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="text-xs text-gray-600">{item.divisi || "Operasional"}</span>
-                      </td>
-                      <td>
-                        <span className="text-sm text-gray-600">
-                          {new Date(item.created_at).toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="font-bold text-[#8B0000]">
-                          {formatCurrency(item.amount || 0)}
-                        </span>
-                      </td>
-                      <td>{getStatusBadge(item.status)}</td>
-                      <td className="text-right">
-                        <button 
-                          className="dash-action-btn view" 
-                          title="Lihat Form Cetak / Detail"
-                          onClick={() => handleViewDetail(item)}
-                        >
-                          <Eye size={16} />
-                        </button>
-                      </td>
+          {(() => {
+            if (loading) {
+              return <div className="p-6"><TableSkeleton rows={6} cols={6} /></div>;
+            }
+            if (filteredRequests.length === 0) {
+              return (
+                <div className="p-12 text-center text-gray-500 text-sm">
+                  Tidak ada pengajuan dana yang ditemukan.
+                </div>
+              );
+            }
+            return (
+              <div className="dash-table-wrapper">
+                <table className="dash-table">
+                  <thead>
+                    <tr>
+                      <th>Karyawan</th>
+                      <th>Keperluan / Judul</th>
+                      <th>Divisi</th>
+                      <th>Tanggal</th>
+                      <th>Nominal</th>
+                      <th>Status</th>
+                      <th className="text-right">Aksi</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {filteredRequests.map((item) => (
+                      <tr key={item.id}>
+                        <td>
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-gray-900">{item.employee_name || item.user?.name || "Karyawan"}</span>
+                            <span className="text-[10px] text-gray-400 uppercase">{item.user?.role?.name || 'Staff'}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <span className="text-sm font-medium text-gray-800 block truncate max-w-[220px]" title={item.title || item.reason}>
+                            {item.title || item.reason || "Pengajuan Uang Muka"}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="text-xs text-gray-600">{item.divisi || "Operasional"}</span>
+                        </td>
+                        <td>
+                          <span className="text-sm text-gray-600">
+                            {new Date(item.created_at).toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="font-bold text-[#8B0000]">
+                            {formatCurrency(item.amount || 0)}
+                          </span>
+                        </td>
+                        <td>{getStatusBadge(item.status)}</td>
+                        <td className="text-right">
+                          <button 
+                            className="dash-action-btn view" 
+                            title="Lihat Form Cetak / Detail"
+                            onClick={() => handleViewDetail(item)}
+                          >
+                            <Eye size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
 
           {pagination.last_page > 1 && (
             <Pagination 
@@ -905,12 +911,13 @@ export default function FundRequestsPage() {
               {/* NAMA PEMOHON & TUJUAN PENGADAAN */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  <label htmlFor="employee_name" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                     NAMA PEMOHON / KARYAWAN
                   </label>
                   <div className="space-y-2">
                     {!formData.is_custom_employee_name ? (
                       <select
+                        id="employee_name"
                         className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 focus:ring-2 focus:ring-[#8B0000]/20 focus:border-[#8B0000]"
                         value={formData.employee_name}
                         onChange={(e) => setFormData({ ...formData, employee_name: e.target.value })}
@@ -953,7 +960,7 @@ export default function FundRequestsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  <label htmlFor="tujuan_lainnya" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                     TUJUAN PENGADAAN (OPSIONAL)
                   </label>
                   <div className="space-y-2">
@@ -987,10 +994,11 @@ export default function FundRequestsPage() {
               {/* KEPERLUAN & PRIORITAS & DIVISI */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  <label htmlFor="fund_title" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                     KEPERLUAN / JUDUL
                   </label>
                   <input
+                    id="fund_title"
                     type="text"
                     required
                     placeholder="Contoh: Pembelian Laptop Kantor Baru"
@@ -1001,7 +1009,7 @@ export default function FundRequestsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  <label htmlFor="priority" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                     PRIORITAS PENGAJUAN
                   </label>
                   <div className="flex items-center gap-4 py-2 text-xs">
@@ -1022,10 +1030,11 @@ export default function FundRequestsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label htmlFor="divisi" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                   DIVISI (DIV.)
                 </label>
                 <input
+                  id="divisi"
                   type="text"
                   placeholder="Contoh: Operasional / IT / HRGA"
                   className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium"
@@ -1037,9 +1046,9 @@ export default function FundRequestsPage() {
               {/* TABLE ITEM BARANG / JASA */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-bold text-gray-700 uppercase">
+                  <span className="block text-xs font-bold text-gray-700 uppercase">
                     ITEM BARANG / JASA
-                  </label>
+                  </span>
                   <button
                     type="button"
                     onClick={handleAddItem}
@@ -1146,7 +1155,7 @@ export default function FundRequestsPage() {
               {/* BUKTI NOTA / LAMPIRAN DUKUNGAN (OPSIONAL) & TTD DIGITAL */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  <label htmlFor="fund-request-attachments" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                     BUKTI NOTA / LAMPIRAN DUKUNGAN (OPSIONAL)
                   </label>
                   <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:border-[#8B0000] transition bg-gray-50/50">
@@ -1167,7 +1176,7 @@ export default function FundRequestsPage() {
                     {formData.attachments.length > 0 && (
                       <div className="mt-3 text-left space-y-1">
                         {formData.attachments.map((file, i) => (
-                          <div key={i} className="flex items-center justify-between bg-white p-1.5 rounded border text-xs">
+                          <div key={`attachment-${file.name}-${i}`} className="flex items-center justify-between bg-white p-1.5 rounded border text-xs">
                             <span className="truncate max-w-[180px] font-medium">{file.name}</span>
                             <button
                               type="button"
@@ -1184,9 +1193,9 @@ export default function FundRequestsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  <span className="block text-xs font-bold text-gray-700 uppercase mb-1">
                     TANDA TANGAN PENGAJU (DIAJUKAN OLEH)
-                  </label>
+                  </span>
                   <SignaturePad
                     onSign={(dataUrl) => setFormData(prev => ({ ...prev, signature: dataUrl }))}
                   />

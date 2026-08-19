@@ -232,20 +232,28 @@ export default function ApprovalsPage() {
       }));
 
       const dData = dinasRes.data.data;
-      const dinasLuars = (Array.isArray(dData) ? dData : (dData?.data || [])).map((d: any) => ({
-        id: d.id,
-        type: "dinas_luar" as const,
-        user_name: d.user?.name || "Karyawan",
-        description: `Tujuan: ${d.dinas_luar_destination}. Keterangan: ${d.dinas_luar_notes || '-'}`,
-        category: "Dinas Luar",
-        start_date: d.check_in ? new Date(d.check_in).toLocaleString('id-ID') : undefined,
-        end_date: undefined,
-        status: d.dinas_luar_status === 'pending' ? 'pending' : (d.dinas_luar_status === 'approved_spv' ? 'waiting_approval' : d.dinas_luar_status),
-        attachment: d.image_in_url ? d.image_in_url.replace(/.*\/storage\//, '') : undefined,
-        created_at: d.created_at,
-        dinas_luar_status: d.dinas_luar_status,
-        target_supervisor_id: d.user?.supervisor_id
-      }));
+      const dinasLuars = (Array.isArray(dData) ? dData : (dData?.data || [])).map((d: any) => {
+        let status = d.dinas_luar_status;
+        if (d.dinas_luar_status === 'pending') {
+          status = 'pending';
+        } else if (d.dinas_luar_status === 'approved_spv') {
+          status = 'waiting_approval';
+        }
+        return {
+          id: d.id,
+          type: "dinas_luar" as const,
+          user_name: d.user?.name || "Karyawan",
+          description: `Tujuan: ${d.dinas_luar_destination}. Keterangan: ${d.dinas_luar_notes || '-'}`,
+          category: "Dinas Luar",
+          start_date: d.check_in ? new Date(d.check_in).toLocaleString('id-ID') : undefined,
+          end_date: undefined,
+          status,
+          attachment: d.image_in_url ? d.image_in_url.replace(/.*\/storage\//, '') : undefined,
+          created_at: d.created_at,
+          dinas_luar_status: d.dinas_luar_status,
+          target_supervisor_id: d.user?.supervisor_id
+        };
+      });
 
       const roleName = currentUser?.role?.name?.toLowerCase() || "";
       const isHR = currentUser?.role_id === 1 || 

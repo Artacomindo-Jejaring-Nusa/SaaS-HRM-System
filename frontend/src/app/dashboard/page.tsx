@@ -5,7 +5,7 @@ import axiosInstance from "@/lib/axios";
 import { 
   Users, UserCheck, UserX, Calendar as CalendarIcon, 
   MoreVertical, Eye, Plus, Search, Filter, X, Clock, AlertCircle, CheckCircle,
-  TrendingUp, TrendingDown, Briefcase, Activity, Coffee, FileText, Cake, Gift, Sparkles
+  TrendingUp, TrendingDown, Briefcase, Activity, Coffee, FileText, Cake
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, CartesianGrid } from 'recharts';
 import Image from "next/image";
@@ -807,7 +807,7 @@ export default function DashboardPage() {
                   {b.phone_number && (
                     <button
                       onClick={() => {
-                        const cleanPhone = b.phone_number?.replace(/[^0-9]/g, "").replace(/^0/, "62");
+                        const cleanPhone = b.phone_number?.replaceAll(/\D/g, "").replace(/^0/, "62");
                         const msg = `Selamat Ulang Tahun Bpk/Ibu ${b.name}! 🎉🎂 Semoga sehat selalu & sukses di PT Narwasthu Artha Tama!`;
                         window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
                       }}

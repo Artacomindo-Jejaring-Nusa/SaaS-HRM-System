@@ -16,6 +16,7 @@ class FundRequestController extends Controller
     use Notifiable;
 
     private const ROLE_HRD_MANAGER = 'HRD Manager';
+    private const FUND_REQUEST_MSG_PREFIX = 'Pengajuan dana Anda sebesar Rp ';
 
     public function index(Request $request)
     {
@@ -66,8 +67,8 @@ class FundRequestController extends Controller
             'priority' => 'nullable|string',
             'signature' => 'nullable|string',
             'items' => 'nullable',
-            'attachment' => 'nullable|file|max:10240',
-            'attachments.*' => 'nullable|file|max:10240',
+            'attachment' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
+            'attachments.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
         ]);
 
         $user = $request->user();
@@ -79,7 +80,7 @@ class FundRequestController extends Controller
             $attachmentPath = $file->store('fund_requests', 'public');
         } elseif ($request->hasFile('attachments')) {
             $files = $request->file('attachments');
-            if (is_array($files) && count($files) > 0) {
+            if (is_array($files) && !empty($files)) {
                 $attachmentPath = $files[0]->store('fund_requests', 'public');
             }
         }
@@ -132,7 +133,7 @@ class FundRequestController extends Controller
             $this->notify(
                 $user,
                 'PENGAJUAN DANA BERHASIL',
-                "Pengajuan dana Anda sebesar Rp ".number_format($amount, 0, ',', '.')." telah diajukan. Menunggu: {$workflowResult['step_label']}.",
+                self::FUND_REQUEST_MSG_PREFIX.number_format($amount, 0, ',', '.')." telah diajukan. Menunggu: {$workflowResult['step_label']}.",
                 'info',
                 self::ROUTE_APPROVALS
             );
@@ -213,7 +214,7 @@ class FundRequestController extends Controller
                 $this->notify(
                     $fundRequest->user,
                     'PENGAJUAN DANA DISETUJUI',
-                    'Pengajuan dana Anda sebesar Rp '.number_format($fundRequest->amount, 0, ',', '.').' telah DISETUJUI sepenuhnya.',
+                    self::FUND_REQUEST_MSG_PREFIX.number_format($fundRequest->amount, 0, ',', '.').' telah DISETUJUI sepenuhnya.',
                     'success'
                 );
 
@@ -280,7 +281,7 @@ class FundRequestController extends Controller
             $this->notify(
                 $fundRequest->user,
                 'PENGAJUAN DANA DISETUJUI',
-                'Pengajuan dana Anda sebesar Rp '.number_format($fundRequest->amount, 0, ',', '.').' telah DISETUJUI sepenuhnya.',
+                self::FUND_REQUEST_MSG_PREFIX.number_format($fundRequest->amount, 0, ',', '.').' telah DISETUJUI sepenuhnya.',
                 'success'
             );
 
