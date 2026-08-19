@@ -146,10 +146,11 @@ const sidebarLinks: SidebarLink[] = [
     icon: ClipboardList,
     permission: 'view-directory',
     submenus: [
-      { name: "approvals", href: "/dashboard/approvals", permission: 'manage-approvals' },
+      { name: "approvals", href: "/dashboard/approvals", permission: 'approve-leaves' },
       { name: "approval_workflow", href: "/dashboard/approval-workflow", permission: 'manage-approvals' },
       { name: "tasks", href: "/dashboard/tasks", permission: 'view-tasks' },
       { name: "announcements", href: "/dashboard/announcements", permission: 'view-announcements' },
+      { name: "birthday_schedule", href: "/dashboard/birthdays", permission: 'view-directory' },
       { name: "whatsapp_settings", href: "/dashboard/whatsapp", permission: 'manage-company' },
       { name: "employee_directory", href: "/dashboard/directory", permission: 'view-directory' },
       { name: "organization_chart", href: "/dashboard/organization", permission: 'view-organization' },

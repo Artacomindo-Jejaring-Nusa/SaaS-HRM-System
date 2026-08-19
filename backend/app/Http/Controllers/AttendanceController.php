@@ -62,8 +62,8 @@ class AttendanceController extends Controller
 
         // Handle Image & Compression
         $imageName = null;
-        if ($request->hasFile('image')) {
-            $file = $request->file('image');
+        $file = $request->hasFile('image') ? $request->file('image') : ($request->image instanceof \Symfony\Component\HttpFoundation\File\UploadedFile ? $request->image : null);
+        if ($file) {
             $imageName = 'attendance/in_'.Str::random(40).'.jpg';
             // Compress and resize image to save storage space (target ~50-80KB)
             $img = Image::decode($file);
@@ -117,8 +117,25 @@ class AttendanceController extends Controller
 
         $faceMatch = true;
 
+        // Check minimum clock-out time (Default: 17:00 WIB / 5 PM, or Shift End Time)
+        $now = now();
+        $today = Carbon::today()->toDateString();
+        $minCheckOutTime = Carbon::today()->setHour(17)->setMinute(0)->setSecond(0);
+
+        $schedule = Schedule::with('shift')
+            ->where('user_id', $user->id)
+            ->where('date', $today)
+            ->first();
+
+        if ($schedule && $schedule->shift && $schedule->shift->end_time) {
+            $minCheckOutTime = Carbon::parse($today . ' ' . $schedule->shift->end_time);
+        }
+
         if (! $attendance) {
             $response = $this->errorResponse('Anda belum check-in atau sudah check-out.', 400);
+        } elseif ($now->lt($minCheckOutTime) && $user->role_id !== 1 && ! $request->boolean('allow_early_checkout')) {
+            $formattedTime = $minCheckOutTime->format('H:i');
+            $response = $this->errorResponse("Belum jam pulang kerja! Absen pulang baru dapat dilakukan mulai pukul {$formattedTime} WIB.", 400);
         } elseif ($request->is_mocked) {
             $response = $this->errorResponse('Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli.', 403);
         } elseif ($request->device_id && $user->device_id && $user->device_id !== $request->device_id) {
@@ -136,8 +153,8 @@ class AttendanceController extends Controller
     {
         // Handle Image & Compression
         $imageName = null;
-        if ($request->hasFile('image')) {
-            $file = $request->file('image');
+        $file = $request->hasFile('image') ? $request->file('image') : ($request->image instanceof \Symfony\Component\HttpFoundation\File\UploadedFile ? $request->image : null);
+        if ($file) {
             $imageName = 'attendance/out_'.Str::random(40).'.jpg';
             // Compress and resize image to save storage space
             $img = Image::decode($file);

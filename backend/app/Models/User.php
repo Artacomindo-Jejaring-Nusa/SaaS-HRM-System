@@ -50,9 +50,7 @@ class User extends Authenticatable
 
     public function getIsManagerAttribute()
     {
-        if (! $this->relationLoaded('role')) {
-            return false;
-        }
+        $this->loadMissing('role');
         if (! $this->role) {
             return false;
         }

@@ -137,13 +137,14 @@ export default function ApprovalsPage() {
   const fetchApprovals = useCallback(async () => {
     try {
       setLoading(true);
-      const [leaveRes, reimRes, profileRes, overtimeRes, permitRes, dinasRes] = await Promise.all([
-        axiosInstance.get("/leave?status=pending"),
-        axiosInstance.get("/reimbursements?status=pending"),
-        axiosInstance.get("/profile-requests?status=pending"),
-        axiosInstance.get("/overtimes?status=pending"),
-        axiosInstance.get("/permits?status=pending"),
-        axiosInstance.get("/attendance/dinas-luar/pending")
+      const [leaveRes, reimRes, profileRes, overtimeRes, permitRes, dinasRes, fundRes] = await Promise.all([
+        axiosInstance.get("/leave?status=pending").catch(() => ({ data: { data: [] } })),
+        axiosInstance.get("/reimbursements?status=pending").catch(() => ({ data: { data: [] } })),
+        axiosInstance.get("/profile-requests?status=pending").catch(() => ({ data: { data: [] } })),
+        axiosInstance.get("/overtimes?status=pending").catch(() => ({ data: { data: [] } })),
+        axiosInstance.get("/permits?status=pending").catch(() => ({ data: { data: [] } })),
+        axiosInstance.get("/attendance/dinas-luar/pending").catch(() => ({ data: { data: [] } })),
+        axiosInstance.get("/fund-requests?status=pending").catch(() => ({ data: { data: [] } }))
       ]);
       const lData = leaveRes.data.data;
       const leaves = (Array.isArray(lData) ? lData : (lData?.data || [])).map((l: RawLeave) => ({
@@ -171,6 +172,20 @@ export default function ApprovalsPage() {
         status: r.status,
         attachment: r.attachment,
         created_at: r.created_at
+      }));
+
+      const fnData = fundRes.data.data;
+      const fundRequests = (Array.isArray(fnData) ? fnData : (fnData?.data || [])).map((f: any) => ({
+        id: f.id,
+        type: "fund_request" as const,
+        user_name: f.employee_name || f.user?.name || "Karyawan",
+        description: f.title || f.reason || "Pengajuan Uang Muka",
+        category: "Pengajuan Dana",
+        amount: f.amount,
+        status: f.status,
+        attachment: f.attachment,
+        created_at: f.created_at,
+        target_supervisor_id: f.user?.supervisor_id
       }));
 
       const oData = overtimeRes.data.data;
@@ -234,21 +249,26 @@ export default function ApprovalsPage() {
 
       const roleName = currentUser?.role?.name?.toLowerCase() || "";
       const isHR = currentUser?.role_id === 1 || 
-                   hasPermission('approve-leaves') || 
-                   roleName.includes("hrd") || 
-                   roleName.includes("admin");
+                   roleName.includes("hr") || 
+                   roleName.includes("admin") ||
+                   roleName.includes("vp") ||
+                   roleName.includes("direktur") ||
+                   roleName.includes("ceo");
 
-      const merged = [...leaves, ...reimbursements, ...profiles, ...overtimes, ...permits, ...dinasLuars]
+      const merged = [...leaves, ...reimbursements, ...fundRequests, ...profiles, ...overtimes, ...permits, ...dinasLuars]
         .filter(item => {
+           const currentUserId = currentUser?.id ? Number(currentUser.id) : null;
+           const targetSpvId = item.target_supervisor_id ? Number(item.target_supervisor_id) : null;
+
            if (item.type === 'leave') {
               if (item.status === 'pending_supervisor') {
-                 return item.target_supervisor_id === currentUser?.id;
+                 return targetSpvId === currentUserId;
               }
               if (item.status === 'pending_hr') {
                  return isHR;
               }
               if (item.status === 'pending') {
-                 return isHR || item.target_supervisor_id === currentUser?.id;
+                 return isHR || targetSpvId === currentUserId;
               }
               return false;
            }
@@ -257,7 +277,7 @@ export default function ApprovalsPage() {
            }
            if (item.type === 'dinas_luar') {
                if (item.dinas_luar_status === 'pending') {
-                   return item.target_supervisor_id === currentUser?.id || isHR;
+                   return targetSpvId === currentUserId || isHR;
                }
                if (item.dinas_luar_status === 'approved_spv') {
                    return isHR;
@@ -325,9 +345,13 @@ export default function ApprovalsPage() {
       }
       
       if (item.type === 'dinas_luar') {
+        const roleName = currentUser?.role?.name?.toLowerCase() || "";
         const isHR = currentUser?.role_id === 1 || 
-                     (currentUser?.role?.name?.toLowerCase() || "").includes("hrd") || 
-                     (currentUser?.role?.name?.toLowerCase() || "").includes("admin");
+                     roleName.includes("hr") || 
+                     roleName.includes("admin") ||
+                     roleName.includes("vp") ||
+                     roleName.includes("direktur") ||
+                     roleName.includes("ceo");
         
         let actionSuffix = "";
         if (action === 'reject') {

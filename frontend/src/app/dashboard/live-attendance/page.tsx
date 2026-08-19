@@ -176,7 +176,13 @@ export default function LiveAttendancePage() {
       
     } catch (error: any) {
       setStatusMsg("Gagal melakukan absensi.");
-      toast.error(error.response?.data?.message || "Terjadi kesalahan sistem.");
+      const errData = error.response?.data;
+      if (errData?.errors) {
+        const fieldErrors = Object.values(errData.errors).flat().join(', ');
+        toast.error(fieldErrors || errData?.message || "Terjadi kesalahan sistem.");
+      } else {
+        toast.error(errData?.message || "Terjadi kesalahan sistem.");
+      }
     } finally {
       setLoading(false);
     }
@@ -215,9 +221,11 @@ export default function LiveAttendancePage() {
         const canvas = canvasRef.current!;
         const context = canvas.getContext('2d');
 
-        // Set dimensions match video
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        // Resize to max 640px width to reduce payload size
+        const maxWidth = 640;
+        const scale = Math.min(maxWidth / video.videoWidth, 1);
+        canvas.width = video.videoWidth * scale;
+        canvas.height = video.videoHeight * scale;
 
         // Draw current frame to canvas
         if (context) {
@@ -227,7 +235,8 @@ export default function LiveAttendancePage() {
           context.drawImage(video, 0, 0, canvas.width, canvas.height);
         }
 
-        const selfieBase64 = canvas.toDataURL('image/png');
+        // Use JPEG at 70% quality (~100KB) instead of PNG (~5MB+)
+        const selfieBase64 = canvas.toDataURL('image/jpeg', 0.7);
 
         const payload = {
           latitude: location.lat,
@@ -246,7 +255,14 @@ export default function LiveAttendancePage() {
         
       } catch (error: any) {
         setStatusMsg("Gagal melakukan absensi.");
-        toast.error(error.response?.data?.message || "Terjadi kesalahan sistem.");
+        const errData = error.response?.data;
+        if (errData?.errors) {
+          // Show detailed validation errors
+          const fieldErrors = Object.values(errData.errors).flat().join(', ');
+          toast.error(fieldErrors || errData?.message || "Terjadi kesalahan sistem.");
+        } else {
+          toast.error(errData?.message || "Terjadi kesalahan sistem.");
+        }
       } finally {
         setLoading(false);
       }
@@ -373,6 +389,16 @@ export default function LiveAttendancePage() {
                     <strong>AKSES DIBLOKIR:</strong> Anda terdeteksi berada {Math.round(distance - officeConfig.radius)} meter di luar area Radius Kantor yang diizinkan. Silakan mendekat ke area kantor untuk melakukan absensi.
                   </p>
               )}
+
+              {/* Notice Jam Pulang Kerja (17:00 WIB) */}
+              {user?.role?.id !== 1 && new Date().getHours() < 17 && (
+                <p className="text-xs text-amber-800 font-bold mt-3 bg-amber-50 p-3 rounded-xl border border-amber-200 flex items-center gap-2">
+                  <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                  <span>
+                    <strong>JAM PULANG:</strong> Absen pulang baru dapat dilakukan mulai pukul 17:00 WIB.
+                  </span>
+                </p>
+              )}
             </div>
 
             <hr className="border-gray-100" />
@@ -439,7 +465,7 @@ export default function LiveAttendancePage() {
                
                <button 
                  onClick={() => handleAttendance('check-out')}
-                 disabled={loading || !streamActive || !location || (attendanceType === 'office' && distance !== null && officeConfig && distance > officeConfig.radius) || (attendanceType === 'dinas_luar' && !destination.trim())}
+                 disabled={loading || !streamActive || !location || (user?.role?.id !== 1 && new Date().getHours() < 17) || (attendanceType === 'office' && distance !== null && officeConfig && distance > officeConfig.radius) || (attendanceType === 'dinas_luar' && !destination.trim())}
                  className="bg-[#8B0000] hover:bg-[#660000] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex flex-col items-center justify-center gap-2 group"
                >
                  <ScanFace size={24} className="group-hover:scale-110 transition-transform" />

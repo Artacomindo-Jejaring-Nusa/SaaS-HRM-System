@@ -82,6 +82,30 @@ class MobileDashboardController extends Controller
             ->limit(3)
             ->get();
 
+        // 5. Upcoming Birthdays (Current Month)
+        $todayObj = Carbon::today();
+        $upcomingBirthdays = User::where('company_id', $companyId)
+            ->whereNotNull('date_of_birth')
+            ->whereMonth('date_of_birth', $todayObj->month)
+            ->with('role')
+            ->get()
+            ->map(function ($emp) use ($todayObj) {
+                $dob = Carbon::parse($emp->date_of_birth);
+                $birthdayThisYear = Carbon::createFromDate($todayObj->year, $dob->month, $dob->day)->startOfDay();
+                return [
+                    'id' => $emp->id,
+                    'name' => $emp->name,
+                    'role' => $emp->role->name ?? 'Karyawan',
+                    'formatted_birthday' => $dob->translatedFormat('d F'),
+                    'birth_day' => $dob->day,
+                    'is_today' => $todayObj->isSameDay($birthdayThisYear),
+                    'phone_number' => $emp->phone_number,
+                ];
+            })
+            ->sortBy('birth_day')
+            ->values()
+            ->take(5);
+
         return $this->successResponse([
             'user' => [
                 'name' => $user->name,
@@ -93,6 +117,7 @@ class MobileDashboardController extends Controller
             'today_status' => $status,
             'pending_counts' => $pendingCounts,
             'announcements' => AnnouncementResource::collection($announcements),
+            'upcoming_birthdays' => $upcomingBirthdays,
         ], 'Mobile dashboard data fetched successfully.');
     }
 }

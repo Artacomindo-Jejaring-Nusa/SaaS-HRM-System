@@ -38,6 +38,7 @@ class DashboardController extends Controller
             'monthly_breakdown' => $this->getMonthlyBreakdown($companyId, $isStaff),
             'overtime_summary' => $this->getOvertimeSummary($companyId, $isStaff),
             'leave_distribution' => $this->getLeaveDistribution($companyId, $isStaff),
+            'upcoming_birthdays' => $this->getUpcomingBirthdays($companyId),
         ], 'Data ringkasan dashboard berhasil diambil.');
     }
 
@@ -395,6 +396,112 @@ class DashboardController extends Controller
             'message' => 'Leaderboard berhasil diambil',
             'data' => $data,
         ]);
+    }
+
+    public function getBirthdays(Request $request)
+    {
+        $user = $request->user();
+        $companyId = $user->company_id;
+
+        $month = (int) $request->query('month', Carbon::now()->month);
+        $month = ($month >= 1 && $month <= 12) ? $month : Carbon::now()->month;
+
+        $query = User::with(['role', 'office']);
+        if ($user->role_id !== 1) {
+            $query->where('company_id', $companyId);
+        }
+
+        $monthNames = [
+            1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
+            5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
+            9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+        ];
+
+        $today = Carbon::today();
+        $currentYear = $today->year;
+
+        $birthdays = $query->whereNotNull('date_of_birth')
+            ->whereMonth('date_of_birth', $month)
+            ->get()
+            ->map(function ($emp) use ($today, $currentYear) {
+                $dob = Carbon::parse($emp->date_of_birth);
+                $birthdayThisYear = Carbon::createFromDate($currentYear, $dob->month, $dob->day)->startOfDay();
+
+                $diffDays = (int) $today->diffInDays($birthdayThisYear, false);
+                $isToday = $today->isSameDay($birthdayThisYear);
+
+                return [
+                    'id' => $emp->id,
+                    'name' => $emp->name,
+                    'nik' => $emp->nik,
+                    'email' => $emp->email,
+                    'phone_number' => $emp->phone_number,
+                    'photo_url' => $emp->profile_photo_path ? url('storage/'.$emp->profile_photo_path) : null,
+                    'role_name' => $emp->role ? $emp->role->name : 'Karyawan',
+                    'office_name' => $emp->office ? $emp->office->name : 'Pusat',
+                    'date_of_birth' => $emp->date_of_birth,
+                    'birth_day' => $dob->day,
+                    'birth_month' => $dob->month,
+                    'birth_month_name' => $dob->translatedFormat('F'),
+                    'formatted_birthday' => $dob->translatedFormat('d F'),
+                    'is_today' => $isToday,
+                    'days_until' => $diffDays,
+                ];
+            })
+            ->sortBy('birth_day')
+            ->values();
+
+        // Calculate counts for all 12 months for tab badges
+        $monthCounts = [];
+        for ($m = 1; $m <= 12; $m++) {
+            $monthCounts[$m] = User::when($user->role_id !== 1, function ($q) use ($companyId) {
+                return $q->where('company_id', $companyId);
+            })
+            ->whereNotNull('date_of_birth')
+            ->whereMonth('date_of_birth', $m)
+            ->count();
+        }
+
+        return $this->successResponse([
+            'selected_month' => $month,
+            'month_name' => $monthNames[$month] ?? 'Bulan ini',
+            'total' => $birthdays->count(),
+            'month_counts' => $monthCounts,
+            'birthdays' => $birthdays,
+        ], 'Data jadwal ulang tahun berhasil diambil.');
+    }
+
+    private function getUpcomingBirthdays($companyId)
+    {
+        $today = Carbon::today();
+        $currentMonth = $today->month;
+        $currentYear = $today->year;
+
+        return User::where('company_id', $companyId)
+            ->whereNotNull('date_of_birth')
+            ->whereMonth('date_of_birth', $currentMonth)
+            ->with('role')
+            ->get()
+            ->map(function ($emp) use ($today, $currentYear) {
+                $dob = Carbon::parse($emp->date_of_birth);
+                $birthdayThisYear = Carbon::createFromDate($currentYear, $dob->month, $dob->day)->startOfDay();
+                $diffDays = (int) $today->diffInDays($birthdayThisYear, false);
+
+                return [
+                    'id' => $emp->id,
+                    'name' => $emp->name,
+                    'role_name' => $emp->role ? $emp->role->name : 'Karyawan',
+                    'date_of_birth' => $emp->date_of_birth,
+                    'birth_day' => $dob->day,
+                    'formatted_birthday' => $dob->translatedFormat('d F'),
+                    'is_today' => $today->isSameDay($birthdayThisYear),
+                    'days_until' => $diffDays,
+                    'phone_number' => $emp->phone_number,
+                ];
+            })
+            ->sortBy('birth_day')
+            ->values()
+            ->take(6);
     }
 
     private function getTopAttendance($companyId, $start, $end)

@@ -80,6 +80,12 @@ class ApiService {
   static Future<Map<String, dynamic>?> getLeaderboard() =>
       DashboardRepository.getLeaderboard();
 
+  static Future<Map<String, dynamic>?> getMobileDashboard() =>
+      DashboardRepository.getMobileDashboard();
+
+  static Future<Map<String, dynamic>?> getBirthdays({int? month}) =>
+      DashboardRepository.getBirthdays(month: month);
+
   // ============ PROFILE ============
 
   static Future<Map<String, dynamic>?> getProfile() =>

@@ -88,6 +88,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     // Dashboard
     Route::get('/dashboard/summary', [DashboardController::class, 'index']);
     Route::get('/dashboard/leaderboard', [DashboardController::class, 'leaderboard']);
+    Route::get('/dashboard/birthdays', [DashboardController::class, 'getBirthdays']);
 
     // --- MOBILE ROUTES ---
     Route::group(['prefix' => 'mobile'], function () {

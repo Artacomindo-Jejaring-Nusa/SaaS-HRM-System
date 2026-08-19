@@ -5,7 +5,7 @@ import axiosInstance from "@/lib/axios";
 import { 
   Users, UserCheck, UserX, Calendar as CalendarIcon, 
   MoreVertical, Eye, Plus, Search, Filter, X, Clock, AlertCircle, CheckCircle,
-  TrendingUp, TrendingDown, Briefcase, Activity, Coffee, FileText
+  TrendingUp, TrendingDown, Briefcase, Activity, Coffee, FileText, Cake, Gift, Sparkles
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, CartesianGrid } from 'recharts';
 import Image from "next/image";
@@ -44,6 +44,17 @@ interface DashboardData {
     content: string;
     created_at: string;
     user: { name: string };
+  }>;
+  upcoming_birthdays?: Array<{
+    id: number;
+    name: string;
+    role_name: string;
+    date_of_birth: string;
+    birth_day: number;
+    formatted_birthday: string;
+    is_today: boolean;
+    days_until: number;
+    phone_number: string | null;
   }>;
   recent_activities: Array<{
     id: number;
@@ -140,6 +151,7 @@ export default function DashboardPage() {
   const attendanceTrends = data?.attendance_trends || [];
   const upcomingHolidays = data?.upcoming_holidays || [];
   const recentAnnouncements = data?.recent_announcements || [];
+  const upcomingBirthdays = data?.upcoming_birthdays || [];
   const recentActivities = data?.recent_activities || [];
   const roleDistribution = data?.role_distribution || [];
   const todayAttendance = data?.today_attendance || [];
@@ -748,6 +760,69 @@ export default function DashboardPage() {
                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">No announcements</p>
                </div>
              )}
+          </div>
+        </div>
+
+        {/* Upcoming Birthdays Widget */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex flex-col h-[350px]">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-gray-900 flex items-center gap-2">
+              <Cake size={18} className="text-[#8B0000]" />
+              Ulang Tahun Bulan Ini 🎂
+            </h3>
+            <button 
+              onClick={() => router.push('/dashboard/birthdays')}
+              className="text-[11px] font-bold text-[#8B0000] hover:underline"
+            >
+              Lihat Semua →
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-3">
+            {upcomingBirthdays.length > 0 ? (
+              upcomingBirthdays.map((b) => (
+                <div 
+                  key={b.id} 
+                  className={`flex items-center justify-between p-3 rounded-xl transition border ${
+                    b.is_today 
+                      ? 'bg-amber-50/60 border-amber-300 ring-1 ring-amber-300/50' 
+                      : 'bg-gray-50/50 border-gray-100 hover:bg-red-50/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-9 h-9 rounded-xl font-black text-xs flex items-center justify-center shrink-0 ${
+                      b.is_today ? 'bg-amber-500 text-white animate-bounce' : 'bg-red-100 text-[#8B0000]'
+                    }`}>
+                      {b.is_today ? '👑' : b.birth_day}
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-gray-900 truncate flex items-center gap-1">
+                        {b.name}
+                        {b.is_today && <span className="text-[10px] bg-yellow-400 text-yellow-950 px-1.5 py-0.5 rounded-full font-black uppercase">Hari ini!</span>}
+                      </h4>
+                      <p className="text-[11px] text-gray-500 truncate">{b.role_name} • {b.formatted_birthday}</p>
+                    </div>
+                  </div>
+
+                  {b.phone_number && (
+                    <button
+                      onClick={() => {
+                        const cleanPhone = b.phone_number?.replace(/[^0-9]/g, "").replace(/^0/, "62");
+                        const msg = `Selamat Ulang Tahun Bpk/Ibu ${b.name}! 🎉🎂 Semoga sehat selalu & sukses di PT Narwasthu Artha Tama!`;
+                        window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+                      }}
+                      className="text-[10px] bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2.5 py-1 rounded-lg font-bold shrink-0 transition"
+                    >
+                      WA 🎈
+                    </button>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-10">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Tidak Ada Ulang Tahun Bulan Ini</p>
+              </div>
+            )}
           </div>
         </div>
 
