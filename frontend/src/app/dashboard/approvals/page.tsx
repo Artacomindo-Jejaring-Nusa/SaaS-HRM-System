@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 
 interface ApprovalItem {
   id: number;
-  type: "leave" | "reimbursement" | "profile" | "overtime" | "permit" | "dinas_luar";
+  type: "leave" | "reimbursement" | "profile" | "overtime" | "permit" | "dinas_luar" | "fund_request";
   user_name: string;
   category: string; // "Cuti Tahunan", "Bensin", etc.
   description: string;
@@ -113,7 +113,10 @@ const typeColor: Record<string, string> = {
 const extractStoragePath = (url?: string): string | undefined => {
   if (!url) return undefined;
   const idx = url.indexOf('/storage/');
-  return idx !== -1 ? url.substring(idx + 9) : url;
+  if (idx >= 0) {
+    return url.substring(idx + 9);
+  }
+  return url;
 };
 
 const getApprovalEndpoint = (type: string): string => {
@@ -152,8 +155,135 @@ const shouldIncludeApprovalItem = (
   return item.status === 'pending' || item.status === 'waiting_approval';
 };
 
+const normalizeLeaves = (data: unknown): ApprovalItem[] =>
+  (Array.isArray(data) ? data : ((data as { data?: RawLeave[] })?.data || [])).map((l: RawLeave) => ({
+    id: l.id,
+    type: "leave" as const,
+    user_name: l.user?.name || "Karyawan",
+    description: l.reason,
+    category: l.type,
+    start_date: l.start_date,
+    end_date: l.end_date,
+    status: l.status,
+    attachment: undefined,
+    created_at: l.created_at,
+    target_supervisor_id: l.user?.supervisor_id
+  }));
+
+const normalizeReimbursements = (data: unknown): ApprovalItem[] =>
+  (Array.isArray(data) ? data : ((data as { data?: RawReimbursement[] })?.data || [])).map((r: RawReimbursement) => ({
+    id: r.id,
+    type: "reimbursement" as const,
+    user_name: r.user?.name || "Karyawan",
+    description: r.description,
+    category: "Reimbursement",
+    amount: r.amount,
+    status: r.status,
+    attachment: r.attachment,
+    created_at: r.created_at
+  }));
+
+const normalizeFundRequests = (data: unknown): ApprovalItem[] =>
+  (Array.isArray(data) ? data : ((data as { data?: any[] })?.data || [])).map((f: any) => ({
+    id: f.id,
+    type: "fund_request" as const,
+    user_name: f.employee_name || f.user?.name || "Karyawan",
+    description: f.title || f.reason || "Pengajuan Uang Muka",
+    category: "Pengajuan Dana",
+    amount: f.amount,
+    status: f.status,
+    attachment: f.attachment,
+    created_at: f.created_at,
+    target_supervisor_id: f.user?.supervisor_id
+  }));
+
+const normalizeOvertimes = (data: unknown): ApprovalItem[] =>
+  (Array.isArray(data) ? data : ((data as { data?: RawOvertime[] })?.data || [])).map((o: RawOvertime) => ({
+    id: o.id,
+    type: "overtime" as const,
+    user_name: o.user?.name || "Karyawan",
+    description: o.reason,
+    category: "Lembur",
+    start_date: o.start_time,
+    end_date: o.end_time,
+    status: o.status,
+    attachment: undefined,
+    created_at: o.created_at
+  }));
+
+const normalizeProfiles = (data: unknown): ApprovalItem[] =>
+  (Array.isArray(data) ? data : ((data as { data?: RawProfileRequest[] })?.data || [])).map((p: RawProfileRequest) => ({
+    id: p.id,
+    type: "profile" as const,
+    user_name: p.user?.name || "Karyawan",
+    description: `Update data: ${Object.keys(p.new_data).join(", ")}`,
+    category: "Perubahan Profil",
+    status: p.status,
+    attachment: undefined,
+    created_at: p.created_at
+  }));
+
+const normalizePermits = (data: unknown): ApprovalItem[] =>
+  (Array.isArray(data) ? data : ((data as { data?: RawPermit[] })?.data || [])).map((pe: RawPermit) => ({
+    id: pe.id,
+    type: "permit" as const,
+    user_name: pe.user?.name || "Karyawan",
+    description: pe.reason,
+    category: `[${pe.category || 'I'}] ${pe.type || 'Izin'}`,
+    start_date: pe.start_date,
+    end_date: pe.end_date,
+    status: pe.status,
+    attachment: undefined,
+    created_at: pe.created_at,
+    permit_category: pe.category || 'I',
+    permit_has_doctor_note: pe.has_doctor_note || false,
+    permit_is_deducted: pe.is_deducted || false,
+  }));
+
+const normalizeDinasLuars = (data: unknown): ApprovalItem[] =>
+  (Array.isArray(data) ? data : ((data as { data?: any[] })?.data || [])).map((d: any) => {
+    let status = d.dinas_luar_status;
+    if (d.dinas_luar_status === 'pending') {
+      status = 'pending';
+    } else if (d.dinas_luar_status === 'approved_spv') {
+      status = 'waiting_approval';
+    }
+    return {
+      id: d.id,
+      type: "dinas_luar" as const,
+      user_name: d.user?.name || "Karyawan",
+      description: `Tujuan: ${d.dinas_luar_destination}. Keterangan: ${d.dinas_luar_notes || '-'}`,
+      category: "Dinas Luar",
+      start_date: d.check_in ? new Date(d.check_in).toLocaleString('id-ID') : undefined,
+      end_date: undefined,
+      status,
+      attachment: extractStoragePath(d.image_in_url),
+      created_at: d.created_at,
+      dinas_luar_status: d.dinas_luar_status,
+      target_supervisor_id: d.user?.supervisor_id
+    };
+  });
+
+const executeApprovalApi = async (
+  item: ApprovalItem,
+  action: "approve" | "reject",
+  isHR: boolean,
+  payload: Record<string, unknown>
+): Promise<void> => {
+  if (item.type === 'dinas_luar') {
+    let actionSuffix = 'reject';
+    if (action === 'approve') {
+      actionSuffix = (isHR && item.status === 'waiting_approval') ? 'approve-hr' : 'approve-spv';
+    }
+    await axiosInstance.post(`/attendance/dinas-luar/${item.id}/${actionSuffix}`, payload);
+  } else {
+    const endpoint = getApprovalEndpoint(item.type);
+    await axiosInstance.post(`${endpoint}/${item.id}/${action}`, payload);
+  }
+};
+
 export default function ApprovalsPage() {
-  const { user: currentUser, hasPermission } = useAuth();
+  const { user: currentUser } = useAuth();
   const [items, setItems] = useState<ApprovalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "leave" | "reimbursement" | "profile" | "overtime" | "permit" | "dinas_luar">("all");
@@ -189,114 +319,16 @@ export default function ApprovalsPage() {
         axiosInstance.get("/attendance/dinas-luar/pending").catch(() => ({ data: { data: [] } })),
         axiosInstance.get("/fund-requests?status=pending").catch(() => ({ data: { data: [] } }))
       ]);
-      const lData = leaveRes.data.data;
-      const leaves = (Array.isArray(lData) ? lData : (lData?.data || [])).map((l: RawLeave) => ({
-        id: l.id,
-        type: "leave" as const,
-        user_name: l.user?.name || "Karyawan",
-        description: l.reason,
-        category: l.type,
-        start_date: l.start_date,
-        end_date: l.end_date,
-        status: l.status,
-        attachment: undefined,
-        created_at: l.created_at,
-        target_supervisor_id: l.user?.supervisor_id
-      }));
 
-      const rData = reimRes.data.data;
-      const reimbursements = (Array.isArray(rData) ? rData : (rData?.data || [])).map((r: RawReimbursement) => ({
-        id: r.id,
-        type: "reimbursement" as const,
-        user_name: r.user?.name || "Karyawan",
-        description: r.description,
-        category: "Reimbursement",
-        amount: r.amount,
-        status: r.status,
-        attachment: r.attachment,
-        created_at: r.created_at
-      }));
-
-      const fnData = fundRes.data.data;
-      const fundRequests = (Array.isArray(fnData) ? fnData : (fnData?.data || [])).map((f: any) => ({
-        id: f.id,
-        type: "fund_request" as const,
-        user_name: f.employee_name || f.user?.name || "Karyawan",
-        description: f.title || f.reason || "Pengajuan Uang Muka",
-        category: "Pengajuan Dana",
-        amount: f.amount,
-        status: f.status,
-        attachment: f.attachment,
-        created_at: f.created_at,
-        target_supervisor_id: f.user?.supervisor_id
-      }));
-
-      const oData = overtimeRes.data.data;
-      const overtimes = (Array.isArray(oData) ? oData : (oData?.data || [])).map((o: RawOvertime) => ({
-        id: o.id,
-        type: "overtime" as const,
-        user_name: o.user?.name || "Karyawan",
-        description: o.reason,
-        category: "Lembur",
-        start_date: o.start_time,
-        end_date: o.end_time,
-        status: o.status,
-        attachment: undefined,
-        created_at: o.created_at
-      }));
-
-      const pData = profileRes.data.data;
-      const profiles = (Array.isArray(pData) ? pData : (pData?.data || [])).map((p: RawProfileRequest) => ({
-        id: p.id,
-        type: "profile" as const,
-        user_name: p.user?.name || "Karyawan",
-        description: `Update data: ${Object.keys(p.new_data).join(", ")}`,
-        category: "Perubahan Profil",
-        status: p.status,
-        attachment: undefined,
-        created_at: p.created_at
-      }));
-
-      const peData = permitRes.data.data;
-      const permits = (Array.isArray(peData) ? peData : (peData?.data || [])).map((pe: RawPermit) => ({
-        id: pe.id,
-        type: "permit" as const,
-        user_name: pe.user?.name || "Karyawan",
-        description: pe.reason,
-        category: `[${pe.category || 'I'}] ${pe.type || 'Izin'}`,
-        start_date: pe.start_date,
-        end_date: pe.end_date,
-        status: pe.status,
-        attachment: undefined,
-        created_at: pe.created_at,
-        permit_category: pe.category || 'I',
-        permit_has_doctor_note: pe.has_doctor_note || false,
-        permit_is_deducted: pe.is_deducted || false,
-      }));
-
-      const dData = dinasRes.data.data;
-      const dinasLuars = (Array.isArray(dData) ? dData : (dData?.data || [])).map((d: any) => {
-        let status = d.dinas_luar_status;
-        if (d.dinas_luar_status === 'pending') {
-          status = 'pending';
-        } else if (d.dinas_luar_status === 'approved_spv') {
-          status = 'waiting_approval';
-        }
-        return {
-          id: d.id,
-          type: "dinas_luar" as const,
-          user_name: d.user?.name || "Karyawan",
-          description: `Tujuan: ${d.dinas_luar_destination}. Keterangan: ${d.dinas_luar_notes || '-'}`,
-          category: "Dinas Luar",
-          start_date: d.check_in ? new Date(d.check_in).toLocaleString('id-ID') : undefined,
-          end_date: undefined,
-          status,
-          attachment: extractStoragePath(d.image_in_url),
-          created_at: d.created_at,
-          dinas_luar_status: d.dinas_luar_status,
-          target_supervisor_id: d.user?.supervisor_id
-        };
-      });
+      const allApprovals = [
+        ...normalizeLeaves(leaveRes.data.data),
+        ...normalizeReimbursements(reimRes.data.data),
+        ...normalizeFundRequests(fundRes.data.data),
+        ...normalizeOvertimes(overtimeRes.data.data),
+        ...normalizeProfiles(profileRes.data.data),
+        ...normalizePermits(permitRes.data.data),
+        ...normalizeDinasLuars(dinasRes.data.data),
+      ];
 
       const roleName = currentUser?.role?.name?.toLowerCase() || "";
       const isHR = currentUser?.role_id === 1 || 
@@ -307,7 +339,6 @@ export default function ApprovalsPage() {
                    roleName.includes("ceo");
 
       const currentUserId = currentUser?.id ? Number(currentUser.id) : null;
-      const allApprovals = [...leaves, ...reimbursements, ...fundRequests, ...profiles, ...overtimes, ...permits, ...dinasLuars];
       const merged = allApprovals
         .filter(item => shouldIncludeApprovalItem(item, currentUserId, isHR))
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -318,7 +349,7 @@ export default function ApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentUser, hasPermission]);
+  }, [currentUser]);
 
   useEffect(() => {
     fetchApprovals();
@@ -356,24 +387,15 @@ export default function ApprovalsPage() {
         payload.has_doctor_note = permitOverrideDoctorNote;
       }
       
-      if (item.type === 'dinas_luar') {
-        const roleName = currentUser?.role?.name?.toLowerCase() || "";
-        const isHR = currentUser?.role_id === 1 || 
-                     roleName.includes("hr") || 
-                     roleName.includes("admin") ||
-                     roleName.includes("vp") ||
-                     roleName.includes("direktur") ||
-                     roleName.includes("ceo");
-        
-        let actionSuffix = 'reject';
-        if (action === 'approve') {
-          actionSuffix = (isHR && item.status === 'waiting_approval') ? 'approve-hr' : 'approve-spv';
-        }
-        await axiosInstance.post(`/attendance/dinas-luar/${item.id}/${actionSuffix}`, payload);
-      } else {
-        const endpoint = getApprovalEndpoint(item.type);
-        await axiosInstance.post(`${endpoint}/${item.id}/${action}`, payload);
-      }
+      const roleName = currentUser?.role?.name?.toLowerCase() || "";
+      const isHR = currentUser?.role_id === 1 || 
+                   roleName.includes("hr") || 
+                   roleName.includes("admin") ||
+                   roleName.includes("vp") ||
+                   roleName.includes("direktur") ||
+                   roleName.includes("ceo");
+
+      await executeApprovalApi(item, action, isHR, payload);
       
       try {
           const audio = new window.Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
