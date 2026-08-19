@@ -133,9 +133,11 @@ trait HandlesAttendanceProcessing
             return ['success' => true, 'office' => null];
         }
 
-        $userLat = $request->latitude;
-        $userLng = $request->longitude;
+        return $this->resolveOfficeGeofence($user, $request->latitude, $request->longitude);
+    }
 
+    private function resolveOfficeGeofence(User $user, $userLat, $userLng): array
+    {
         if ($user->office_id) {
             $assignedCheck = $this->checkAssignedOffice($userLat, $userLng, $user->office_id);
             if ($assignedCheck) {
@@ -146,11 +148,9 @@ trait HandlesAttendanceProcessing
         $allOffices = Office::where('company_id', $user->company_id)->active()->get();
         $matchedOffice = $this->findNearestOffice($allOffices, $userLat, $userLng);
 
-        if (! $matchedOffice) {
-            return $this->checkCompanyRadius($user, $userLat, $userLng);
-        }
-
-        return ['success' => true, 'office' => $matchedOffice];
+        return $matchedOffice
+            ? ['success' => true, 'office' => $matchedOffice]
+            : $this->checkCompanyRadius($user, $userLat, $userLng);
     }
 
     private function calculateDistance($lat1, $lon1, $lat2, $lon2): float
