@@ -9,6 +9,7 @@ use App\Traits\Notifiable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\File;
 use Intervention\Image\Laravel\Facades\Image;
 
 class FundRequestController extends Controller
@@ -67,9 +68,9 @@ class FundRequestController extends Controller
             'priority' => 'nullable|string',
             'signature' => 'nullable|string',
             'items' => 'nullable',
-            'attachment' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:10240'],
+            'attachment' => ['nullable', File::types(['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'])->max(10240)],
             'attachments' => ['nullable', 'array', 'max:10'],
-            'attachments.*' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:10240'],
+            'attachments.*' => ['nullable', File::types(['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'])->max(10240)],
         ]);
 
         $user = $request->user();
