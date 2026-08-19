@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import axiosInstance from "@/lib/axios";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Cake, Calendar, Gift, Search, MessageSquare, Printer, Sparkles, PartyPopper, Users, Heart } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Cake, Calendar, Gift, Search, MessageSquare, Printer, Sparkles, PartyPopper } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -41,7 +41,7 @@ const MONTHS = [
 ];
 
 export default function BirthdaySchedulePage() {
-  const { user } = useAuth();
+  useAuth();
   const currentMonthNum = new Date().getMonth() + 1;
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonthNum);
   const [birthdays, setBirthdays] = useState<EmployeeBirthday[]>([]);
@@ -83,7 +83,7 @@ export default function BirthdaySchedulePage() {
   const handleSendWish = (emp: EmployeeBirthday) => {
     const defaultMsg = `Selamat Ulang Tahun Bpk/Ibu ${emp.name}! 🎉🎂 Semoga sehat selalu, panjang umur, dan semakin sukses bersama PT Narwasthu Artha Tama! ✨🎈`;
     if (emp.phone_number) {
-      const cleanPhone = emp.phone_number.replace(/[^0-9]/g, "").replace(/^0/, "62");
+      const cleanPhone = emp.phone_number.replaceAll(/\D/g, "").replace(/^0/, "62");
       window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(defaultMsg)}`, "_blank");
     } else {
       navigator.clipboard.writeText(defaultMsg);
@@ -92,7 +92,7 @@ export default function BirthdaySchedulePage() {
   };
 
   const handlePrint = () => {
-    window.print();
+    globalThis.print();
   };
 
   return (
@@ -220,30 +220,36 @@ export default function BirthdaySchedulePage() {
       </div>
 
       {/* Birthday Grid View */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="h-44 bg-gray-100 rounded-2xl animate-pulse"></div>
-          ))}
-        </div>
-      ) : filteredBirthdays.length === 0 ? (
-        <Card className="border border-dashed border-gray-200 bg-gray-50/50 py-12 text-center">
-          <CardContent className="space-y-3">
-            <div className="w-12 h-12 bg-red-50 text-[#8B0000] rounded-full flex items-center justify-center mx-auto">
-              <Gift size={24} />
+      {(() => {
+        if (loading) {
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="h-44 bg-gray-100 rounded-2xl animate-pulse"></div>
+              ))}
             </div>
-            <h3 className="font-bold text-gray-800 text-sm">
-              Tidak Ada Karyawan Berulang Tahun di Bulan {monthName}
-            </h3>
-            <p className="text-xs text-gray-500 max-w-sm mx-auto">
-              {searchQuery ? "Tidak ditemukan karyawan dengan kata kunci tersebut." : `Belum ada jadwal ulang tahun terdaftar di bulan ${monthName}.`}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredBirthdays.map((emp) => {
-            return (
+          );
+        }
+        if (filteredBirthdays.length === 0) {
+          return (
+            <Card className="border border-dashed border-gray-200 bg-gray-50/50 py-12 text-center">
+              <CardContent className="space-y-3">
+                <div className="w-12 h-12 bg-red-50 text-[#8B0000] rounded-full flex items-center justify-center mx-auto">
+                  <Gift size={24} />
+                </div>
+                <h3 className="font-bold text-gray-800 text-sm">
+                  Tidak Ada Karyawan Berulang Tahun di Bulan {monthName}
+                </h3>
+                <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                  {searchQuery ? "Tidak ditemukan karyawan dengan kata kunci tersebut." : `Belum ada jadwal ulang tahun terdaftar di bulan ${monthName}.`}
+                </p>
+              </CardContent>
+            </Card>
+          );
+        }
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredBirthdays.map((emp) => (
               <Card
                 key={emp.id}
                 className={`overflow-hidden border transition-all duration-300 hover:shadow-lg ${
@@ -323,10 +329,10 @@ export default function BirthdaySchedulePage() {
                   </div>
                 </CardContent>
               </Card>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }

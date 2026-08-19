@@ -292,14 +292,23 @@ export default function AttendancePage() {
                   <div className="mt-8 grid grid-cols-2 md:grid-cols-3 gap-4">
                      <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Status</p>
-                        <div className="flex items-center gap-2">
-                           <div className={`w-2 h-2 rounded-full ${selectedRecord.attendance_type === 'dinas_luar' ? 'bg-rose-500' : (selectedRecord.status === 'present' ? 'bg-emerald-500' : 'bg-red-500')}`}></div>
-                           <p className="text-xs font-bold text-gray-900">
-                             {selectedRecord.attendance_type === 'dinas_luar' 
-                               ? `Dinas Luar (${selectedRecord.dinas_luar_status?.toUpperCase()})` 
-                               : (selectedRecord.status === 'present' ? 'Hadir Tepat Waktu' : 'Terlambat')}
-                           </p>
-                        </div>
+                        {(() => {
+                           let badgeColor = 'bg-red-500';
+                           let label = 'Terlambat';
+                           if (selectedRecord.attendance_type === 'dinas_luar') {
+                              badgeColor = 'bg-rose-500';
+                              label = `Dinas Luar (${selectedRecord.dinas_luar_status?.toUpperCase()})`;
+                           } else if (selectedRecord.status === 'present') {
+                              badgeColor = 'bg-emerald-500';
+                              label = 'Hadir Tepat Waktu';
+                           }
+                           return (
+                              <div className="flex items-center gap-2">
+                                 <div className={`w-2 h-2 rounded-full ${badgeColor}`}></div>
+                                 <p className="text-xs font-bold text-gray-900">{label}</p>
+                              </div>
+                           );
+                        })()}
                      </div>
                      <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Perangkat</p>

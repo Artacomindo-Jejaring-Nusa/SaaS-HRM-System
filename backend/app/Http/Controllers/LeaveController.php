@@ -14,18 +14,19 @@ class LeaveController extends Controller
     use Notifiable;
 
     private const TYPE_ANNUAL_LEAVE = 'Cuti Tahunan';
+    private const ARTICLE_PASAL_93 = 'Pasal 93 UU No. 13/2003';
 
     private const KEMNAKER_LEAVE_TYPES = [
         'Cuti Tahunan' => ['days' => 12, 'paid' => true, 'article' => 'Pasal 79 UU No. 13/2003', 'uses_quota' => true],
-        'Cuti Sakit' => ['days' => 0, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
+        'Cuti Sakit' => ['days' => 0, 'paid' => true, 'article' => self::ARTICLE_PASAL_93, 'uses_quota' => false],
         'Cuti Melahirkan' => ['days' => 90, 'paid' => true, 'article' => 'Pasal 82 UU No. 13/2003', 'uses_quota' => false],
         'Cuti Keguguran' => ['days' => 45, 'paid' => true, 'article' => 'Pasal 82 UU No. 13/2003', 'uses_quota' => false],
-        'Cuti Menikah' => ['days' => 3, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
-        'Menikahkan Anak' => ['days' => 2, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
-        'Khitanan/Baptis Anak' => ['days' => 2, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
-        'Istri Melahirkan/Keguguran' => ['days' => 2, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
-        'Kematian Keluarga Inti' => ['days' => 2, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
-        'Kematian Keluarga Serumah' => ['days' => 1, 'paid' => true, 'article' => 'Pasal 93 UU No. 13/2003', 'uses_quota' => false],
+        'Cuti Menikah' => ['days' => 3, 'paid' => true, 'article' => self::ARTICLE_PASAL_93, 'uses_quota' => false],
+        'Menikahkan Anak' => ['days' => 2, 'paid' => true, 'article' => self::ARTICLE_PASAL_93, 'uses_quota' => false],
+        'Khitanan/Baptis Anak' => ['days' => 2, 'paid' => true, 'article' => self::ARTICLE_PASAL_93, 'uses_quota' => false],
+        'Istri Melahirkan/Keguguran' => ['days' => 2, 'paid' => true, 'article' => self::ARTICLE_PASAL_93, 'uses_quota' => false],
+        'Kematian Keluarga Inti' => ['days' => 2, 'paid' => true, 'article' => self::ARTICLE_PASAL_93, 'uses_quota' => false],
+        'Kematian Keluarga Serumah' => ['days' => 1, 'paid' => true, 'article' => self::ARTICLE_PASAL_93, 'uses_quota' => false],
         'Haid (Hari 1 & 2)' => ['days' => 2, 'paid' => true, 'article' => 'Pasal 81 UU No. 13/2003', 'uses_quota' => false],
         'Cuti Besar/Panjang' => ['days' => 0, 'paid' => false, 'article' => 'Pasal 79 UU No. 13/2003', 'uses_quota' => false],
     ];
@@ -543,7 +544,7 @@ class LeaveController extends Controller
         return $this->successResponse(null, 'Cuti berhasil dihapus.');
     }
 
-    public function getLeaveTypes(Request $request): \Illuminate\Http\JsonResponse
+    public function getLeaveTypes(): \Illuminate\Http\JsonResponse
     {
         return response()->json([
             'status' => 'success',

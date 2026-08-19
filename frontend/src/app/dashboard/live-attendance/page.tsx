@@ -147,47 +147,6 @@ export default function LiveAttendancePage() {
     return d * 1000; // Return in meters
   };
 
-  const handleAttendanceWithoutPhoto = async (type: 'check-in' | 'check-out') => {
-    if (!location) {
-      toast.warning("Menunggu titik koordinat lokasi GPS...");
-      return;
-    }
-
-    if (distance !== null && officeConfig && distance > officeConfig.radius) {
-      toast.error(`Akses Ditolak: Anda berada ${Math.round(distance - officeConfig.radius)}m di luar radius kantor!`);
-      return;
-    }
-
-    setLoading(true);
-    setStatusMsg("Memproses Absensi (Via Tombol)...");
-
-    try {
-      const payload = {
-        latitude: location.lat,
-        longitude: location.lng,
-        image: null // No image for button attendance
-      };
-
-      const res = await axiosInstance.post(`/attendance/${type}`, payload);
-      
-      setStatusMsg(`Berhasil ${type === 'check-in' ? 'Absen Masuk' : 'Absen Keluar'}!`);
-      toast.success(res.data.message || `Berhasil ${type === 'check-in' ? 'Check-in' : 'Check-out'}!`);
-      router.push('/dashboard');
-      
-    } catch (error: any) {
-      setStatusMsg("Gagal melakukan absensi.");
-      const errData = error.response?.data;
-      if (errData?.errors) {
-        const fieldErrors = Object.values(errData.errors).flat().join(', ');
-        toast.error(fieldErrors || errData?.message || "Terjadi kesalahan sistem.");
-      } else {
-        toast.error(errData?.message || "Terjadi kesalahan sistem.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleAttendance = async (type: 'check-in' | 'check-out') => {
     if (!location) {
       toast.warning("Menunggu titik koordinat lokasi GPS...");
@@ -426,8 +385,9 @@ export default function LiveAttendancePage() {
               {attendanceType === 'dinas_luar' && (
                 <div className="space-y-3 p-4 bg-red-50/50 border border-red-100 rounded-2xl animate-in slide-in-from-top-2 duration-300">
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tujuan Dinas Luar *</label>
+                    <label htmlFor="dinas_destination" className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tujuan Dinas Luar *</label>
                     <input
+                      id="dinas_destination"
                       type="text"
                       value={destination}
                       onChange={(e) => setDestination(e.target.value)}
@@ -437,8 +397,9 @@ export default function LiveAttendancePage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Keterangan / Aktivitas</label>
+                    <label htmlFor="dinas_notes" className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Keterangan / Aktivitas</label>
                     <textarea
+                      id="dinas_notes"
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="Contoh: Rapat koordinasi proyek dan maintenance server"

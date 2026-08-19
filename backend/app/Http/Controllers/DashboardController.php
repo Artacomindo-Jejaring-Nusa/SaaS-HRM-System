@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
+    private const STORAGE_PATH_PREFIX = 'storage/';
     public function index(Request $request)
     {
         $user = $request->user();
@@ -436,7 +437,7 @@ class DashboardController extends Controller
                     'nik' => $emp->nik,
                     'email' => $emp->email,
                     'phone_number' => $emp->phone_number,
-                    'photo_url' => $emp->profile_photo_path ? url('storage/'.$emp->profile_photo_path) : null,
+                    'photo_url' => $emp->profile_photo_path ? url(self::STORAGE_PATH_PREFIX.$emp->profile_photo_path) : null,
                     'role_name' => $emp->role ? $emp->role->name : 'Karyawan',
                     'office_name' => $emp->office ? $emp->office->name : 'Pusat',
                     'date_of_birth' => $emp->date_of_birth,
@@ -515,7 +516,7 @@ class DashboardController extends Controller
             ->groupBy('users.id', 'users.name', 'users.profile_photo_path')
             ->orderByDesc('score')->take(10)->get()
             ->map(function ($e) {
-                $e->photo_url = $e->profile_photo_path ? url('storage/'.$e->profile_photo_path) : null;
+                $e->photo_url = $e->profile_photo_path ? url(self::STORAGE_PATH_PREFIX.$e->profile_photo_path) : null;
                 return $e;
             })->values();
     }
@@ -531,7 +532,7 @@ class DashboardController extends Controller
             ->groupBy('users.id', 'users.name', 'users.profile_photo_path')
             ->orderByDesc('score')->take(10)->get()
             ->map(function ($e) {
-                $e->photo_url = $e->profile_photo_path ? url('storage/'.$e->profile_photo_path) : null;
+                $e->photo_url = $e->profile_photo_path ? url(self::STORAGE_PATH_PREFIX.$e->profile_photo_path) : null;
                 return $e;
             })->values();
     }

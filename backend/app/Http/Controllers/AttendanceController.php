@@ -62,7 +62,12 @@ class AttendanceController extends Controller
 
         // Handle Image & Compression
         $imageName = null;
-        $file = $request->hasFile('image') ? $request->file('image') : ($request->image instanceof \Symfony\Component\HttpFoundation\File\UploadedFile ? $request->image : null);
+        $file = null;
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+        } elseif ($request->image instanceof \Symfony\Component\HttpFoundation\File\UploadedFile) {
+            $file = $request->image;
+        }
         if ($file) {
             $imageName = 'attendance/in_'.Str::random(40).'.jpg';
             // Compress and resize image to save storage space (target ~50-80KB)
@@ -153,7 +158,12 @@ class AttendanceController extends Controller
     {
         // Handle Image & Compression
         $imageName = null;
-        $file = $request->hasFile('image') ? $request->file('image') : ($request->image instanceof \Symfony\Component\HttpFoundation\File\UploadedFile ? $request->image : null);
+        $file = null;
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+        } elseif ($request->image instanceof \Symfony\Component\HttpFoundation\File\UploadedFile) {
+            $file = $request->image;
+        }
         if ($file) {
             $imageName = 'attendance/out_'.Str::random(40).'.jpg';
             // Compress and resize image to save storage space
