@@ -306,7 +306,7 @@ export const FundRequestSheetInner = ({
               const item = items[idx];
               const isLast = idx === rowsToRender.length - 1;
               return (
-                <tr key={`fund-item-row-pos-${String.fromCharCode(65 + idx)}`} className={`border-b border-gray-300 text-black ${isLast ? 'border-b-2 border-black' : ''} h-[24px]`}>
+                <tr key={`fund-item-row-pos-${String.fromCodePoint(65 + idx)}`} className={`border-b border-gray-300 text-black ${isLast ? 'border-b-2 border-black' : ''} h-[24px]`}>
                   <td className="border-r border-black text-center font-bold text-gray-700">{idx + 1}</td>
                   <td className="border-r border-black px-2 font-medium truncate max-w-[200px]">
                     {item?.spesifikasi || (idx === 0 ? title : '')}

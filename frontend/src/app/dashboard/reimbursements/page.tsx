@@ -85,29 +85,8 @@ const formatCurrency = (amount: number | string) => {
   }).format(num || 0);
 };
 
-// Indonesian Terbilang Helper
-const terbilang = (nominal: number): string => {
-  if (nominal === 0) return "Nol Rupiah";
-  const angka = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
-  
-  const konversi = (n: number): string => {
-    if (n < 12) return angka[n];
-    if (n < 20) return konversi(n - 10) + " Belas";
-    if (n < 100) return konversi(Math.floor(n / 10)) + " Puluh " + konversi(n % 10);
-    if (n < 200) return "Seratus " + konversi(n - 100);
-    if (n < 1000) return konversi(Math.floor(n / 100)) + " Ratus " + konversi(n % 100);
-    if (n < 2000) return "Seribu " + konversi(n - 1000);
-    if (n < 1000000) return konversi(Math.floor(n / 1000)) + " Ribu " + konversi(n % 1000);
-    if (n < 1000000000) return konversi(Math.floor(n / 1000000)) + " Juta " + konversi(n % 1000000);
-    if (n < 1000000000000) return konversi(Math.floor(n / 1000000000)) + " Milyar " + konversi(n % 1000000000);
-    return "";
-  };
-  
-  let hasil = konversi(Math.floor(nominal));
-  hasil = hasil.replaceAll(/\s+/g, ' ').trim();
-  hasil = hasil.replaceAll("Satu Ratus", "Seratus").replaceAll("Satu Puluh", "Sepuluh").replaceAll("Satu Ribu", "Seribu");
-  return hasil + " Rupiah";
-};
+import { terbilang } from "@/lib/terbilang";
+import { renderPriorityBoxes, renderInfoFields, getSizeStyles } from "@/components/FundRequestSheet";
 
 interface Employee {
   id: number;
@@ -193,122 +172,6 @@ const renderSignatureStatus = (status: string | undefined, type: 'dirut' | 'fina
     return <span className="text-gray-400 italic text-[7px]">— Belum Disetujui —</span>;
   }
   return <span className="text-gray-400 italic text-[7px]">— Belum Diverifikasi —</span>;
-};
-
-const renderPriorityBoxes = (priority: string, isDetailView: boolean) => {
-  const p = (priority || 'Normal').toLowerCase();
-  const sizePriorityBox = isDetailView ? "w-[11px] h-[11px] text-[8px]" : "w-[10px] h-[10px] text-[7px]";
-  const sizePriority = isDetailView ? "text-[9px]" : "text-[8px]";
-  return (
-    <div className={`flex justify-end mb-2 ${sizePriority}`}>
-      <div className="space-y-0.5">
-        <div className="flex items-center gap-1.5 font-bold">
-          <span className={`inline-flex items-center justify-center border border-black font-black ${sizePriorityBox}`}>
-            {p === 'normal' ? '✓' : ''}
-          </span> NORMAL
-        </div>
-        <div className="flex items-center gap-1.5 font-bold">
-          <span className={`inline-flex items-center justify-center border border-black font-black ${sizePriorityBox}`}>
-            {p === 'urgent' ? '✓' : ''}
-          </span> URGENT
-        </div>
-        <div className="flex items-center gap-1.5 font-bold">
-          <span className={`inline-flex items-center justify-center border border-black font-black ${sizePriorityBox}`}>
-            {['top urgent', 'top_urgent'].includes(p) ? '✓' : ''}
-          </span> TOP URGENT
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const renderInfoFields = (
-  employee_name: string,
-  title: string | null,
-  divisi: string,
-  tujuan: string,
-  isDetailView: boolean
-) => {
-  const sizeText = isDetailView ? "text-[10px]" : "text-[9px]";
-  const sizeTujuanBox = isDetailView ? "w-[10px] h-[10px] text-[7px] leading-[10px]" : "w-[9px] h-[9px] text-[6px] leading-[9px]";
-  const sizeTujuanText = isDetailView ? "text-[9px]" : "text-[8px]";
-  const t = (tujuan || '').toLowerCase();
-
-  return (
-    <div className={`flex justify-between items-start ${sizeText} mb-3 gap-4`}>
-      <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-2">
-        <div className="flex items-center">
-          <span className="font-bold w-[50px] py-1 text-black shrink-0">Nama</span>
-          <span className="w-[8px] py-1 text-black shrink-0">:</span>
-          <span className="border-b border-dotted border-gray-500 py-1 text-black font-semibold flex-1 ml-1 truncate">
-            {employee_name || '—'}
-          </span>
-        </div>
-        <div className="flex items-center">
-          <span className="font-bold w-[50px] py-1 text-black shrink-0">Tujuan</span>
-          <span className="w-[8px] py-1 text-black shrink-0">:</span>
-          <span className="border-b border-dotted border-gray-500 py-1 text-black font-semibold flex-1 ml-1 truncate">
-            {title || '—'}
-          </span>
-        </div>
-        <div className="flex items-center">
-          <span className="font-bold w-[50px] py-1 text-black shrink-0">Div.</span>
-          <span className="w-[8px] py-1 text-black shrink-0">:</span>
-          <span className="border-b border-dotted border-gray-500 py-1 text-black font-semibold flex-1 ml-1 truncate">
-            {divisi || '—'}
-          </span>
-        </div>
-        <div></div>
-      </div>
-      <div className={`${sizeTujuanText} space-y-0.5 flex-shrink-0`}>
-        <div className="flex items-center gap-1 text-black font-semibold">
-          <span className={`inline-block border border-black text-center ${sizeTujuanBox} ${t.includes('pengadaan') ? 'bg-black text-white' : ''}`}>
-            {t.includes('pengadaan') ? '✓' : ''}
-          </span> Pengadaan Baru
-        </div>
-        <div className="flex items-center gap-1 text-black font-semibold">
-          <span className={`inline-block border border-black text-center ${sizeTujuanBox} ${t.includes('gudang') ? 'bg-black text-white' : ''}`}>
-            {t.includes('gudang') ? '✓' : ''}
-          </span> Dari Gudang
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const getSizeStyles = (isDetailView: boolean) => {
-  if (isDetailView) {
-    return {
-      sizeHeading: "text-[16px]",
-      sizeLogo: "h-14",
-      sizeLogoText: "text-[11px]",
-      sizeHeaderNo: "text-[10px] w-[180px]",
-      sizeTable: "text-[10px]",
-      sizeRowHeader: "h-8",
-      sizeTerbilangLabel: "text-[10px] mb-1",
-      sizeTerbilangBox: "text-[10px] min-h-[28px] px-3 py-1.5",
-      sizeSigText: "text-[9px]",
-      sizeSigName: "text-[8px]",
-      sizeSigImg: "h-12",
-      wrapperClass: "",
-      noColorClass: ""
-    };
-  }
-  return {
-    sizeHeading: "text-[14px]",
-    sizeLogo: "h-12",
-    sizeLogoText: "text-[10px]",
-    sizeHeaderNo: "text-[9px] w-[150px]",
-    sizeTable: "text-[9px]",
-    sizeRowHeader: "h-7",
-    sizeTerbilangLabel: "text-[8px] mb-0.5",
-    sizeTerbilangBox: "text-[8px] min-h-[24px] px-2 py-1 bg-gray-50/50",
-    sizeSigText: "text-[8px]",
-    sizeSigName: "text-[7px]",
-    sizeSigImg: "h-10",
-    wrapperClass: "p-6 shadow-inner max-w-full overflow-x-auto",
-    noColorClass: "text-gray-400"
-  };
 };
 
 const renderTableBody = (items: ReimbursementItem[], totalAmount: number, isDetailView: boolean) => {
