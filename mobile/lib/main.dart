@@ -22,35 +22,49 @@ void main() async {
   
   try {
     await Firebase.initializeApp();
-    // Initialize Google Sign In (required for v7.x)
-    await GoogleSignIn.instance.initialize();
     await FcmService.init();
+  } catch (e) {
+    debugPrint("Firebase initialization error: $e");
+  }
+
+  try {
+    await GoogleSignIn.instance.initialize();
+  } catch (e) {
+    debugPrint("Google Sign In initialize note: $e");
+  }
+
+  try {
     await TrackingService.initializeService();
   } catch (e) {
-    print("Firebase/Tracking initialization error: $e");
+    debugPrint("TrackingService initialization error: $e");
   }
   
-  // Load Settings
-  final prefs = await SharedPreferences.getInstance();
-  final isDark = prefs.getBool('dark_mode') ?? false;
-  themeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
-  languageNotifier.value = prefs.getString('language') ?? 'ID';
-  
-  await NotificationService().init();
-  
-  // Initialize secure storage and migrate old plaintext tokens
-  final secureStorage = await SecureStorageService.getInstance();
-  await secureStorage.migrateFromPlainPrefs();
-  
-  // Check for valid token (encrypted)
-  bool hasToken = await secureStorage.hasValidToken();
-  
-  if (hasToken) {
-    try {
-      await TrackingService.startTracking();
-    } catch (e) {
-      print("Failed to start tracking: $e");
+  bool hasToken = false;
+  try {
+    // Load Settings
+    final prefs = await SharedPreferences.getInstance();
+    final isDark = prefs.getBool('dark_mode') ?? false;
+    themeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
+    languageNotifier.value = prefs.getString('language') ?? 'ID';
+    
+    await NotificationService().init();
+    
+    // Initialize secure storage and migrate old plaintext tokens
+    final secureStorage = await SecureStorageService.getInstance();
+    await secureStorage.migrateFromPlainPrefs();
+    
+    // Check for valid token (encrypted)
+    hasToken = await secureStorage.hasValidToken();
+    
+    if (hasToken) {
+      try {
+        await TrackingService.startTracking();
+      } catch (e) {
+        debugPrint("Failed to start tracking: $e");
+      }
     }
+  } catch (e) {
+    debugPrint("App Startup initialization fallback: $e");
   }
 
   runApp(MyApp(isLoggedIn: hasToken));
