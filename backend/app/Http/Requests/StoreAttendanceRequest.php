@@ -57,9 +57,9 @@ class StoreAttendanceRequest extends FormRequest
         return [
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240', // Selfie image (max 10MB)
-            'is_mocked' => 'nullable|boolean',
-            'device_id' => 'nullable|string|max:255|regex:/^[a-zA-Z0-9_-]+$/',
+            'image' => 'nullable|file|mimes:jpeg,png,jpg,webp|max:10240', // Selfie image (max 10MB)
+            'is_mocked' => 'nullable',
+            'device_id' => 'nullable|string|max:255',
             'attendance_type' => 'nullable|string|in:office,dinas_luar',
             'dinas_luar_destination' => 'required_if:attendance_type,dinas_luar|nullable|string|max:255',
             'dinas_luar_notes' => 'nullable|string|max:1000',
@@ -74,7 +74,6 @@ class StoreAttendanceRequest extends FormRequest
         return [
             'latitude.between' => 'Latitude harus antara -90 dan 90.',
             'longitude.between' => 'Longitude harus antara -180 dan 180.',
-            'device_id.regex' => 'Format Device ID tidak valid.',
         ];
     }
 

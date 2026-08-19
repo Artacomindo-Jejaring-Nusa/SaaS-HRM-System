@@ -219,7 +219,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           Navigator.of(context).pop(result['data']);
         }
       } else {
-        _showErrorDialog(result?['message'] ?? "Gagal memproses absensi");
+        String errMsg = result?['message'] ?? "Gagal memproses absensi";
+        if (result?['errors'] != null) {
+          final errs = result!['errors'];
+          if (errs is Map && errs.isNotEmpty) {
+            errMsg = errs.values.map((v) => v is List ? v.join(', ') : v.toString()).join('\n');
+          }
+        }
+        _showErrorDialog(errMsg);
         // Reset liveness if failed so they can try again
         setState(() {
           _isLivenessVerified = false;
