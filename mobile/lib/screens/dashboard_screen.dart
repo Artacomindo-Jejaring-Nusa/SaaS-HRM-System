@@ -537,7 +537,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-  }
 
   void _onItemTapped(int index) {
     setState(() => _selectedIndex = index);
