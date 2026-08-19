@@ -312,59 +312,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
   }
 
-  Future<void> _takeQuickAttendance() async {
-    if (_isProcessingAttendance) return;
-    setState(() => _isProcessingAttendance = true);
-
-    try {
-      Position position = await _determinePosition();
-      if (position.isMocked) {
-        throw "Lokasi Palsu Terdeteksi!";
-      }
-
-      String deviceId = await ApiService.getDeviceId();
-      bool isCheckIn = _attendanceData?['check_in'] == null;
-
-      Map<String, dynamic>? result;
-      if (isCheckIn) {
-        result = await ApiService.checkIn(
-          position.latitude, 
-          position.longitude, 
-          imagePath: null,
-          deviceId: deviceId,
-          isMocked: position.isMocked,
-        );
-      } else {
-        result = await ApiService.checkOut(
-          position.latitude, 
-          position.longitude, 
-          imagePath: null,
-          deviceId: deviceId,
-          isMocked: position.isMocked,
-        );
-      }
-
-      if (result != null && (result['status'] == 'success' || result['status'] == true)) {
-        await _refreshData();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Absensi Cepat Berhasil!"), backgroundColor: Colors.green),
-          );
-        }
-      } else {
-        throw result?['message'] ?? "Gagal memproses absensi";
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isProcessingAttendance = false);
-    }
-  }
-
   Future<void> _showDinasLuarDialog() async {
     final destinationController = TextEditingController();
     final notesController = TextEditingController();
@@ -473,6 +420,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _onAbsenTapped() async {
     final bool isCheckIn = _attendanceData?['check_in'] == null;
 
+    if (!isCheckIn) {
+      // Langsung buka kamera untuk Absen Pulang
+      final dynamic res = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (c) => const AttendanceScreen(isCheckIn: false),
+        ),
+      );
+      if (res != null) {
+        _refreshData();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Absen Pulang Berhasil!"), backgroundColor: Colors.green),
+        );
+      }
+      return;
+    }
+
+    // Pilihan Absen Masuk: Kantor vs Dinas Luar
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -492,14 +457,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 25),
             Text(
-              isCheckIn ? "Pilih Jenis Absen Masuk" : "Pilih Metode Absen Pulang",
+              "Pilih Jenis Absen Masuk",
               style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             Text(
-              isCheckIn
-                  ? "Pilih Absen Kantor jika di lokasi kantor, atau Dinas Luar jika sedang bertugas di luar kantor."
-                  : "Gunakan Selfie untuk verifikasi wajah atau Absen Cepat jika sedang terburu-buru.",
+              "Pilih Absen Kantor jika berada di kantor, atau Dinas Luar jika bertugas di luar area kantor.",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[600], fontSize: 13),
             ),
@@ -513,7 +476,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       final dynamic res = await Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (c) => AttendanceScreen(isCheckIn: isCheckIn, attendanceType: 'office'),
+                          builder: (c) => const AttendanceScreen(isCheckIn: true, attendanceType: 'office'),
                         ),
                       );
                       if (res != null) {
@@ -530,64 +493,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
                       ),
-                      child: Column(
+                      child: const Column(
                         children: [
-                          const Icon(Icons.face_retouching_natural, color: Colors.white, size: 32),
-                          const SizedBox(height: 10),
-                          Text(isCheckIn ? "Absen Kantor" : "Absen Selfie", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          Text(isCheckIn ? "(Selfie / Normal)" : "(Face ID)", style: const TextStyle(color: Colors.white, fontSize: 10)),
+                          Icon(Icons.face_retouching_natural, color: Colors.white, size: 32),
+                          SizedBox(height: 10),
+                          Text("Absen Kantor", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          Text("(Selfie / Normal)", style: TextStyle(color: Colors.white, fontSize: 10)),
                         ],
                       ),
                     ),
                   ),
                 ),
-                if (isCheckIn) ...[
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.pop(context);
-                        _showDinasLuarDialog();
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        decoration: BoxDecoration(
-                          color: Colors.amber[700],
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [BoxShadow(color: Colors.amber.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
-                        ),
-                        child: const Column(
-                          children: [
-                            Icon(Icons.business_center, color: Colors.white, size: 32),
-                            SizedBox(height: 10),
-                            Text("Dinas Luar", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            Text("(Luar Kantor)", style: TextStyle(color: Colors.white, fontSize: 10)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
                 const SizedBox(width: 15),
                 Expanded(
                   child: GestureDetector(
                     onTap: () {
                       Navigator.pop(context);
-                      _takeQuickAttendance();
+                      _showDinasLuarDialog();
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 20),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Colors.amber[700],
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: primaryColor, width: 2),
+                        boxShadow: [BoxShadow(color: Colors.amber.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
                       ),
-                      child: Column(
+                      child: const Column(
                         children: [
-                          Icon(Icons.touch_app, color: primaryColor, size: 32),
-                          const SizedBox(height: 10),
-                          Text("Absen Cepat", style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold)),
-                          Text("(Tanpa Foto)", style: TextStyle(color: primaryColor, fontSize: 10)),
+                          Icon(Icons.business_center, color: Colors.white, size: 32),
+                          SizedBox(height: 10),
+                          Text("Dinas Luar", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          Text("(Luar Kantor)", style: TextStyle(color: Colors.white, fontSize: 10)),
                         ],
                       ),
                     ),
@@ -600,6 +536,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
+  }
   }
 
   void _onItemTapped(int index) {
