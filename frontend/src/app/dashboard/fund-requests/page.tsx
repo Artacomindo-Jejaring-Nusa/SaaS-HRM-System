@@ -370,11 +370,12 @@ const FundRequestSheetInner = ({
             </tr>
           </thead>
           <tbody>
-            {rowsToRender.map((_, idx) => {
+            {rowsToRender.map((r, idx) => {
               const item = items[idx];
               const isLast = idx === rowsToRender.length - 1;
+              const rowKey = `fund-form-row-${r}`;
               return (
-                <tr key={`item-row-${idx}`} className={`border-b border-gray-300 text-black ${isLast ? 'border-b-2 border-black' : ''} h-[24px]`}>
+                <tr key={rowKey} className={`border-b border-gray-300 text-black ${isLast ? 'border-b-2 border-black' : ''} h-[24px]`}>
                   <td className="border-r border-black text-center font-bold text-gray-700">{idx + 1}</td>
                   <td className="border-r border-black px-2 font-medium truncate max-w-[200px]">
                     {item?.spesifikasi || (idx === 0 ? title : '')}
@@ -915,7 +916,15 @@ export default function FundRequestsPage() {
                     NAMA PEMOHON / KARYAWAN
                   </label>
                   <div className="space-y-2">
-                    {!formData.is_custom_employee_name ? (
+                    {formData.is_custom_employee_name ? (
+                      <input
+                        type="text"
+                        placeholder="Ketik Nama Pemohon Manual..."
+                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 focus:ring-2 focus:ring-[#8B0000]/20 focus:border-[#8B0000]"
+                        value={formData.employee_name}
+                        onChange={(e) => setFormData({ ...formData, employee_name: e.target.value })}
+                      />
+                    ) : (
                       <select
                         id="employee_name"
                         className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 focus:ring-2 focus:ring-[#8B0000]/20 focus:border-[#8B0000]"
@@ -927,14 +936,6 @@ export default function FundRequestsPage() {
                           <option key={emp.id} value={emp.name}>{emp.name} ({emp.department || 'Staff'})</option>
                         ))}
                       </select>
-                    ) : (
-                      <input
-                        type="text"
-                        placeholder="Ketik Nama Pemohon Manual..."
-                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 focus:ring-2 focus:ring-[#8B0000]/20 focus:border-[#8B0000]"
-                        value={formData.employee_name}
-                        onChange={(e) => setFormData({ ...formData, employee_name: e.target.value })}
-                      />
                     )}
                     <div className="flex items-center gap-3 text-[11px]">
                       <label className="flex items-center gap-1.5 cursor-pointer text-gray-600">
@@ -944,7 +945,7 @@ export default function FundRequestsPage() {
                           checked={!formData.is_custom_employee_name}
                           onChange={() => setFormData({ ...formData, is_custom_employee_name: false, employee_name: user?.name || "" })}
                         />
-                        Pilih dari Karyawan
+                        <span>Pilih dari Karyawan</span>
                       </label>
                       <label className="flex items-center gap-1.5 cursor-pointer text-gray-600">
                         <input
@@ -953,7 +954,7 @@ export default function FundRequestsPage() {
                           checked={formData.is_custom_employee_name}
                           onChange={() => setFormData({ ...formData, is_custom_employee_name: true })}
                         />
-                        Tulis Nama Manual
+                        <span>Tulis Nama Manual</span>
                       </label>
                     </div>
                   </div>

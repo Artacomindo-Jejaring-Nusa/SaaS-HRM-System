@@ -44,6 +44,48 @@ interface FlowEdge {
 }
 interface FlowData { nodes: FlowNode[]; edges: FlowEdge[]; }
 
+const getStepNodeMeta = (
+  step: BackendStep,
+  idx: number,
+  totalSteps: number,
+  roles: Array<{ id: number; name: string }>
+) => {
+  if (step.approver_type === "supervisor") {
+    return {
+      stageTitle: idx === 0 ? "Checked by (Diperiksa)" : "Acknowledge (Diketahui)",
+      subText: "Atasan Langsung (SPV)",
+      icon: "👔",
+      type: "supervisor",
+    };
+  }
+  if (step.approver_type === "role") {
+    const matchingRole = roles.find(r => r.id === step.approver_role_id);
+    const roleName = matchingRole ? matchingRole.name : `Role ${step.approver_role_id}`;
+    let stageTitle = `Acknowledge (${roleName})`;
+    if (idx === 0) stageTitle = `Checked by (${roleName})`;
+    else if (idx === totalSteps - 1) stageTitle = `Approved by (${roleName})`;
+
+    return {
+      stageTitle,
+      subText: `Role: ${roleName}`,
+      icon: "🏢",
+      type: "hrd",
+    };
+  }
+  return {
+    stageTitle: idx === totalSteps - 1 ? "Approved by (User)" : "Acknowledge (User)",
+    subText: "Spesifik Karyawan",
+    icon: "👤",
+    type: "peer",
+  };
+};
+
+const getRejectNodeLabel = (idx: number, totalSteps: number): string => {
+  if (idx === 0) return "Ditolak (Checked by)";
+  if (idx === totalSteps - 1) return "Ditolak (Approved by)";
+  return "Ditolak (Acknowledge)";
+};
+
 // Backend Step Data
 interface BackendStep {
   step_number: number;
@@ -232,52 +274,21 @@ export default function ApprovalWorkflowPage() {
     steps.forEach((step, idx) => {
       const stepId = `step_${step.step_number}`;
       const x = 60 + (idx + 1) * 250;
-      
-      let stageTitle = "Checked by (Diperiksa)";
-      let subText = `SLA: ${step.sla_hours} Jam`;
-      let icon = "👔";
-      let type = "supervisor";
-
-      if (step.approver_type === "supervisor") {
-        stageTitle = idx === 0 ? "Checked by (Diperiksa)" : "Acknowledge (Diketahui)";
-        subText = "Atasan Langsung (SPV)";
-      } else if (step.approver_type === "role") {
-        const matchingRole = roles.find(r => r.id === step.approver_role_id);
-        const roleName = matchingRole ? matchingRole.name : `Role ${step.approver_role_id}`;
-        
-        if (idx === 0) {
-          stageTitle = `Checked by (${roleName})`;
-        } else if (idx === steps.length - 1) {
-          stageTitle = `Approved by (${roleName})`;
-        } else {
-          stageTitle = `Acknowledge (${roleName})`;
-        }
-        subText = `Role: ${roleName}`;
-        icon = "🏢";
-        type = "hrd";
-      } else if (step.approver_type === "user") {
-        stageTitle = idx === steps.length - 1 ? "Approved by (User)" : "Acknowledge (User)";
-        subText = "Spesifik Karyawan";
-        icon = "👤";
-        type = "peer";
-      }
+      const meta = getStepNodeMeta(step, idx, steps.length, roles);
 
       nodes.push({
         id: stepId,
         x,
         y: 120,
-        label: stageTitle,
-        sub: subText,
-        type,
-        icon,
+        label: meta.stageTitle,
+        sub: meta.subText,
+        type: meta.type,
+        icon: meta.icon,
       });
 
       // Reject Node for this level using Excel terminology
       const rejectId = `reject_${step.step_number}`;
-      let rejectLabel;
-      if (idx === 0) rejectLabel = "Ditolak (Checked by)";
-      else if (idx === steps.length - 1) rejectLabel = "Ditolak (Approved by)";
-      else rejectLabel = "Ditolak (Acknowledge)";
+      const rejectLabel = getRejectNodeLabel(idx, steps.length);
 
       nodes.push({
         id: rejectId,

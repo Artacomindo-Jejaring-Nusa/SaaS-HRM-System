@@ -25,6 +25,8 @@ interface ApprovalItem {
   permit_category?: string;
   permit_has_doctor_note?: boolean;
   permit_is_deducted?: boolean;
+  target_supervisor_id?: number | null;
+  dinas_luar_status?: string;
 }
 
 interface RawLeave {
@@ -107,6 +109,47 @@ const typeColor: Record<string, string> = {
   permit: "bg-purple-50 text-purple-700 border-purple-200",
   profile: "bg-orange-50 text-orange-700 border-orange-200",
   dinas_luar: "bg-rose-50 text-rose-700 border-rose-200",
+};
+const extractStoragePath = (url?: string): string | undefined => {
+  if (!url) return undefined;
+  const idx = url.indexOf('/storage/');
+  return idx !== -1 ? url.substring(idx + 9) : url;
+};
+
+const getApprovalEndpoint = (type: string): string => {
+  const map: Record<string, string> = {
+    leave: '/leave',
+    reimbursement: '/reimbursements',
+    profile: '/profile-requests',
+    overtime: '/overtimes',
+    permit: '/permits',
+  };
+  return map[type] || `/${type}`;
+};
+
+const shouldIncludeApprovalItem = (
+  item: ApprovalItem,
+  currentUserId: number | null,
+  isHR: boolean
+): boolean => {
+  const targetSpvId = item.target_supervisor_id ? Number(item.target_supervisor_id) : null;
+  const isTargetSpv = targetSpvId === currentUserId;
+
+  if (item.type === 'leave') {
+    if (item.status === 'pending_supervisor') return isTargetSpv;
+    if (item.status === 'pending_hr') return isHR;
+    if (item.status === 'pending') return isHR || isTargetSpv;
+    return false;
+  }
+  if (item.type === 'permit') {
+    return isHR && item.status === 'pending';
+  }
+  if (item.type === 'dinas_luar') {
+    if (item.dinas_luar_status === 'pending') return isTargetSpv || isHR;
+    if (item.dinas_luar_status === 'approved_spv') return isHR;
+    return false;
+  }
+  return item.status === 'pending' || item.status === 'waiting_approval';
 };
 
 export default function ApprovalsPage() {
@@ -248,7 +291,7 @@ export default function ApprovalsPage() {
           start_date: d.check_in ? new Date(d.check_in).toLocaleString('id-ID') : undefined,
           end_date: undefined,
           status,
-          attachment: d.image_in_url ? d.image_in_url.replace(/.*\/storage\//, '') : undefined,
+          attachment: extractStoragePath(d.image_in_url),
           created_at: d.created_at,
           dinas_luar_status: d.dinas_luar_status,
           target_supervisor_id: d.user?.supervisor_id
@@ -263,37 +306,10 @@ export default function ApprovalsPage() {
                    roleName.includes("direktur") ||
                    roleName.includes("ceo");
 
-      const merged = [...leaves, ...reimbursements, ...fundRequests, ...profiles, ...overtimes, ...permits, ...dinasLuars]
-        .filter(item => {
-           const currentUserId = currentUser?.id ? Number(currentUser.id) : null;
-           const targetSpvId = item.target_supervisor_id ? Number(item.target_supervisor_id) : null;
-
-           if (item.type === 'leave') {
-              if (item.status === 'pending_supervisor') {
-                 return targetSpvId === currentUserId;
-              }
-              if (item.status === 'pending_hr') {
-                 return isHR;
-              }
-              if (item.status === 'pending') {
-                 return isHR || targetSpvId === currentUserId;
-              }
-              return false;
-           }
-           if (item.type === 'permit') {
-               return isHR && item.status === "pending";
-           }
-           if (item.type === 'dinas_luar') {
-               if (item.dinas_luar_status === 'pending') {
-                   return targetSpvId === currentUserId || isHR;
-               }
-               if (item.dinas_luar_status === 'approved_spv') {
-                   return isHR;
-               }
-               return false;
-           }
-           return item.status === "pending" || item.status === "waiting_approval";
-        })
+      const currentUserId = currentUser?.id ? Number(currentUser.id) : null;
+      const allApprovals = [...leaves, ...reimbursements, ...fundRequests, ...profiles, ...overtimes, ...permits, ...dinasLuars];
+      const merged = allApprovals
+        .filter(item => shouldIncludeApprovalItem(item, currentUserId, isHR))
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setItems(merged);
@@ -313,7 +329,6 @@ export default function ApprovalsPage() {
   const handleActionClick = (item: ApprovalItem, action: "approve" | "reject") => {
     setActionModal({ isOpen: true, action, item });
     setRemarkInput("");
-    // Initialize permit override from current data
     if (item.type === 'permit') {
       setPermitOverrideCategory(item.permit_category || 'I');
       setPermitOverrideDoctorNote(item.permit_has_doctor_note || false);
@@ -333,21 +348,10 @@ export default function ApprovalsPage() {
     setProcessingId(`${item.type}-${item.id}`);
     
     try {
-      let endpoint = "";
-      if (item.type === 'leave') endpoint = '/leave';
-      else if (item.type === 'reimbursement') endpoint = '/reimbursements';
-      else if (item.type === 'profile') endpoint = '/profile-requests';
-      else if (item.type === 'overtime') endpoint = '/overtimes';
-      else if (item.type === 'permit') endpoint = '/permits';
-
-      console.log(`Processing ${action} for ${item.type} ID: ${item.id}`);
-      
-      // Build payload
-      let payload: Record<string, unknown> = { remark: remarkInput };
+      const payload: Record<string, unknown> = { remark: remarkInput };
       if (item.type === 'dinas_luar' && action === 'reject') {
-        payload = { reason: remarkInput };
-      }
-      if (item.type === 'permit' && action === 'approve') {
+        payload.reason = remarkInput;
+      } else if (item.type === 'permit' && action === 'approve') {
         payload.category = permitOverrideCategory;
         payload.has_doctor_note = permitOverrideDoctorNote;
       }
@@ -361,19 +365,16 @@ export default function ApprovalsPage() {
                      roleName.includes("direktur") ||
                      roleName.includes("ceo");
         
-        let actionSuffix = "";
-        if (action === 'reject') {
-          actionSuffix = 'reject';
-        } else {
-          // If approved by SPV previously, HR approves it next. Otherwise, SPV approves it.
+        let actionSuffix = 'reject';
+        if (action === 'approve') {
           actionSuffix = (isHR && item.status === 'waiting_approval') ? 'approve-hr' : 'approve-spv';
         }
         await axiosInstance.post(`/attendance/dinas-luar/${item.id}/${actionSuffix}`, payload);
       } else {
+        const endpoint = getApprovalEndpoint(item.type);
         await axiosInstance.post(`${endpoint}/${item.id}/${action}`, payload);
       }
       
-      // Play a satisfying 'success' sound on the Admin side
       try {
           const audio = new window.Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
           audio.volume = 0.8;
