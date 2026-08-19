@@ -10,8 +10,17 @@ import '../api/api_service.dart';
 
 class AttendanceScreen extends StatefulWidget {
   final bool isCheckIn;
+  final String attendanceType; // 'office' | 'dinas_luar'
+  final String? dinasLuarDestination;
+  final String? dinasLuarNotes;
 
-  const AttendanceScreen({super.key, required this.isCheckIn});
+  const AttendanceScreen({
+    super.key,
+    required this.isCheckIn,
+    this.attendanceType = 'office',
+    this.dinasLuarDestination,
+    this.dinasLuarNotes,
+  });
 
   @override
   _AttendanceScreenState createState() => _AttendanceScreenState();
@@ -248,6 +257,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           imagePath: image.path,
           deviceId: deviceId,
           isMocked: position.isMocked,
+          attendanceType: widget.attendanceType,
+          dinasLuarDestination: widget.dinasLuarDestination,
+          dinasLuarNotes: widget.dinasLuarNotes,
         );
       } else {
         result = await ApiService.checkOut(
@@ -299,11 +311,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    String screenTitle = "Absen ${widget.isCheckIn ? 'Masuk' : 'Pulang'}";
+    if (widget.isCheckIn && widget.attendanceType == 'dinas_luar') {
+      screenTitle = "Absen Masuk (Dinas Luar)";
+    }
     
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text("Absen ${widget.isCheckIn ? 'Masuk' : 'Pulang'}", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text(screenTitle, style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(icon: Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),

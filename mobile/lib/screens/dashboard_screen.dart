@@ -365,7 +365,114 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _showDinasLuarDialog() async {
+    final destinationController = TextEditingController();
+    final notesController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.amber[50],
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.business_center, color: Colors.amber, size: 24),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              "Absen Dinas Luar",
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Absen dinas luar tidak dibatasi radius kantor dan akan otomatis diteruskan ke Supervisor untuk persetujuan.",
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: destinationController,
+              decoration: InputDecoration(
+                labelText: "Tujuan Dinas Luar *",
+                hintText: "Contoh: Kantor Klien PT ABC / Proyek Lapangan",
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Icon(Icons.location_on_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: notesController,
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: "Keterangan Kegiatan (Opsional)",
+                hintText: "Catatan tugas dinas luar...",
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Icon(Icons.note_alt_outlined),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Batal"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () {
+              if (destinationController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Tujuan Dinas Luar wajib diisi!"), backgroundColor: Colors.red),
+                );
+                return;
+              }
+              Navigator.pop(ctx, true);
+            },
+            child: const Text("Lanjut Selfie", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final dynamic res = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (c) => AttendanceScreen(
+            isCheckIn: true,
+            attendanceType: 'dinas_luar',
+            dinasLuarDestination: destinationController.text.trim(),
+            dinasLuarNotes: notesController.text.trim(),
+          ),
+        ),
+      );
+      if (res != null) {
+        _refreshData();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Absen Dinas Luar Berhasil! Menunggu persetujuan Supervisor."),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _onAbsenTapped() async {
+    final bool isCheckIn = _attendanceData?['check_in'] == null;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -385,43 +492,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 25),
             Text(
-              "Pilih Metode Absensi",
+              isCheckIn ? "Pilih Jenis Absen Masuk" : "Pilih Metode Absen Pulang",
               style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             Text(
-              "Gunakan Selfie untuk verifikasi wajah atau Absen Cepat jika Anda sedang terburu-buru.",
+              isCheckIn
+                  ? "Pilih Absen Kantor jika di lokasi kantor, atau Dinas Luar jika sedang bertugas di luar kantor."
+                  : "Gunakan Selfie untuk verifikasi wajah atau Absen Cepat jika sedang terburu-buru.",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[600], fontSize: 13),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 25),
             Row(
               children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      Navigator.pop(context);
-                      _takeQuickAttendance();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: primaryColor, width: 2),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(Icons.touch_app, color: primaryColor, size: 32),
-                          const SizedBox(height: 10),
-                          Text("Absen Cepat", style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold)),
-                          Text("(Tanpa Foto)", style: TextStyle(color: primaryColor, fontSize: 10)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 15),
                 Expanded(
                   child: GestureDetector(
                     onTap: () async {
@@ -429,7 +513,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       final dynamic res = await Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (c) => AttendanceScreen(isCheckIn: _attendanceData?['check_in'] == null),
+                          builder: (c) => AttendanceScreen(isCheckIn: isCheckIn, attendanceType: 'office'),
                         ),
                       );
                       if (res != null) {
@@ -450,8 +534,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         children: [
                           const Icon(Icons.face_retouching_natural, color: Colors.white, size: 32),
                           const SizedBox(height: 10),
-                          const Text("Absen Selfie", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          const Text("(Face ID)", style: TextStyle(color: Colors.white, fontSize: 10)),
+                          Text(isCheckIn ? "Absen Kantor" : "Absen Selfie", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          Text(isCheckIn ? "(Selfie / Normal)" : "(Face ID)", style: const TextStyle(color: Colors.white, fontSize: 10)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (isCheckIn) ...[
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showDinasLuarDialog();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        decoration: BoxDecoration(
+                          color: Colors.amber[700],
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [BoxShadow(color: Colors.amber.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
+                        ),
+                        child: const Column(
+                          children: [
+                            Icon(Icons.business_center, color: Colors.white, size: 32),
+                            SizedBox(height: 10),
+                            Text("Dinas Luar", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            Text("(Luar Kantor)", style: TextStyle(color: Colors.white, fontSize: 10)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 15),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context);
+                      _takeQuickAttendance();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: primaryColor, width: 2),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(Icons.touch_app, color: primaryColor, size: 32),
+                          const SizedBox(height: 10),
+                          Text("Absen Cepat", style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold)),
+                          Text("(Tanpa Foto)", style: TextStyle(color: primaryColor, fontSize: 10)),
                         ],
                       ),
                     ),

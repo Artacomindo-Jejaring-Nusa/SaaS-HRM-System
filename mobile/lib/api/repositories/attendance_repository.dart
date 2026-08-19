@@ -54,6 +54,9 @@ class AttendanceRepository {
     String? imagePath,
     String? deviceId,
     bool isMocked = false,
+    String? attendanceType,
+    String? dinasLuarDestination,
+    String? dinasLuarNotes,
   }) async {
     return _submitAttendance(
       '${ApiClient.baseUrl}/attendance/check-in',
@@ -62,6 +65,9 @@ class AttendanceRepository {
       imagePath: imagePath,
       deviceId: deviceId,
       isMocked: isMocked,
+      attendanceType: attendanceType,
+      dinasLuarDestination: dinasLuarDestination,
+      dinasLuarNotes: dinasLuarNotes,
     );
   }
 
@@ -90,6 +96,9 @@ class AttendanceRepository {
     String? imagePath,
     String? deviceId,
     bool isMocked = false,
+    String? attendanceType,
+    String? dinasLuarDestination,
+    String? dinasLuarNotes,
   }) async {
     try {
       final headers = await ApiClient.getHeaders();
@@ -104,6 +113,15 @@ class AttendanceRepository {
       request.fields['is_mocked'] = isMocked ? '1' : '0';
       if (deviceId != null) {
         request.fields['device_id'] = deviceId;
+      }
+      if (attendanceType != null) {
+        request.fields['attendance_type'] = attendanceType;
+      }
+      if (dinasLuarDestination != null && dinasLuarDestination.isNotEmpty) {
+        request.fields['dinas_luar_destination'] = dinasLuarDestination;
+      }
+      if (dinasLuarNotes != null && dinasLuarNotes.isNotEmpty) {
+        request.fields['dinas_luar_notes'] = dinasLuarNotes;
       }
 
       // Add image file if provided
