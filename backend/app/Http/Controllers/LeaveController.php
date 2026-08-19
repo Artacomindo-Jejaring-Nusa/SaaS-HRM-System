@@ -95,60 +95,18 @@ class LeaveController extends Controller
         $user = $request->user();
         $companyId = $user->company_id;
 
-        // Check if leave type is valid under Kemnaker
         $typeMeta = self::KEMNAKER_LEAVE_TYPES[$request->type] ?? null;
-        if (!$typeMeta) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Tipe cuti tidak valid menurut ketentuan ketenagakerjaan.',
-            ], 400);
-        }
-
         $requestedDays = Carbon::parse($request->start_date)->diffInDays(Carbon::parse($request->end_date)) + 1;
 
-        // Check if duration exceeds maximum Kemnaker limit (for non-zero configurations)
-        if ($typeMeta['days'] > 0 && $requestedDays > $typeMeta['days']) {
+        $validationError = $this->validateLeaveRequest($user, $request, $typeMeta, $requestedDays);
+        if ($validationError !== null) {
             return response()->json([
                 'status' => 'error',
-                'message' => "Durasi cuti {$request->type} melebihi batas maksimal UU Ketenagakerjaan ({$typeMeta['days']} hari).",
+                'message' => $validationError,
             ], 400);
         }
 
-        $isExpandUsed = false;
-
-        // Eligibility and Balance Validation for Cuti Tahunan
-        if ($request->type === self::TYPE_ANNUAL_LEAVE) {
-            if (!$user->is_eligible_for_leave) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Anda belum berhak mengambil Cuti Tahunan karena masa kerja kurang dari 1 tahun.',
-                ], 400);
-            }
-
-            $pendingDays = Leave::where('user_id', $user->id)
-                ->where('type', self::TYPE_ANNUAL_LEAVE)
-                ->whereIn('status', ['pending', 'pending_supervisor', 'pending_hr'])
-                ->get()
-                ->sum(function ($l) {
-                    return Carbon::parse($l->start_date)->diffInDays(Carbon::parse($l->end_date)) + 1;
-                });
-
-            $availableBalance = $user->kemnaker_leave_balance;
-            $requiredBalance = $requestedDays + $pendingDays;
-
-            if ($availableBalance < $requiredBalance) {
-                // Check if they are short by exactly 1 day and can use "expand mendadak"
-                $shortfall = $requiredBalance - $availableBalance;
-                if ($shortfall == 1 && $user->canUseExpandMendadak()) {
-                    $isExpandUsed = true;
-                } else {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Sisa cuti tahunan Anda tidak mencukupi (termasuk cuti yang masih pending/menunggu).',
-                    ], 400);
-                }
-            }
-        }
+        $isExpandUsed = ($request->type === self::TYPE_ANNUAL_LEAVE && ($user->kemnaker_leave_balance < $requestedDays));
 
         // Create attributes
         $leaveAttributes = [
@@ -550,5 +508,42 @@ class LeaveController extends Controller
             'status' => 'success',
             'data' => self::KEMNAKER_LEAVE_TYPES,
         ]);
+    }
+
+    private function validateLeaveRequest(User $user, Request $request, ?array $typeMeta, int $requestedDays): ?string
+    {
+        if (!$typeMeta) {
+            return 'Tipe cuti tidak valid menurut ketentuan ketenagakerjaan.';
+        }
+
+        if ($typeMeta['days'] > 0 && $requestedDays > $typeMeta['days']) {
+            return "Durasi cuti {$request->type} melebihi batas maksimal UU Ketenagakerjaan ({$typeMeta['days']} hari).";
+        }
+
+        if ($request->type === self::TYPE_ANNUAL_LEAVE) {
+            if (!$user->is_eligible_for_leave) {
+                return 'Anda belum berhak mengambil Cuti Tahunan karena masa kerja kurang dari 1 tahun.';
+            }
+
+            $pendingDays = Leave::where('user_id', $user->id)
+                ->where('type', self::TYPE_ANNUAL_LEAVE)
+                ->whereIn('status', ['pending', 'pending_supervisor', 'pending_hr'])
+                ->get()
+                ->sum(function ($l) {
+                    return Carbon::parse($l->start_date)->diffInDays(Carbon::parse($l->end_date)) + 1;
+                });
+
+            $availableBalance = $user->kemnaker_leave_balance;
+            $requiredBalance = $requestedDays + $pendingDays;
+
+            if ($availableBalance < $requiredBalance) {
+                $shortfall = $requiredBalance - $availableBalance;
+                if (!($shortfall == 1 && $user->canUseExpandMendadak())) {
+                    return 'Sisa cuti tahunan Anda tidak mencukupi (termasuk cuti yang masih pending/menunggu).';
+                }
+            }
+        }
+
+        return null;
     }
 }
