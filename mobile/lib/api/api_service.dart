@@ -107,9 +107,19 @@ class ApiService {
       AttendanceRepository.getTodayAttendance();
 
   static Future<Map<String, dynamic>?> checkIn(double lat, double lng,
-          {String? imagePath, String? deviceId, bool isMocked = false}) =>
+          {String? imagePath,
+          String? deviceId,
+          bool isMocked = false,
+          String? attendanceType,
+          String? dinasLuarDestination,
+          String? dinasLuarNotes}) =>
       AttendanceRepository.checkIn(lat, lng,
-          imagePath: imagePath, deviceId: deviceId, isMocked: isMocked);
+          imagePath: imagePath,
+          deviceId: deviceId,
+          isMocked: isMocked,
+          attendanceType: attendanceType,
+          dinasLuarDestination: dinasLuarDestination,
+          dinasLuarNotes: dinasLuarNotes);
 
   static Future<Map<String, dynamic>?> checkOut(double lat, double lng,
           {String? imagePath, String? deviceId, bool isMocked = false}) =>
