@@ -57,7 +57,7 @@ class StoreAttendanceRequest extends FormRequest
         return [
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
-            'image' => 'nullable|file|mimes:jpeg,png,jpg,webp|max:10240', // Selfie image (max 10MB)
+            'image' => 'nullable|file|mimes:jpeg,png,jpg,webp|max:5120', // Selfie image (max 5MB to comply with safe content length limits)
             'is_mocked' => 'nullable',
             'device_id' => 'nullable|string|max:255',
             'attendance_type' => 'nullable|string|in:office,dinas_luar',
