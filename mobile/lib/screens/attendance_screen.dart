@@ -166,63 +166,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     super.dispose();
   }
 
-  Future<void> _takeAttendanceByButton() async {
-    if (_isProcessing) return;
-
-    setState(() => _isProcessing = true);
-
-    try {
-      // Stop camera stream to save resources and prevent crashes
-      if (_controller != null && _controller!.value.isStreamingImages) {
-        await _controller!.stopImageStream();
-      }
-
-      // 1. Dapatkan Lokasi GPS (Tetap Wajib)
-      Position position = await _determinePosition();
-
-      // Anti Fake GPS
-      if (position.isMocked) {
-        _showErrorDialog("Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli.");
-        return;
-      }
-
-      // 2. Ambil Device ID
-      String deviceId = await ApiService.getDeviceId();
-
-      // 3. Kirim ke API (Tanpa Image)
-      Map<String, dynamic>? result;
-      if (widget.isCheckIn) {
-        result = await ApiService.checkIn(
-          position.latitude, 
-          position.longitude, 
-          imagePath: null, // Kosongkan image
-          deviceId: deviceId,
-          isMocked: position.isMocked,
-        );
-      } else {
-        result = await ApiService.checkOut(
-          position.latitude, 
-          position.longitude, 
-          imagePath: null, // Kosongkan image
-          deviceId: deviceId,
-          isMocked: position.isMocked,
-        );
-      }
-
-      if (result != null && (result['status'] == 'success' || result['status'] == true)) {
-        if (mounted) {
-          Navigator.of(context).pop(result['data']);
-        }
-      } else {
-        _showErrorDialog(result?['message'] ?? "Gagal memproses absensi");
-      }
-    } catch (e) {
-      _showErrorDialog("Error: ${e.toString()}");
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
   Future<void> _takeAttendance() async {
     if (!_isCameraReady || _isProcessing) return;
 
@@ -322,7 +265,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         title: Text(screenTitle, style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(icon: Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
+        leading: IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
       ),
       body: Stack(
         children: [
@@ -342,7 +285,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               ),
             )
           else 
-            Center(child: CircularProgressIndicator(color: Colors.white)),
+            const Center(child: CircularProgressIndicator(color: Colors.white)),
           
           // Face Frame (Visual Cue)
           Center(
@@ -361,13 +304,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
           // Liveness Status Indicator
           Positioned(
-            top: size.height * 0.1,
+            top: size.height * 0.05,
             left: 0,
             right: 0,
             child: Column(
               children: [
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   decoration: BoxDecoration(
                     color: _isLivenessVerified ? Colors.green.withOpacity(0.8) : Colors.black45,
                     borderRadius: BorderRadius.circular(20),
@@ -376,8 +319,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (!_isLivenessVerified) 
-                        Padding(
-                          padding: const EdgeInsets.only(right: 10),
+                        const Padding(
+                          padding: EdgeInsets.only(right: 10),
                           child: SizedBox(height: 15, width: 15, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
                         ),
                       Text(
@@ -399,79 +342,42 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
           ),
 
-                // Action Buttons
-                Positioned(
-                  bottom: 40,
-                  left: 0,
-                  right: 0,
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Tombol Foto (Original)
-                          Column(
-                            children: [
-                              GestureDetector(
-                                onTap: _takeAttendance,
-                                child: Container(
-                                  height: 70,
-                                  width: 70,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: const Color(0xFF800000), width: 4),
-                                    boxShadow: [
-                                      BoxShadow(color: Colors.redAccent.withOpacity(0.3), blurRadius: 15, spreadRadius: 1)
-                                    ]
-                                  ),
-                                  child: const Icon(Icons.face_retouching_natural, color: Color(0xFF800000), size: 35),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                "Foto Selfie",
-                                style: GoogleFonts.outfit(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                              )
-                            ],
-                          ),
-                          const SizedBox(width: 40),
-                          // Tombol Button (Baru)
-                          Column(
-                            children: [
-                              GestureDetector(
-                                onTap: _takeAttendanceByButton,
-                                child: Container(
-                                  height: 70,
-                                  width: 70,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF800000),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 4),
-                                    boxShadow: [
-                                      BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 15, spreadRadius: 1)
-                                    ]
-                                  ),
-                                  child: const Icon(Icons.touch_app, color: Colors.white, size: 35),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                "Via Tombol",
-                                style: GoogleFonts.outfit(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                              )
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        "Pilih metode absensi Anda",
-                        style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14),
-                      )
-                    ],
+          // Shutter Action Button
+          Positioned(
+            bottom: 40,
+            left: 0,
+            right: 0,
+            child: Column(
+              children: [
+                GestureDetector(
+                  onTap: _takeAttendance,
+                  child: Container(
+                    height: 75,
+                    width: 75,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFF800000), width: 4),
+                      boxShadow: [
+                        BoxShadow(color: Colors.redAccent.withOpacity(0.3), blurRadius: 15, spreadRadius: 1)
+                      ],
+                    ),
+                    child: const Icon(Icons.camera_alt, color: Color(0xFF800000), size: 36),
                   ),
                 ),
+                const SizedBox(height: 12),
+                Text(
+                  "Ambil Foto Selfie",
+                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Posisikan wajah Anda pada lingkaran",
+                  style: GoogleFonts.outfit(color: Colors.white60, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
 
           if (_isProcessing)
             Container(color: Colors.black54, child: Center(child: Column(
