@@ -19,7 +19,7 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class AttendanceController extends Controller
 {
-    use Notifiable, \App\Traits\HandlesAttendanceDinasLuar;
+    use Notifiable, \App\Traits\HandlesAttendanceDinasLuar, \App\Traits\HandlesAttendanceProcessing;
 
     public function checkIn(StoreAttendanceRequest $request)
     {
@@ -137,8 +137,6 @@ class AttendanceController extends Controller
             return $response;
         }
 
-        $imageName = $this->saveCompressedAttendanceImage($request, 'out');
-        
         if ($request->is_mocked) {
             $response = $this->errorResponse('Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli.', 403);
         } elseif ($request->device_id && $user->device_id && $user->device_id !== $request->device_id) {
@@ -154,21 +152,7 @@ class AttendanceController extends Controller
 
     private function processCheckOut(Attendance $attendance, User $user, StoreAttendanceRequest $request)
     {
-        // Handle Image & Compression
-        $imageName = null;
-        $file = null;
-        if ($request->hasFile('image')) {
-            $file = $request->file('image');
-        } elseif ($request->image instanceof \Symfony\Component\HttpFoundation\File\UploadedFile) {
-            $file = $request->image;
-        }
-        if ($file) {
-            $imageName = 'attendance/out_'.Str::random(40).'.jpg';
-            // Compress and resize image to save storage space
-            $img = Image::decode($file);
-            $img->scale(width: 800);
-            Storage::disk('public')->put($imageName, (string) $img->encodeUsingFileExtension('jpg', 80));
-        }
+        $imageName = $this->saveCompressedAttendanceImage($request, 'out');
 
         $attendance->update([
             'check_out' => now(),
@@ -374,190 +358,5 @@ class AttendanceController extends Controller
         }
 
         return null;
-    }
-
-    private function findNearestOffice($allOffices, $userLat, $userLng)
-    {
-        $nearestDistance = PHP_INT_MAX;
-        $matchedOffice = null;
-
-        foreach ($allOffices as $office) {
-            $distance = $this->calculateDistance($userLat, $userLng, $office->latitude, $office->longitude);
-            if ($distance <= ($office->radius ?? 100) && $distance < $nearestDistance) {
-                $nearestDistance = $distance;
-                $matchedOffice = $office;
-            }
-        }
-
-        return $matchedOffice;
-    }
-
-    private function determineCheckInStatus($user, $schedule, $now)
-    {
-        $shift = $schedule ? $schedule->shift : null;
-
-        if ($shift) {
-            if ($now->toTimeString() > $shift->start_time) {
-                return 'late';
-            }
-            return 'present';
-        }
-
-        return $user->attendance_type === 'shift' ? 'no_schedule' : 'office_hour';
-    }
-
-    private function sendCheckInNotifications($user, $status, $now)
-    {
-        $this->notify(
-            $user,
-            'BERHASIL ABSEN MASUK',
-            "Anda telah berhasil absen masuk pada pukul {$now->format('H:i')} WIB. Status: ".strtoupper($status),
-            $status === 'late' ? 'warning' : 'success',
-            null,
-            'notif',
-            false
-        );
-
-        if ($status === 'late' && $user->supervisor_id) {
-            $supervisor = User::find($user->supervisor_id);
-            if ($supervisor) {
-                $this->notify(
-                    $supervisor,
-                    'BAWAHAN TERLAMBAT',
-                    "Karyawan {$user->name} baru saja absen masuk terlambat (Pukul {$now->format('H:i')}). Status: ".strtoupper($status),
-                    'warning',
-                    '/dashboard/attendance'
-                );
-            }
-        }
-    }
-
-    private function checkAssignedOffice($userLat, $userLng, $officeId)
-    {
-        $assignedOffice = Office::find($officeId);
-        if ($assignedOffice && $assignedOffice->is_active) {
-            $distance = $this->calculateDistance($userLat, $userLng, $assignedOffice->latitude, $assignedOffice->longitude);
-            if ($distance > ($assignedOffice->radius ?? 100)) {
-                return ['success' => false, 'message' => "Maaf, Anda berada di luar area kantor assigned Anda: {$assignedOffice->name} ({$distance} meter). Silakan mendekat ke lokasi kerja Anda!", 'status' => 400];
-            }
-            return ['success' => true, 'office' => $assignedOffice];
-        }
-        return null;
-    }
-
-    private function checkCompanyRadius($user, $userLat, $userLng)
-    {
-        $company = $user->company;
-        $targetLat = $company?->latitude ?? null;
-        $targetLng = $company?->longitude ?? null;
-        $radius = $company?->radius_meters ?? $company?->default_radius ?? 100;
-
-        if ($targetLat && $targetLng) {
-            $distance = $this->calculateDistance($userLat, $userLng, $targetLat, $targetLng);
-            if ($distance > $radius) {
-                return ['success' => false, 'message' => "Maaf, Anda berada di luar area kantor manapun ({$distance} meter dari titik terdekat). Silakan mendekat ke kantor Anda!", 'status' => 400];
-            }
-            return ['success' => true, 'office' => null];
-        }
-        return ['success' => false, 'message' => 'Koordinat lokasi kantor belum diatur oleh Admin.', 'status' => 400];
-    }
-
-    private function validateGeofencing($user, $request)
-    {
-        $userRoleName = $user->role ? strtolower($user->role->name) : '';
-        $isTechnician = str_contains($userRoleName, 'teknisi');
-
-        $today = now()->startOfDay();
-        $isWfhActive = $user->is_wfh && ($user->wfh_start_date <= $today && $user->wfh_end_date >= $today);
-
-        if ($isTechnician || $isWfhActive) {
-            return ['success' => true, 'office' => null];
-        }
-
-        $userLat = $request->latitude;
-        $userLng = $request->longitude;
-
-        if ($user->office_id) {
-            $assignedCheck = $this->checkAssignedOffice($userLat, $userLng, $user->office_id);
-            if ($assignedCheck) {
-                return $assignedCheck;
-            }
-        }
-
-        $allOffices = Office::where('company_id', $user->company_id)->active()->get();
-        $matchedOffice = $this->findNearestOffice($allOffices, $userLat, $userLng);
-
-        if (! $matchedOffice) {
-            return $this->checkCompanyRadius($user, $userLat, $userLng);
-        }
-
-        return ['success' => true, 'office' => $matchedOffice];
-    }
-
-    private function calculateDistance($lat1, $lon1, $lat2, $lon2)
-    {
-        $earthRadius = 6371000; // dalam meter
-
-        $latDelta = deg2rad($lat2 - $lat1);
-        $lonDelta = deg2rad($lon2 - $lon1);
-
-        $a = sin($latDelta / 2) * sin($latDelta / 2) +
-            cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
-            sin($lonDelta / 2) * sin($lonDelta / 2);
-
-        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
-
-        return round($earthRadius * $c);
-    }
-
-    // ── Dinas Luar Notifications ──
-
-    private function sendDinasLuarNotifications(User $user, Attendance $attendance)
-    {
-        // Notify the employee
-        $this->notify(
-            $user,
-            'ABSEN DINAS LUAR TERCATAT',
-            "Absensi Dinas Luar Anda ke {$attendance->dinas_luar_destination} telah tercatat pada pukul ".now()->format('H:i').' WIB. Menunggu persetujuan Supervisor.',
-            'info',
-            null,
-            'notif',
-            false
-        );
-
-        // Notify the supervisor
-        if ($user->supervisor_id) {
-            $supervisor = User::find($user->supervisor_id);
-            if ($supervisor) {
-                $this->notify(
-                    $supervisor,
-                    'PENGAJUAN DINAS LUAR BAWAHAN',
-                    "Karyawan {$user->name} mengajukan absen Dinas Luar ke {$attendance->dinas_luar_destination}. Mohon untuk meninjau dan menyetujui pengajuan ini.",
-                    'warning',
-                    '/dashboard/approvals'
-                );
-            }
-        }
-    }
-
-    private function saveCompressedAttendanceImage($request, string $prefix): ?string
-    {
-        $file = null;
-        if ($request->hasFile('image')) {
-            $file = $request->file('image');
-        } elseif ($request->image instanceof \Symfony\Component\HttpFoundation\File\UploadedFile) {
-            $file = $request->image;
-        }
-
-        if (!$file) {
-            return null;
-        }
-
-        $imageName = "attendance/{$prefix}_".Str::random(40).'.jpg';
-        $img = Image::decode($file);
-        $img->scale(width: 800);
-        Storage::disk('public')->put($imageName, (string) $img->encodeUsingFileExtension('jpg', 80));
-
-        return $imageName;
     }
 }
