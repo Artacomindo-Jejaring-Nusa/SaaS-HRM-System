@@ -61,20 +61,7 @@ class AttendanceController extends Controller
         $status = $isDinasLuar ? 'dinas_luar' : $this->determineCheckInStatus($user, $schedule, $now);
 
         // Handle Image & Compression
-        $imageName = null;
-        $file = null;
-        if ($request->hasFile('image')) {
-            $file = $request->file('image');
-        } elseif ($request->image instanceof \Symfony\Component\HttpFoundation\File\UploadedFile) {
-            $file = $request->image;
-        }
-        if ($file) {
-            $imageName = 'attendance/in_'.Str::random(40).'.jpg';
-            // Compress and resize image to save storage space (target ~50-80KB)
-            $img = Image::decode($file);
-            $img->scale(width: 800);
-            Storage::disk('public')->put($imageName, (string) $img->encodeUsingFileExtension('jpg', 80));
-        }
+        $imageName = $this->saveCompressedAttendanceImage($request, 'in');
 
         $attendanceData = [
             'user_id' => $user->id,
@@ -138,10 +125,21 @@ class AttendanceController extends Controller
 
         if (! $attendance) {
             $response = $this->errorResponse('Anda belum check-in atau sudah check-out.', 400);
-        } elseif ($now->lt($minCheckOutTime) && $user->role_id !== 1 && ! $request->boolean('allow_early_checkout')) {
-            $formattedTime = $minCheckOutTime->format('H:i');
-            $response = $this->errorResponse("Belum jam pulang kerja! Absen pulang baru dapat dilakukan mulai pukul {$formattedTime} WIB.", 400);
-        } elseif ($request->is_mocked) {
+        } elseif ($now->lt($minCheckOutTime)) {
+            $diffMinutes = $now->diffInMinutes($minCheckOutTime);
+            $hours = floor($diffMinutes / 60);
+            $mins = $diffMinutes % 60;
+            $timeRemaining = ($hours > 0 ? $hours . ' jam ' : '') . $mins . ' menit';
+            $response = $this->errorResponse("Belum saatnya pulang! Jam pulang Anda adalah pukul {$minCheckOutTime->format('H:i')} WIB (Kurang {$timeRemaining} lagi).", 400);
+        }
+
+        if ($response) {
+            return $response;
+        }
+
+        $imageName = $this->saveCompressedAttendanceImage($request, 'out');
+        
+        if ($request->is_mocked) {
             $response = $this->errorResponse('Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli.', 403);
         } elseif ($request->device_id && $user->device_id && $user->device_id !== $request->device_id) {
             $response = $this->errorResponse('HP Anda tidak terdaftar. Gunakan HP yang sama saat absen masuk.', 403);
@@ -542,4 +540,24 @@ class AttendanceController extends Controller
         }
     }
 
+    private function saveCompressedAttendanceImage($request, string $prefix): ?string
+    {
+        $file = null;
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+        } elseif ($request->image instanceof \Symfony\Component\HttpFoundation\File\UploadedFile) {
+            $file = $request->image;
+        }
+
+        if (!$file) {
+            return null;
+        }
+
+        $imageName = "attendance/{$prefix}_".Str::random(40).'.jpg';
+        $img = Image::decode($file);
+        $img->scale(width: 800);
+        Storage::disk('public')->put($imageName, (string) $img->encodeUsingFileExtension('jpg', 80));
+
+        return $imageName;
+    }
 }
