@@ -43,18 +43,25 @@ class TrackingController extends Controller
      */
     public function live(Request $request)
     {
-        // Get the latest track for each user today
+        $user = $request->user();
         $today = Carbon::today();
         
-        $tracks = EmployeeTrack::with('user:id,name,nik,profile_photo_path')
+        $query = EmployeeTrack::with('user:id,name,nik,profile_photo_path')
             ->whereDate('recorded_at', $today)
             ->whereIn('id', function ($query) use ($today) {
                 $query->selectRaw('MAX(id)')
                       ->from('employee_tracks')
                       ->whereDate('recorded_at', $today)
                       ->groupBy('user_id');
-            })
-            ->get();
+            });
+
+        if ($user->company_id && !$user->canAccessAllCompanies()) {
+            $query->whereHas('user', function ($q) use ($user) {
+                $q->where('company_id', $user->company_id);
+            });
+        }
+
+        $tracks = $query->get();
 
         // Map to include profile_photo_url instead of path
         $tracks->transform(function ($track) {
@@ -75,6 +82,18 @@ class TrackingController extends Controller
      */
     public function history(Request $request, $userId)
     {
+        $user = $request->user();
+
+        if ($user->company_id && !$user->canAccessAllCompanies()) {
+            $targetUser = \App\Models\User::find($userId);
+            if (!$targetUser || $targetUser->company_id !== $user->company_id) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Unauthorized'
+                ], 403);
+            }
+        }
+
         $date = $request->get('date', Carbon::today()->toDateString());
 
         $tracks = EmployeeTrack::where('user_id', $userId)
