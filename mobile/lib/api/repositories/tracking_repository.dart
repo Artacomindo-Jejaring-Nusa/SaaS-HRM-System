@@ -1,14 +1,14 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/secure_storage_service.dart';
 import '../api_client.dart';
 
 /// Repository untuk fitur Employee Tracking.
 /// Menangani: updateLiveLocation.
 class TrackingRepository {
   static Future<Map<String, dynamic>> updateLiveLocation(double lat, double lng, double accuracy) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
+    final secureStorage = await SecureStorageService.getInstance();
+    final token = await secureStorage.getAccessToken();
     if (token == null) throw Exception("Token tidak ditemukan");
 
     final res = await ApiClient.client.post(
