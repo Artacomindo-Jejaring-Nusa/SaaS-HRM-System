@@ -8,6 +8,7 @@ use App\Models\Announcement;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -518,29 +519,40 @@ class EmployeeController extends Controller
             $query->where('role_id', $request->role_id);
         }
 
-        $employees = $query->get();
         $mode = $request->mode;
         $amount = (int) $request->amount;
-        $count = 0;
+        $reason = $request->reason ?: 'Penyesuaian massal';
 
-        foreach ($employees as $employee) {
-            $oldBalance = $employee->leave_balance ?? 12;
-            if ($mode === 'set') {
-                $newBalance = max(0, $amount);
-            } else { // adjust (+/-)
-                $newBalance = max(0, $oldBalance + $amount);
-            }
+        $employees = $query->select(['id', 'name', 'leave_balance', 'company_id'])->get();
+        $count = $employees->count();
 
-            $employee->leave_balance = $newBalance;
-            $employee->save();
-
-            $this->logActivity(
-                'BULK_LEAVE_UPDATE',
-                "Mengubah jatah cuti untuk {$employee->name} dari {$oldBalance} menjadi {$newBalance} hari. Alasan: " . ($request->reason ?: 'Penyesuaian massal'),
-                $employee
-            );
-            $count++;
+        if ($count === 0) {
+            return $this->errorResponse('Tidak ada data karyawan yang ditemukan untuk diperbarui.', 404);
         }
+
+        DB::transaction(function () use ($employees, $mode, $amount) {
+            foreach ($employees as $employee) {
+                $oldBalance = $employee->leave_balance ?? 12;
+                $newBalance = $mode === 'set' ? max(0, $amount) : max(0, $oldBalance + $amount);
+
+                $employee->update(['leave_balance' => $newBalance]);
+            }
+        });
+
+        $targetDesc = match ($request->target_type) {
+            'selected' => "{$count} karyawan terpilih",
+            'role' => "karyawan dengan peran ID {$request->role_id} ({$count} orang)",
+            default => "seluruh karyawan ({$count} orang)",
+        };
+
+        $actionDesc = $mode === 'set'
+            ? "menjadi {$amount} hari"
+            : ($amount >= 0 ? "ditambah {$amount} hari" : 'dikurang '.abs($amount).' hari');
+
+        $this->logActivity(
+            'BULK_LEAVE_UPDATE',
+            "Memperbarui jatah cuti massal untuk {$targetDesc} {$actionDesc}. Alasan: {$reason}"
+        );
 
         return $this->successResponse(
             ['affected_count' => $count],
