@@ -491,6 +491,63 @@ class EmployeeController extends Controller
         return $this->successResponse(null, "Berhasil mengirim ulang {$count} email verifikasi.");
     }
 
+    public function bulkUpdateLeaveBalance(Request $request)
+    {
+        abort_if(! $request->user()->hasPermission('edit-employees'), 403, self::MSG_FORBIDDEN);
+
+        $request->validate([
+            'mode' => 'required|in:set,adjust',
+            'amount' => 'required|numeric',
+            'target_type' => 'required|in:selected,all,role',
+            'user_ids' => 'required_if:target_type,selected|array',
+            'user_ids.*' => 'exists:users,id',
+            'role_id' => 'required_if:target_type,role|nullable|exists:roles,id',
+            'reason' => 'nullable|string|max:255',
+        ]);
+
+        $query = User::query();
+        $currentUser = $request->user();
+
+        if ($currentUser->company_id && ! $currentUser->canAccessAllCompanies()) {
+            $query->where('company_id', $currentUser->company_id);
+        }
+
+        if ($request->target_type === 'selected') {
+            $query->whereIn('id', $request->user_ids);
+        } elseif ($request->target_type === 'role') {
+            $query->where('role_id', $request->role_id);
+        }
+
+        $employees = $query->get();
+        $mode = $request->mode;
+        $amount = (int) $request->amount;
+        $count = 0;
+
+        foreach ($employees as $employee) {
+            $oldBalance = $employee->leave_balance ?? 12;
+            if ($mode === 'set') {
+                $newBalance = max(0, $amount);
+            } else { // adjust (+/-)
+                $newBalance = max(0, $oldBalance + $amount);
+            }
+
+            $employee->leave_balance = $newBalance;
+            $employee->save();
+
+            $this->logActivity(
+                'BULK_LEAVE_UPDATE',
+                "Mengubah jatah cuti untuk {$employee->name} dari {$oldBalance} menjadi {$newBalance} hari. Alasan: " . ($request->reason ?: 'Penyesuaian massal'),
+                $employee
+            );
+            $count++;
+        }
+
+        return $this->successResponse(
+            ['affected_count' => $count],
+            "Berhasil memperbarui jatah cuti untuk {$count} karyawan."
+        );
+    }
+
     public function potentialSupervisors(Request $request)
     {
         $user = $request->user();
