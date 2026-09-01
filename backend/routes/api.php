@@ -283,6 +283,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::delete('/employees/{id}', [EmployeeController::class, 'destroy']);
     });
     Route::middleware('permission:edit-employees')->post('/employees/{id}/toggle-wfh', [EmployeeController::class, 'toggleWfh']);
+    Route::middleware('permission:edit-employees')->post('/employees/bulk-leave-balance', [EmployeeController::class, 'bulkUpdateLeaveBalance']);
     Route::middleware('permission:edit-employees')->post('/employees/bulk-resend-verification', [EmployeeController::class, 'bulkResendVerification']);
     Route::middleware('permission:edit-employees')->post('/employees/{id}/resend-verification', [EmployeeController::class, 'resendVerification']);
     Route::middleware('permission:edit-employees')->post('/employees/{id}/reset-device', [EmployeeController::class, 'resetDeviceId']);
