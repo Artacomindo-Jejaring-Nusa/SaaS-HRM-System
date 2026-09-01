@@ -74,9 +74,10 @@ function IndividualLeaveModal({ employee, isOpen, onClose, onSuccess }: Individu
       alert("Sisa jatah cuti berhasil diperbarui!");
       onSuccess();
       onClose();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      alert(error.response?.data?.message || "Terjadi kesalahan saat menyimpan data.");
+      const errorMsg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || "Terjadi kesalahan saat menyimpan data.";
+      alert(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -153,6 +154,15 @@ interface BulkModalProps {
   onSuccess: () => void;
 }
 
+interface BulkLeavePayload {
+  mode: "set" | "adjust";
+  amount: number | "";
+  target_type: "selected" | "all" | "role";
+  reason: string;
+  user_ids?: number[];
+  role_id?: number | "";
+}
+
 function BulkLeaveModal({
   isOpen,
   targetType,
@@ -202,7 +212,7 @@ function BulkLeaveModal({
 
     setIsSubmitting(true);
     try {
-      const payload: any = {
+      const payload: BulkLeavePayload = {
         mode,
         amount,
         target_type: targetType,
@@ -219,9 +229,10 @@ function BulkLeaveModal({
       alert(res.data?.message || "Berhasil memperbarui jatah cuti massal!");
       onSuccess();
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      alert(err.response?.data?.message || "Gagal memperbarui jatah cuti massal.");
+      const errorMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || "Gagal memperbarui jatah cuti massal.";
+      alert(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
