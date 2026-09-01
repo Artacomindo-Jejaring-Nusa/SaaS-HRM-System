@@ -32,10 +32,6 @@ const nextConfig: NextConfig = {
         source: '/(.*)',
         headers: [
           {
-            key: 'X-Frame-Options',
-            value: 'SAMEORIGIN',
-          },
-          {
             key: 'X-Content-Type-Options',
             value: 'nosniff',
           },
@@ -49,7 +45,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self' 'unsafe-inline' 'unsafe-eval' http: https: ws: wss: data: blob:;",
+            value: "default-src 'self' 'unsafe-inline' 'unsafe-eval' http: https: ws: wss: data: blob:; frame-ancestors 'self' https://cloud.jelantik.com;",
           },
         ],
       },

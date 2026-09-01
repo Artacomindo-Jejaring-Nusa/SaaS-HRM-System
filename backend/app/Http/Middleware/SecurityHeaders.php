@@ -30,8 +30,9 @@ class SecurityHeaders
         // Prevent MIME type sniffing (stops browser from guessing content type)
         $response->headers->set('X-Content-Type-Options', 'nosniff');
 
-        // Prevent clickjacking attacks by disallowing embedding in iframes
-        $response->headers->set('X-Frame-Options', 'DENY');
+        // Allow iframe embedding only from self and trusted Nextcloud cloud.jelantik.com
+        $response->headers->set('Content-Security-Policy', "frame-ancestors 'self' https://cloud.jelantik.com;");
+        $response->headers->remove('X-Frame-Options');
 
         // Enable XSS protection filter in older browsers
         $response->headers->set('X-XSS-Protection', '1; mode=block');
