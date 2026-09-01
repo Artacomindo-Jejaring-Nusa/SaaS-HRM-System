@@ -44,14 +44,17 @@ interface PaginationData {
   per_page: number;
 }
 
+type TargetType = "selected" | "all" | "role";
+type BulkMode = "set" | "adjust";
+
 interface IndividualModalProps {
-  employee: Employee;
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
+  readonly employee: Employee;
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
+  readonly onSuccess: () => void;
 }
 
-function IndividualLeaveModal({ employee, isOpen, onClose, onSuccess }: IndividualModalProps) {
+function IndividualLeaveModal({ employee, isOpen, onClose, onSuccess }: Readonly<IndividualModalProps>) {
   const [balance, setBalance] = useState<number | "">(employee.leave_balance ?? 12);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -144,22 +147,22 @@ function IndividualLeaveModal({ employee, isOpen, onClose, onSuccess }: Individu
 }
 
 interface BulkModalProps {
-  isOpen: boolean;
-  targetType: "selected" | "all" | "role";
-  setTargetType: (t: "selected" | "all" | "role") => void;
-  selectedIds: number[];
-  totalEmployees: number;
-  roles: Role[];
-  onClose: () => void;
-  onSuccess: () => void;
+  readonly isOpen: boolean;
+  readonly targetType: TargetType;
+  readonly setTargetType: (t: TargetType) => void;
+  readonly selectedIds: readonly number[];
+  readonly totalEmployees: number;
+  readonly roles: readonly Role[];
+  readonly onClose: () => void;
+  readonly onSuccess: () => void;
 }
 
 interface BulkLeavePayload {
-  mode: "set" | "adjust";
+  mode: BulkMode;
   amount: number | "";
-  target_type: "selected" | "all" | "role";
+  target_type: TargetType;
   reason: string;
-  user_ids?: number[];
+  user_ids?: readonly number[];
   role_id?: number | "";
 }
 
@@ -172,9 +175,9 @@ function BulkLeaveModal({
   roles,
   onClose,
   onSuccess
-}: BulkModalProps) {
+}: Readonly<BulkModalProps>) {
   const [selectedRoleId, setSelectedRoleId] = useState<number | "">("");
-  const [mode, setMode] = useState<"set" | "adjust">("set");
+  const [mode, setMode] = useState<BulkMode>("set");
   const [amount, setAmount] = useState<number | "">(12);
   const [reason, setReason] = useState("Penyesuaian Jatah Cuti");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -238,7 +241,7 @@ function BulkLeaveModal({
     }
   };
 
-  const getTargetCardClass = (type: "selected" | "all" | "role") => {
+  const getTargetCardClass = (type: TargetType) => {
     if (targetType === type) {
       return "border-[#800000] bg-red-50/30 text-[#800000] ring-1 ring-[#800000]";
     }
@@ -459,7 +462,7 @@ function LeaveBalancesContent() {
   // Modals state
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-  const [bulkTargetType, setBulkTargetType] = useState<"selected" | "all" | "role">("selected");
+  const [bulkTargetType, setBulkTargetType] = useState<TargetType>("selected");
 
   useEffect(() => {
     fetchEmployees(page);
@@ -508,7 +511,7 @@ function LeaveBalancesContent() {
     }
   };
 
-  const handleOpenBulkModal = (target?: "selected" | "all" | "role") => {
+  const handleOpenBulkModal = (target?: TargetType) => {
     if (target) {
       setBulkTargetType(target);
     } else if (selectedIds.length > 0) {
