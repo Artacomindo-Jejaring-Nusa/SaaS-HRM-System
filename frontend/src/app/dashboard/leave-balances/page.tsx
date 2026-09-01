@@ -10,16 +10,12 @@ import {
   Sparkles, 
   CheckSquare, 
   Square, 
-  Minus, 
-  Plus, 
   Layers, 
   UserCheck, 
   AlertCircle,
-  HelpCircle,
   CalendarCheck
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { PermissionGuard } from "@/components/PermissionGuard";
 import Pagination from "@/components/Pagination";
 import { TableSkeleton } from "@/components/Skeleton";
 import { useSearchParams } from "next/navigation";
@@ -48,6 +44,392 @@ interface PaginationData {
   per_page: number;
 }
 
+interface IndividualModalProps {
+  employee: Employee;
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function IndividualLeaveModal({ employee, isOpen, onClose, onSuccess }: IndividualModalProps) {
+  const [balance, setBalance] = useState<number | "">(employee.leave_balance ?? 12);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const data = new FormData();
+      data.append('_method', 'PUT');
+      data.append('leave_balance', balance.toString());
+      data.append('name', employee.name);
+      data.append('email', employee.email);
+      data.append('role_id', employee.role_id.toString());
+
+      await axiosInstance.post(`/employees/${employee.id}`, data, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      alert("Sisa jatah cuti berhasil diperbarui!");
+      onSuccess();
+      onClose();
+    } catch (error: any) {
+      console.error(error);
+      alert(error.response?.data?.message || "Terjadi kesalahan saat menyimpan data.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center p-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-900">Ubah Jatah Cuti Karyawan</h3>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={18} />
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div className="p-5 space-y-4">
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Nama Karyawan</p>
+              <p className="text-sm font-bold text-gray-900">{employee.name}</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="individual-balance-input" className="text-xs font-semibold text-gray-700 block">
+                Set Sisa Cuti Baru (Hari)
+              </label>
+              <input 
+                id="individual-balance-input"
+                type="number" 
+                min="0"
+                max="100"
+                required
+                autoFocus
+                className="w-full px-3 py-2 text-lg font-bold border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#800000]"
+                value={balance}
+                onChange={(e) => setBalance(e.target.value ? Number.parseInt(e.target.value, 10) : "")}
+              />
+              <p className="text-[11px] text-gray-500 italic">
+                Standar cuti tahunan umum adalah 12 hari kerja per tahun.
+              </p>
+            </div>
+          </div>
+          
+          <div className="p-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50">
+            <button 
+              type="button" 
+              onClick={onClose}
+              className="px-3.5 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              Batal
+            </button>
+            <button 
+              type="submit" 
+              disabled={isSubmitting || balance === ""}
+              className="px-4 py-2 text-xs font-semibold text-white bg-[#800000] rounded-lg hover:bg-[#660000] transition-colors disabled:opacity-50 inline-flex items-center"
+            >
+              {isSubmitting ? "Menyimpan..." : "Simpan Sisa Cuti"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+interface BulkModalProps {
+  isOpen: boolean;
+  targetType: "selected" | "all" | "role";
+  setTargetType: (t: "selected" | "all" | "role") => void;
+  selectedIds: number[];
+  totalEmployees: number;
+  roles: Role[];
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function BulkLeaveModal({
+  isOpen,
+  targetType,
+  setTargetType,
+  selectedIds,
+  totalEmployees,
+  roles,
+  onClose,
+  onSuccess
+}: BulkModalProps) {
+  const [selectedRoleId, setSelectedRoleId] = useState<number | "">("");
+  const [mode, setMode] = useState<"set" | "adjust">("set");
+  const [amount, setAmount] = useState<number | "">(12);
+  const [reason, setReason] = useState("Penyesuaian Jatah Cuti");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  if (!isOpen) return null;
+
+  const getConfirmationText = () => {
+    if (targetType === "selected") {
+      return `Terapkan perubahan jatah cuti pada ${selectedIds.length} karyawan terpilih?`;
+    }
+    if (targetType === "all") {
+      return `Terapkan perubahan jatah cuti pada SEMUA (${totalEmployees}) karyawan?`;
+    }
+    return `Terapkan perubahan jatah cuti pada seluruh karyawan dengan peran yang dipilih?`;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (amount === "") {
+      alert("Masukkan jumlah hari cuti.");
+      return;
+    }
+
+    if (targetType === "selected" && selectedIds.length === 0) {
+      alert("Pilih minimal satu karyawan dari daftar tabel.");
+      return;
+    }
+
+    if (targetType === "role" && !selectedRoleId) {
+      alert("Pilih posisi / peran tujuan.");
+      return;
+    }
+
+    if (!confirm(getConfirmationText())) return;
+
+    setIsSubmitting(true);
+    try {
+      const payload: any = {
+        mode,
+        amount,
+        target_type: targetType,
+        reason,
+      };
+
+      if (targetType === "selected") {
+        payload.user_ids = selectedIds;
+      } else if (targetType === "role") {
+        payload.role_id = selectedRoleId;
+      }
+
+      const res = await axiosInstance.post("/employees/bulk-leave-balance", payload);
+      alert(res.data?.message || "Berhasil memperbarui jatah cuti massal!");
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.message || "Gagal memperbarui jatah cuti massal.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const getTargetCardClass = (type: "selected" | "all" | "role") => {
+    if (targetType === type) {
+      return "border-[#800000] bg-red-50/30 text-[#800000] ring-1 ring-[#800000]";
+    }
+    if (type === "selected" && selectedIds.length === 0) {
+      return "border-gray-200 bg-gray-50 text-gray-400 opacity-60 cursor-not-allowed";
+    }
+    return "border-gray-200 hover:border-gray-300 text-gray-700 bg-white";
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-slate-50/50">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-red-100 text-[#800000] flex items-center justify-center font-bold">
+              ⚡
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900 text-sm">Pengaturan Jatah Cuti Massal (Bulk Update)</h3>
+              <p className="text-[11px] text-gray-500">Perbarui hak cuti banyak karyawan secara instan.</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={18} />
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div className="p-6 space-y-5">
+            {/* Target Selection */}
+            <div>
+              <span className="text-xs font-bold text-gray-800 uppercase tracking-wider block mb-2">
+                1. Target Karyawan
+              </span>
+              <div className="grid grid-cols-3 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setTargetType("selected")}
+                  disabled={selectedIds.length === 0}
+                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${getTargetCardClass("selected")}`}
+                >
+                  <UserCheck className="w-4 h-4 mb-2" />
+                  <div>
+                    <p className="text-xs font-bold">Terpilih</p>
+                    <p className="text-[10px] text-gray-500">{selectedIds.length} Orang</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTargetType("all")}
+                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${getTargetCardClass("all")}`}
+                >
+                  <Users className="w-4 h-4 mb-2" />
+                  <div>
+                    <p className="text-xs font-bold">Semua</p>
+                    <p className="text-[10px] text-gray-500">{totalEmployees} Karyawan</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTargetType("role")}
+                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${getTargetCardClass("role")}`}
+                >
+                  <Layers className="w-4 h-4 mb-2" />
+                  <div>
+                    <p className="text-xs font-bold">Per Peran</p>
+                    <p className="text-[10px] text-gray-500">Berdasarkan Role</p>
+                  </div>
+                </button>
+              </div>
+
+              {targetType === "role" && (
+                <div className="mt-3">
+                  <label htmlFor="bulk-role-select" className="text-xs font-semibold text-gray-700 block mb-1">
+                    Pilih Posisi/Peran
+                  </label>
+                  <select
+                    id="bulk-role-select"
+                    value={selectedRoleId}
+                    onChange={(e) => setSelectedRoleId(e.target.value ? Number.parseInt(e.target.value, 10) : "")}
+                    className="w-full h-9 px-3 text-xs bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#800000]"
+                    required
+                  >
+                    <option value="">-- Pilih Peran / Posisi --</option>
+                    {roles.map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Mode Selection */}
+            <div>
+              <span className="text-xs font-bold text-gray-800 uppercase tracking-wider block mb-2">
+                2. Metode Pembaruan
+              </span>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setMode("set")}
+                  className={`p-3 rounded-xl border text-left transition-all ${
+                    mode === "set"
+                      ? "border-[#800000] bg-red-50/30 text-[#800000] ring-1 ring-[#800000]"
+                      : "border-gray-200 hover:border-gray-300 text-gray-700 bg-white"
+                  }`}
+                >
+                  <p className="text-xs font-bold">Set Nilai Sama</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Semua disetel ke angka tertentu (misal: 12)</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMode("adjust")}
+                  className={`p-3 rounded-xl border text-left transition-all ${
+                    mode === "adjust"
+                      ? "border-[#800000] bg-red-50/30 text-[#800000] ring-1 ring-[#800000]"
+                      : "border-gray-200 hover:border-gray-300 text-gray-700 bg-white"
+                  }`}
+                >
+                  <p className="text-xs font-bold">Penyesuaian (+ / -)</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Tambah atau potong saldo berjalan</p>
+                </button>
+              </div>
+            </div>
+
+            {/* Amount Input */}
+            <div className="space-y-1.5">
+              <label htmlFor="bulk-amount-input" className="text-xs font-bold text-gray-800 uppercase tracking-wider block">
+                3. {mode === "set" ? "Jumlah Hari Baru" : "Jumlah Hari Penyesuaian (+/-)"}
+              </label>
+              <div className="relative">
+                <input 
+                  id="bulk-amount-input"
+                  type="number" 
+                  min={mode === "set" ? 0 : -50}
+                  max="100"
+                  required
+                  className="w-full px-3.5 py-2.5 text-base font-bold border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#800000]"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value ? Number.parseInt(e.target.value, 10) : "")}
+                  placeholder={mode === "set" ? "12" : "+1 atau -1"}
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">
+                  Hari
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 italic">
+                {mode === "set" 
+                  ? "Contoh: Masukkan '12' untuk mengatur saldo seluruh target menjadi 12 hari."
+                  : "Contoh: Masukkan '1' untuk menambah 1 hari (misal bonus cuti bersama) atau '-1' untuk memotong."}
+              </p>
+            </div>
+
+            {/* Reason Input */}
+            <div className="space-y-1.5">
+              <label htmlFor="bulk-reason-input" className="text-xs font-bold text-gray-800 uppercase tracking-wider block">
+                4. Catatan / Alasan (Opsional)
+              </label>
+              <input 
+                id="bulk-reason-input"
+                type="text" 
+                maxLength={255}
+                className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#800000]"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Contoh: Pembaruan Saldo Cuti Awal Tahun 2026"
+              />
+            </div>
+          </div>
+          
+          <div className="p-5 border-t border-gray-100 flex items-center justify-between bg-slate-50">
+            <div className="text-[11px] text-gray-500 flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span>Aksi ini akan dicatat di log audit aktivitas.</span>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <button 
+                type="button" 
+                onClick={onClose}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-100 transition-colors"
+              >
+                Batal
+              </button>
+              <button 
+                type="submit" 
+                disabled={isSubmitting || amount === ""}
+                className="px-5 py-2 text-xs font-bold text-white bg-[#800000] rounded-xl hover:bg-[#660000] transition-colors disabled:opacity-50 shadow-sm flex items-center gap-2"
+              >
+                {isSubmitting ? "Memproses..." : "Terapkan Perubahan"}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function LeaveBalancesContent() {
   const { hasPermission } = useAuth();
   const searchParams = useSearchParams();
@@ -63,20 +445,10 @@ function LeaveBalancesContent() {
   // Selection states for Bulk Action
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
-  // Individual Edit Modal states
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Modals state
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
-  const [newBalance, setNewBalance] = useState<number | "">("");
-
-  // Bulk Edit Modal states
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkTargetType, setBulkTargetType] = useState<"selected" | "all" | "role">("selected");
-  const [bulkSelectedRoleId, setBulkSelectedRoleId] = useState<number | "">("");
-  const [bulkMode, setBulkMode] = useState<"set" | "adjust">("set");
-  const [bulkAmount, setBulkAmount] = useState<number | "">(12);
-  const [bulkReason, setBulkReason] = useState("");
-  const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
 
   useEffect(() => {
     fetchEmployees(page);
@@ -109,7 +481,6 @@ function LeaveBalancesContent() {
     }
   };
 
-  // Selection handlers
   const handleSelectAll = () => {
     if (selectedIds.length === employees.length) {
       setSelectedIds([]);
@@ -126,115 +497,22 @@ function LeaveBalancesContent() {
     }
   };
 
-  // Individual Modal Handlers
-  const handleOpenEditModal = (emp: Employee) => {
-    setSelectedEmployee(emp);
-    setNewBalance(emp.leave_balance ?? 12);
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setSelectedEmployee(null);
-  };
-
-  const handleSubmitIndividual = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedEmployee) return;
-
-    setIsSubmitting(true);
-    try {
-      const data = new FormData();
-      data.append('_method', 'PUT');
-      data.append('leave_balance', newBalance.toString());
-      data.append('name', selectedEmployee.name);
-      data.append('email', selectedEmployee.email);
-      data.append('role_id', selectedEmployee.role_id.toString());
-
-      await axiosInstance.post(`/employees/${selectedEmployee.id}`, data, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-      alert("Sisa jatah cuti berhasil diperbarui!");
-      handleCloseModal();
-      fetchEmployees(pagination?.current_page || 1);
-    } catch (error: any) {
-      console.error(error);
-      alert(error.response?.data?.message || "Terjadi kesalahan saat menyimpan data.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Bulk Modal Handlers
-  const handleOpenBulkModal = (defaultTarget?: "selected" | "all" | "role") => {
-    if (defaultTarget) {
-      setBulkTargetType(defaultTarget);
+  const handleOpenBulkModal = (target?: "selected" | "all" | "role") => {
+    if (target) {
+      setBulkTargetType(target);
     } else if (selectedIds.length > 0) {
       setBulkTargetType("selected");
     } else {
       setBulkTargetType("all");
     }
-    setBulkMode("set");
-    setBulkAmount(12);
-    setBulkReason("Penyesuaian Jatah Cuti");
     setIsBulkModalOpen(true);
   };
 
-  const handleCloseBulkModal = () => {
-    setIsBulkModalOpen(false);
-  };
-
-  const handleSubmitBulk = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (bulkAmount === "") {
-      alert("Masukkan jumlah hari cuti.");
-      return;
-    }
-
-    if (bulkTargetType === "selected" && selectedIds.length === 0) {
-      alert("Pilih minimal satu karyawan dari daftar tabel.");
-      return;
-    }
-
-    if (bulkTargetType === "role" && !bulkSelectedRoleId) {
-      alert("Pilih posisi / peran tujuan.");
-      return;
-    }
-
-    const confirmMsg = bulkTargetType === "selected" 
-      ? `Terapkan perubahan jatah cuti pada ${selectedIds.length} karyawan terpilih?`
-      : bulkTargetType === "all"
-      ? `Terapkan perubahan jatah cuti pada SEMUA karyawan di perusahaan?`
-      : `Terapkan perubahan jatah cuti pada seluruh karyawan dengan peran yang dipilih?`;
-
-    if (!confirm(confirmMsg)) return;
-
-    setIsBulkSubmitting(true);
-    try {
-      const payload: any = {
-        mode: bulkMode,
-        amount: bulkAmount,
-        target_type: bulkTargetType,
-        reason: bulkReason,
-      };
-
-      if (bulkTargetType === "selected") {
-        payload.user_ids = selectedIds;
-      } else if (bulkTargetType === "role") {
-        payload.role_id = bulkSelectedRoleId;
-      }
-
-      const res = await axiosInstance.post("/employees/bulk-leave-balance", payload);
-      alert(res.data?.message || "Berhasil memperbarui jatah cuti massal!");
-      setIsBulkModalOpen(false);
-      setSelectedIds([]);
-      fetchEmployees(pagination?.current_page || 1);
-    } catch (err: any) {
-      console.error(err);
-      alert(err.response?.data?.message || "Gagal memperbarui jatah cuti massal.");
-    } finally {
-      setIsBulkSubmitting(false);
-    }
+  const getRoleDisplayName = (emp: Employee) => {
+    if (emp.role?.name) return emp.role.name;
+    if (emp.role_id === 1) return "Super Admin";
+    if (emp.role_id === 2) return "HR";
+    return "Karyawan";
   };
 
   const filteredEmployees = employees.filter(emp => 
@@ -259,6 +537,7 @@ function LeaveBalancesContent() {
         {hasPermission('edit-employees') && (
           <div className="flex items-center gap-2.5">
             <button
+              type="button"
               onClick={() => handleOpenBulkModal("all")}
               className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2"
             >
@@ -267,6 +546,7 @@ function LeaveBalancesContent() {
             </button>
 
             <button
+              type="button"
               onClick={() => handleOpenBulkModal(selectedIds.length > 0 ? "selected" : "all")}
               className="px-4 py-2 text-xs font-semibold rounded-lg bg-[#800000] text-white hover:bg-[#660000] transition-all shadow-sm flex items-center gap-2"
             >
@@ -291,12 +571,14 @@ function LeaveBalancesContent() {
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => handleOpenBulkModal("selected")}
               className="px-3 py-1.5 text-xs font-bold rounded-lg bg-[#800000] text-white hover:bg-[#660000] transition-colors"
             >
               Ubah Saldo Terpilih
             </button>
             <button
+              type="button"
               onClick={() => setSelectedIds([])}
               className="px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
             >
@@ -360,6 +642,11 @@ function LeaveBalancesContent() {
               <tbody>
                 {filteredEmployees.map((emp) => {
                   const isSelected = selectedIds.includes(emp.id);
+                  const isLow = (emp.leave_balance || 0) <= 2;
+                  const balanceBadgeClass = isLow 
+                    ? "bg-red-50 text-red-600 border-red-200" 
+                    : "bg-green-50 text-green-700 border-green-200";
+
                   return (
                     <tr 
                       key={emp.id} 
@@ -396,21 +683,21 @@ function LeaveBalancesContent() {
                       </td>
                       <td>
                         <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2.5 py-1 rounded-md">
-                          {emp.role?.name || (emp.role_id === 1 ? "Super Admin" : emp.role_id === 2 ? "HR" : "Karyawan")}
+                          {getRoleDisplayName(emp)}
                         </span>
                       </td>
                       <td className="text-center">
-                        <div className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-black tracking-wide border
-                          ${(emp.leave_balance || 0) <= 2 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                        <div className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-black tracking-wide border ${balanceBadgeClass}`}>
                           {emp.leave_balance ?? 12} Hari
                         </div>
                       </td>
                       {hasPermission('edit-employees') && (
                         <td className="text-right">
                           <button 
+                            type="button"
                             className="dash-btn dash-btn-outline h-8 px-3 text-xs inline-flex items-center gap-1.5 hover:bg-gray-100" 
                             title="Sesuaikan Jatah Cuti"
-                            onClick={() => handleOpenEditModal(emp)}
+                            onClick={() => setSelectedEmployee(emp)}
                           >
                             <Settings size={14} />
                             Ubah Cuti
@@ -436,265 +723,30 @@ function LeaveBalancesContent() {
         )}
       </div>
 
-      {/* Individual Editing Modal */}
-      {isModalOpen && selectedEmployee && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center p-4 border-b border-gray-100">
-              <h3 className="font-semibold text-gray-900">Ubah Jatah Cuti Karyawan</h3>
-              <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600">
-                <X size={18} />
-              </button>
-            </div>
-            
-            <form onSubmit={handleSubmitIndividual}>
-              <div className="p-5 space-y-4">
-                <div>
-                  <p className="text-xs text-gray-500 mb-0.5">Nama Karyawan</p>
-                  <p className="text-sm font-bold text-gray-900">{selectedEmployee.name}</p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-gray-700">Set Sisa Cuti Baru (Hari)</label>
-                  <input 
-                    type="number" 
-                    min="0"
-                    max="100"
-                    required
-                    autoFocus
-                    className="w-full px-3 py-2 text-lg font-bold border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#800000]"
-                    value={newBalance}
-                    onChange={(e) => setNewBalance(e.target.value ? parseInt(e.target.value) : "")}
-                  />
-                  <p className="text-[11px] text-gray-500 italic">
-                    Standar cuti tahunan umum adalah 12 hari kerja per tahun.
-                  </p>
-                </div>
-              </div>
-              
-              <div className="p-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50">
-                <button 
-                  type="button" 
-                  onClick={handleCloseModal}
-                  className="px-3.5 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  Batal
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={isSubmitting || newBalance === ""}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#800000] rounded-lg hover:bg-[#660000] transition-colors disabled:opacity-50 inline-flex items-center"
-                >
-                  {isSubmitting ? "Menyimpan..." : "Simpan Sisa Cuti"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {/* Individual Modal */}
+      {selectedEmployee && (
+        <IndividualLeaveModal
+          employee={selectedEmployee}
+          isOpen={Boolean(selectedEmployee)}
+          onClose={() => setSelectedEmployee(null)}
+          onSuccess={() => fetchEmployees(pagination?.current_page || 1)}
+        />
       )}
 
-      {/* Bulk Editing Modal */}
-      {isBulkModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-slate-50/50">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-red-100 text-[#800000] flex items-center justify-center font-bold">
-                  ⚡
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-900 text-sm">Pengaturan Jatah Cuti Massal (Bulk Update)</h3>
-                  <p className="text-[11px] text-gray-500">Perbarui hak cuti banyak karyawan secara instan.</p>
-                </div>
-              </div>
-              <button onClick={handleCloseBulkModal} className="text-gray-400 hover:text-gray-600">
-                <X size={18} />
-              </button>
-            </div>
-            
-            <form onSubmit={handleSubmitBulk}>
-              <div className="p-6 space-y-5">
-                {/* Target Selection */}
-                <div>
-                  <label className="text-xs font-bold text-gray-800 uppercase tracking-wider block mb-2">
-                    1. Target Karyawan
-                  </label>
-                  <div className="grid grid-cols-3 gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setBulkTargetType("selected")}
-                      disabled={selectedIds.length === 0}
-                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
-                        bulkTargetType === "selected"
-                          ? "border-[#800000] bg-red-50/30 text-[#800000] ring-1 ring-[#800000]"
-                          : selectedIds.length === 0
-                          ? "border-gray-200 bg-gray-50 text-gray-400 opacity-60 cursor-not-allowed"
-                          : "border-gray-200 hover:border-gray-300 text-gray-700 bg-white"
-                      }`}
-                    >
-                      <UserCheck className="w-4 h-4 mb-2" />
-                      <div>
-                        <p className="text-xs font-bold">Terpilih</p>
-                        <p className="text-[10px] text-gray-500">{selectedIds.length} Orang</p>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setBulkTargetType("all")}
-                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
-                        bulkTargetType === "all"
-                          ? "border-[#800000] bg-red-50/30 text-[#800000] ring-1 ring-[#800000]"
-                          : "border-gray-200 hover:border-gray-300 text-gray-700 bg-white"
-                      }`}
-                    >
-                      <Users className="w-4 h-4 mb-2" />
-                      <div>
-                        <p className="text-xs font-bold">Semua</p>
-                        <p className="text-[10px] text-gray-500">{pagination?.total || employees.length} Karyawan</p>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setBulkTargetType("role")}
-                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
-                        bulkTargetType === "role"
-                          ? "border-[#800000] bg-red-50/30 text-[#800000] ring-1 ring-[#800000]"
-                          : "border-gray-200 hover:border-gray-300 text-gray-700 bg-white"
-                      }`}
-                    >
-                      <Layers className="w-4 h-4 mb-2" />
-                      <div>
-                        <p className="text-xs font-bold">Per Peran</p>
-                        <p className="text-[10px] text-gray-500">Berdasarkan Role</p>
-                      </div>
-                    </button>
-                  </div>
-
-                  {/* Dropdown if role target */}
-                  {bulkTargetType === "role" && (
-                    <div className="mt-3">
-                      <label className="text-xs font-semibold text-gray-700 block mb-1">Pilih Posisi/Peran</label>
-                      <select
-                        value={bulkSelectedRoleId}
-                        onChange={(e) => setBulkSelectedRoleId(e.target.value ? parseInt(e.target.value) : "")}
-                        className="w-full h-9 px-3 text-xs bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#800000]"
-                        required
-                      >
-                        <option value="">-- Pilih Peran / Posisi --</option>
-                        {roles.map(r => (
-                          <option key={r.id} value={r.id}>{r.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-
-                {/* Mode Selection */}
-                <div>
-                  <label className="text-xs font-bold text-gray-800 uppercase tracking-wider block mb-2">
-                    2. Metode Pembaruan
-                  </label>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setBulkMode("set")}
-                      className={`p-3 rounded-xl border text-left transition-all ${
-                        bulkMode === "set"
-                          ? "border-[#800000] bg-red-50/30 text-[#800000] ring-1 ring-[#800000]"
-                          : "border-gray-200 hover:border-gray-300 text-gray-700 bg-white"
-                      }`}
-                    >
-                      <p className="text-xs font-bold">Set Nilai Sama</p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">Semua disetel ke angka tertentu (misal: 12)</p>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setBulkMode("adjust")}
-                      className={`p-3 rounded-xl border text-left transition-all ${
-                        bulkMode === "adjust"
-                          ? "border-[#800000] bg-red-50/30 text-[#800000] ring-1 ring-[#800000]"
-                          : "border-gray-200 hover:border-gray-300 text-gray-700 bg-white"
-                      }`}
-                    >
-                      <p className="text-xs font-bold">Penyesuaian (+ / -)</p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">Tambah atau potong saldo berjalan</p>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Amount Input */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-800 uppercase tracking-wider block">
-                    3. {bulkMode === "set" ? "Jumlah Hari Baru" : "Jumlah Hari Penyesuaian (+/-)"}
-                  </label>
-                  <div className="relative">
-                    <input 
-                      type="number" 
-                      min={bulkMode === "set" ? 0 : -50}
-                      max="100"
-                      required
-                      className="w-full px-3.5 py-2.5 text-base font-bold border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#800000]"
-                      value={bulkAmount}
-                      onChange={(e) => setBulkAmount(e.target.value ? parseInt(e.target.value) : "")}
-                      placeholder={bulkMode === "set" ? "12" : "+1 atau -1"}
-                    />
-                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">
-                      Hari
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-gray-500 italic">
-                    {bulkMode === "set" 
-                      ? "Contoh: Masukkan '12' untuk mengatur saldo seluruh target menjadi 12 hari."
-                      : "Contoh: Masukkan '1' untuk menambah 1 hari (misal bonus cuti bersama) atau '-1' untuk memotong."}
-                  </p>
-                </div>
-
-                {/* Reason Input */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-800 uppercase tracking-wider block">
-                    4. Catatan / Alasan (Opsional)
-                  </label>
-                  <input 
-                    type="text" 
-                    maxLength={255}
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#800000]"
-                    value={bulkReason}
-                    onChange={(e) => setBulkReason(e.target.value)}
-                    placeholder="Contoh: Pembaruan Saldo Cuti Awal Tahun 2026"
-                  />
-                </div>
-              </div>
-              
-              <div className="p-5 border-t border-gray-100 flex items-center justify-between bg-slate-50">
-                <div className="text-[11px] text-gray-500 flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                  <span>Aksi ini akan dicatat di log audit aktivitas.</span>
-                </div>
-
-                <div className="flex items-center gap-2.5">
-                  <button 
-                    type="button" 
-                    onClick={handleCloseBulkModal}
-                    className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-100 transition-colors"
-                  >
-                    Batal
-                  </button>
-                  <button 
-                    type="submit" 
-                    disabled={isBulkSubmitting || bulkAmount === ""}
-                    className="px-5 py-2 text-xs font-bold text-white bg-[#800000] rounded-xl hover:bg-[#660000] transition-colors disabled:opacity-50 shadow-sm flex items-center gap-2"
-                  >
-                    {isBulkSubmitting ? "Memproses..." : "Terapkan Perubahan"}
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Bulk Modal */}
+      <BulkLeaveModal
+        isOpen={isBulkModalOpen}
+        targetType={bulkTargetType}
+        setTargetType={setBulkTargetType}
+        selectedIds={selectedIds}
+        totalEmployees={pagination?.total || employees.length}
+        roles={roles}
+        onClose={() => setIsBulkModalOpen(false)}
+        onSuccess={() => {
+          setSelectedIds([]);
+          fetchEmployees(pagination?.current_page || 1);
+        }}
+      />
     </div>
   );
 }
