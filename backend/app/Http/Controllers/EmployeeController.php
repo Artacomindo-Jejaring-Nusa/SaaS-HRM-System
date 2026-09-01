@@ -545,9 +545,13 @@ class EmployeeController extends Controller
             default => "seluruh karyawan ({$count} orang)",
         };
 
-        $actionDesc = $mode === 'set'
-            ? "menjadi {$amount} hari"
-            : ($amount >= 0 ? "ditambah {$amount} hari" : 'dikurang '.abs($amount).' hari');
+        if ($mode === 'set') {
+            $actionDesc = "menjadi {$amount} hari";
+        } elseif ($amount >= 0) {
+            $actionDesc = "ditambah {$amount} hari";
+        } else {
+            $actionDesc = 'dikurang '.abs($amount).' hari';
+        }
 
         $this->logActivity(
             'BULK_LEAVE_UPDATE',
