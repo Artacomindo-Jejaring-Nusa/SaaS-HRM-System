@@ -145,35 +145,41 @@ class OvertimeController extends Controller
 
     private function createOvertime(Request $request, User $user, $companyId, bool $isDraft): Overtime
     {
+        $firstItem = null;
+        if ($request->has('items') && is_array($request->items) && count($request->items) > 0) {
+            $firstItem = $request->items[0];
+        }
+
+        $date = $request->input('date', $firstItem['date'] ?? null);
+        $startTime = $request->input('start_time', $firstItem['start_time'] ?? null);
+        $endTime = $request->input('end_time', $firstItem['end_time'] ?? null);
+        $reason = $request->input('reason', $firstItem['reason'] ?? null);
+
+        $baseData = [
+            'user_id' => $user->id,
+            'company_id' => $companyId,
+            'title' => $request->title,
+            'date' => $date,
+            'start_time' => $startTime,
+            'end_time' => $endTime,
+            'reason' => $reason,
+        ];
+
         if ($isDraft) {
-            $overtime = Overtime::create([
-                'user_id' => $user->id,
-                'company_id' => $companyId,
-                'title' => $request->title,
-                'status' => 'draft',
-            ]);
+            $baseData['status'] = 'draft';
+            $overtime = Overtime::create($baseData);
         } else {
             // ── Dynamic Workflow Check ──
             $workflowResult = ApprovalService::initApproval('overtime', $companyId, $user);
 
+            $baseData['signature'] = $request->signature;
             if ($workflowResult) {
-                $overtime = Overtime::create([
-                    'user_id' => $user->id,
-                    'company_id' => $companyId,
-                    'title' => $request->title,
-                    'signature' => $request->signature,
-                    'status' => $workflowResult['status'],
-                    'current_approval_step' => $workflowResult['current_approval_step'],
-                ]);
+                $baseData['status'] = $workflowResult['status'];
+                $baseData['current_approval_step'] = $workflowResult['current_approval_step'];
             } else {
-                $overtime = Overtime::create([
-                    'user_id' => $user->id,
-                    'company_id' => $companyId,
-                    'title' => $request->title,
-                    'signature' => $request->signature,
-                    'status' => 'pending',
-                ]);
+                $baseData['status'] = 'pending';
             }
+            $overtime = Overtime::create($baseData);
         }
 
         // Create items
@@ -306,6 +312,18 @@ class OvertimeController extends Controller
 
         // Update main record
         $updateData = ['title' => $request->title ?? $overtime->title];
+
+        $firstItem = null;
+        if ($request->has('items') && is_array($request->items) && count($request->items) > 0) {
+            $firstItem = $request->items[0];
+        }
+
+        if ($firstItem) {
+            $updateData['date'] = $request->input('date', $firstItem['date'] ?? null);
+            $updateData['start_time'] = $request->input('start_time', $firstItem['start_time'] ?? null);
+            $updateData['end_time'] = $request->input('end_time', $firstItem['end_time'] ?? null);
+            $updateData['reason'] = $request->input('reason', $firstItem['reason'] ?? null);
+        }
 
         if ($isSubmitting) {
             $updateData['signature'] = $request->signature;
