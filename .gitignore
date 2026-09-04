@@ -50,3 +50,9 @@ sonar-scanner-*/
 # Security
 SECURITY_AUDIT_REPORT.md
 SECURITY_MAINTENANCE_VERIFICATION.md
+
+# Private Documents & Spreadsheets
+Form Permintaan Dana&Uang Muka - AJNusa.xls
+Spend of Layer-Signature.xlsx
+*.xlsx
+*.xls

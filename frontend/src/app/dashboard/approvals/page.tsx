@@ -253,6 +253,17 @@ const getApprovalEndpoint = (type: ApprovalType): string => {
   return map[type] || `/${type}`;
 };
 
+const isLeaveAllowed = (status: string, isTargetSpv: boolean, isHR: boolean): boolean => {
+  if (status === 'pending_supervisor') return isTargetSpv || isHR;
+  if (status === 'pending_hr') return isHR;
+  return status === 'pending' && (isHR || isTargetSpv);
+};
+
+const isDinasLuarAllowed = (dinasStatus: string | undefined, isTargetSpv: boolean, isHR: boolean): boolean => {
+  if (dinasStatus === 'pending') return isTargetSpv || isHR;
+  return dinasStatus === 'approved_spv' && isHR;
+};
+
 const shouldIncludeApprovalItem = (
   item: ApprovalItem,
   currentUserId: number | null,
@@ -267,25 +278,15 @@ const shouldIncludeApprovalItem = (
   }
 
   if (item.type === 'leave') {
-    if (item.status === 'pending_supervisor') return isTargetSpv || isHR;
-    if (item.status === 'pending_hr') return isHR;
-    if (item.status === 'pending') return isHR || isTargetSpv;
-    return false;
+    return isLeaveAllowed(item.status, isTargetSpv, isHR);
   }
   if (item.type === 'dinas_luar') {
-    if (item.dinas_luar_status === 'pending') return isTargetSpv || isHR;
-    if (item.dinas_luar_status === 'approved_spv') return isHR;
-    return false;
-  }
-  if (item.type === 'permit' || item.type === 'overtime' || item.type === 'reimbursement' || item.type === 'fund_request') {
-    if (item.status === 'pending_supervisor') return isTargetSpv || isHR;
-    if (item.status === 'pending_hr') return isHR;
-    return isHR || isTargetSpv;
+    return isDinasLuarAllowed(item.dinas_luar_status, isTargetSpv, isHR);
   }
   if (item.type === 'profile') {
     return isHR;
   }
-  return item.status === 'pending' || item.status === 'waiting_approval';
+  return true;
 };
 
 const normalizeLeaves = (data: unknown): ApprovalItem[] =>
@@ -723,7 +724,7 @@ export default function ApprovalsPage() {
                           )}
                           {item.amount && (
                             <div className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md w-fit">
-                              IDR {parseInt(item.amount, 10).toLocaleString('id-ID')}
+                              IDR {Number.parseInt(item.amount, 10).toLocaleString('id-ID')}
                             </div>
                           )}
                           {!item.start_date && !item.amount && (
@@ -819,7 +820,7 @@ export default function ApprovalsPage() {
                   Math.min(totalPages, currentPage + 2)
                 ).map(page => (
                   <button
-                    key={page}
+                    key={`page-${page}`}
                     onClick={() => setCurrentPage(page)}
                     className={`w-8 h-8 text-xs font-medium rounded-lg transition ${
                       page === currentPage
@@ -903,7 +904,7 @@ export default function ApprovalsPage() {
                 {selectedItem.amount ? (
                   <div className="p-3.5 border border-emerald-100 bg-emerald-50/40 rounded-2xl">
                     <p className="text-[10px] uppercase font-black tracking-wider text-emerald-600/80 mb-1">NOMINAL PENGAJUAN</p>
-                    <p className="text-base font-black text-emerald-700">IDR {parseInt(selectedItem.amount, 10).toLocaleString('id-ID')}</p>
+                    <p className="text-base font-black text-emerald-700">IDR {Number.parseInt(selectedItem.amount, 10).toLocaleString('id-ID')}</p>
                   </div>
                 ) : (
                   <div className="p-3.5 bg-gray-50/50 border border-gray-100 rounded-2xl">
@@ -925,19 +926,22 @@ export default function ApprovalsPage() {
                   </p>
                   {selectedItem.overtime_items && selectedItem.overtime_items.length > 0 ? (
                     <div className="border border-gray-200 rounded-2xl overflow-hidden divide-y divide-gray-100 bg-white shadow-xs">
-                      {selectedItem.overtime_items.map((otItem, idx) => (
-                        <div key={idx} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-gray-900">{otItem.date || selectedItem.start_date || '-'}</span>
-                              <span className="bg-amber-50 text-amber-800 font-semibold px-2 py-0.5 rounded border border-amber-200">
-                                {otItem.start_time || '-'} s/d {otItem.end_time || '-'}
-                              </span>
+                      {selectedItem.overtime_items.map((otItem) => {
+                        const otKey = `ot-${otItem.id ?? `${otItem.date}-${otItem.start_time}-${otItem.end_time}`}`;
+                        return (
+                          <div key={otKey} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-gray-900">{otItem.date || selectedItem.start_date || '-'}</span>
+                                <span className="bg-amber-50 text-amber-800 font-semibold px-2 py-0.5 rounded border border-amber-200">
+                                  {otItem.start_time || '-'} s/d {otItem.end_time || '-'}
+                                </span>
+                              </div>
+                              <p className="text-gray-600 mt-1 italic">&ldquo;{otItem.reason || 'Tanpa keterangan tugas'}&rdquo;</p>
                             </div>
-                            <p className="text-gray-600 mt-1 italic">&ldquo;{otItem.reason || 'Tanpa keterangan tugas'}&rdquo;</p>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-xs space-y-1">
@@ -1024,19 +1028,22 @@ export default function ApprovalsPage() {
                         <span>Item Pengeluaran</span>
                         <span>Nominal</span>
                       </div>
-                      {selectedItem.reimbursement_items.map((rItem, idx) => (
-                        <div key={idx} className="p-3 flex justify-between items-center text-xs">
-                          <div>
-                            <p className="font-bold text-gray-900">{rItem.item_name || `Item #${idx + 1}`}</p>
-                            {rItem.description && <p className="text-gray-500 text-[11px]">{rItem.description}</p>}
+                      {selectedItem.reimbursement_items.map((rItem) => {
+                        const rKey = `r-${rItem.id ?? `${rItem.item_name}-${rItem.amount}-${rItem.description}`}`;
+                        return (
+                          <div key={rKey} className="p-3 flex justify-between items-center text-xs">
+                            <div>
+                              <p className="font-bold text-gray-900">{rItem.item_name || 'Item Reimbursement'}</p>
+                              {rItem.description && <p className="text-gray-500 text-[11px]">{rItem.description}</p>}
+                            </div>
+                            {rItem.amount && (
+                              <span className="font-bold text-emerald-700">
+                                IDR {Number.parseInt(String(rItem.amount), 10).toLocaleString('id-ID')}
+                              </span>
+                            )}
                           </div>
-                          {rItem.amount && (
-                            <span className="font-bold text-emerald-700">
-                              IDR {parseInt(String(rItem.amount), 10).toLocaleString('id-ID')}
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1074,7 +1081,7 @@ export default function ApprovalsPage() {
                   <div className="bg-white rounded-xl border border-orange-100 p-3 divide-y divide-gray-100 space-y-1.5">
                     {Object.entries(selectedItem.profile_new_data).map(([key, val]) => (
                       <div key={key} className="flex justify-between items-center pt-1.5 first:pt-0">
-                        <span className="text-gray-500 capitalize">{key.replace(/_/g, ' ')}</span>
+                        <span className="text-gray-500 capitalize">{key.replaceAll('_', ' ')}</span>
                         <span className="font-bold text-gray-900">{String(val)}</span>
                       </div>
                     ))}
