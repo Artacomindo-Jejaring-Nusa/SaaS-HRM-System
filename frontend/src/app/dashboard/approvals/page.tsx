@@ -927,7 +927,7 @@ export default function ApprovalsPage() {
                   {selectedItem.overtime_items && selectedItem.overtime_items.length > 0 ? (
                     <div className="border border-gray-200 rounded-2xl overflow-hidden divide-y divide-gray-100 bg-white shadow-xs">
                       {selectedItem.overtime_items.map((otItem) => {
-                        const otKey = `ot-${otItem.id ?? `${otItem.date}-${otItem.start_time}-${otItem.end_time}`}`;
+                        const otKey = `ot-${otItem.id ?? ''}-${otItem.date ?? ''}-${otItem.start_time ?? ''}-${otItem.end_time ?? ''}`;
                         return (
                           <div key={otKey} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                             <div>
@@ -1029,7 +1029,7 @@ export default function ApprovalsPage() {
                         <span>Nominal</span>
                       </div>
                       {selectedItem.reimbursement_items.map((rItem) => {
-                        const rKey = `r-${rItem.id ?? `${rItem.item_name}-${rItem.amount}-${rItem.description}`}`;
+                        const rKey = `r-${rItem.id ?? ''}-${rItem.item_name ?? ''}-${rItem.amount ?? ''}-${rItem.description ?? ''}`;
                         return (
                           <div key={rKey} className="p-3 flex justify-between items-center text-xs">
                             <div>
