@@ -357,7 +357,8 @@ export default function PayrollHistoryPage() {
                   <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest pl-8">Karyawan</th>
                   <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Gaji Pokok</th>
                   <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Tunjangan</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Potongan</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Pot. Disiplin</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Pajak & BPJS</th>
                   <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Net Payable (THP)</th>
                   <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Aksi</th>
                 </tr>
@@ -365,49 +366,61 @@ export default function PayrollHistoryPage() {
               <tbody className="divide-y divide-gray-50">
                 {filteredSalaries.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-10 text-gray-400 italic">
+                    <td colSpan={7} className="text-center py-10 text-gray-400 italic">
                       Tidak ada data karyawan yang cocok.
                     </td>
                   </tr>
                 ) : (
-                  filteredSalaries.map((salary: SalaryRecord) => (
-                    <tr key={salary.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-5 pl-8">
-                        <span className="font-bold text-gray-900 block">{salary.user?.name}</span>
-                        <span className="text-xs text-gray-400 font-medium block mt-0.5">{salary.department}</span>
-                      </td>
-                      <td className="px-6 py-5 font-semibold text-gray-600 text-sm">
-                        Rp {formatRupiah(salary.basic_salary)}
-                      </td>
-                      <td className="px-6 py-5 font-semibold text-emerald-600 text-sm">
-                        Rp {formatRupiah(parseAmount(salary.total_earnings) - parseAmount(salary.basic_salary))}
-                      </td>
-                      <td className="px-6 py-5 font-semibold text-rose-600 text-sm">
-                        Rp {formatRupiah(salary.total_deductions)}
-                      </td>
-                      <td className="px-6 py-5 font-black text-[#8B0000] text-sm">
-                        Rp {formatRupiah(salary.net_salary)}
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <div className="flex justify-center gap-1">
-                          <button 
-                            onClick={() => handlePreviewSlip(salary)}
-                            className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                            title="Lihat Slip"
-                          >
-                            <Eye size={18} />
-                          </button>
-                          <button 
-                            onClick={() => handleDownloadPDF(salary.id, salary.user?.name || "Karyawan")}
-                            className="p-2.5 text-gray-400 hover:text-[#8B0000] hover:bg-red-50 rounded-xl transition-all"
-                            title="Download PDF"
-                          >
-                            <Download size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  filteredSalaries.map((salary: SalaryRecord) => {
+                    const discDeduction = (parseFloat(salary.deduction_late as any) || 0) + (parseFloat(salary.deduction_absence as any) || 0);
+                    const taxAndBpjs = (parseFloat(salary.deduction_tax as any) || 0) + 
+                                       (parseFloat(salary.deduction_bpjs_jht as any) || 0) + 
+                                       (parseFloat(salary.deduction_bpjs_jp as any) || 0) + 
+                                       (parseFloat(salary.deduction_bpjs_kes as any) || 0);
+                    const allowances = parseAmount(salary.total_earnings) - parseAmount(salary.basic_salary);
+
+                    return (
+                      <tr key={salary.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-5 pl-8">
+                          <span className="font-bold text-gray-900 block">{salary.user?.name}</span>
+                          <span className="text-xs text-gray-400 font-medium block mt-0.5">{salary.department}</span>
+                        </td>
+                        <td className="px-6 py-5 font-semibold text-gray-600 text-sm">
+                          Rp {formatRupiah(salary.basic_salary)}
+                        </td>
+                        <td className="px-6 py-5 font-semibold text-emerald-600 text-sm">
+                          +Rp {formatRupiah(allowances)}
+                        </td>
+                        <td className="px-6 py-5 font-semibold text-rose-600 text-sm">
+                          {discDeduction > 0 ? `-Rp ${formatRupiah(discDeduction)}` : 'Rp 0'}
+                        </td>
+                        <td className="px-6 py-5 font-semibold text-orange-600 text-sm">
+                          -Rp {formatRupiah(taxAndBpjs)}
+                        </td>
+                        <td className="px-6 py-5 font-black text-[#8B0000] text-sm">
+                          Rp {formatRupiah(salary.net_salary)}
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <div className="flex justify-center gap-1">
+                            <button 
+                              onClick={() => handlePreviewSlip(salary)}
+                              className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                              title="Lihat Slip"
+                            >
+                              <Eye size={18} />
+                            </button>
+                            <button 
+                              onClick={() => handleDownloadPDF(salary.id, salary.user?.name || "Karyawan")}
+                              className="p-2.5 text-gray-400 hover:text-[#8B0000] hover:bg-red-50 rounded-xl transition-all"
+                              title="Download PDF"
+                            >
+                              <Download size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

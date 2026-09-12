@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Exports\AttendanceExport;
 use App\Models\Attendance;
+use App\Models\EmployeeTrack;
+use App\Events\EmployeeLocationUpdated;
 use App\Models\Office;
 use App\Models\Schedule;
 use App\Models\User;
@@ -84,6 +86,21 @@ class AttendanceController extends Controller
 
         $attendance = Attendance::create($attendanceData);
 
+        // Auto-record initial position into employee_tracks & broadcast live location to Superadmin
+        try {
+            $track = EmployeeTrack::create([
+                'user_id' => $user->id,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'accuracy' => 10.0,
+                'battery_level' => 100,
+                'recorded_at' => $now,
+            ]);
+            broadcast(new EmployeeLocationUpdated($track))->toOthers();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Auto track on checkIn failed: '.$e->getMessage());
+        }
+
         if ($isDinasLuar) {
             $this->sendDinasLuarNotifications($user, $attendance);
         } else {
@@ -161,6 +178,21 @@ class AttendanceController extends Controller
             'image_out' => $imageName,
         ]);
 
+        // Record checkout position into employee_tracks & broadcast live location
+        try {
+            $track = EmployeeTrack::create([
+                'user_id' => $user->id,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'accuracy' => 10.0,
+                'battery_level' => 100,
+                'recorded_at' => now(),
+            ]);
+            broadcast(new EmployeeLocationUpdated($track))->toOthers();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Auto track on checkOut failed: '.$e->getMessage());
+        }
+
         $this->notify(
             $user,
             'BERHASIL ABSEN KELUAR',
@@ -218,16 +250,20 @@ class AttendanceController extends Controller
         /** @var User $user */
         $user = Auth::user();
 
-        // Security check: Only Admin, HR, or Owner can see the map
-        $userRoleName = $user->role ? strtolower($user->role->name) : '';
-        if (str_contains($userRoleName, 'karyawan') && ! str_contains($userRoleName, 'admin') && ! str_contains($userRoleName, 'hr')) {
-            return $this->errorResponse('Akses ditolak. Fitur ini hanya untuk Admin/HR.', 403);
+        // Security check: Only Super Admin can access the attendance map
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+        if (! $isSuperAdmin && ! $user->hasPermission('view-attendance-map')) {
+            return $this->errorResponse('Akses ditolak. Fitur Peta Kehadiran hanya untuk Super Admin.', 403);
         }
 
-        $attendances = Attendance::with('user')
-            ->where('company_id', $user->company_id)
-            ->whereDate('check_in', Carbon::today())
-            ->get();
+        $query = Attendance::with('user')
+            ->whereDate('check_in', Carbon::today());
+
+        if (! $user->canAccessAllCompanies() && $user->company_id) {
+            $query->where('company_id', $user->company_id);
+        }
+
+        $attendances = $query->get();
 
         return $this->successResponse($attendances, 'Data heatmap absensi hari ini berhasil diambil.');
     }

@@ -85,7 +85,7 @@ const sidebarLinks: SidebarLink[] = [
     permission: 'view-attendances',
     submenus: [
       { name: "Live Attendance", href: "/dashboard/live-attendance", permission: 'apply-attendances' },
-      { name: "Live Tracking", href: "/dashboard/live-tracking", permission: 'view-attendances' },
+      { name: "Live Tracking", href: "/dashboard/live-tracking", permission: 'view-live-tracking' },
       { name: "attendance_history", href: "/dashboard/attendance", permission: 'view-attendances' },
       { name: "shift_swap", href: "/dashboard/shift-swap", permission: 'view-shift-swaps' },
       { name: "attendance_correction", href: "/dashboard/attendance-corrections", permission: 'manage-attendance-corrections' },
@@ -580,20 +580,33 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
             return (
               <li key={link.name}>
                 <button
-                  className={`dash-nav-link w-full dash-nav-group-btn ${hasActiveChild ? "dash-nav-group-active" : ""}`}
+                  type="button"
+                  className={`dash-nav-link w-full dash-nav-group-btn text-left ${hasActiveChild ? "dash-nav-group-active" : ""}`}
                   onClick={() => toggleGroup(link.name)}
                   title={!isSidebarOpen ? t(link.name) : undefined}
                 >
-                  <div className="flex items-center gap-[10px]">
-                    <Icon className="dash-nav-icon" />
-                    <span>{t(link.name)}</span>
+                  <div className="flex items-center gap-[10px] min-w-0 text-left">
+                    <Icon className="dash-nav-icon shrink-0" />
+                    <span className="truncate">{t(link.name)}</span>
                   </div>
-                  {isOpen ? <ChevronDown size={14} className="text-gray-400 group-chevron" /> : <ChevronRight size={14} className="text-gray-400 group-chevron" />}
+                  {isOpen ? <ChevronDown size={14} className="text-gray-400 group-chevron shrink-0" /> : <ChevronRight size={14} className="text-gray-400 group-chevron shrink-0" />}
                 </button>
                 {isOpen && (
                   <ul className="dash-submenu-list">
                     {filteredSubmenus.map((sub) => {
-                      const isActive = pathname === sub.href || pathname.startsWith(`${sub.href}/`);
+                      const isActive = (() => {
+                        if (pathname === sub.href) return true;
+                        if (pathname.startsWith(`${sub.href}/`)) {
+                          const hasMoreSpecificMatch = filteredSubmenus.some(
+                            otherSub => otherSub.href !== sub.href && 
+                                        otherSub.href.startsWith(sub.href) && 
+                                        (pathname === otherSub.href || pathname.startsWith(`${otherSub.href}/`))
+                          );
+                          return !hasMoreSpecificMatch;
+                        }
+                        return false;
+                      })();
+
                       return (
                         <li key={sub.href}>
                           <Link
@@ -601,8 +614,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                             onClick={onNavigate}
                             className={`dash-submenu-link ${isActive ? "dash-submenu-active" : ""}`}
                           >
-                            <span className="dash-submenu-dot" />
-                            {t(sub.name)}
+                            <span className="dash-submenu-dot shrink-0" />
+                            <span className="truncate">{t(sub.name)}</span>
                           </Link>
                         </li>
                       );
@@ -614,7 +627,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           }
 
           // Regular standalone links
-          const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
+          const isActive = pathname === link.href || (link.href !== "/dashboard" && pathname.startsWith(`${link.href}/`));
           return (
             <li key={link.href}>
               <Link
@@ -623,8 +636,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                 className={`dash-nav-link ${isActive ? "dash-nav-link-active" : ""}`}
                 title={!isSidebarOpen ? t(link.name) : undefined}
               >
-                <Icon className="dash-nav-icon" />
-                <span>{t(link.name)}</span>
+                <Icon className="dash-nav-icon shrink-0" />
+                <span className="truncate">{t(link.name)}</span>
               </Link>
             </li>
           );

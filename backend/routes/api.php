@@ -152,8 +152,9 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
 
     Route::middleware('permission:view-attendances')->group(function () {
         Route::get('/attendance/history', [AttendanceController::class, 'history']);
-        Route::get('/attendance/heatmap', [AttendanceController::class, 'heatmap']);
     });
+
+    Route::middleware('permission:view-attendance-map')->get('/attendance/heatmap', [AttendanceController::class, 'heatmap']);
 
     Route::middleware('permission:view-reports')->group(function () {
         Route::get('/attendance/suspicious', [AttendanceController::class, 'suspiciousRecords']);
@@ -494,8 +495,10 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
 
     // Employee Tracking (Live Location)
     Route::post('/tracking/update', [TrackingController::class, 'store']);
-    Route::get('/tracking/live', [TrackingController::class, 'live']);
-    Route::get('/tracking/history/{userId}', [TrackingController::class, 'history']);
+    Route::middleware('permission:view-live-tracking')->group(function () {
+        Route::get('/tracking/live', [TrackingController::class, 'live']);
+        Route::get('/tracking/history/{userId}', [TrackingController::class, 'history']);
+    });
 });
 
 // Exports (Authenticated via query token or header inside controller)

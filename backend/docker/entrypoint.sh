@@ -37,10 +37,10 @@ if [ $counter -ge $max_retries ]; then
     exit 1
 fi
 
-echo "[✓] MySQL Master is ready!"
-
 # Clear any existing caches that might interfere with initialization
 echo "[*] Preparing Laravel..."
+# Clean stale host volume cache files before Laravel boots
+rm -f /var/www/html/bootstrap/cache/*.php 2>/dev/null || true
 php artisan config:clear
 # cache:clear after config:clear needs explicit DB_CONNECTION since
 # Laravel 11 defaults to sqlite without cached config

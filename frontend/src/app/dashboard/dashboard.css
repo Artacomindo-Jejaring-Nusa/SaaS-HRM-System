@@ -165,7 +165,16 @@
   font-weight: 500;
   color: #5f6368;
   text-decoration: none;
+  text-align: left;
   transition: background 0.15s ease, color 0.15s ease;
+  width: 100%;
+}
+
+.dash-nav-link span {
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dash-nav-link:hover {
@@ -181,6 +190,7 @@
 
 .dash-nav-group-btn {
   justify-content: space-between;
+  text-align: left;
 }
 
 .dash-nav-group-active {
@@ -213,7 +223,16 @@
   font-weight: 500;
   color: #8c8fa3;
   text-decoration: none;
+  text-align: left;
+  white-space: nowrap;
   transition: color 0.15s ease;
+}
+
+.dash-submenu-link span {
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dash-submenu-link:hover {
@@ -231,6 +250,7 @@
   border-radius: 50%;
   background-color: currentColor;
   opacity: 0.5;
+  flex-shrink: 0;
 }
 
 .dash-submenu-active .dash-submenu-dot {

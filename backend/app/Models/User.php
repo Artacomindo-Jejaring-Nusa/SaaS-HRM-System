@@ -55,14 +55,22 @@ class User extends Authenticatable
             return false;
         }
         $roleName = $this->role->name;
+        $lowerRole = strtolower($roleName);
 
         // Broad list of roles that count as management/HR for data visibility
         $managerRoles = [
             'Manager', 'Supervisor', 'HRD', 'HRD Manager', 'Management',
             'Direktur', 'Direktur Utama', 'CEO', 'Super Admin', 'Admin',
+            'CEO / Direktur Utama', 'Finance Manager', 'Supervisor Operational', 'Supervisor Engineer',
         ];
 
-        return in_array($roleName, $managerRoles) || str_contains(strtolower($roleName), 'manager');
+        return in_array($roleName, $managerRoles) 
+            || str_contains($lowerRole, 'manager') 
+            || str_contains($lowerRole, 'supervisor') 
+            || str_contains($lowerRole, 'direktur') 
+            || str_contains($lowerRole, 'head') 
+            || str_contains($lowerRole, 'leader') 
+            || str_contains($lowerRole, 'hrd');
     }
 
     protected function casts(): array

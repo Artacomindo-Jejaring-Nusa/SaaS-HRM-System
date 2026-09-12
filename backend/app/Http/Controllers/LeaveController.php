@@ -487,19 +487,21 @@ class LeaveController extends Controller
     public function destroy(Request $request, $id): \Illuminate\Http\JsonResponse
     {
         $user = $request->user();
-        $leave = Leave::where(function ($q) use ($user) {
-            if ($user->role_id !== 1) {
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+
+        $leave = Leave::where(function ($q) use ($user, $isSuperAdmin) {
+            if (!$isSuperAdmin && !$user->canAccessAllCompanies()) {
                 $q->where('company_id', $user->company_id);
             }
         })->findOrFail($id);
 
-        if (! in_array($leave->status, ['pending', 'pending_supervisor', 'pending_hr']) && $user->role_id !== 1) {
+        if (! $isSuperAdmin && ! in_array($leave->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
             return $this->errorResponse('Cuti yang sudah diproses tidak bisa dihapus.', 403);
         }
 
         $leave->delete();
 
-        return $this->successResponse(null, 'Cuti berhasil dihapus.');
+        return $this->successResponse(null, 'Permohonan cuti berhasil dihapus.');
     }
 
     public function getLeaveTypes(): \Illuminate\Http\JsonResponse

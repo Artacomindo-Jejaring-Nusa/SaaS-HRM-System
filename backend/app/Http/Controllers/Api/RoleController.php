@@ -11,7 +11,7 @@ class RoleController extends Controller
 {
     public function index()
     {
-        $roles = Role::withCount('users')->get();
+        $roles = Role::withCount('users')->orderBy('id', 'asc')->get();
 
         return response()->json([
             'success' => true,
@@ -65,6 +65,13 @@ class RoleController extends Controller
     {
         $role = Role::findOrFail($id);
 
+        if ((int) $id === 1 || $role->name === 'Super Admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Role bawaan Super Admin tidak dapat dihapus',
+            ], 403);
+        }
+
         if ($role->users()->count() > 0) {
             return response()->json([
                 'success' => false,
@@ -94,10 +101,10 @@ class RoleController extends Controller
     {
         $role = Role::findOrFail($id);
         $request->validate([
-            'permissions' => 'required|array',
+            'permissions' => 'present|array',
         ]);
 
-        $role->permissions()->sync($request->permissions);
+        $role->permissions()->sync($request->permissions ?? []);
 
         return response()->json([
             'success' => true,

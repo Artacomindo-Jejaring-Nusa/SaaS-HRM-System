@@ -103,12 +103,13 @@ export default function PayrollProcessPage() {
 
   const fetchStats = async () => {
     try {
-      const res = await axiosInstance.get('/employees');
+      const res = await axiosInstance.get('/employees?per_page=1000');
       const employees = res.data.data.data || [];
+      const total = res.data.data.total ?? employees.length;
       const unsaved = employees.filter((e: any) => !e.basic_salary || parseInt(e.basic_salary) === 0).length;
-      setStats({ total_employees: employees.length, unsaved_profiles: unsaved });
+      setStats({ total_employees: total, unsaved_profiles: unsaved });
     } catch (e) {
-      console.error(e);
+      console.error("Gagal mengambil statistik karyawan:", e);
     }
   };
 

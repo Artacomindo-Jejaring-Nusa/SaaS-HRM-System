@@ -349,6 +349,9 @@ class ApiService {
   // ============ EMPLOYEE TRACKING ============
 
   static Future<Map<String, dynamic>> updateLiveLocation(
-          double lat, double lng, double accuracy) =>
-      TrackingRepository.updateLiveLocation(lat, lng, accuracy);
+          double lat, double lng, double accuracy,
+          {int? batteryLevel, DateTime? recordedAt}) =>
+      TrackingRepository.updateLiveLocation(lat, lng, accuracy,
+          batteryLevel: batteryLevel, recordedAt: recordedAt);
 }
+

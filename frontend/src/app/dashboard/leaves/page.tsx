@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
 import { downloadFile, sanitizeFileName } from "@/lib/downloadHelper";
 import { toast } from "sonner";
-import { Plus, Search, X, Eye, Plane, Printer, Check, ArrowLeft, FileDown } from "lucide-react";
+import { Plus, Search, X, Eye, Plane, Printer, Check, ArrowLeft, FileDown, Trash2 } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import SignaturePad from "@/components/SignaturePad";
 import { useAuth } from "@/contexts/AuthContext";
@@ -759,9 +759,23 @@ export default function LeavesPage() {
     }
   };
 
+  const isSuperAdmin = user?.role_id === 1 || user?.role?.name === 'Super Admin';
+
   const handleViewDetail = (item: LeaveRecord) => {
     setSelectedItem(item);
     setViewMode("detail");
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus permohonan cuti ini?")) return;
+    try {
+      await axiosInstance.delete(`/leave/${id}`);
+      toast.success("Permohonan cuti berhasil dihapus.");
+      fetchLeaves(page);
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error(err.response?.data?.message || "Gagal menghapus permohonan cuti.");
+    }
   };
 
   const handlePrint = (e: React.MouseEvent) => {
@@ -1008,6 +1022,15 @@ export default function LeavesPage() {
                             >
                               <Eye size={16} />
                             </button>
+                            {(isSuperAdmin || hasPermission('delete-leaves')) && (
+                              <button 
+                                className="dash-action-btn delete text-red-600 hover:bg-red-50" 
+                                title="Hapus Pengajuan Cuti"
+                                onClick={() => handleDelete(leave.id)}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1109,6 +1132,17 @@ export default function LeavesPage() {
               >
                 <FileDown size={15} /> Unduh Excel
               </button>
+              {(isSuperAdmin || hasPermission('delete-leaves')) && (
+                <button 
+                  onClick={() => {
+                    handleDelete(selectedItem.id);
+                    setViewMode("list");
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-red-700 bg-red-50 hover:bg-red-100 rounded border border-red-200 transition-colors"
+                >
+                  <Trash2 size={15} /> Hapus Cuti
+                </button>
+              )}
             </div>
           </div>
 

@@ -107,7 +107,7 @@ interface DashboardData {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, hasPermission, loading: authLoading } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewEmployeeId, setViewEmployeeId] = useState<string | null>(null);
@@ -467,27 +467,29 @@ export default function DashboardPage() {
 
       </div>
 
-      {/* REAL-TIME ACTIVITY SECTION */}
-      <div className="grid grid-cols-1 mb-6">
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm overflow-hidden">
-           <div className="flex items-center justify-between mb-6">
-             <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
-               <div className="w-1.5 h-4 bg-[#8B0000] rounded-full"></div>
-               Real-time Live Location
-             </h3>
-             <button 
-              onClick={() => router.push('/dashboard/attendance/map')} 
-              className="text-[10px] font-black text-[#8B0000] hover:underline uppercase tracking-widest"
-             >
-               View Full Map
-             </button>
-           </div>
-           {/* Add 'isolate z-0' here so Leaflet's high z-index panes don't overlap the fixed page header */}
-           <div className="h-[400px] w-full rounded-xl overflow-hidden border border-gray-50 relative isolate z-0">
-              <AttendanceMap />
-           </div>
+      {/* REAL-TIME ACTIVITY SECTION (Super Admin Only) */}
+      {hasPermission('view-attendance-map') && (
+        <div className="grid grid-cols-1 mb-6">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm overflow-hidden">
+             <div className="flex items-center justify-between mb-6">
+               <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                 <div className="w-1.5 h-4 bg-[#8B0000] rounded-full"></div>
+                 Real-time Live Location
+               </h3>
+               <button 
+                onClick={() => router.push('/dashboard/attendance/map')} 
+                className="text-[10px] font-black text-[#8B0000] hover:underline uppercase tracking-widest"
+               >
+                 View Full Map
+               </button>
+             </div>
+             {/* Add 'isolate z-0' here so Leaflet's high z-index panes don't overlap the fixed page header */}
+             <div className="h-[400px] w-full rounded-xl overflow-hidden border border-gray-50 relative isolate z-0">
+                <AttendanceMap />
+             </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ANALYTICS CHARTS ROW */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">

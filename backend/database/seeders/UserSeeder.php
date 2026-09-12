@@ -29,7 +29,7 @@ class UserSeeder extends Seeder
             ['email' => 'superadmin@example.com'],
             [
                 'name' => 'Super Admin',
-                'password' => Hash::make('password'),
+                'password' => 'password',
                 'company_id' => $company->id,
                 'role_id' => $superAdminRole->id,
                 'ktp_no' => '3171234567800001',

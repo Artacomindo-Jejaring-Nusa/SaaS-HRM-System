@@ -438,63 +438,76 @@ export default function PayrollApprovalPage() {
                       <th className="p-4 text-xs font-black text-gray-400 uppercase tracking-widest">Bagian</th>
                       <th className="p-4 text-xs font-black text-gray-400 uppercase tracking-widest text-right">Gaji Pokok</th>
                       <th className="p-4 text-xs font-black text-gray-400 uppercase tracking-widest text-right">Tunjangan</th>
-                      <th className="p-4 text-xs font-black text-gray-400 uppercase tracking-widest text-right">Potongan</th>
+                      <th className="p-4 text-xs font-black text-gray-400 uppercase tracking-widest text-right">Pot. Disiplin</th>
+                      <th className="p-4 text-xs font-black text-gray-400 uppercase tracking-widest text-right">Pajak & BPJS</th>
                       <th className="p-4 text-xs font-black text-[#8B0000] uppercase tracking-widest text-right">THP</th>
                       <th className="p-4 text-xs font-black text-gray-400 uppercase tracking-widest text-center">Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {batchDetails.salaries.map((salary: any) => (
-                      <tr key={salary.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                        <td className="p-4">
-                          <div className="font-bold text-gray-900">{salary.user?.name}</div>
-                          <div className="text-xs text-gray-500">{salary.bank_name} - {salary.bank_account_no}</div>
-                        </td>
-                        <td className="p-4 text-sm font-medium text-gray-600">{salary.department}</td>
-                        <td className="p-4 text-sm font-medium text-gray-900 text-right">
-                          {new Intl.NumberFormat('id-ID').format(salary.basic_salary)}
-                        </td>
-                        <td className="p-4 text-sm font-medium text-gray-600 text-right">
-                          {new Intl.NumberFormat('id-ID').format(salary.total_earnings - salary.basic_salary)}
-                        </td>
-                        <td className="p-4 text-sm font-medium text-red-500 text-right">
-                          {new Intl.NumberFormat('id-ID').format(salary.total_deductions)}
-                        </td>
-                        <td className="p-4 text-sm font-black text-[#8B0000] text-right">
-                          {new Intl.NumberFormat('id-ID').format(salary.net_salary)}
-                        </td>
-                        <td className="p-4">
-                          <div className="flex justify-center gap-1">
-                            {['draft', 'rejected'].includes(batchDetails.status) ? (
-                              <button 
-                                onClick={() => setEditingSalary({...salary})}
-                                className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors"
-                                title="Edit Tunjangan & Potongan"
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                            ) : (
-                              <>
+                    {batchDetails.salaries.map((salary: any) => {
+                      const discDeduction = (parseFloat(salary.deduction_late) || 0) + (parseFloat(salary.deduction_absence) || 0);
+                      const taxAndBpjs = (parseFloat(salary.deduction_tax) || 0) + 
+                                         (parseFloat(salary.deduction_bpjs_jht) || 0) + 
+                                         (parseFloat(salary.deduction_bpjs_jp) || 0) + 
+                                         (parseFloat(salary.deduction_bpjs_kes) || 0);
+                      const allowances = (parseFloat(salary.total_earnings) || 0) - (parseFloat(salary.basic_salary) || 0);
+
+                      return (
+                        <tr key={salary.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                          <td className="p-4">
+                            <div className="font-bold text-gray-900">{salary.user?.name}</div>
+                            <div className="text-xs text-gray-500">{salary.bank_name} - {salary.bank_account_no}</div>
+                          </td>
+                          <td className="p-4 text-sm font-medium text-gray-600">{salary.department}</td>
+                          <td className="p-4 text-sm font-medium text-gray-900 text-right">
+                            Rp {new Intl.NumberFormat('id-ID').format(salary.basic_salary || 0)}
+                          </td>
+                          <td className="p-4 text-sm font-medium text-emerald-600 text-right">
+                            +Rp {new Intl.NumberFormat('id-ID').format(allowances || 0)}
+                          </td>
+                          <td className="p-4 text-sm font-medium text-rose-600 text-right">
+                            {discDeduction > 0 ? `-Rp ${new Intl.NumberFormat('id-ID').format(discDeduction)}` : 'Rp 0'}
+                          </td>
+                          <td className="p-4 text-sm font-medium text-orange-600 text-right">
+                            -Rp {new Intl.NumberFormat('id-ID').format(taxAndBpjs || 0)}
+                          </td>
+                          <td className="p-4 text-sm font-black text-[#8B0000] text-right">
+                            Rp {new Intl.NumberFormat('id-ID').format(salary.net_salary || 0)}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex justify-center gap-1">
+                              {['draft', 'rejected'].includes(batchDetails.status) ? (
                                 <button 
-                                  onClick={() => handlePreviewSlip(salary)}
-                                  className="w-8 h-8 flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
-                                  title="Lihat Slip"
+                                  onClick={() => setEditingSalary({...salary})}
+                                  className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors"
+                                  title="Edit Tunjangan & Potongan"
                                 >
-                                  <Eye size={14} />
+                                  <Edit2 size={14} />
                                 </button>
-                                <button 
-                                  onClick={() => handleDownloadSlipPDF(salary)}
-                                  className="w-8 h-8 flex items-center justify-center bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-lg transition-colors"
-                                  title="Download PDF"
-                                >
-                                  <Download size={14} />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                              ) : (
+                                <>
+                                  <button 
+                                    onClick={() => handlePreviewSlip(salary)}
+                                    className="w-8 h-8 flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
+                                    title="Lihat Slip"
+                                  >
+                                    <Eye size={14} />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDownloadSlipPDF(salary)}
+                                    className="w-8 h-8 flex items-center justify-center bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-lg transition-colors"
+                                    title="Download PDF"
+                                  >
+                                    <Download size={14} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -565,15 +578,27 @@ export default function PayrollApprovalPage() {
                 {/* Kolom Kanan: Potongan & Info */}
                 <div className="space-y-6">
                   <div className="space-y-4">
-                    <h4 className="font-bold text-gray-900 border-b border-gray-100 pb-2">Potongan Manual</h4>
+                    <h4 className="font-bold text-gray-900 border-b border-gray-100 pb-2">Potongan Disiplin & Penyesuaian</h4>
                     
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold text-gray-600">Potongan Absensi</label>
+                      <label className="text-xs font-bold text-gray-600">Potongan Keterlambatan (Late Deduction)</label>
                       <input 
                         type="number" 
-                        value={editingSalary.deduction_absence} 
+                        value={editingSalary.deduction_late || 0} 
+                        onChange={(e) => setEditingSalary({...editingSalary, deduction_late: e.target.value})}
+                        className="w-full h-12 bg-red-50 text-red-600 border-none rounded-xl px-4 font-bold focus:ring-2 focus:ring-red-500/20"
+                        placeholder="Rp 0"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-gray-600">Potongan Absensi / Alfa (Absence Deduction)</label>
+                      <input 
+                        type="number" 
+                        value={editingSalary.deduction_absence || 0} 
                         onChange={(e) => setEditingSalary({...editingSalary, deduction_absence: e.target.value})}
                         className="w-full h-12 bg-red-50 text-red-600 border-none rounded-xl px-4 font-bold focus:ring-2 focus:ring-red-500/20"
+                        placeholder="Rp 0"
                       />
                     </div>
                   </div>

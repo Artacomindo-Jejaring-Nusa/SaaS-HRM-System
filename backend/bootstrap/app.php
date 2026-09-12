@@ -11,6 +11,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
+use Illuminate\Http\Exceptions\ThrottleRequestsException as LaravelThrottleException;
 use Symfony\Component\HttpKernel\Exception\ThrottleRequestsException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -30,12 +31,12 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->render(function (ThrottleRequestsException $e, $request) {
+        $exceptions->render(function (ThrottleRequestsException|LaravelThrottleException $e, $request) {
             if ($request->is('api/*')) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Terlalu banyak permintaan (Rate limit terlampaui). Silakan coba lagi nanti.',
-                    'retry_after' => $e->getHeaders()['Retry-After'] ?? 60,
+                    'retry_after' => method_exists($e, 'getHeaders') ? ($e->getHeaders()['Retry-After'] ?? 60) : 60,
                 ], 429);
             }
         });
@@ -77,13 +78,17 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
-        $exceptions->render(function (Exception $e, $request) {
+        $exceptions->render(function (\Throwable $e, $request) {
             if ($request->is('api/*')) {
-                $debugMsg = config('app.debug') ? ': '.$e->getMessage() : '';
+                \Illuminate\Support\Facades\Log::error('API Error: '.$e->getMessage(), [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
 
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Terjadi kesalahan sistem internal'.$debugMsg,
+                    'message' => 'Terjadi kesalahan sistem internal: '.$e->getMessage(),
                 ], 500);
             }
         });

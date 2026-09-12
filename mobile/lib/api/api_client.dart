@@ -22,7 +22,7 @@ class ApiClient {
   /// Toggle between Development and Production
   static const String _prodIp = 'ontime.jelantik.com';
   static const String _devIp =
-      '2.2.2.42'; // Standard Android Emulator local address
+      '2.2.2.104'; // Standard Android Emulator local address
 
   static String get serverIp => kDebugMode ? _devIp : _prodIp;
 

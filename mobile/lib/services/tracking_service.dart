@@ -89,28 +89,63 @@ void onStart(ServiceInstance service) async {
     service.stopSelf();
   });
 
-  // Init Geolocator Settings
-  const LocationSettings locationSettings = LocationSettings(
-    accuracy: LocationAccuracy.high,
-    distanceFilter: 10, // Send update when device moves 10 meters
-  );
-
-  // Send periodic updates or stream listen
-  Geolocator.getPositionStream(locationSettings: locationSettings).listen((Position position) async {
-    // Save to backend
+  // Helper function to send location update
+  Future<void> sendLocationUpdate(Position position) async {
     try {
-      await ApiService.updateLiveLocation(position.latitude, position.longitude, position.accuracy);
+      await ApiService.updateLiveLocation(
+        position.latitude,
+        position.longitude,
+        position.accuracy,
+        recordedAt: DateTime.now(),
+      );
+
+      if (service is AndroidServiceInstance) {
+        final now = DateTime.now();
+        final timeStr =
+            "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
+        service.setForegroundNotificationInfo(
+          title: "Live Tracking Aktif",
+          content: "Lokasi GPS diperbarui pada $timeStr",
+        );
+      }
     } catch (e) {
       debugPrint("Gagal kirim live tracking: $e");
     }
+  }
 
-    if (service is AndroidServiceInstance) {
-      final now = DateTime.now();
-      final timeStr = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
-      service.setForegroundNotificationInfo(
-        title: "Live Tracking Aktif",
-        content: "Lokasi diperbarui pada $timeStr",
+  // 1. Send initial location immediately upon start
+  try {
+    Position initialPos = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+      timeLimit: const Duration(seconds: 10),
+    );
+    await sendLocationUpdate(initialPos);
+  } catch (e) {
+    debugPrint("Initial location check failed: $e");
+  }
+
+  // 2. Stream position on movement (every 10 meters)
+  const LocationSettings locationSettings = LocationSettings(
+    accuracy: LocationAccuracy.high,
+    distanceFilter: 10,
+  );
+
+  Geolocator.getPositionStream(locationSettings: locationSettings)
+      .listen((Position position) async {
+    await sendLocationUpdate(position);
+  });
+
+  // 3. Periodic heartbeat timer (every 60s) to keep status Online even if stationary
+  Timer.periodic(const Duration(seconds: 60), (timer) async {
+    try {
+      Position currentPos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
       );
+      await sendLocationUpdate(currentPos);
+    } catch (e) {
+      debugPrint("Periodic location heartbeat failed: $e");
     }
   });
 }
+

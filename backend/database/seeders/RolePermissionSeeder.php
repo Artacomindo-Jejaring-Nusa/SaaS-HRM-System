@@ -59,6 +59,7 @@ class RolePermissionSeeder extends Seeder
             ['name' => 'Lakukan Absensi', 'slug' => 'apply-attendances', 'group' => 'Kehadiran'],
             ['name' => 'Lihat Absensi', 'slug' => 'view-attendances', 'group' => 'Kehadiran'],
             ['name' => 'Lihat Map Absensi', 'slug' => 'view-attendance-map', 'group' => 'Kehadiran'],
+            ['name' => 'Lihat Live Tracking Teknisi', 'slug' => 'view-live-tracking', 'group' => 'Kehadiran'],
             ['name' => 'Lihat Laporan Absensi', 'slug' => 'view-attendance-reports', 'group' => 'Kehadiran'],
             ['name' => 'Export Laporan Absensi', 'slug' => 'export-attendance', 'group' => 'Kehadiran'],
             ['name' => 'Kelola Koreksi Absen', 'slug' => 'manage-attendance-corrections', 'group' => 'Kehadiran'],
@@ -116,43 +117,108 @@ class RolePermissionSeeder extends Seeder
             Permission::updateOrCreate(['slug' => $p['slug']], $p);
         }
 
+        // 1. Super Admin
         $admin = Role::updateOrCreate(['name' => 'Super Admin']);
-        $hrd = Role::updateOrCreate(['name' => 'HRD Manager']);
-        $staff = Role::updateOrCreate(['name' => 'Staff Karyawan']);
+        // 2. HRD Manager
+        $hrdManager = Role::updateOrCreate(['name' => 'HRD Manager']);
+        // 3. Staff Karyawan
+        $staffKaryawan = Role::updateOrCreate(['name' => 'Staff Karyawan']);
+        // 4. Direktur
         $direktur = Role::updateOrCreate(['name' => 'Direktur']);
+        // 5. Manager
         $manager = Role::updateOrCreate(['name' => 'Manager']);
+        // 6. Supervisor
         $supervisor = Role::updateOrCreate(['name' => 'Supervisor']);
+        // 7. CEO / Direktur Utama
+        $ceo = Role::updateOrCreate(['name' => 'CEO / Direktur Utama']);
+        // 8. HRD
+        $hrd = Role::updateOrCreate(['name' => 'HRD']);
+        // 9. Finance Manager
+        $financeManager = Role::updateOrCreate(['name' => 'Finance Manager']);
+        // 10. Supervisor Operational
+        $spvOps = Role::updateOrCreate(['name' => 'Supervisor Operational']);
+        // 11. Staff Teknisi
+        $staffTeknisi = Role::updateOrCreate(['name' => 'Staff Teknisi']);
+        // 12. Supervisor Engineer
+        $spvEng = Role::updateOrCreate(['name' => 'Supervisor Engineer']);
 
         $allPermissions = Permission::all()->pluck('id');
+        // Only Super Admin has all permissions including live tracking & attendance map
         $admin->permissions()->sync($allPermissions);
-        $direktur->permissions()->sync($allPermissions);
 
-        $managerPermissions = Permission::whereIn('group', [
-            'Pegawai', 'Cuti', 'Perizinan', 'Reimbursement', 'Lembur', 'Operasional', 'Performa', 'Kehadiran', 'Tukar Shift', 'Proyek', 'Kendaraan', 'Tugas', 'Dokumen',
-        ])->whereNotIn('slug', ['delete-employees', 'manage-roles', 'manage-company'])->pluck('id');
-        $manager->permissions()->sync($managerPermissions);
-
-        $supervisorPermissions = Permission::whereIn('slug', [
-            'view-employees', 'view-directory', 'view-organization',
-            'view-leaves', 'approve-leaves',
-            'view-permits', 'approve-permits',
-            'view-reimbursements', 'approve-reimbursements',
-            'view-overtimes', 'approve-overtimes',
-            'view-kpis', 'view-attendance-map', 'view-attendance-reports', 'view-attendances', 'view-reports',
-            'manage-shifts', 'manage-schedules', 'manage-approvals', 'view-announcements',
-            'view-shift-swaps', 'approve-shift-swaps', 'view-shift-swap-reports', 'export-shift-swaps',
-            'view-projects', 'approve-project-costs',
-            'view-vehicle-logs', 'approve-vehicle-logs', 'view-vehicle-reports',
-            'view-tasks', 'manage-tasks', 'view-documents',
-            'view-fund-requests', 'apply-fund-requests', 'approve-fund-requests',
+        // Direktur & CEO (All except Super Admin exclusive tracking / map / system settings)
+        $executivePermissions = Permission::whereNotIn('slug', [
+            'view-attendance-map', 'view-live-tracking', 'manage-roles', 'manage-company',
         ])->pluck('id');
-        $supervisor->permissions()->sync($supervisorPermissions);
+        $direktur->permissions()->sync($executivePermissions);
+        $ceo->permissions()->sync($executivePermissions);
 
+        // HRD Manager Permissions (All except super admin exclusive & system settings)
+        $hrdManagerPermissions = Permission::whereNotIn('slug', [
+            'manage-roles', 'manage-company', 'view-attendance-map', 'view-live-tracking',
+        ])->pluck('id');
+        $hrdManager->permissions()->sync($hrdManagerPermissions);
+
+        // HRD Permissions
         $hrdPermissions = Permission::whereIn('group', [
-            'Pegawai', 'Cuti', 'Perizinan', 'Reimbursement', 'Lembur', 'Operasional', 'Performa', 'Kehadiran', 'Tukar Shift', 'Proyek', 'Kendaraan', 'Tugas', 'Payroll', 'Dokumen',
-        ])->pluck('id');
+            'Pegawai', 'Cuti', 'Perizinan', 'Reimbursement', 'Lembur', 'Operasional', 'Performa', 'Kehadiran', 'Tukar Shift', 'Payroll', 'Dokumen', 'Keuangan',
+        ])->whereNotIn('slug', ['manage-roles', 'manage-company', 'view-attendance-map', 'view-live-tracking'])->pluck('id');
         $hrd->permissions()->sync($hrdPermissions);
 
+        // Manager Permissions
+        $managerPermissions = Permission::whereIn('group', [
+            'Pegawai', 'Cuti', 'Perizinan', 'Reimbursement', 'Lembur', 'Operasional', 'Performa', 'Kehadiran', 'Tukar Shift', 'Proyek', 'Kendaraan', 'Tugas', 'Dokumen', 'Keuangan',
+        ])->whereNotIn('slug', ['delete-employees', 'manage-roles', 'manage-company', 'view-attendance-map', 'view-live-tracking'])->pluck('id');
+        $manager->permissions()->sync($managerPermissions);
+
+        // Finance Manager Permissions
+        $financePermissions = Permission::whereIn('slug', [
+            'view-employees', 'view-directory', 'view-organization',
+            'view-leaves', 'apply-leaves', 'approve-leaves',
+            'view-permits', 'apply-permits', 'approve-permits',
+            'view-reimbursements', 'apply-reimbursements', 'approve-reimbursements',
+            'view-overtimes', 'apply-overtimes', 'approve-overtimes',
+            'view-salaries', 'manage-payroll', 'view-payroll-reports',
+            'view-fund-requests', 'apply-fund-requests', 'approve-fund-requests',
+            'view-projects', 'manage-project-budgets', 'approve-project-costs',
+            'view-reports', 'view-documents', 'manage-documents', 'view-announcements',
+        ])->pluck('id');
+        $financeManager->permissions()->sync($financePermissions);
+
+        // Supervisor Permissions (General)
+        $supervisorPermissions = Permission::whereIn('slug', [
+            'view-employees', 'view-directory', 'view-organization',
+            'view-leaves', 'apply-leaves', 'approve-leaves',
+            'view-permits', 'apply-permits', 'approve-permits',
+            'view-reimbursements', 'apply-reimbursements', 'approve-reimbursements',
+            'view-overtimes', 'apply-overtimes', 'approve-overtimes',
+            'view-kpis', 'view-attendance-reports', 'view-attendances', 'view-reports',
+            'manage-shifts', 'manage-schedules', 'manage-approvals', 'view-announcements',
+            'view-shift-swaps', 'apply-shift-swaps', 'approve-shift-swaps', 'view-shift-swap-reports', 'export-shift-swaps',
+            'view-projects', 'approve-project-costs',
+            'view-vehicle-logs', 'apply-vehicle-logs', 'approve-vehicle-logs', 'view-vehicle-reports',
+            'view-tasks', 'manage-tasks', 'view-documents',
+            'view-fund-requests', 'apply-fund-requests', 'approve-fund-requests', 'view-salaries',
+        ])->pluck('id');
+        $supervisor->permissions()->sync($supervisorPermissions);
+        $spvOps->permissions()->sync($supervisorPermissions);
+
+        // Supervisor Engineer Permissions
+        $spvEngPermissions = Permission::whereIn('slug', [
+            'view-employees', 'view-directory', 'view-organization',
+            'view-leaves', 'apply-leaves', 'approve-leaves',
+            'view-permits', 'apply-permits', 'approve-permits',
+            'view-reimbursements', 'apply-reimbursements', 'approve-reimbursements',
+            'view-overtimes', 'apply-overtimes', 'approve-overtimes',
+            'view-kpis', 'view-attendances', 'view-reports',
+            'view-projects', 'create-projects', 'edit-projects', 'manage-project-budgets', 'approve-project-costs',
+            'view-vehicle-logs', 'apply-vehicle-logs', 'approve-vehicle-logs',
+            'view-tasks', 'manage-tasks', 'view-documents', 'manage-documents',
+            'view-fund-requests', 'apply-fund-requests', 'approve-fund-requests', 'view-salaries',
+        ])->pluck('id');
+        $spvEng->permissions()->sync($spvEngPermissions);
+
+        // Staff Karyawan & Staff Teknisi (Self-Service)
         $staffPermissions = Permission::whereIn('slug', [
             'view-directory', 'view-organization', 'view-announcements',
             'view-leaves', 'apply-leaves',
@@ -167,6 +233,7 @@ class RolePermissionSeeder extends Seeder
             'view-tasks', 'view-salaries', 'view-documents',
             'view-fund-requests', 'apply-fund-requests',
         ])->pluck('id');
-        $staff->permissions()->sync($staffPermissions);
+        $staffKaryawan->permissions()->sync($staffPermissions);
+        $staffTeknisi->permissions()->sync($staffPermissions);
     }
 }

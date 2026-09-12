@@ -162,7 +162,31 @@ export default function RolesPage() {
     });
   };
 
-  const filteredRoles = roles.filter(r => 
+  const roleOrder = [
+    "Super Admin",
+    "HRD Manager",
+    "Staff Karyawan",
+    "Direktur",
+    "Manager",
+    "Supervisor",
+    "CEO / Direktur Utama",
+    "HRD",
+    "Finance Manager",
+    "Supervisor Operational",
+    "Staff Teknisi",
+    "Supervisor Engineer",
+  ];
+
+  const sortedRoles = [...roles].sort((a, b) => {
+    const indexA = roleOrder.indexOf(a.name);
+    const indexB = roleOrder.indexOf(b.name);
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+    if (indexA !== -1) return -1;
+    if (indexB !== -1) return 1;
+    return a.id - b.id;
+  });
+
+  const filteredRoles = sortedRoles.filter(r => 
     r.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 

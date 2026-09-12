@@ -84,25 +84,28 @@ class RealCompanySeeder extends Seeder
         // 4. Define Roles Matching Real Company Structure
         // ═══════════════════════════════════════════════════════
         $allPermIds = Permission::all()->pluck('id');
+        $nonSuperAdminPermIds = Permission::whereNotIn('slug', [
+            'view-attendance-map', 'view-live-tracking', 'manage-roles', 'manage-company',
+        ])->pluck('id');
 
         $rolesData = [
             // Super Admin → ALL permissions (system administrator)
             'Super Admin' => $allPermIds,
 
-            // CEO (Board of Commissioners) → ALL permissions
-            'CEO / BOC' => $allPermIds,
+            // CEO (Board of Commissioners) → Management permissions (No Super Admin exclusive map/tracking)
+            'CEO / BOC' => $nonSuperAdminPermIds,
 
-            // COO → ALL permissions
-            'COO' => $allPermIds,
+            // COO → Management permissions (No Super Admin exclusive map/tracking)
+            'COO' => $nonSuperAdminPermIds,
 
-            // Anggota Direksi (Board Member) → ALL except system config
-            'Anggota Direksi' => $allPermIds,
+            // Anggota Direksi (Board Member) → Management permissions (No Super Admin exclusive map/tracking)
+            'Anggota Direksi' => $nonSuperAdminPermIds,
 
             // Admin VP → Can view, approve, manage within their division
             'Admin VP' => Permission::whereIn('group', [
                 'Pegawai', 'Cuti', 'Perizinan', 'Pengaturan', 'Payroll',
                 'Reimbursement', 'Lembur', 'Tugas', 'Kehadiran', 'Kendaraan',
-            ])->pluck('id'),
+            ])->whereNotIn('slug', ['view-attendance-map', 'view-live-tracking', 'manage-roles', 'manage-company'])->pluck('id'),
 
             // Kadiv / Direktur → Can view, approve within their scope
             'Kadiv Direktur' => Permission::whereIn('slug', [
@@ -144,13 +147,13 @@ class RealCompanySeeder extends Seeder
             // Finance Manager → Financial focus
             'Finance Manager' => Permission::whereIn('group', [
                 'Reimbursement', 'Payroll', 'Kehadiran',
-            ])->pluck('id'),
+            ])->whereNotIn('slug', ['view-attendance-map', 'view-live-tracking', 'manage-roles', 'manage-company'])->pluck('id'),
 
             // HRD Manager (Full HR Authority)
             'HRD Manager' => Permission::whereIn('group', [
                 'Pegawai', 'Cuti', 'Perizinan', 'Pengaturan', 'Payroll',
                 'Reimbursement', 'Lembur', 'Tugas', 'Kehadiran', 'Kendaraan',
-            ])->pluck('id'),
+            ])->whereNotIn('slug', ['view-attendance-map', 'view-live-tracking', 'manage-roles', 'manage-company'])->pluck('id'),
 
             // HRD (Staff level)
             'HRD' => Permission::whereIn('slug', [
@@ -170,7 +173,7 @@ class RealCompanySeeder extends Seeder
         // ═══════════════════════════════════════════════════════
         // 5. Helper to create users
         // ═══════════════════════════════════════════════════════
-        $defaultPassword = Hash::make('password');
+        $defaultPassword = 'password';
         $createUser = function ($email, $name, $roleName, $supervisorId, $nik, $bagian = null, $extra = []) use ($company, $office, $roles, $defaultPassword) {
             // Generate deterministic date_of_birth per NIK across all 12 months
             $hash = md5($nik);

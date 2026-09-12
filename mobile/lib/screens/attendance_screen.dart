@@ -7,6 +7,7 @@ import 'package:camera/camera.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import '../api/api_service.dart';
+import '../services/tracking_service.dart';
 
 class AttendanceScreen extends StatefulWidget {
   final bool isCheckIn;
@@ -215,6 +216,25 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       }
 
       if (result != null && (result['status'] == 'success' || result['status'] == true)) {
+        // Auto-start Live Tracking for Clerk, Teknisi, & all field employees on Check-In
+        if (widget.isCheckIn) {
+          try {
+            await TrackingService.startTracking();
+            await ApiService.updateLiveLocation(
+              position.latitude,
+              position.longitude,
+              position.accuracy,
+              recordedAt: DateTime.now(),
+            );
+          } catch (e) {
+            debugPrint("Auto tracking on checkIn error: $e");
+          }
+        } else {
+          try {
+            await TrackingService.stopTracking();
+          } catch (_) {}
+        }
+
         if (mounted) {
           Navigator.of(context).pop(result['data']);
         }
