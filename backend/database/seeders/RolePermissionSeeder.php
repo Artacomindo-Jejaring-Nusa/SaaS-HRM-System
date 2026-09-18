@@ -44,6 +44,7 @@ class RolePermissionSeeder extends Seeder
             ['name' => 'Hapus Lembur', 'slug' => 'delete-overtimes', 'group' => 'Lembur'],
 
             // Operational
+            ['name' => 'Akses Portal Manager', 'slug' => 'view-manager-portal', 'group' => 'Operasional'],
             ['name' => 'Kelola Shift', 'slug' => 'manage-shifts', 'group' => 'Operasional'],
             ['name' => 'Kelola Jadwal', 'slug' => 'manage-schedules', 'group' => 'Operasional'],
             ['name' => 'Kelola Hari Libur', 'slug' => 'manage-holidays', 'group' => 'Operasional'],
@@ -141,6 +142,12 @@ class RolePermissionSeeder extends Seeder
         $staffTeknisi = Role::updateOrCreate(['name' => 'Staff Teknisi']);
         // 12. Supervisor Engineer
         $spvEng = Role::updateOrCreate(['name' => 'Supervisor Engineer']);
+        // 13. Specific Supervisors
+        $spvFinance = Role::updateOrCreate(['name' => 'Supervisor Finance']);
+        $spvIT = Role::updateOrCreate(['name' => 'Supervisor IT']);
+        $spvAdmin = Role::updateOrCreate(['name' => 'Supervisor Admin']);
+        $spvSales = Role::updateOrCreate(['name' => 'Supervisor Sales']);
+        $spvNOC = Role::updateOrCreate(['name' => 'Supervisor NOC']);
 
         $allPermissions = Permission::all()->pluck('id');
         // Only Super Admin has all permissions including live tracking & attendance map
@@ -173,6 +180,7 @@ class RolePermissionSeeder extends Seeder
 
         // Finance Manager Permissions
         $financePermissions = Permission::whereIn('slug', [
+            'view-manager-portal',
             'view-employees', 'view-directory', 'view-organization',
             'view-leaves', 'apply-leaves', 'approve-leaves',
             'view-permits', 'apply-permits', 'approve-permits',
@@ -187,6 +195,7 @@ class RolePermissionSeeder extends Seeder
 
         // Supervisor Permissions (General)
         $supervisorPermissions = Permission::whereIn('slug', [
+            'view-manager-portal',
             'view-employees', 'view-directory', 'view-organization',
             'view-leaves', 'apply-leaves', 'approve-leaves',
             'view-permits', 'apply-permits', 'approve-permits',
@@ -202,9 +211,15 @@ class RolePermissionSeeder extends Seeder
         ])->pluck('id');
         $supervisor->permissions()->sync($supervisorPermissions);
         $spvOps->permissions()->sync($supervisorPermissions);
+        $spvFinance->permissions()->sync($supervisorPermissions);
+        $spvIT->permissions()->sync($supervisorPermissions);
+        $spvAdmin->permissions()->sync($supervisorPermissions);
+        $spvSales->permissions()->sync($supervisorPermissions);
+        $spvNOC->permissions()->sync($supervisorPermissions);
 
         // Supervisor Engineer Permissions
         $spvEngPermissions = Permission::whereIn('slug', [
+            'view-manager-portal',
             'view-employees', 'view-directory', 'view-organization',
             'view-leaves', 'apply-leaves', 'approve-leaves',
             'view-permits', 'apply-permits', 'approve-permits',
@@ -235,5 +250,11 @@ class RolePermissionSeeder extends Seeder
         ])->pluck('id');
         $staffKaryawan->permissions()->sync($staffPermissions);
         $staffTeknisi->permissions()->sync($staffPermissions);
+
+        // Extra executive roles (CEO/BOC, COO, etc.)
+        $extraExecutiveRoles = Role::whereIn('name', ['CEO / BOC', 'COO', 'Anggota Direksi', 'Kadiv Direktur', 'Leader', 'Admin VP'])->get();
+        foreach ($extraExecutiveRoles as $extraRole) {
+            $extraRole->permissions()->sync($executivePermissions);
+        }
     }
 }

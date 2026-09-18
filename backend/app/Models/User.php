@@ -24,6 +24,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'name', 'email', 'password', 'company_id', 'office_id', 'role_id', 'supervisor_id', 'device_id',
+        'can_access_manager_portal',
         'profile_photo_path', 'face_embedding',
         'nik', 'ktp_no', 'phone', 'emergency_contact_name', 'emergency_contact_phone', 'address',
         'place_of_birth', 'date_of_birth', 'gender', 'marital_status', 'religion', 'blood_type',
@@ -41,36 +42,43 @@ class User extends Authenticatable
         'remember_token',
     ];
 
-    protected $appends = ['profile_photo_url', 'is_manager', 'kemnaker_leave_balance', 'is_eligible_for_leave'];
+    protected $appends = ['profile_photo_url', 'is_manager', 'can_access_manager_portal', 'permission_slugs', 'kemnaker_leave_balance', 'is_eligible_for_leave'];
 
     public function getProfilePhotoUrlAttribute()
     {
         return $this->profile_photo_path ? asset('storage/'.$this->profile_photo_path) : null;
     }
 
+    public function getCanAccessManagerPortalAttribute(): bool
+    {
+        if ($this->role_id === 1) {
+            return true;
+        }
+
+        if (array_key_exists('can_access_manager_portal', $this->attributes) && $this->attributes['can_access_manager_portal'] !== null) {
+            return (bool) $this->attributes['can_access_manager_portal'];
+        }
+
+        return $this->hasPermission('view-manager-portal');
+    }
+
     public function getIsManagerAttribute()
     {
-        $this->loadMissing('role');
-        if (! $this->role) {
-            return false;
+        return $this->can_access_manager_portal;
+    }
+
+    public function getPermissionSlugsAttribute(): array
+    {
+        if ($this->role_id === 1) {
+            return Permission::pluck('slug')->toArray();
         }
-        $roleName = $this->role->name;
-        $lowerRole = strtolower($roleName);
 
-        // Broad list of roles that count as management/HR for data visibility
-        $managerRoles = [
-            'Manager', 'Supervisor', 'HRD', 'HRD Manager', 'Management',
-            'Direktur', 'Direktur Utama', 'CEO', 'Super Admin', 'Admin',
-            'CEO / Direktur Utama', 'Finance Manager', 'Supervisor Operational', 'Supervisor Engineer',
-        ];
+        $this->loadMissing('role.permissions');
+        if (! $this->role || ! $this->role->relationLoaded('permissions')) {
+            return [];
+        }
 
-        return in_array($roleName, $managerRoles) 
-            || str_contains($lowerRole, 'manager') 
-            || str_contains($lowerRole, 'supervisor') 
-            || str_contains($lowerRole, 'direktur') 
-            || str_contains($lowerRole, 'head') 
-            || str_contains($lowerRole, 'leader') 
-            || str_contains($lowerRole, 'hrd');
+        return $this->role->permissions->pluck('slug')->toArray();
     }
 
     protected function casts(): array
@@ -79,6 +87,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_wfh' => 'boolean',
+            'can_access_manager_portal' => 'boolean',
             'wfh_start_date' => 'date',
             'wfh_end_date' => 'date',
             'date_of_birth' => 'date',
@@ -128,24 +137,19 @@ class User extends Authenticatable
 
     public function hasPermission($slug)
     {
-        if (! $this->relationLoaded('role')) {
-            // If role is not loaded and we are in strict mode, this might still fail
-            // if we access $this->role. But PermissionMiddleware now handles this.
-            // For other cases, we can try to use role_id if it's the master admin.
-            if ($this->role_id === 1) {
-                return true;
-            }
-
-            return false;
+        // Master Admin (Role ID 1) bypass all
+        if ($this->role_id === 1) {
+            return true;
         }
+
+        $this->loadMissing('role.permissions');
 
         if (! $this->role) {
             return false;
         }
 
-        // Master Admin (Role ID 1) bypass all
-        if ($this->role_id === 1) {
-            return true;
+        if ($this->role->relationLoaded('permissions')) {
+            return $this->role->permissions->contains('slug', $slug);
         }
 
         return $this->role->permissions()->where('slug', $slug)->exists();

@@ -29,6 +29,8 @@ class LeaveController extends Controller
         'Kematian Keluarga Serumah' => ['days' => 1, 'paid' => true, 'article' => self::ARTICLE_PASAL_93, 'uses_quota' => false],
         'Haid (Hari 1 & 2)' => ['days' => 2, 'paid' => true, 'article' => 'Pasal 81 UU No. 13/2003', 'uses_quota' => false],
         'Cuti Besar/Panjang' => ['days' => 0, 'paid' => false, 'article' => 'Pasal 79 UU No. 13/2003', 'uses_quota' => false],
+        'Cuti Alasan Penting' => ['days' => 0, 'paid' => true, 'article' => self::ARTICLE_PASAL_93, 'uses_quota' => true],
+        'Lainnya' => ['days' => 0, 'paid' => true, 'article' => 'Kebijakan Perusahaan', 'uses_quota' => true],
     ];
 
     public function index(Request $request): \Illuminate\Http\JsonResponse
@@ -253,13 +255,7 @@ class LeaveController extends Controller
         $leave->update($updateData);
 
         if ($result['is_final'] && $result['status'] === 'approved') {
-            if ($leave->type === self::TYPE_ANNUAL_LEAVE) {
-                $days = Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1;
-                $leaveUser = $leave->user;
-                $leaveUser->leave_balance = max(0, $leaveUser->leave_balance - $days);
-                $leaveUser->leave_used += $days;
-                $leaveUser->save();
-            }
+            self::processLeaveApprovalDeduction($leave);
 
             $this->notify(
                 $leave->user,
@@ -369,13 +365,7 @@ class LeaveController extends Controller
      */
     private function finalizeLeaveApproval(Leave $leave): \Illuminate\Http\JsonResponse
     {
-        if ($leave->type === self::TYPE_ANNUAL_LEAVE) {
-            $days      = Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1;
-            $leaveUser = $leave->user;
-            $leaveUser->leave_balance = max(0, $leaveUser->leave_balance - $days);
-            $leaveUser->leave_used += $days;
-            $leaveUser->save();
-        }
+        self::processLeaveApprovalDeduction($leave);
 
         $this->notify(
             $leave->user,
@@ -385,6 +375,34 @@ class LeaveController extends Controller
         );
 
         return $this->successResponse(null, 'Permohonan cuti disetujui.');
+    }
+
+    /**
+     * Helper to deduct leave balance on approval.
+     */
+    public static function processLeaveApprovalDeduction(Leave $leave): void
+    {
+        $days = $leave->duration_days ?: (Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1);
+        $leaveUser = $leave->user;
+        if ($leaveUser) {
+            $leaveUser->leave_balance = max(0, ($leaveUser->leave_balance ?? 12) - $days);
+            $leaveUser->leave_used = ($leaveUser->leave_used ?? 0) + $days;
+            $leaveUser->save();
+        }
+    }
+
+    /**
+     * Helper to refund leave balance if approved leave is rejected or deleted.
+     */
+    public static function processLeaveApprovalRefund(Leave $leave): void
+    {
+        $days = $leave->duration_days ?: (Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1);
+        $leaveUser = $leave->user;
+        if ($leaveUser) {
+            $leaveUser->leave_balance = ($leaveUser->leave_balance ?? 12) + $days;
+            $leaveUser->leave_used = max(0, ($leaveUser->leave_used ?? 0) - $days);
+            $leaveUser->save();
+        }
     }
 
     /**
@@ -497,6 +515,10 @@ class LeaveController extends Controller
 
         if (! $isSuperAdmin && ! in_array($leave->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
             return $this->errorResponse('Cuti yang sudah diproses tidak bisa dihapus.', 403);
+        }
+
+        if ($leave->status === 'approved') {
+            self::processLeaveApprovalRefund($leave);
         }
 
         $leave->delete();

@@ -35,7 +35,13 @@ class ManagerRepository {
       );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        return body['data'];
+        final data = body['data'];
+        if (data is List) {
+          return data;
+        } else if (data is Map && data['data'] is List) {
+          return data['data'];
+        }
+        return [];
       }
       return null;
     } catch (e) {
@@ -64,7 +70,7 @@ class ManagerRepository {
       );
       return jsonDecode(response.body);
     } catch (e) {
-      return {'status': 'error', 'message': 'Koneksi gagal.'};
+      return {'status': 'error', 'message': 'Koneksi gagal: $e'};
     }
   }
 
@@ -77,7 +83,13 @@ class ManagerRepository {
       );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        return body['data'];
+        final data = body['data'];
+        if (data is List) {
+          return data;
+        } else if (data is Map && data['data'] is List) {
+          return data['data'];
+        }
+        return [];
       }
       return null;
     } catch (e) {

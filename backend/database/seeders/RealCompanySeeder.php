@@ -122,6 +122,42 @@ class RealCompanySeeder extends Seeder
                 'view-attendances', 'apply-attendances',
             ])->pluck('id'),
 
+            'Supervisor Finance' => Permission::whereIn('slug', [
+                'view-employees', 'view-leaves', 'approve-leaves', 'view-overtimes',
+                'approve-overtimes', 'approve-permits', 'manage-tasks',
+                'view-attendances', 'apply-attendances', 'view-reimbursements', 'approve-reimbursements',
+            ])->pluck('id'),
+
+            'Supervisor IT' => Permission::whereIn('slug', [
+                'view-employees', 'view-leaves', 'approve-leaves', 'view-overtimes',
+                'approve-overtimes', 'approve-permits', 'manage-tasks',
+                'view-attendances', 'apply-attendances',
+            ])->pluck('id'),
+
+            'Supervisor Admin' => Permission::whereIn('slug', [
+                'view-employees', 'view-leaves', 'approve-leaves', 'view-overtimes',
+                'approve-overtimes', 'approve-permits', 'manage-tasks',
+                'view-attendances', 'apply-attendances',
+            ])->pluck('id'),
+
+            'Supervisor Sales' => Permission::whereIn('slug', [
+                'view-employees', 'view-leaves', 'approve-leaves', 'view-overtimes',
+                'approve-overtimes', 'approve-permits', 'manage-tasks',
+                'view-attendances', 'apply-attendances',
+            ])->pluck('id'),
+
+            'Supervisor NOC' => Permission::whereIn('slug', [
+                'view-employees', 'view-leaves', 'approve-leaves', 'view-overtimes',
+                'approve-overtimes', 'approve-permits', 'manage-tasks',
+                'view-attendances', 'apply-attendances',
+            ])->pluck('id'),
+
+            'Supervisor Operational' => Permission::whereIn('slug', [
+                'view-employees', 'view-leaves', 'approve-leaves', 'view-overtimes',
+                'approve-overtimes', 'approve-permits', 'manage-tasks',
+                'view-attendances', 'apply-attendances',
+            ])->pluck('id'),
+
             // Leader → Same as Supervisor but for NOC/Tech
             'Leader' => Permission::whereIn('slug', [
                 'view-employees', 'view-leaves', 'approve-leaves', 'approve-permits',
@@ -251,14 +287,14 @@ class RealCompanySeeder extends Seeder
 
         // #5 Sales&Marketing - Reports to Kadiv (ZH) → CEO
         $etang = $createUser(
-            'etang@artacomindo.com', 'Etang Agung Apriyanto', 'Supervisor', $zenHelmi->id, 'SAL001',
+            'etang@artacomindo.com', 'Etang Agung Apriyanto', 'Supervisor Sales', $zenHelmi->id, 'SAL001',
             'Sales&Marketing', ['basic_salary' => 9000000, 'fixed_allowance' => 900000]
         );
 
         // ------- FINANCE & ADMIN -------
         // #7 Finance&Admin - Reports to Spv(NN) → CEO
         $haris = $createUser(
-            'haris@artacomindo.com', 'E Haris Ambiyana', 'Supervisor', $nazirin->id, 'FIN001',
+            'haris@artacomindo.com', 'E Haris Ambiyana', 'Supervisor Finance', $nazirin->id, 'FIN001',
             'Finance&Admin', ['basic_salary' => 8000000, 'fixed_allowance' => 800000]
         );
 
@@ -283,19 +319,19 @@ class RealCompanySeeder extends Seeder
         // ------- NOC / OPERATIONAL (under Yulhan) -------
         // #14 Hub-Engineer - Reports to Kadiv-Direktur(Yulhan) → CEO
         $abas = $createUser(
-            'abas@artacomindo.com', 'Agung Basuki Manto', 'Supervisor', $yulhan->id, 'ENG001',
+            'abas@artacomindo.com', 'Agung Basuki Manto', 'Supervisor IT', $yulhan->id, 'ENG001',
             'Hub-Engineer', ['basic_salary' => 9000000, 'fixed_allowance' => 900000]
         );
 
         // #17 NOC Spv - Reports to Kadiv-Direktur(Yulhan) → CEO
         $ratno = $createUser(
-            'ratno@artacomindo.com', 'Henratno Satiawan Karo En', 'Supervisor', $yulhan->id, 'NOC001',
+            'ratno@artacomindo.com', 'Henratno Satiawan Karo En', 'Supervisor NOC', $yulhan->id, 'NOC001',
             'NOC Spv.', ['basic_salary' => 9000000, 'fixed_allowance' => 900000]
         );
 
         // #18 Operasional Head - Reports to Kadiv-Direktur(Yulhan) → CEO
         $sigit = $createUser(
-            'sigit@artacomindo.com', 'Sigit Purnomo Sejati', 'Supervisor', $yulhan->id, 'OPS001',
+            'sigit@artacomindo.com', 'Sigit Purnomo Sejati', 'Supervisor Operational', $yulhan->id, 'OPS001',
             'Operasional Head', ['basic_salary' => 9000000, 'fixed_allowance' => 900000]
         );
 

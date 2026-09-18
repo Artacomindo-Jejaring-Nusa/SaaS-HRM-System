@@ -16,6 +16,7 @@ class Leave extends Model
         'status', 'current_approval_step',
         'approved_by', 'signature', 'remark',
         'supervisor_approved_by', 'supervisor_approved_at', 'supervisor_remark',
+        'duration_days', 'is_paid', 'kemnaker_article',
     ];
 
     public function user(): \Illuminate\Database\Eloquent\Relations\BelongsTo

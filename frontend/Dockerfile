@@ -17,6 +17,7 @@ ARG NEXT_PUBLIC_API_URL=http://backend:80/api
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 # Build the application
 RUN npm run build

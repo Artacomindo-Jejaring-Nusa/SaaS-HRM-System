@@ -42,6 +42,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _profilePhotoUrl;
   bool _isManager = false;
   String? _attendanceType;
+  Set<String> _permissions = {};
+
+  bool _hasPermission(String slug, [String? fallbackSlug]) {
+    final lowerRole = _userRole.toLowerCase();
+    if (lowerRole == 'super admin' || lowerRole == 'superadmin' || lowerRole.contains('super admin')) {
+      return true;
+    }
+    if (_permissions.contains(slug)) return true;
+    if (fallbackSlug != null && _permissions.contains(fallbackSlug)) return true;
+    return false;
+  }
 
   // Custom Menu
   List<String> _pinnedMenuIds = ['absen', 'cuti', 'klaim', 'lembur'];
@@ -289,11 +300,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
       rawUrl = ApiService.fixUrl(rawUrl);
       setState(() {
         _userName = userData['name'] ?? "Karyawan";
+        String roleName = "";
         if (userData['role'] != null) {
-          _userRole = userData['role']['name'] ?? "";
+          roleName = userData['role']['name'] ?? "";
+          _userRole = roleName;
         }
         _profilePhotoUrl = rawUrl;
-        _isManager = userData['is_manager'] ?? false;
+        
+        // Extract permissions from permission_slugs or role.permissions
+        final Set<String> perms = {};
+        if (userData['permission_slugs'] is List) {
+          for (var p in userData['permission_slugs']) {
+            if (p != null) perms.add(p.toString());
+          }
+        }
+        if (userData['role'] != null && userData['role']['permissions'] is List) {
+          for (var p in userData['role']['permissions']) {
+            if (p is Map && p['slug'] != null) {
+              perms.add(p['slug'].toString());
+            }
+          }
+        }
+        _permissions = perms;
+
+        // Determine Manager Portal access:
+        // 1. If explicitly set on account (can_access_manager_portal true/false), use that
+        // 2. Otherwise check view-manager-portal permission
+        if (userData['can_access_manager_portal'] != null) {
+          _isManager = userData['can_access_manager_portal'] == true;
+        } else {
+          _isManager = _hasPermission('view-manager-portal');
+        }
+
         _attendanceType = userData['attendance_type'];
       });
     }
@@ -776,7 +814,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'icon': Icons.settings,
         'label': 'Setting',
         'color': Colors.blueGrey,
-        'onTap': () => _onItemTapped(3),
+        'onTap': () => _onItemTapped(_isManager ? 4 : 3),
       },
       'kpi': {
         'icon': Icons.star_rate_rounded,
@@ -852,8 +890,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
       },
     };
 
-    if (!_isManager && _attendanceType != 'shift') {
+    // Filter dynamic menu items based on Super Admin configured permissions
+    if (!_hasPermission('apply-attendances', 'view-attendances')) {
+      items.remove('absen');
+    }
+    if (!_hasPermission('view-leaves', 'apply-leaves')) {
+      items.remove('cuti');
+    }
+    if (!_hasPermission('view-permits', 'apply-permits')) {
+      items.remove('permit');
+    }
+    if (!_hasPermission('view-reimbursements', 'apply-reimbursements')) {
+      items.remove('klaim');
+    }
+    if (!_hasPermission('view-overtimes', 'apply-overtimes')) {
+      items.remove('lembur');
+    }
+    if (!_hasPermission('view-salaries')) {
+      items.remove('gaji');
+    }
+    if (!_hasPermission('view-tasks', 'manage-tasks')) {
+      items.remove('tugas');
+    }
+    if (!_hasPermission('view-kpis')) {
+      items.remove('kpi');
+    }
+    if (!_hasPermission('view-shift-swaps', 'apply-shift-swaps')) {
       items.remove('swap');
+    } else if (!_isManager && _attendanceType != 'shift') {
+      items.remove('swap');
+    }
+    if (!_hasPermission('manage-attendance-corrections')) {
+      items.remove('koreksi');
+    }
+    if (!_hasPermission('view-vehicle-logs', 'apply-vehicle-logs')) {
+      items.remove('fleet');
+    }
+    if (!_hasPermission('view-documents')) {
+      items.remove('dokumen');
+    }
+    if (!_hasPermission('view-fund-requests', 'apply-fund-requests')) {
+      items.remove('dana');
+    }
+    if (!_hasPermission('view-projects')) {
+      items.remove('proyek');
     }
 
     return items;
@@ -1104,12 +1184,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildHomeContent() {
     final allItems = _getMenuItems();
-    final pinnedItems = _pinnedMenuIds
+    final activePinnedIds = _pinnedMenuIds
         .where((id) => allItems.containsKey(id))
-        .map((id) => allItems[id]!)
         .toList();
+    if (activePinnedIds.length < 4) {
+      for (final id in allItems.keys) {
+        if (!activePinnedIds.contains(id)) {
+          activePinnedIds.add(id);
+          if (activePinnedIds.length == 4) break;
+        }
+      }
+    }
+    final pinnedItems = activePinnedIds.map((id) => allItems[id]!).toList();
     final otherItems = allItems.keys
-        .where((id) => !_pinnedMenuIds.contains(id))
+        .where((id) => !activePinnedIds.contains(id))
         .map((id) => allItems[id]!)
         .toList();
 
@@ -1124,74 +1212,85 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: primaryColor, width: 2),
-                      ),
-                      child: CircleAvatar(
-                        radius: 25,
-                        backgroundColor: primaryColor.withOpacity(0.1),
-                        backgroundImage: (_profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty)
-                            ? NetworkImage(_profilePhotoUrl!)
-                            : null,
-                        child: (_profilePhotoUrl == null || _profilePhotoUrl!.isEmpty)
-                            ? Text(
-                                _userName.isNotEmpty
-                                    ? _userName[0].toUpperCase()
-                                    : "U",
-                                style: TextStyle(
-                                  color: primaryColor,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            : null,
-                      ),
-                    ),
-                    SizedBox(width: 15),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _getGreeting(),
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: primaryColor, width: 2),
                         ),
-                        Text(
-                          _userName,
-                          style: GoogleFonts.outfit(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                          ),
+                        child: CircleAvatar(
+                          radius: 25,
+                          backgroundColor: primaryColor.withOpacity(0.1),
+                          backgroundImage: (_profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty)
+                              ? NetworkImage(_profilePhotoUrl!)
+                              : null,
+                          child: (_profilePhotoUrl == null || _profilePhotoUrl!.isEmpty)
+                              ? Text(
+                                  _userName.isNotEmpty
+                                      ? _userName[0].toUpperCase()
+                                      : "U",
+                                  style: TextStyle(
+                                    color: primaryColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                )
+                              : null,
                         ),
-                        if (_userRole.isNotEmpty)
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: primaryColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            child: Text(
-                              _userRole,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _getGreeting(),
                               style: GoogleFonts.outfit(
-                                fontSize: 10,
-                                color: primaryColor,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: Colors.grey[600],
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                  ],
+                            Text(
+                              _userName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.outfit(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
+                            ),
+                            if (_userRole.isNotEmpty)
+                              Container(
+                                margin: const EdgeInsets.only(top: 3),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: primaryColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: Text(
+                                  _userRole,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10,
+                                    color: primaryColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Stack(
                   alignment: Alignment.topRight,
                   children: [

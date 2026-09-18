@@ -49,7 +49,7 @@ trait HasKemnakerLeave
             return 0;
         }
         
-        $months = $period['start']->diffInMonths(now());
+        $months = (int) $period['start']->diffInMonths(now());
         
         return min(12, $months + 1);
     }
@@ -63,12 +63,16 @@ trait HasKemnakerLeave
         $accrued = $this->getAccruedLeaveCount();
         $period = $this->getCurrentLeavePeriod();
         $used = $this->leaves()
-            ->where('type', 'Cuti Tahunan')
             ->where('status', 'approved')
+            ->where(function ($q) {
+                $q->where('type', 'Cuti Tahunan')
+                  ->orWhere('type', 'like', '%Tahunan%')
+                  ->orWhere('type', 'like', '%cuti%');
+            })
             ->whereBetween('start_date', [$period['start'], $period['end']])
             ->get()
             ->sum(function ($l) {
-                return Carbon::parse($l->start_date)->diffInDays(Carbon::parse($l->end_date)) + 1;
+                return $l->duration_days ?: (Carbon::parse($l->start_date)->diffInDays(Carbon::parse($l->end_date)) + 1);
             });
             
         return max(0, $accrued - $used);

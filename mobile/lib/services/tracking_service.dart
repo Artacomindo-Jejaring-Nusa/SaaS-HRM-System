@@ -42,25 +42,43 @@ class TrackingService {
   }
 
   static Future<void> startTracking() async {
-    final service = FlutterBackgroundService();
-    bool isRunning = await service.isRunning();
-    if (!isRunning) {
-      // Pastikan permission diberikan
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        debugPrint("Location service is disabled on device.");
+        return;
+      }
+
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
+
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
-        service.startService();
+        final service = FlutterBackgroundService();
+        bool isRunning = await service.isRunning();
+        if (!isRunning) {
+          await service.startService();
+          debugPrint("Live tracking background service started.");
+        }
+      } else {
+        debugPrint("Location permission not granted ($permission). Foreground tracking service not started.");
       }
+    } catch (e) {
+      debugPrint("startTracking error: $e");
     }
   }
 
   static Future<void> stopTracking() async {
-    final service = FlutterBackgroundService();
-    bool isRunning = await service.isRunning();
-    if (isRunning) {
-      service.invoke("stopService");
+    try {
+      final service = FlutterBackgroundService();
+      bool isRunning = await service.isRunning();
+      if (isRunning) {
+        service.invoke("stopService");
+        debugPrint("Live tracking background service stopped.");
+      }
+    } catch (e) {
+      debugPrint("stopTracking error: $e");
     }
   }
 }
@@ -74,20 +92,22 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
+  WidgetsFlutterBinding.ensureInitialized();
   DartPluginRegistrant.ensureInitialized();
 
   if (service is AndroidServiceInstance) {
     service.on('setAsForeground').listen((event) {
       service.setAsForegroundService();
-    });
+    }, onError: (err) => debugPrint("setAsForeground error: $err"));
+    
     service.on('setAsBackground').listen((event) {
       service.setAsBackgroundService();
-    });
+    }, onError: (err) => debugPrint("setAsBackground error: $err"));
   }
 
   service.on('stopService').listen((event) {
     service.stopSelf();
-  });
+  }, onError: (err) => debugPrint("stopService error: $err"));
 
   // Helper function to send location update
   Future<void> sendLocationUpdate(Position position) async {
@@ -125,15 +145,21 @@ void onStart(ServiceInstance service) async {
   }
 
   // 2. Stream position on movement (every 10 meters)
-  const LocationSettings locationSettings = LocationSettings(
-    accuracy: LocationAccuracy.high,
-    distanceFilter: 10,
-  );
+  try {
+    const LocationSettings locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 10,
+    );
 
-  Geolocator.getPositionStream(locationSettings: locationSettings)
-      .listen((Position position) async {
-    await sendLocationUpdate(position);
-  });
+    Geolocator.getPositionStream(locationSettings: locationSettings)
+        .listen((Position position) async {
+      await sendLocationUpdate(position);
+    }, onError: (err) {
+      debugPrint("Live tracking position stream error: $err");
+    });
+  } catch (e) {
+    debugPrint("Failed to initialize position stream: $e");
+  }
 
   // 3. Periodic heartbeat timer (every 60s) to keep status Online even if stationary
   Timer.periodic(const Duration(seconds: 60), (timer) async {

@@ -45,6 +45,7 @@
     "pusher-js": "^8.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-error-boundary": "^6.1.5",
     "react-leaflet": "^5.0.0",
     "recharts": "^3.8.0",
     "shadcn": "^4.0.8",

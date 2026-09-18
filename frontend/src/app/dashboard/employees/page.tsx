@@ -20,6 +20,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
+import { SearchableSupervisorSelect } from "@/components/SearchableSupervisorSelect";
 
 interface Role {
   id: number;
@@ -60,6 +61,7 @@ interface Employee {
   bank_name?: string;
   bank_account_no?: string;
   bank_account_name?: string;
+  can_access_manager_portal?: boolean | null;
 }
 
 interface EmployeeFormData {
@@ -92,6 +94,7 @@ interface EmployeeFormData {
   bank_name?: string;
   bank_account_no?: string;
   bank_account_name?: string;
+  can_access_manager_portal?: boolean | null;
 }
 
 interface PaginationData {
@@ -138,7 +141,7 @@ function EmployeesContent() {
   // Delete state
   const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [potentialSupervisors, setPotentialSupervisors] = useState<{id: number, name: string}[]>([]);
+  const [potentialSupervisors, setPotentialSupervisors] = useState<{id: number, name: string, role?: {id: number, name: string}}[]>([]);
   const [availableOffices, setAvailableOffices] = useState<{id: number, name: string}[]>([]);
 
   const [viewModalOpen, setViewModalOpen] = useState(false);
@@ -475,6 +478,7 @@ function EmployeesContent() {
       bank_name: "",
       bank_account_no: "",
       bank_account_name: "",
+      can_access_manager_portal: null,
     });
     fetchPotentialSupervisors();
     setIsModalOpen(true);
@@ -510,6 +514,7 @@ function EmployeesContent() {
       bank_name: emp.bank_name || "",
       bank_account_no: emp.bank_account_no || "",
       bank_account_name: emp.bank_account_name || "",
+      can_access_manager_portal: emp.can_access_manager_portal ?? null,
     });
     fetchPotentialSupervisors(emp.id);
     setPhotoPreview(emp.profile_photo_url || null);
@@ -532,6 +537,8 @@ function EmployeesContent() {
         if (val !== undefined) {
           if (key === 'photo') {
             if (val instanceof File) data.append('photo', val);
+          } else if (key === 'can_access_manager_portal') {
+            data.append(key, val === null ? "" : val ? "1" : "0");
           } else {
             // Kirim string kosong untuk nilai null agar Laravel bisa menghapus nilai di DB (nullable)
             data.append(key, val === null ? "" : val.toString());
@@ -722,7 +729,7 @@ function EmployeesContent() {
               <p className="dash-page-desc font-medium">Manajemen profil, penugasan, dan status verifikasi seluruh anggota tim.</p>
            </div>
         </div>
-        <div className="dash-page-actions flex gap-2">
+        <div className="dash-page-actions flex flex-wrap gap-2">
           <PermissionGuard slug="create-employees">
             <button 
               onClick={downloadTemplate}
@@ -745,12 +752,12 @@ function EmployeesContent() {
             </label>
             <label className="dash-btn dash-btn-outline border-blue-200 hover:border-blue-300 text-blue-600 font-bold cursor-pointer">
               <CreditCard size={14} className="mr-1" />
-              Importe Rekening/Gaji
+              Import Rekening/Gaji
               <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={handlePayrollImport} />
             </label>
             <button 
               onClick={handleOpenAddModal}
-              className="dash-btn dash-btn-primary shadow-lg shadow-gray-200 bg-[#f97316] hover:bg-[#ea580c] border-none font-black text-white!"
+              className="dash-btn dash-btn-primary shadow-lg shadow-orange-500/20 bg-[#f97316] hover:bg-[#ea580c] border-none font-black text-white"
             >
               <Plus size={16} />
               Tambah Karyawan
@@ -761,9 +768,9 @@ function EmployeesContent() {
 
       {/* Verification Notice Banner */}
       {unverifiedCount > 0 && isHRorAdmin && (
-         <div className="mb-6 bg-blue-50 border border-blue-100 p-4 rounded-2xl flex items-center justify-between animate-in slide-in-from-top-4 duration-500">
+         <div className="mb-6 bg-blue-50 border border-blue-100 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in slide-in-from-top-4 duration-500">
             <div className="flex items-center gap-3">
-               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
+               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 shrink-0">
                   <UserIcon size={16} />
                </div>
                <p className="text-sm text-blue-900 font-bold">
@@ -772,7 +779,7 @@ function EmployeesContent() {
             </div>
             <button 
               onClick={() => handleResendVerification()}
-              className="text-xs font-black text-blue-700 hover:text-blue-800 tracking-tight flex items-center gap-1 uppercase"
+              className="text-xs font-black text-blue-700 hover:text-blue-800 tracking-tight flex items-center gap-1 uppercase shrink-0"
             >
                Kirim Ulang Semua Undangan <Plus size={14} className="rotate-45" />
             </button>
@@ -866,11 +873,11 @@ function EmployeesContent() {
           {loading ? (
              <div className="p-12"><TableSkeleton rows={8} cols={8} /></div>
           ) : (
-            <table className="w-full text-left border-collapse min-w-[1200px]">
+            <table className="w-full text-left border-collapse min-w-[960px]">
               <thead>
-                <tr className="bg-gray-50/50 border-b border-gray-50">
+                <tr className="bg-gray-50 border-b border-gray-100">
                   {isHRorAdmin && (
-                    <th className="px-6 py-5 w-10 sticky left-0 bg-gray-50/50 z-20">
+                    <th className="px-3 py-3 w-10 sticky left-0 bg-gray-50 z-20 text-center">
                       <input 
                         type="checkbox" 
                         onChange={handleSelectAll}
@@ -879,23 +886,39 @@ function EmployeesContent() {
                       />
                     </th>
                   )}
-                  <th className={`px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest sticky bg-gray-50/50 z-20 min-w-[250px] ${isHRorAdmin ? "left-10" : "left-0"}`}>Karyawan</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest min-w-[200px]">Detail Kontak</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest min-w-[180px]">Posisi / Peran</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center min-w-[150px]">Bergabung</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center min-w-[140px]">Status</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center min-w-[160px]">Lokasi</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center min-w-[180px]">Email Verification</th>
+                  <th className={`px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky bg-gray-50 z-20 min-w-[200px] whitespace-nowrap ${isHRorAdmin ? "left-10" : "left-0"}`}>
+                    Karyawan
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest min-w-[170px] whitespace-nowrap">
+                    Detail Kontak
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest min-w-[150px] whitespace-nowrap">
+                    Posisi / Peran
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[110px] whitespace-nowrap">
+                    Bergabung
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[100px] whitespace-nowrap">
+                    Status
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap">
+                    Lokasi
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap">
+                    Email Verification
+                  </th>
                   {isHRorAdmin && (
-                    <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right sticky right-0 bg-gray-50/50 z-20 w-16">Opsi</th>
+                    <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right sticky right-0 bg-gray-50 z-20 w-14 min-w-[60px] whitespace-nowrap">
+                      Opsi
+                    </th>
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-100">
                 {filteredEmployees.map((emp) => (
-                  <tr key={emp.id} className="group hover:bg-orange-50/10 transition-all">
+                  <tr key={emp.id} className="group hover:bg-orange-50/20 transition-all">
                     {isHRorAdmin && (
-                      <td className="px-6 py-4 sticky left-0 bg-white group-hover:bg-orange-50/10 z-10">
+                      <td className="px-3 py-3 w-10 sticky left-0 bg-white group-hover:bg-orange-50/20 z-10 text-center">
                         <input 
                           type="checkbox" 
                           checked={selectedIds.includes(emp.id)}
@@ -904,25 +927,25 @@ function EmployeesContent() {
                         />
                       </td>
                     )}
-                    <td className={`px-6 py-4 sticky bg-white group-hover:bg-orange-50/10 z-10 ${isHRorAdmin ? "left-10" : "left-0"}`}>
-                       <div className="flex items-center gap-4">
+                    <td className={`px-3.5 py-3 sticky bg-white group-hover:bg-orange-50/20 z-10 min-w-[200px] ${isHRorAdmin ? "left-10" : "left-0"}`}>
+                       <div className="flex items-center gap-3">
                           <div className="relative">
-                             <Avatar className="size-11 border-2 border-white shadow-md transition-transform group-hover:scale-110">
+                             <Avatar className="size-9 border-2 border-white shadow-md transition-transform group-hover:scale-105">
                                 <AvatarImage src={emp.profile_photo_url} alt={emp.name} />
                                 <AvatarFallback className="bg-orange-100 text-orange-600 font-black text-xs">
                                    {emp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                                 </AvatarFallback>
                              </Avatar>
-                             <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm ${emp.email_verified_at ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                             <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white shadow-sm ${emp.email_verified_at ? 'bg-emerald-500' : 'bg-amber-400'}`} />
                           </div>
                           <div className="flex flex-col min-w-0">
-                             <span className="font-black text-gray-900 text-sm tracking-tight truncate">{emp.name}</span>
-                             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">EMP-{emp.id.toString().padStart(4, '0')}</span>
+                             <span className="font-black text-gray-900 text-xs tracking-tight truncate">{emp.name}</span>
+                             <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">EMP-{emp.id.toString().padStart(4, '0')}</span>
                           </div>
                        </div>
                     </td>
-                    <td className="px-6 py-4">
-                       <div className="flex flex-col gap-1">
+                    <td className="px-3.5 py-3 whitespace-nowrap">
+                       <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1.5 text-xs text-gray-600">
                              <Mail size={12} className="text-gray-400" />
                              {emp.email}
@@ -935,8 +958,8 @@ function EmployeesContent() {
                           )}
                        </div>
                     </td>
-                    <td className="px-6 py-4">
-                       <div className="flex flex-col gap-1">
+                    <td className="px-3.5 py-3">
+                       <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1.5 bg-gray-100 px-2 py-0.5 rounded-lg w-fit border border-gray-200">
                              <Building2 size={10} className="text-gray-400" />
                              <span className="text-[10px] font-black text-gray-700 uppercase">{emp.role?.name || "Member"}</span>
@@ -953,43 +976,43 @@ function EmployeesContent() {
                           )}
                        </div>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                       <div className="flex flex-col items-center gap-1">
+                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
+                       <div className="flex flex-col items-center gap-0.5">
                           <span className="text-xs font-black text-gray-700">{formatDate(emp.join_date)}</span>
                           <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1">
-                             <Clock size={8} /> {emp.join_date ? Math.floor((new Date().getTime() - new Date(emp.join_date).getTime()) / (1000 * 60 * 60 * 24 * 365)) : 0} Tahun
+                             <Clock size={8} /> {emp.join_date ? Math.floor((new Date().getTime() - new Date(emp.join_date).getTime()) / (1000 * 60 * 60 * 24 * 365)) : 0} Thn
                           </span>
                        </div>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                       <span className={`text-[10px] font-black px-3 py-1 rounded-full border border-gray-100 ${emp.employment_status === 'Permanent' ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-50 text-gray-500'}`}>
+                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
+                       <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border border-gray-100 ${emp.employment_status === 'Permanent' ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-50 text-gray-500'}`}>
                           {emp.employment_status || 'Permanent'}
                        </span>
                     </td>
-                    <td className="px-6 py-4 text-center text-xs font-bold text-gray-500">
+                    <td className="px-3.5 py-3 text-center text-xs font-bold text-gray-500 whitespace-nowrap">
                        <div className="flex items-center justify-center gap-1">
                           <MapPin size={12} className="text-red-400" />
                           {emp.office?.name || emp.work_location || 'Kantor Pusat'}
                        </div>
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
                        {emp.email_verified_at ? (
-                          <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-xl text-[10px] font-black border border-emerald-100 uppercase tracking-tighter">
-                             <BadgeCheck size={14} className="text-emerald-500" />
+                          <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-emerald-100 uppercase tracking-tighter">
+                             <BadgeCheck size={13} className="text-emerald-500" />
                              Verified
                           </div>
                        ) : (
-                          <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-600 px-3 py-1.5 rounded-xl text-[10px] font-black border border-amber-100 uppercase tracking-tighter shadow-sm">
+                          <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-amber-100 uppercase tracking-tighter shadow-sm">
                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                              Pending
                           </div>
                        )}
                     </td>
                     {isHRorAdmin && (
-                      <td className="px-6 py-4 text-right sticky right-0 bg-white group-hover:bg-orange-50/10 z-10">
+                      <td className="px-3.5 py-3 text-right sticky right-0 bg-white group-hover:bg-orange-50/20 z-10 w-14 min-w-[60px]">
                         <DropdownMenu>
-                          <DropdownMenuTrigger className="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors cursor-pointer outline-none ml-auto">
-                            <MoreVertical size={20} />
+                          <DropdownMenuTrigger className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors cursor-pointer outline-none ml-auto">
+                            <MoreVertical size={16} />
                           </DropdownMenuTrigger>
                           
                           <DropdownMenuContent 
@@ -1438,16 +1461,36 @@ function EmployeesContent() {
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-sm font-medium text-gray-700">Atasan Langsung</label>
-                        <select 
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                          value={formData.supervisor_id || ""}
-                          onChange={(e) => setFormData({...formData, supervisor_id: e.target.value ? parseInt(e.target.value) : null})}
-                        >
-                          <option value="">Tanpa Atasan</option>
-                          {potentialSupervisors.map(emp => (
-                            <option key={emp.id} value={emp.id}>{emp.name}</option>
-                          ))}
-                        </select>
+                        <SearchableSupervisorSelect
+                          value={formData.supervisor_id}
+                          onChange={(id) => setFormData({...formData, supervisor_id: id})}
+                          supervisors={potentialSupervisors}
+                        />
+                        <p className="text-[11px] text-gray-500 italic mt-0.5">* Ketik untuk mencari jabatan/nama</p>
+                      </div>
+
+                      <div className="space-y-1.5 md:col-span-2 bg-gray-50/80 p-3.5 rounded-xl border border-gray-200">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <label className="text-sm font-semibold text-gray-800">Akses Portal Manager</label>
+                            <p className="text-xs text-gray-500">Izin akun ini untuk melihat Tab & Fitur Manager (Approval Cuti, Lembur, Klaim, Izin, Fleet Log, dll.)</p>
+                          </div>
+                          <select
+                            className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e] bg-white font-medium cursor-pointer"
+                            value={formData.can_access_manager_portal === true ? "enabled" : formData.can_access_manager_portal === false ? "disabled" : "default"}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFormData({
+                                ...formData,
+                                can_access_manager_portal: val === "enabled" ? true : val === "disabled" ? false : null,
+                              });
+                            }}
+                          >
+                            <option value="default">Ikuti Hak Akses Role (Default)</option>
+                            <option value="enabled">Diaktifkan (Enabled)</option>
+                            <option value="disabled">Dinonaktifkan (Disabled)</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
                     

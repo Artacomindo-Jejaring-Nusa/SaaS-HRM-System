@@ -417,9 +417,9 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::delete('/api-tokens/{id}', [ApiTokenController::class, 'destroy']);
 
     // Employee Directory & Org Chart
-    // Employee Directory & Org Chart
     Route::middleware('permission:view-directory')->get('/directory', [EmployeeController::class, 'directory']);
     Route::middleware('permission:view-organization')->get('/organization-chart', [OrganizationController::class, 'getChart']);
+    Route::middleware('permission:edit-employees')->put('/organization-chart/update-node', [OrganizationController::class, 'updateNode']);
 
     // MassLeave
     Route::middleware('permission:approve-leaves')->group(function () {

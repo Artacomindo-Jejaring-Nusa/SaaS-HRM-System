@@ -57,11 +57,13 @@ void main() async {
     hasToken = await secureStorage.hasValidToken();
     
     if (hasToken) {
-      try {
-        await TrackingService.startTracking();
-      } catch (e) {
-        debugPrint("Failed to start tracking: $e");
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          await TrackingService.startTracking();
+        } catch (e) {
+          debugPrint("Failed to start tracking post frame: $e");
+        }
+      });
     }
   } catch (e) {
     debugPrint("App Startup initialization fallback: $e");

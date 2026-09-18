@@ -155,6 +155,7 @@ class EmployeeController extends Controller
             'emergency_contact_phone' => self::RULE_NULLABLE_STRING,
             'office_id' => 'nullable|exists:offices,id',
             'cost_center' => self::RULE_NULLABLE_STRING,
+            'can_access_manager_portal' => 'nullable|boolean',
         ]);
 
         $path = null;
@@ -168,6 +169,7 @@ class EmployeeController extends Controller
         $employee->password = Hash::make($request->password);
         $employee->company_id = $request->user()->company_id;
         $employee->role_id = $request->role_id;
+        $employee->can_access_manager_portal = $request->has('can_access_manager_portal') ? $request->can_access_manager_portal : null;
         $employee->nik = $request->nik;
         $employee->phone = $request->phone;
         $employee->address = $request->address;
@@ -246,6 +248,7 @@ class EmployeeController extends Controller
             'bank_name' => self::RULE_NULLABLE_STRING,
             'bank_account_no' => self::RULE_NULLABLE_STRING,
             'bank_account_name' => self::RULE_NULLABLE_STRING,
+            'can_access_manager_portal' => 'nullable|boolean',
             'password' => 'nullable|min:6',
         ]);
 
@@ -258,6 +261,10 @@ class EmployeeController extends Controller
         }
 
         $employee->update($request->except(['photo', 'password']));
+
+        if ($request->has('can_access_manager_portal')) {
+            $employee->can_access_manager_portal = $request->can_access_manager_portal;
+        }
 
         if ($request->has('employment_status')) {
             $employee->employment_status = $request->employment_status;
@@ -599,14 +606,16 @@ class EmployeeController extends Controller
     public function potentialSupervisors(Request $request)
     {
         $user = $request->user();
-        $query = User::select('id', 'name')->where('company_id', $user->company_id);
+        $query = User::with('role:id,name')->select('id', 'name', 'role_id')->where('company_id', $user->company_id);
 
         // Exclude current employee if editing
         if ($request->exclude_id) {
             $query->where('id', '!=', $request->exclude_id);
         }
 
-        $supervisors = $query->orderBy('name', 'asc')->get();
+        $supervisors = $query->get()->sortBy(function ($emp) {
+            return $emp->role ? $emp->role->name : 'ZZZ';
+        })->values();
 
         return $this->successResponse($supervisors, 'Data calon atasan berhasil diambil.');
     }
