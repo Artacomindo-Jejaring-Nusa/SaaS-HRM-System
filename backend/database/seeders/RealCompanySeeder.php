@@ -510,7 +510,7 @@ class RealCompanySeeder extends Seeder
                 ],
             ],
             'fund_request' => [
-                'name' => 'Alur Permintaan Uang Muka / Kasbon',
+                'name' => 'Alur Permintaan Uang Muka / Pengajuan Dana',
                 'steps' => [
                     ['step_number' => 1, 'approver_type' => 'supervisor', 'sla_hours' => 24],
                     ['step_number' => 2, 'approver_type' => 'role', 'approver_role_id' => $roles['Admin VP']->id, 'sla_hours' => 24],

@@ -66,6 +66,16 @@ export default function PermitsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
 
+  // Modal Persetujuan / Penolakan
+  const [actionModal, setActionModal] = useState<{
+    isOpen: boolean;
+    action: 'approve' | 'reject' | null;
+    item: PermitRecord | null;
+  }>({ isOpen: false, action: null, item: null });
+  const [remarkInput, setRemarkInput] = useState("");
+  const [overrideCategory, setOverrideCategory] = useState("I");
+  const [overrideDoctorNote, setOverrideDoctorNote] = useState(false);
+
   const [formData, setFormData] = useState({
     start_date: "",
     end_date: "",
@@ -120,7 +130,46 @@ export default function PermitsPage() {
     }
   };
 
+  const handleActionClick = (item: PermitRecord, action: 'approve' | 'reject') => {
+    setActionModal({ isOpen: true, action, item });
+    setRemarkInput("");
+    setOverrideCategory(item.category || 'I');
+    setOverrideDoctorNote(item.has_doctor_note || false);
+  };
 
+  const executeAction = async () => {
+    const { action, item } = actionModal;
+    if (!action || !item || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      const payload: Record<string, unknown> = {
+        remark: remarkInput,
+      };
+      if (action === 'approve') {
+        payload.category = overrideCategory;
+        payload.has_doctor_note = overrideDoctorNote;
+      }
+      await axiosInstance.post(`/permits/${item.id}/${action}`, payload);
+      toast.success(`Pengajuan Izin berhasil di-${action === 'approve' ? 'setujui' : 'tolak'}!`);
+      setActionModal({ isOpen: false, action: null, item: null });
+      if (selectedItem?.id === item.id) {
+        setSelectedItem({
+          ...selectedItem,
+          status: action === 'approve' ? 'approved' : 'rejected',
+          remark: remarkInput || selectedItem.remark,
+          category: overrideCategory,
+          has_doctor_note: overrideDoctorNote,
+        });
+      }
+      fetchpermits(page);
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error(err.response?.data?.message || `Gagal ${action === 'approve' ? 'menyetujui' : 'menolak'} izin.`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleViewDetail = (item: PermitRecord) => {
     setSelectedItem(item);
@@ -226,6 +275,24 @@ export default function PermitsPage() {
                     >
                       <Eye size={16} />
                     </button>
+                    {hasPermission('approve-permits') && permit.status === 'pending' && (
+                      <>
+                        <button
+                          className="dash-action-btn text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 border border-emerald-200"
+                          title="Setujui Izin"
+                          onClick={() => handleActionClick(permit, 'approve')}
+                        >
+                          <Check size={16} />
+                        </button>
+                        <button
+                          className="dash-action-btn text-rose-600 hover:bg-rose-50 hover:text-rose-700 border border-rose-200"
+                          title="Tolak Izin"
+                          onClick={() => handleActionClick(permit, 'reject')}
+                        >
+                          <X size={16} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -418,6 +485,22 @@ export default function PermitsPage() {
                   {getStatusBadge(selectedItem.status || '')}
                 </div>
                 <div className="flex items-center gap-2">
+                  {hasPermission('approve-permits') && selectedItem.status === 'pending' && (
+                    <>
+                      <button 
+                        onClick={() => handleActionClick(selectedItem, 'approve')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded border border-emerald-200 transition-colors shadow-sm"
+                      >
+                        <Check size={15} /> Setujui
+                      </button>
+                      <button 
+                        onClick={() => handleActionClick(selectedItem, 'reject')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded border border-rose-200 transition-colors shadow-sm"
+                      >
+                        <X size={15} /> Tolak
+                      </button>
+                    </>
+                  )}
                   <button 
                     onClick={handlePrint}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200"
@@ -529,6 +612,118 @@ export default function PermitsPage() {
                     Dokumen ini di-generate secara otomatis oleh HRMS SaaS pada {new Date().toLocaleString('id-ID')}
                  </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL KONFIRMASI APPROVAL / REJECTION */}
+      {actionModal.isOpen && actionModal.item && (
+        <div className="fixed inset-0 z-80 flex items-center justify-center p-4 print:hidden">
+          <button
+            type="button"
+            aria-label="Tutup modal konfirmasi"
+            className="absolute inset-0 w-full h-full bg-black/40 backdrop-blur-sm cursor-default"
+            onClick={() => !isSubmitting && setActionModal({ isOpen: false, action: null, item: null })}
+          />
+          <div className="relative w-full max-w-md bg-white rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className={`p-4 border-b flex items-center justify-between ${actionModal.action === 'approve' ? 'bg-emerald-50 border-emerald-100 text-emerald-900' : 'bg-rose-50 border-rose-100 text-rose-900'}`}>
+              <h3 className="font-bold text-base flex items-center gap-2">
+                {actionModal.action === 'approve' ? (
+                  <>
+                    <Check size={18} className="text-emerald-600" />
+                    Setujui Permohonan Izin
+                  </>
+                ) : (
+                  <>
+                    <X size={18} className="text-rose-600" />
+                    Tolak Permohonan Izin
+                  </>
+                )}
+              </h3>
+              <button
+                onClick={() => setActionModal({ isOpen: false, action: null, item: null })}
+                disabled={isSubmitting}
+                className="p-1 rounded-full hover:bg-black/5"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-sm space-y-1">
+                <p><span className="text-gray-500">Karyawan:</span> <strong>{actionModal.item.user?.name || "Karyawan"}</strong></p>
+                <p><span className="text-gray-500">Tipe Izin:</span> <strong>{actionModal.item.type || "-"}</strong></p>
+                <p><span className="text-gray-500">Periode:</span> <strong>{actionModal.item.start_date} s/d {actionModal.item.end_date}</strong></p>
+                <p><span className="text-gray-500">Alasan:</span> <span className="italic">{actionModal.item.reason || "-"}</span></p>
+              </div>
+
+              {actionModal.action === 'approve' && (
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Kategori Izin Akhir (Override)
+                    </label>
+                    <select
+                      value={overrideCategory}
+                      onChange={(e) => setOverrideCategory(e.target.value)}
+                      className="w-full text-sm border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="I">[I] Izin Biasa (Tanpa Potong Gaji)</option>
+                      <option value="S">[S] Sakit</option>
+                      <option value="A">[A] Alpha / Mangkir (Potong Gaji)</option>
+                      <option value="L">[L] Lainnya</option>
+                    </select>
+                  </div>
+
+                  {overrideCategory === 'S' && (
+                    <label className="flex items-center gap-2 text-sm text-gray-700 font-medium cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={overrideDoctorNote}
+                        onChange={(e) => setOverrideDoctorNote(e.target.checked)}
+                        className="rounded text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>Ada Surat Dokter Resmi (Tidak Potong Gaji)</span>
+                    </label>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  {actionModal.action === 'approve' ? 'Catatan Tambahan (Opsional)' : 'Alasan Penolakan (Wajib)'}
+                </label>
+                <textarea
+                  value={remarkInput}
+                  onChange={(e) => setRemarkInput(e.target.value)}
+                  placeholder={actionModal.action === 'approve' ? "Berikan catatan jika diperlukan..." : "Tuliskan alasan mengapa izin ini ditolak..."}
+                  rows={3}
+                  className="w-full text-sm border border-gray-300 rounded-lg p-2.5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActionModal({ isOpen: false, action: null, item: null })}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={executeAction}
+                  disabled={isSubmitting || (actionModal.action === 'reject' && !remarkInput.trim())}
+                  className={`px-4 py-2 text-sm font-semibold text-white rounded-lg transition-colors shadow-sm disabled:opacity-50 ${
+                    actionModal.action === 'approve'
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-rose-600 hover:bg-rose-700'
+                  }`}
+                >
+                  {isSubmitting ? "Memproses..." : actionModal.action === 'approve' ? "Ya, Setujui" : "Ya, Tolak"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

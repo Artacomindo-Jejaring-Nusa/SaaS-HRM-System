@@ -79,6 +79,8 @@ interface ApprovalItem {
   dinas_luar_status?: string;
   dinas_luar_destination?: string;
   dinas_luar_notes?: string;
+  // Dynamic approval workflow
+  current_approval_step?: number | null;
 }
 
 interface RawLeave {
@@ -91,6 +93,7 @@ interface RawLeave {
   emergency_phone?: string;
   signature?: string;
   status: "pending" | "approved" | "rejected" | "pending_supervisor" | "pending_hr";
+  current_approval_step?: number | null;
   created_at: string;
   user?: {
     name?: string;
@@ -107,6 +110,7 @@ interface RawReimbursement {
   description?: string;
   amount?: string | number;
   status: "pending" | "approved" | "rejected" | "waiting_approval";
+  current_approval_step?: number | null;
   attachment?: string | string[];
   signature?: string;
   items?: ReimbursementItemDetail[];
@@ -129,6 +133,7 @@ interface RawOvertime {
   end_time?: string;
   reason?: string;
   status: "pending" | "approved" | "rejected" | "waiting_approval";
+  current_approval_step?: number | null;
   created_at: string;
   signature?: string;
   items?: OvertimeItemDetail[];
@@ -163,6 +168,7 @@ interface RawPermit {
   start_date?: string;
   end_date?: string;
   status: "pending" | "approved" | "rejected" | "waiting_approval";
+  current_approval_step?: number | null;
   attachment?: string;
   signature?: string;
   created_at: string;
@@ -200,6 +206,7 @@ interface RawFundRequest {
   reason?: string;
   amount?: string | number;
   status: string;
+  current_approval_step?: number | null;
   attachment?: string;
   signature?: string;
   created_at: string;
@@ -301,6 +308,7 @@ const normalizeLeaves = (data: unknown): ApprovalItem[] =>
     start_date: l.start_date,
     end_date: l.end_date,
     status: l.status,
+    current_approval_step: l.current_approval_step || null,
     attachment: undefined,
     signature: l.signature,
     leave_address: l.leave_address,
@@ -330,6 +338,7 @@ const normalizeReimbursements = (data: unknown): ApprovalItem[] =>
       category: r.title || "Reimbursement",
       amount: r.amount ? String(r.amount) : undefined,
       status: r.status,
+      current_approval_step: r.current_approval_step || null,
       attachment: attPath,
       attachments: atts,
       signature: r.signature,
@@ -352,6 +361,7 @@ const normalizeFundRequests = (data: unknown): ApprovalItem[] =>
     category: "Pengajuan Dana",
     amount: f.amount ? String(f.amount) : undefined,
     status: f.status,
+    current_approval_step: f.current_approval_step || null,
     attachment: extractStoragePath(f.attachment),
     signature: f.signature,
     created_at: f.created_at,
@@ -386,6 +396,7 @@ const normalizeOvertimes = (data: unknown): ApprovalItem[] =>
       start_date: formattedDate || dateVal,
       end_date: items.length > 1 ? `+${items.length - 1} jadwal` : undefined,
       status: o.status,
+      current_approval_step: o.current_approval_step || null,
       attachment: undefined,
       signature: o.signature,
       created_at: o.created_at,
@@ -421,6 +432,7 @@ const normalizePermits = (data: unknown): ApprovalItem[] =>
     start_date: pe.start_date,
     end_date: pe.end_date,
     status: pe.status,
+    current_approval_step: pe.current_approval_step || null,
     attachment: extractStoragePath(pe.attachment),
     signature: pe.signature,
     created_at: pe.created_at,
@@ -528,7 +540,11 @@ export default function ApprovalsPage() {
                    roleName.includes("admin") ||
                    roleName.includes("vp") ||
                    roleName.includes("direktur") ||
-                   roleName.includes("ceo");
+                   roleName.includes("director") ||
+                   roleName.includes("ceo") ||
+                   roleName.includes("coo") ||
+                   roleName.includes("boc") ||
+                   roleName.includes("management");
 
       const currentUserId = currentUser?.id ? Number(currentUser.id) : null;
       const merged = allApprovals
@@ -703,9 +719,16 @@ export default function ApprovalsPage() {
 
                       {/* Tipe */}
                       <td>
-                        <Badge variant="outline" className={`text-xs font-semibold ${typeColor[item.type]}`}>
-                          {typeLabel[item.type] || item.type}
-                        </Badge>
+                        <div className="flex flex-col gap-1 items-start">
+                          <Badge variant="outline" className={`text-xs font-semibold ${typeColor[item.type]}`}>
+                            {typeLabel[item.type] || item.type}
+                          </Badge>
+                          {item.current_approval_step && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              Tahap {item.current_approval_step}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Kategori */}
@@ -862,6 +885,11 @@ export default function ApprovalsPage() {
                     <Badge variant="outline" className={`text-[11px] font-semibold ${typeColor[selectedItem.type]}`}>
                       {typeLabel[selectedItem.type] || selectedItem.type}
                     </Badge>
+                    {selectedItem.current_approval_step && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                        Tahap {selectedItem.current_approval_step}
+                      </span>
+                    )}
                     <span className="text-xs text-gray-500 font-medium">ID #{selectedItem.id}</span>
                   </div>
                 </div>

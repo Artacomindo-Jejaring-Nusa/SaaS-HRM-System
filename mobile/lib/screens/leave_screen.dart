@@ -255,7 +255,7 @@ class _LeaveFormScreenState extends State<LeaveFormScreen> {
   
   DateTime _startDate = DateTime.now();
   DateTime _endDate = DateTime.now();
-  String _type = 'Cuti Tahunan';
+  final _typeController = TextEditingController(text: 'Cuti Tahunan');
   final _reasonController = TextEditingController();
   final _addressController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -270,6 +270,7 @@ class _LeaveFormScreenState extends State<LeaveFormScreen> {
 
   @override
   void dispose() {
+    _typeController.dispose();
     _reasonController.dispose();
     _addressController.dispose();
     _phoneController.dispose();
@@ -372,47 +373,7 @@ class _LeaveFormScreenState extends State<LeaveFormScreen> {
   }
 
   Widget _buildPurposeRow() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 90,
-          child: Text("Purpose", style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: Colors.grey[700], fontSize: 10)),
-        ),
-        Text(" : ", style: GoogleFonts.inter(color: Colors.grey[400], fontSize: 10)),
-        Expanded(
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: ["Cuti Tahunan", "Cuti Melahirkan", "Cuti Alasan Penting", "Lainnya"].map((type) {
-              final isSelected = _type == type;
-              return GestureDetector(
-                onTap: () => setState(() => _type = type),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[500]!, width: 1.2),
-                        borderRadius: BorderRadius.circular(2),
-                        color: isSelected ? const Color(0xFF0056B3) : Colors.transparent,
-                      ),
-                      child: isSelected
-                          ? const Icon(Icons.check, size: 8, color: Colors.white)
-                          : null,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(type, style: GoogleFonts.inter(fontSize: 9, color: Colors.grey[800], fontWeight: FontWeight.w500)),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      ],
-    );
+    return _buildInputRow("Purpose", _typeController, hint: "Tulis jenis/tujuan cuti...");
   }
 
   Widget _buildPeriodRow() {
@@ -938,8 +899,10 @@ class _LeaveFormScreenState extends State<LeaveFormScreen> {
 
       final base64Sig = base64Encode(sigData);
 
+      final leaveType = _typeController.text.trim().isEmpty ? 'Cuti Tahunan' : _typeController.text.trim();
+
       final res = await ApiService.submitLeave({
-        'type': _type,
+        'type': leaveType,
         'start_date': DateFormat('yyyy-MM-dd').format(_startDate),
         'end_date': DateFormat('yyyy-MM-dd').format(_endDate),
         'reason': _reasonController.text,

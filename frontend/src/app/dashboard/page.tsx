@@ -118,19 +118,25 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function fetchData() {
+      if (authLoading) return;
+      if (!user) return;
+
       try {
+        setLoading(true);
         const dashRes = await axiosInstance.get("/dashboard/summary");
-        setData(dashRes.data.data);
+        if (dashRes.data?.data) {
+          setData(dashRes.data.data);
+        }
       } catch (e) {
-        console.error("Gagal mendapatkan data", e);
+        console.error("Gagal mendapatkan data dashboard", e);
       } finally {
         setLoading(false);
       }
     }
     fetchData();
-  }, []);
+  }, [user, authLoading]);
 
-  if (loading || authLoading) {
+  if (loading || authLoading || !data) {
     return <DashboardSkeleton />;
   }
 

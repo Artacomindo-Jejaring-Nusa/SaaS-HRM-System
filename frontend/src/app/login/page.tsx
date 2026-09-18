@@ -8,7 +8,8 @@ import axiosInstance from "@/lib/axios";
 import Cookies from "js-cookie";
 import axios from "axios";
 import Image from "next/image";
-import { Eye, EyeOff, Loader2, Building2, Globe } from "lucide-react";
+import { Eye, EyeOff, Loader2, Building2, Globe, ShieldCheck } from "lucide-react";
+import { isSuperAdminUser } from "@/contexts/AuthContext";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -27,6 +28,16 @@ export default function LoginPage() {
   const [selectedFromSuggestion, setSelectedFromSuggestion] = useState(false);
   
   const companyInputRef = useRef<HTMLDivElement>(null);
+
+  // Check URL query parameter for unauthorized redirection
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("unauthorized") === "1") {
+        setError("Akses Website hanya diperuntukkan bagi Super Admin. Karyawan dan Manajer silakan masuk melalui Aplikasi Mobile On Time HRMS.");
+      }
+    }
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -91,7 +102,17 @@ export default function LoginPage() {
         company_name: companyName,
       });
       if (response.data.data && response.data.data.access_token) {
-        const { access_token, refresh_token, expires_in } = response.data.data;
+        const { access_token, refresh_token, expires_in, user: loggedUser } = response.data.data;
+        
+        // Strict Super Admin Access Restriction
+        if (!isSuperAdminUser(loggedUser)) {
+          Cookies.remove("token");
+          Cookies.remove("refresh_token");
+          setError("Akses Website hanya diperuntukkan bagi Super Admin. Karyawan dan Manajer silakan masuk melalui Aplikasi Mobile On Time HRMS.");
+          setLoading(false);
+          return;
+        }
+
         const isSecure = window.location.protocol === "https:";
         
         // Calculate access token expiry in days
@@ -166,7 +187,17 @@ export default function LoginPage() {
       });
 
       if (response.data.data && response.data.data.access_token) {
-        const { access_token, refresh_token, expires_in } = response.data.data;
+        const { access_token, refresh_token, expires_in, user: loggedUser } = response.data.data;
+
+        // Strict Super Admin Access Restriction
+        if (!isSuperAdminUser(loggedUser)) {
+          Cookies.remove("token");
+          Cookies.remove("refresh_token");
+          setError("Akses Website hanya diperuntukkan bagi Super Admin. Karyawan dan Manajer silakan masuk melalui Aplikasi Mobile On Time HRMS.");
+          setLoading(false);
+          return;
+        }
+
         const isSecure = window.location.protocol === "https:";
         const accessExpiryDays = expires_in ? expires_in / 86400 : 1;
 
@@ -220,10 +251,9 @@ export default function LoginPage() {
                 />
             </div>
             <div className="login-left-text">
-              <h2>Kelola SDM Lebih Efisien dengan Digital HRMS</h2>
+              <h2>Pusat Kontrol Super Admin HRMS</h2>
               <p>
-                Platform manajemen SDM terintegrasi untuk pengelolaan data
-                karyawan, absensi, penggajian, dan masih banyak lagi.
+                Platform administrasi pusat untuk pengelolaan perusahaan, struktur organisasi, alur persetujuan, dan operasional menyeluruh.
               </p>
             </div>
           </div>
@@ -252,8 +282,12 @@ export default function LoginPage() {
                 />
               </div>
               <div className="login-brand">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 mb-1 bg-red-50 border border-red-200 text-[#8B0000] rounded-full text-[10px] font-extrabold uppercase tracking-wider">
+                  <ShieldCheck size={12} className="text-[#8B0000]" />
+                  Portal Super Admin
+                </div>
                 <h1 className="login-title">Welcome Back!</h1>
-                <p className="login-subtitle">ON TIME HRMS (OT)</p>
+                <p className="login-subtitle">Khusus Super Administrator</p>
               </div>
             </div>
 

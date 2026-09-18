@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_service.dart';
 
 class TrackingService {
@@ -43,6 +42,12 @@ class TrackingService {
 
   static Future<void> startTracking() async {
     try {
+      final isEnabled = await ApiService.getMyTrackingStatus();
+      if (!isEnabled) {
+        debugPrint("Live tracking is disabled by administrator for this user/division.");
+        return;
+      }
+
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         debugPrint("Location service is disabled on device.");
@@ -112,12 +117,19 @@ void onStart(ServiceInstance service) async {
   // Helper function to send location update
   Future<void> sendLocationUpdate(Position position) async {
     try {
-      await ApiService.updateLiveLocation(
+      final res = await ApiService.updateLiveLocation(
         position.latitude,
         position.longitude,
         position.accuracy,
         recordedAt: DateTime.now(),
       );
+
+      // If Super Admin has disabled tracking for this user/division, stop the service
+      if (res['status'] == 'disabled' || res['is_tracking_enabled'] == false) {
+        debugPrint("Live tracking turned off by admin. Stopping background service.");
+        service.stopSelf();
+        return;
+      }
 
       if (service is AndroidServiceInstance) {
         final now = DateTime.now();

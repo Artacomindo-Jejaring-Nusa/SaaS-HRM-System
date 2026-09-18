@@ -41,6 +41,19 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+export const isSuperAdminUser = (u: any): boolean => {
+  if (!u) return false;
+  return (
+    u.role_id === 1 ||
+    u.role?.id === 1 ||
+    u.role?.name === "Super Admin" ||
+    u.role?.name?.toLowerCase() === "super admin" ||
+    u.can_access_all_companies === true ||
+    u.can_access_all_companies === 1 ||
+    u.role?.permissions?.some((p: any) => p.slug === "manage-roles" || p.slug === "view-superadmin-dashboard")
+  );
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -48,22 +61,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const router = useRouter();
 
   const fetchUser = useCallback(async () => {
+    const token = Cookies.get("token");
+    if (!token) {
+      setUser(null);
+      setPermissions([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await axiosInstance.get("/user");
       // Handle both { data: { user: ... } } and { data: ... }
       const userData = response.data?.user || response.data?.data?.user || response.data?.data || response.data;
 
       if (userData) {
+        // Enforce Super Admin only for web app
+        if (!isSuperAdminUser(userData)) {
+          console.warn("Akses web ditolak: Hanya Super Admin yang diizinkan.", userData.email);
+          Cookies.remove("token");
+          Cookies.remove("refresh_token");
+          setUser(null);
+          setPermissions([]);
+          router.replace("/login?unauthorized=1");
+          return;
+        }
+
         setUser(userData);
         const slugs = userData.role?.permissions?.map((p: { slug: string }) => p.slug) || [];
         setPermissions(slugs);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Gagal ambil data user", e);
+      if (e?.response?.status === 401) {
+        Cookies.remove("token");
+        Cookies.remove("refresh_token");
+        setUser(null);
+        setPermissions([]);
+        router.replace("/login");
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   const logout = async () => {
     // Call backend to revoke server-side tokens
@@ -83,8 +122,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const hasPermission = (permission?: string) => {
     if (!permission) return true;
-    // Bypass for Master Admin (role_id = 1) or Super Admin role
-    if (user?.role_id === 1 || user?.role?.name === 'Super Admin') return true;
+    // Super Admin has all permissions
+    if (isSuperAdminUser(user)) return true;
     return permissions.includes(permission);
   };
 

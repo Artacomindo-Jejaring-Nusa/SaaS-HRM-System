@@ -353,5 +353,8 @@ class ApiService {
           {int? batteryLevel, DateTime? recordedAt}) =>
       TrackingRepository.updateLiveLocation(lat, lng, accuracy,
           batteryLevel: batteryLevel, recordedAt: recordedAt);
+
+  static Future<bool> getMyTrackingStatus() =>
+      TrackingRepository.getMyTrackingStatus();
 }
 

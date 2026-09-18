@@ -19,6 +19,7 @@ class ApprovalService
         'reimbursement' => 'Reimbursement',
         'fund_request' => 'Pengajuan Dana',
         'attendance_correction' => 'Koreksi Absen',
+        'shift_swap' => 'Tukar Shift',
     ];
 
     /**
@@ -26,7 +27,7 @@ class ApprovalService
      */
     public static function getWorkflow(string $moduleKey, int $companyId): ?ApprovalWorkflow
     {
-        return ApprovalWorkflow::with('steps.role')
+        return ApprovalWorkflow::with(['steps.role', 'steps.approverUser'])
             ->where('company_id', $companyId)
             ->where('module_key', $moduleKey)
             ->where('is_active', true)

@@ -97,7 +97,12 @@ class LeaveController extends Controller
         $user = $request->user();
         $companyId = $user->company_id;
 
-        $typeMeta = self::KEMNAKER_LEAVE_TYPES[$request->type] ?? null;
+        $typeMeta = self::KEMNAKER_LEAVE_TYPES[$request->type] ?? [
+            'days' => 0,
+            'paid' => true,
+            'article' => 'Kebijakan Perusahaan',
+            'uses_quota' => false,
+        ];
         $requestedDays = Carbon::parse($request->start_date)->diffInDays(Carbon::parse($request->end_date)) + 1;
 
         $validationError = $this->validateLeaveRequest($user, $request, $typeMeta, $requestedDays);
@@ -108,7 +113,7 @@ class LeaveController extends Controller
             ], 400);
         }
 
-        $isExpandUsed = ($request->type === self::TYPE_ANNUAL_LEAVE && ($user->kemnaker_leave_balance < $requestedDays));
+        $isExpandUsed = false;
 
         // Create attributes
         $leaveAttributes = [
@@ -122,8 +127,8 @@ class LeaveController extends Controller
             'emergency_phone' => $request->emergency_phone,
             'signature' => $request->signature,
             'duration_days' => $requestedDays,
-            'is_paid' => $typeMeta['paid'],
-            'kemnaker_article' => $typeMeta['article'],
+            'is_paid' => $typeMeta['paid'] ?? true,
+            'kemnaker_article' => $typeMeta['article'] ?? 'Kebijakan Perusahaan',
         ];
 
         // ── Dynamic Workflow Check ──
@@ -378,17 +383,11 @@ class LeaveController extends Controller
     }
 
     /**
-     * Helper to deduct leave balance on approval.
+     * Helper to process leave approval deduction (disabled automatic decrement per requirements).
      */
     public static function processLeaveApprovalDeduction(Leave $leave): void
     {
-        $days = $leave->duration_days ?: (Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1);
-        $leaveUser = $leave->user;
-        if ($leaveUser) {
-            $leaveUser->leave_balance = max(0, ($leaveUser->leave_balance ?? 12) - $days);
-            $leaveUser->leave_used = ($leaveUser->leave_used ?? 0) + $days;
-            $leaveUser->save();
-        }
+        // Decrement otomatis jatah cuti tahunan dihilangkan
     }
 
     /**
@@ -396,13 +395,7 @@ class LeaveController extends Controller
      */
     public static function processLeaveApprovalRefund(Leave $leave): void
     {
-        $days = $leave->duration_days ?: (Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1);
-        $leaveUser = $leave->user;
-        if ($leaveUser) {
-            $leaveUser->leave_balance = ($leaveUser->leave_balance ?? 12) + $days;
-            $leaveUser->leave_used = max(0, ($leaveUser->leave_used ?? 0) - $days);
-            $leaveUser->save();
-        }
+        // No refund needed since automatic deduction is disabled
     }
 
     /**
@@ -536,37 +529,8 @@ class LeaveController extends Controller
 
     private function validateLeaveRequest(User $user, Request $request, ?array $typeMeta, int $requestedDays): ?string
     {
-        $error = null;
-
-        if (!$typeMeta) {
-            $error = 'Tipe cuti tidak valid menurut ketentuan ketenagakerjaan.';
-        } elseif ($typeMeta['days'] > 0 && $requestedDays > $typeMeta['days']) {
-            $error = "Durasi cuti {$request->type} melebihi batas maksimal UU Ketenagakerjaan ({$typeMeta['days']} hari).";
-        } elseif ($request->type === self::TYPE_ANNUAL_LEAVE) {
-            $error = $this->validateAnnualLeaveBalance($user, $requestedDays);
-        }
-
-        return $error;
-    }
-
-    private function validateAnnualLeaveBalance(User $user, int $requestedDays): ?string
-    {
-        if (!$user->is_eligible_for_leave) {
-            return 'Anda belum berhak mengambil Cuti Tahunan karena masa kerja kurang dari 1 tahun.';
-        }
-
-        $pendingDays = Leave::where('user_id', $user->id)
-            ->where('type', self::TYPE_ANNUAL_LEAVE)
-            ->whereIn('status', ['pending', 'pending_supervisor', 'pending_hr'])
-            ->get()
-            ->sum(fn ($l) => Carbon::parse($l->start_date)->diffInDays(Carbon::parse($l->end_date)) + 1);
-
-        $requiredBalance = $requestedDays + $pendingDays;
-        if ($user->kemnaker_leave_balance < $requiredBalance) {
-            $shortfall = $requiredBalance - $user->kemnaker_leave_balance;
-            if (!($shortfall == 1 && $user->canUseExpandMendadak())) {
-                return 'Sisa cuti tahunan Anda tidak mencukupi (termasuk cuti yang masih pending/menunggu).';
-            }
+        if ($typeMeta && isset($typeMeta['days']) && $typeMeta['days'] > 0 && $requestedDays > $typeMeta['days']) {
+            return "Durasi cuti {$request->type} melebihi batas maksimal UU Ketenagakerjaan ({$typeMeta['days']} hari).";
         }
 
         return null;

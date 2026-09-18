@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import axiosInstance from "@/lib/axios";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { GitBranch, Info, Plus, Trash2, ArrowUp, ArrowDown, Save, ToggleLeft, ToggleRight, Sparkles, Check, Play } from "lucide-react";
+import { GitBranch, Info, Plus, Trash2, ArrowUp, ArrowDown, Save, ToggleLeft, ToggleRight, Sparkles, Check, Play, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -18,22 +18,22 @@ interface WorkflowModule {
 
 const modules: WorkflowModule[] = [
   { key: "leave", label: "Cuti", layers: 2, description: "Karyawan → Supervisor → HRD" },
-  { key: "fund_request", label: "Kasbon", layers: 2, description: "Karyawan → Supervisor → HRD" },
+  { key: "fund_request", label: "Pengajuan Dana", layers: 2, description: "Karyawan → Supervisor → HRD" },
   { key: "shift_swap", label: "Tukar Shift", layers: 3, description: "Karyawan → Rekan Kerja → Manager" },
   { key: "overtime", label: "Lembur", layers: 1, description: "Karyawan → HRD/Admin" },
   { key: "permit", label: "Izin", layers: 1, description: "Karyawan → HRD/Admin" },
-  { key: "reimbursement", label: "Reimbursement", layers: 1, description: "Karyawan → HRD/Admin" },
+  { key: "reimbursement", label: "Klaim Biaya", layers: 1, description: "Karyawan → HRD/Admin" },
   { key: "profile_request", label: "Ubah Profil", layers: 1, description: "Karyawan → HRD/Admin" },
   { key: "attendance_correction", label: "Koreksi Absen", layers: 1, description: "Karyawan → HRD/Admin" },
 ];
 
 const roleColors: Record<string, { bg: string; border: string; text: string; glow: string }> = {
-  trigger:   { bg: "#eff6ff", border: "#3b82f6", text: "#1e40af", glow: "rgba(59,130,246,0.12)" },
-  peer:      { bg: "#fffbeb", border: "#f59e0b", text: "#854d0e", glow: "rgba(245,158,11,0.12)" },
-  supervisor:{ bg: "#f5f3ff", border: "#8b5cf6", text: "#5b21b6", glow: "rgba(139,92,246,0.12)" },
-  hrd:       { bg: "#fff5f5", border: "#8b0000", text: "#7f1d1d", glow: "rgba(139,0,0,0.12)" },
-  approved:  { bg: "#f0fdf4", border: "#10b981", text: "#065f46", glow: "rgba(16,185,129,0.12)" },
-  rejected:  { bg: "#fef2f2", border: "#ef4444", text: "#991b1b", glow: "rgba(239,68,68,0.12)" },
+  trigger:   { bg: "#f0f7ff", border: "#3b82f6", text: "#1e40af", glow: "rgba(59,130,246,0.14)" },
+  peer:      { bg: "#fffdf0", border: "#f59e0b", text: "#92400e", glow: "rgba(245,158,11,0.14)" },
+  supervisor:{ bg: "#f8f5ff", border: "#8b5cf6", text: "#5b21b6", glow: "rgba(139,92,246,0.14)" },
+  hrd:       { bg: "#fff5f5", border: "#e11d48", text: "#9f1239", glow: "rgba(225,29,72,0.14)" },
+  approved:  { bg: "#f0fdf4", border: "#10b981", text: "#065f46", glow: "rgba(16,185,129,0.14)" },
+  rejected:  { bg: "#fef2f2", border: "#ef4444", text: "#991b1b", glow: "rgba(239,68,68,0.14)" },
 };
 
 interface FlowNode {
@@ -48,11 +48,27 @@ const getStepNodeMeta = (
   step: BackendStep,
   idx: number,
   totalSteps: number,
-  roles: Array<{ id: number; name: string }>
+  roles: Array<{ id: number; name: string }>,
+  users: Array<{ id: number; name: string; role?: { name: string } }> = []
 ) => {
+  let stageTitle = "";
+  if (totalSteps === 1) {
+    stageTitle = "Persetujuan (Step 1)";
+  } else if (totalSteps === 2) {
+    stageTitle = idx === 0 ? "Pemeriksaan (Step 1)" : "Persetujuan (Step 2)";
+  } else if (totalSteps === 3) {
+    if (idx === 0) stageTitle = "Pemeriksaan (Step 1)";
+    else if (idx === 1) stageTitle = "Mengetahui (Step 2)";
+    else stageTitle = "Persetujuan (Step 3)";
+  } else {
+    if (idx === 0) stageTitle = "Pemeriksaan (Step 1)";
+    else if (idx === totalSteps - 1) stageTitle = `Persetujuan (Step ${idx + 1})`;
+    else stageTitle = `Mengetahui (Step ${idx + 1})`;
+  }
+
   if (step.approver_type === "supervisor") {
     return {
-      stageTitle: idx === 0 ? "Checked by (Diperiksa)" : "Acknowledge (Diketahui)",
+      stageTitle,
       subText: "Atasan Langsung (SPV)",
       icon: "👔",
       type: "supervisor",
@@ -60,10 +76,7 @@ const getStepNodeMeta = (
   }
   if (step.approver_type === "role") {
     const matchingRole = roles.find(r => r.id === step.approver_role_id);
-    const roleName = matchingRole ? matchingRole.name : `Role ${step.approver_role_id}`;
-    let stageTitle = `Acknowledge (${roleName})`;
-    if (idx === 0) stageTitle = `Checked by (${roleName})`;
-    else if (idx === totalSteps - 1) stageTitle = `Approved by (${roleName})`;
+    const roleName = matchingRole ? matchingRole.name : (step.role?.name || `Role ${step.approver_role_id}`);
 
     return {
       stageTitle,
@@ -72,18 +85,27 @@ const getStepNodeMeta = (
       type: "hrd",
     };
   }
+  if (step.approver_type === "user") {
+    const matchingUser = users.find(u => u.id === step.approver_user_id);
+    const userName = matchingUser ? matchingUser.name : (step.approver_user?.name || `User ID ${step.approver_user_id}`);
+
+    return {
+      stageTitle,
+      subText: `User: ${userName}`,
+      icon: "👤",
+      type: "peer",
+    };
+  }
   return {
-    stageTitle: idx === totalSteps - 1 ? "Approved by (User)" : "Acknowledge (User)",
-    subText: "Spesifik Karyawan",
+    stageTitle,
+    subText: "Penyetuju",
     icon: "👤",
     type: "peer",
   };
 };
 
-const getRejectNodeLabel = (idx: number, totalSteps: number): string => {
-  if (idx === 0) return "Ditolak (Checked by)";
-  if (idx === totalSteps - 1) return "Ditolak (Approved by)";
-  return "Ditolak (Acknowledge)";
+const getRejectNodeLabel = (idx: number, _totalSteps: number): string => {
+  return `Ditolak (Tahap ${idx + 1})`;
 };
 
 // Backend Step Data
@@ -91,12 +113,15 @@ interface BackendStep {
   step_number: number;
   approver_type: "supervisor" | "role" | "user";
   approver_role_id: number | null;
+  approver_user_id?: number | null;
   sla_hours: number;
   role?: { id: number; name: string };
+  approver_user?: { id: number; name: string };
 }
 
 interface BackendWorkflow {
   id: number;
+  company_id?: number | null;
   module_key: string;
   name: string;
   is_active: boolean;
@@ -109,17 +134,57 @@ interface AppRole {
   name: string;
 }
 
-const NODE_W = 180, NODE_H = 72;
-
-function getNodeCenter(n: FlowNode): [number, number] {
-  return [n.x + NODE_W / 2, n.y + NODE_H / 2];
+interface AppUser {
+  id: number;
+  name: string;
+  email?: string;
+  role?: { id: number; name: string };
 }
 
-function buildPath(from: FlowNode, to: FlowNode): string {
-  const [x1, y1] = getNodeCenter(from);
-  const [x2, y2] = getNodeCenter(to);
+interface AppCompany {
+  id: number;
+  name: string;
+}
+
+const NODE_W = 200, NODE_H = 76;
+
+function buildEdgePath(from: FlowNode, to: FlowNode): { path: string; mx: number; my: number } {
+  const isVertical = Math.abs(from.x - to.x) < 50;
+
+  if (isVertical) {
+    // Vertical connection: bottom of `from` to top of `to`
+    const x = from.x + NODE_W / 2;
+    const y1 = from.y + NODE_H;
+    const y2 = to.y;
+    const my = (y1 + y2) / 2;
+    return {
+      path: `M ${x},${y1} L ${x},${y2}`,
+      mx: x,
+      my,
+    };
+  }
+
+  // Horizontal connection: right of `from` to left of `to`
+  const x1 = from.x + NODE_W;
+  const y1 = from.y + NODE_H / 2;
+  const x2 = to.x;
+  const y2 = to.y + NODE_H / 2;
   const mx = (x1 + x2) / 2;
-  return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+  const my = (y1 + y2) / 2;
+
+  if (Math.abs(y1 - y2) < 5) {
+    return {
+      path: `M ${x1},${y1} L ${x2},${y2}`,
+      mx,
+      my,
+    };
+  }
+
+  return {
+    path: `M ${x1},${y1} C ${mx},${y1} ${mx},${y2} ${x2},${y2}`,
+    mx,
+    my,
+  };
 }
 
 export default function ApprovalWorkflowPage() {
@@ -128,11 +193,17 @@ export default function ApprovalWorkflowPage() {
   const [customActive, setCustomActive] = useState<boolean>(false);
   const [steps, setSteps] = useState<BackendStep[]>([]);
   const [roles, setRoles] = useState<AppRole[]>([]);
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [companies, setCompanies] = useState<AppCompany[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
 
-  const isAuthorized = user?.role_id === 1 ||
+  const isSuperAdmin = user?.role_id === 1 || 
     user?.role?.name === "Super Admin" ||
+    (user as any)?.can_access_all_companies;
+
+  const isAuthorized = isSuperAdmin ||
     user?.role?.name === "Admin" ||
     user?.role?.name?.toLowerCase().includes("hrd") ||
     user?.role?.name?.toLowerCase().includes("admin");
@@ -143,6 +214,25 @@ export default function ApprovalWorkflowPage() {
       setIsEditing(false);
     }
   }, [isAuthorized]);
+
+  // Load companies for Super Admin
+  useEffect(() => {
+    if (isSuperAdmin) {
+      axiosInstance.get("/approval-workflows/companies")
+        .then(res => {
+          if (res.data.status === "success" && Array.isArray(res.data.data)) {
+            setCompanies(res.data.data);
+            if (res.data.data.length > 0 && selectedCompanyId === null) {
+              const defaultCompany = user?.company_id 
+                ? res.data.data.find((c: AppCompany) => c.id === user.company_id) || res.data.data[0]
+                : res.data.data[0];
+              setSelectedCompanyId(defaultCompany.id);
+            }
+          }
+        })
+        .catch(err => console.error("Gagal memuat daftar perusahaan:", err));
+    }
+  }, [isSuperAdmin, user?.company_id]);
 
   // Load available roles for the step editor
   useEffect(() => {
@@ -155,15 +245,28 @@ export default function ApprovalWorkflowPage() {
       .catch(err => console.error("Gagal memuat roles:", err));
   }, []);
 
-  // Load existing workflow for the selected module
+  // Load available users for the specific user approver option
+  useEffect(() => {
+    const params = selectedCompanyId ? `?company_id=${selectedCompanyId}` : "";
+    axiosInstance.get(`/approval-workflows/users${params}`)
+      .then(res => {
+        if (res.data.status === "success" && Array.isArray(res.data.data)) {
+          setUsers(res.data.data);
+        }
+      })
+      .catch(err => console.error("Gagal memuat users:", err));
+  }, [selectedCompanyId]);
+
+  // Load existing workflow for the selected module and company
   useEffect(() => {
     setLoading(true);
-    axiosInstance.get(`/approval-workflows/${selected}`)
+    const params = selectedCompanyId ? `?company_id=${selectedCompanyId}` : "";
+    axiosInstance.get(`/approval-workflows/${selected}${params}`)
       .then(res => {
         if (res.data.status === "success" && res.data.data) {
           const wf = res.data.data as BackendWorkflow;
           setCustomActive(wf.is_active);
-          setSteps(wf.steps);
+          setSteps(wf.steps || []);
         } else {
           // If no custom workflow, reset to default dynamic state
           setCustomActive(false);
@@ -172,64 +275,64 @@ export default function ApprovalWorkflowPage() {
       })
       .catch(err => console.error("Gagal memuat workflow:", err))
       .finally(() => setLoading(false));
-  }, [selected]);
+  }, [selected, selectedCompanyId]);
 
   // Fallback default workflows (before customization)
   const defaultFlowData = (): FlowData => {
     if (selected === "leave") {
       return {
         nodes: [
-          { id: "submit", x: 60, y: 200, label: "Requition (Pemohon)", sub: "Mengajukan Cuti", type: "trigger", icon: "📝" },
-          { id: "spv", x: 310, y: 120, label: "Checked by (Diperiksa)", sub: "Atasan Langsung", type: "supervisor", icon: "👔" },
-          { id: "hr", x: 560, y: 200, label: "Acknowledge (Diketahui)", sub: "Admin VP / HRD", type: "hrd", icon: "🏢" },
-          { id: "ok", x: 810, y: 140, label: "Approved by (Disetujui)", sub: "CEO / Cuti Berlaku", type: "approved", icon: "✅" },
-          { id: "no1", x: 310, y: 340, label: "Ditolak (Checked by)", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
-          { id: "no2", x: 660, y: 340, label: "Ditolak (Acknowledge)", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
+          { id: "submit", x: 40, y: 100, label: "Pengajuan (Pemohon)", sub: "Mengajukan Cuti", type: "trigger", icon: "📝" },
+          { id: "spv", x: 290, y: 100, label: "Pemeriksaan (Step 1)", sub: "Atasan Langsung (SPV)", type: "supervisor", icon: "👔" },
+          { id: "hr", x: 540, y: 100, label: "Persetujuan (Step 2)", sub: "Role: HRD / Admin", type: "hrd", icon: "🏢" },
+          { id: "ok", x: 790, y: 100, label: "Pengajuan Disetujui", sub: "Proses Selesai", type: "approved", icon: "✅" },
+          { id: "no1", x: 290, y: 270, label: "Ditolak (Tahap 1)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
+          { id: "no2", x: 540, y: 270, label: "Ditolak (Tahap 2)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
         ],
         edges: [
-          { id: "e1", from: "submit", to: "spv", color: "#3B82F6", animated: true },
-          { id: "e2", from: "spv", to: "hr", label: "Approve", color: "#14B8A6", animated: true },
-          { id: "e3", from: "spv", to: "no1", label: "Reject", color: "#EF4444" },
-          { id: "e4", from: "hr", to: "ok", label: "Approve", color: "#14B8A6", animated: true },
-          { id: "e5", from: "hr", to: "no2", label: "Reject", color: "#EF4444" },
+          { id: "e1", from: "submit", to: "spv", color: "#3b82f6", animated: true },
+          { id: "e2", from: "spv", to: "hr", label: "Approve", color: "#10b981", animated: true },
+          { id: "e3", from: "spv", to: "no1", label: "Reject", color: "#ef4444" },
+          { id: "e4", from: "hr", to: "ok", label: "Approve", color: "#10b981", animated: true },
+          { id: "e5", from: "hr", to: "no2", label: "Reject", color: "#ef4444" },
         ],
       };
     }
     if (selected === "fund_request") {
       return {
         nodes: [
-          { id: "submit", x: 60, y: 200, label: "Requition (Pemohon)", sub: "Pengajuan Dana / Kasbon", type: "trigger", icon: "💰" },
-          { id: "spv", x: 310, y: 120, label: "Checked by (Diperiksa)", sub: "Atasan Langsung", type: "supervisor", icon: "👔" },
-          { id: "hr", x: 560, y: 200, label: "Acknowledge (Diketahui)", sub: "Admin VP / Kadiv", type: "hrd", icon: "🏢" },
-          { id: "ok", x: 810, y: 140, label: "Approved by (Disetujui)", sub: "CEO / Dana Dicairkan", type: "approved", icon: "✅" },
-          { id: "no1", x: 310, y: 340, label: "Ditolak (Checked by)", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
-          { id: "no2", x: 660, y: 340, label: "Ditolak (Acknowledge)", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
+          { id: "submit", x: 40, y: 100, label: "Pengajuan (Pemohon)", sub: "Pengajuan Dana", type: "trigger", icon: "💰" },
+          { id: "spv", x: 290, y: 100, label: "Pemeriksaan (Step 1)", sub: "Atasan Langsung (SPV)", type: "supervisor", icon: "👔" },
+          { id: "hr", x: 540, y: 100, label: "Persetujuan (Step 2)", sub: "Role: Keuangan / HRD", type: "hrd", icon: "🏢" },
+          { id: "ok", x: 790, y: 100, label: "Pengajuan Disetujui", sub: "Dana Dicairkan", type: "approved", icon: "✅" },
+          { id: "no1", x: 290, y: 270, label: "Ditolak (Tahap 1)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
+          { id: "no2", x: 540, y: 270, label: "Ditolak (Tahap 2)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
         ],
         edges: [
-          { id: "e1", from: "submit", to: "spv", color: "#3B82F6", animated: true },
-          { id: "e2", from: "spv", to: "hr", label: "Approve", color: "#14B8A6", animated: true },
-          { id: "e3", from: "spv", to: "no1", label: "Reject", color: "#EF4444" },
-          { id: "e4", from: "hr", to: "ok", label: "Approve", color: "#14B8A6", animated: true },
-          { id: "e5", from: "hr", to: "no2", label: "Reject", color: "#EF4444" },
+          { id: "e1", from: "submit", to: "spv", color: "#3b82f6", animated: true },
+          { id: "e2", from: "spv", to: "hr", label: "Approve", color: "#10b981", animated: true },
+          { id: "e3", from: "spv", to: "no1", label: "Reject", color: "#ef4444" },
+          { id: "e4", from: "hr", to: "ok", label: "Approve", color: "#10b981", animated: true },
+          { id: "e5", from: "hr", to: "no2", label: "Reject", color: "#ef4444" },
         ],
       };
     }
     if (selected === "shift_swap") {
       return {
         nodes: [
-          { id: "submit", x: 40, y: 200, label: "Requition (Pemohon)", sub: "Request Tukar Shift", type: "trigger", icon: "🔄" },
-          { id: "peer", x: 260, y: 120, label: "Checked by (Rekan)", sub: "Receiver Accept?", type: "peer", icon: "🤝" },
-          { id: "mgr", x: 490, y: 200, label: "Acknowledge (Manager)", sub: "Supervisor / Atasan", type: "supervisor", icon: "👔" },
-          { id: "ok", x: 730, y: 140, label: "Approved by (Disetujui)", sub: "Jadwal Updated", type: "approved", icon: "✅" },
-          { id: "no1", x: 260, y: 340, label: "Ditolak (Rekan)", sub: "Swap Batal", type: "rejected", icon: "❌" },
-          { id: "no2", x: 580, y: 340, label: "Ditolak (Manager)", sub: "Swap Batal", type: "rejected", icon: "❌" },
+          { id: "submit", x: 40, y: 100, label: "Pengajuan (Pemohon)", sub: "Request Tukar Shift", type: "trigger", icon: "🔄" },
+          { id: "peer", x: 290, y: 100, label: "Konfirmasi (Step 1)", sub: "Rekan Pengganti", type: "peer", icon: "🤝" },
+          { id: "mgr", x: 540, y: 100, label: "Persetujuan (Step 2)", sub: "Atasan / Manager", type: "supervisor", icon: "👔" },
+          { id: "ok", x: 790, y: 100, label: "Pengajuan Disetujui", sub: "Jadwal Diperbarui", type: "approved", icon: "✅" },
+          { id: "no1", x: 290, y: 270, label: "Ditolak (Rekan)", sub: "Swap Batal", type: "rejected", icon: "❌" },
+          { id: "no2", x: 540, y: 270, label: "Ditolak (Manager)", sub: "Swap Batal", type: "rejected", icon: "❌" },
         ],
         edges: [
-          { id: "e1", from: "submit", to: "peer", color: "#3B82F6", animated: true },
-          { id: "e2", from: "peer", to: "mgr", label: "Accept", color: "#F59E0B", animated: true },
-          { id: "e3", from: "peer", to: "no1", label: "Reject", color: "#EF4444" },
-          { id: "e4", from: "mgr", to: "ok", label: "Approve", color: "#14B8A6", animated: true },
-          { id: "e5", from: "mgr", to: "no2", label: "Reject", color: "#EF4444" },
+          { id: "e1", from: "submit", to: "peer", color: "#3b82f6", animated: true },
+          { id: "e2", from: "peer", to: "mgr", label: "Accept", color: "#f59e0b", animated: true },
+          { id: "e3", from: "peer", to: "no1", label: "Reject", color: "#ef4444" },
+          { id: "e4", from: "mgr", to: "ok", label: "Approve", color: "#10b981", animated: true },
+          { id: "e5", from: "mgr", to: "no2", label: "Reject", color: "#ef4444" },
         ],
       };
     }
@@ -244,15 +347,15 @@ export default function ApprovalWorkflowPage() {
     const l = labels[selected] || labels.overtime;
     return {
       nodes: [
-        { id: "submit", x: 100, y: 200, label: "Requition (Pemohon)", sub: l.sub, type: "trigger", icon: l.icon },
-        { id: "hr", x: 420, y: 200, label: "Checked by (Diperiksa)", sub: "Evaluasi & Keputusan", type: "hrd", icon: "🏢" },
-        { id: "ok", x: 720, y: 140, label: "Approved by (Disetujui)", sub: "Selesai", type: "approved", icon: "✅" },
-        { id: "no", x: 720, y: 300, label: "Ditolak (Checked by)", sub: "Alasan Tertera", type: "rejected", icon: "❌" },
+        { id: "submit", x: 40, y: 100, label: "Pengajuan (Pemohon)", sub: l.sub, type: "trigger", icon: l.icon },
+        { id: "hr", x: 290, y: 100, label: "Persetujuan (Step 1)", sub: "Role: HRD / Admin", type: "hrd", icon: "🏢" },
+        { id: "ok", x: 540, y: 100, label: "Pengajuan Disetujui", sub: l.okLabel, type: "approved", icon: "✅" },
+        { id: "no", x: 290, y: 270, label: "Ditolak (Tahap 1)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
       ],
       edges: [
-        { id: "e1", from: "submit", to: "hr", color: "#3B82F6", animated: true },
-        { id: "e2", from: "hr", to: "ok", label: "Approve", color: "#14B8A6", animated: true },
-        { id: "e3", from: "hr", to: "no", label: "Reject", color: "#EF4444" },
+        { id: "e1", from: "submit", to: "hr", color: "#3b82f6", animated: true },
+        { id: "e2", from: "hr", to: "ok", label: "Approve", color: "#10b981", animated: true },
+        { id: "e3", from: "hr", to: "no", label: "Reject", color: "#ef4444" },
       ],
     };
   };
@@ -265,37 +368,38 @@ export default function ApprovalWorkflowPage() {
 
     const nodes: FlowNode[] = [];
     const edges: FlowEdge[] = [];
+    const GAP_X = 250;
 
     // Start trigger node
     const triggerLabel = modules.find(m => m.key === selected)?.label || "Pengajuan";
-    nodes.push({ id: "submit", x: 60, y: 200, label: "Requition (Pemohon)", sub: `Ajukan ${triggerLabel}`, type: "trigger", icon: "📝" });
+    nodes.push({ id: "submit", x: 40, y: 100, label: "Pengajuan (Pemohon)", sub: `Ajukan ${triggerLabel}`, type: "trigger", icon: "📝" });
 
     // Middle step approval nodes
     steps.forEach((step, idx) => {
       const stepId = `step_${step.step_number}`;
-      const x = 60 + (idx + 1) * 250;
-      const meta = getStepNodeMeta(step, idx, steps.length, roles);
+      const x = 40 + (idx + 1) * GAP_X;
+      const meta = getStepNodeMeta(step, idx, steps.length, roles, users);
 
       nodes.push({
         id: stepId,
         x,
-        y: 120,
+        y: 100,
         label: meta.stageTitle,
         sub: meta.subText,
         type: meta.type,
         icon: meta.icon,
       });
 
-      // Reject Node for this level using Excel terminology
+      // Reject Node for this level
       const rejectId = `reject_${step.step_number}`;
       const rejectLabel = getRejectNodeLabel(idx, steps.length);
 
       nodes.push({
         id: rejectId,
         x,
-        y: 340,
+        y: 270,
         label: rejectLabel,
-        sub: "Alasan Tertera",
+        sub: "Alasan Penolakan",
         type: "rejected",
         icon: "❌",
       });
@@ -307,7 +411,7 @@ export default function ApprovalWorkflowPage() {
         from: prevId,
         to: stepId,
         label: idx === 0 ? undefined : "Approve",
-        color: idx === 0 ? "#3b82f6" : "#14b8a6",
+        color: idx === 0 ? "#3b82f6" : "#10b981",
         animated: true,
       });
 
@@ -323,15 +427,15 @@ export default function ApprovalWorkflowPage() {
 
     // Final approved node
     const lastStepId = `step_${steps[steps.length - 1].step_number}`;
-    const finalX = 60 + (steps.length + 1) * 250;
-    nodes.push({ id: "ok", x: finalX, y: 140, label: "Approved by (Disetujui)", sub: "Proses Selesai", type: "approved", icon: "✅" });
+    const finalX = 40 + (steps.length + 1) * GAP_X;
+    nodes.push({ id: "ok", x: finalX, y: 100, label: "Pengajuan Disetujui", sub: "Proses Selesai", type: "approved", icon: "✅" });
 
     edges.push({
       id: "e-final-approve",
       from: lastStepId,
       to: "ok",
       label: "Approve",
-      color: "#14b8a6",
+      color: "#10b981",
       animated: true,
     });
 
@@ -342,7 +446,7 @@ export default function ApprovalWorkflowPage() {
   const nodeMap = Object.fromEntries(flow.nodes.map(n => [n.id, n]));
 
   // Calculate SVG viewBox
-  const maxX = Math.max(...flow.nodes.map(n => n.x + NODE_W)) + 40;
+  const maxX = Math.max(...flow.nodes.map(n => n.x + NODE_W)) + 60;
   const maxY = Math.max(...flow.nodes.map(n => n.y + NODE_H)) + 60;
 
   // Add a new step
@@ -352,6 +456,7 @@ export default function ApprovalWorkflowPage() {
       step_number: nextNumber,
       approver_type: "supervisor",
       approver_role_id: roles.length > 0 ? roles[0].id : null,
+      approver_user_id: users.length > 0 ? users[0].id : null,
       sla_hours: 24,
     };
     setSteps([...steps, newStep]);
@@ -397,15 +502,28 @@ export default function ApprovalWorkflowPage() {
 
   // Save the customized workflow to the backend
   const handleSaveWorkflow = async () => {
-    if (customActive && steps.length === 0) {
-      toast.error("Alur kustom minimal harus memiliki 1 step persetujuan.");
-      return;
+    if (customActive) {
+      if (steps.length === 0) {
+        toast.error("Alur kustom minimal harus memiliki 1 step persetujuan.");
+        return;
+      }
+      for (const s of steps) {
+        if (s.approver_type === "role" && !s.approver_role_id) {
+          toast.error(`Step ${s.step_number}: Silakan pilih role jabatan penyetuju.`);
+          return;
+        }
+        if (s.approver_type === "user" && !s.approver_user_id) {
+          toast.error(`Step ${s.step_number}: Silakan pilih user/pejabat penyetuju.`);
+          return;
+        }
+      }
     }
 
     setLoading(true);
     try {
       const payload = {
         module_key: selected,
+        company_id: selectedCompanyId || undefined,
         name: `${modules.find(m => m.key === selected)?.label || selected} Custom Workflow`,
         is_active: customActive,
         flow_json: JSON.stringify(flow),
@@ -413,6 +531,7 @@ export default function ApprovalWorkflowPage() {
           step_number: s.step_number,
           approver_type: s.approver_type,
           approver_role_id: s.approver_type === "role" ? s.approver_role_id : null,
+          approver_user_id: s.approver_type === "user" ? s.approver_user_id : null,
           sla_hours: s.sla_hours,
         })),
       };
@@ -461,6 +580,34 @@ export default function ApprovalWorkflowPage() {
           </div>
         )}
       </div>
+
+      {/* Super Admin Company / Branch Selector */}
+      {isSuperAdmin && companies.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-gray-200/80 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-red-50 text-[#8B0000] rounded-xl">
+              <Building2 size={18} />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-gray-900">Perusahaan / Entitas Cabang</div>
+              <div className="text-[11px] text-gray-500">Konfigurasi alur approval spesifik per perusahaan</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedCompanyId || ""}
+              onChange={(e) => setSelectedCompanyId(e.target.value ? Number(e.target.value) : null)}
+              className="text-xs font-semibold bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-gray-800 focus:outline-none focus:border-[#8B0000] focus:ring-1 focus:ring-[#8B0000] min-w-[220px]"
+            >
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* Module Tabs */}
       <div className="flex flex-wrap gap-2">
@@ -515,56 +662,68 @@ export default function ApprovalWorkflowPage() {
               <svg
                 viewBox={`0 0 ${maxX} ${maxY}`}
                 className="w-full relative z-10"
-                style={{ minHeight: 420, minWidth: 700 }}
+                style={{ minHeight: 380, minWidth: Math.max(720, maxX) }}
               >
                 <defs>
                   {/* Arrow markers */}
                   {flow.edges.map(e => (
-                    <marker key={`m-${e.id}`} id={`arrow-${e.id}`} viewBox="0 0 10 10" refX="10" refY="5"
-                      markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-                      <path d="M 0 0 L 10 5 L 0 10 z" fill={e.color} />
+                    <marker key={`m-${e.id}`} id={`arrow-${e.id}`} viewBox="0 0 10 10" refX="7" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill={e.color} />
                     </marker>
                   ))}
                   {/* Glow filters */}
                   {Object.entries(roleColors).map(([key, c]) => (
                     <filter key={key} id={`glow-${key}`} x="-50%" y="-50%" width="200%" height="200%">
-                      <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor={c.border} floodOpacity="0.15" />
+                      <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor={c.border} floodOpacity="0.16" />
                     </filter>
                   ))}
-                  {/* Animated particle gradient */}
-                  <linearGradient id="particle-grad">
-                    <stop offset="0%" stopColor="transparent" />
-                    <stop offset="50%" stopColor="white" stopOpacity="0.9" />
-                    <stop offset="100%" stopColor="transparent" />
-                  </linearGradient>
                 </defs>
 
                 {/* Edges */}
                 {flow.edges.map(e => {
                   const from = nodeMap[e.from], to = nodeMap[e.to];
                   if (!from || !to) return null;
-                  const path = buildPath(from, to);
-                  const [mx, my] = [(from.x + to.x + NODE_W) / 2, (from.y + to.y + NODE_H) / 2];
+                  const { path, mx, my } = buildEdgePath(from, to);
+                  const isReject = e.label === "Reject" || e.color === "#ef4444" || e.color === "#EF4444";
+
                   return (
                     <g key={e.id}>
-                      <path d={path} fill="none" stroke={e.color} strokeWidth={3} strokeOpacity={0.15} />
-                      <path d={path} fill="none" stroke={e.color} strokeWidth={2} strokeOpacity={0.7}
+                      {/* Background halo */}
+                      <path d={path} fill="none" stroke={e.color} strokeWidth={3.5} strokeOpacity={0.15} />
+                      {/* Main edge path */}
+                      <path d={path} fill="none" stroke={e.color} strokeWidth={2} strokeOpacity={0.85}
                         markerEnd={`url(#arrow-${e.id})`}
-                        strokeDasharray={e.animated ? undefined : "6 4"}
+                        strokeDasharray={isReject ? "5 4" : undefined}
                       />
-                      {e.animated && (
-                        <circle r="4" fill={e.color} opacity="0.9">
-                          <animateMotion dur="2.5s" repeatCount="indefinite" path={path} />
+                      {/* Animated motion dot for active main flow */}
+                      {e.animated && !isReject && (
+                        <circle r="4" fill={e.color} opacity="0.95">
+                          <animateMotion dur="2.2s" repeatCount="indefinite" path={path} />
                         </circle>
                       )}
+                      {/* Edge Label Badge */}
                       {e.label && (
                         <g>
-                          <rect x={mx - 28} y={my - 10} width={56} height={20} rx={10}
-                            fill={e.color} fillOpacity={0.12} stroke={e.color} strokeWidth={1} strokeOpacity={0.3} />
-                          <text x={mx} y={my + 4} textAnchor="middle"
-                            fill={e.color} fontSize={10} fontWeight="700" fontFamily="ui-monospace, monospace">
-                            {e.label}
-                          </text>
+                          {isReject ? (
+                            <>
+                              <rect x={mx - 24} y={my - 10} width={48} height={20} rx={10}
+                                fill="#fef2f2" stroke="#ef4444" strokeWidth={1} strokeOpacity={0.5} />
+                              <text x={mx} y={my + 3.5} textAnchor="middle"
+                                fill="#dc2626" fontSize={10} fontWeight="700" fontFamily="system-ui, -apple-system, sans-serif">
+                                ✕ Reject
+                              </text>
+                            </>
+                          ) : (
+                            <>
+                              <rect x={mx - 28} y={my - 11} width={56} height={22} rx={11}
+                                fill="#ecfdf5" stroke="#10b981" strokeWidth={1} strokeOpacity={0.5} />
+                              <text x={mx} y={my + 3.5} textAnchor="middle"
+                                fill="#059669" fontSize={10} fontWeight="700" fontFamily="system-ui, -apple-system, sans-serif">
+                                ✓ Approve
+                              </text>
+                            </>
+                          )}
                         </g>
                       )}
                     </g>
@@ -575,30 +734,54 @@ export default function ApprovalWorkflowPage() {
                 {flow.nodes.map(n => {
                   const c = roleColors[n.type] || roleColors.trigger;
                   return (
-                    <g key={n.id} className="cursor-pointer" style={{ transition: "transform 0.2s" }}>
+                    <g key={n.id} className="cursor-pointer select-none" style={{ transition: "transform 0.2s" }}>
+                      {/* Outer Card Background */}
                       <rect x={n.x} y={n.y} width={NODE_W} height={NODE_H} rx={14}
-                        fill={c.bg} stroke={c.border} strokeWidth={2}
+                        fill={c.bg} stroke={c.border} strokeWidth={1.8}
                         filter={`url(#glow-${n.type})`}
                       />
                       <rect x={n.x} y={n.y} width={NODE_W} height={NODE_H} rx={14}
                         fill={c.bg} stroke={c.border} strokeWidth={1.5} strokeOpacity={0.8}
                       />
-                      <rect x={n.x} y={n.y} width={NODE_W} height={NODE_H / 2} rx={14}
-                        fill="white" fillOpacity={0.04}
+                      
+                      {/* Icon Box */}
+                      <rect x={n.x + 10} y={n.y + 14} width={44} height={48} rx={10}
+                        fill="white" stroke={c.border} strokeWidth={1} strokeOpacity={0.35}
                       />
-                      <text x={n.x + 16} y={n.y + NODE_H / 2 + 1} fontSize={18} dominantBaseline="middle">
+                      <text x={n.x + 32} y={n.y + 42} textAnchor="middle" dominantBaseline="central" fontSize={20}>
                         {n.icon}
                       </text>
-                      <text x={n.x + 40} y={n.y + 28} fill={c.text} fontSize={12} fontWeight="700"
-                        fontFamily="system-ui, sans-serif">
-                        {n.label}
+
+                      {/* Text Details */}
+                      <text x={n.x + 62} y={n.y + 32} fill={c.text} fontSize={11.5} fontWeight="700"
+                        fontFamily="system-ui, -apple-system, sans-serif">
+                        {n.label.length > 18 ? n.label.slice(0, 17) + '…' : n.label}
                       </text>
-                      <text x={n.x + 40} y={n.y + 46} fill={c.text} fontSize={10} fontWeight="400"
-                        fontFamily="ui-monospace, monospace" opacity={0.6}>
-                        {n.sub}
+                      <text x={n.x + 62} y={n.y + 51} fill={c.text} fontSize={10} fontWeight="500"
+                        fontFamily="system-ui, -apple-system, sans-serif" opacity={0.75}>
+                        {n.sub.length > 20 ? n.sub.slice(0, 19) + '…' : n.sub}
                       </text>
-                      <circle cx={n.x} cy={n.y + NODE_H / 2} r={5} fill={c.bg} stroke={c.border} strokeWidth={2} />
-                      <circle cx={n.x + NODE_W} cy={n.y + NODE_H / 2} r={5} fill={c.bg} stroke={c.border} strokeWidth={2} />
+
+                      {/* Port Handle Dots */}
+                      {/* Left Input Port */}
+                      {n.type !== "trigger" && n.type !== "rejected" && (
+                        <circle cx={n.x} cy={n.y + NODE_H / 2} r={4.5} fill="white" stroke={c.border} strokeWidth={2} />
+                      )}
+
+                      {/* Right Output Port */}
+                      {n.type !== "approved" && n.type !== "rejected" && (
+                        <circle cx={n.x + NODE_W} cy={n.y + NODE_H / 2} r={4.5} fill="white" stroke={c.border} strokeWidth={2} />
+                      )}
+
+                      {/* Bottom Reject Port for approval steps */}
+                      {(n.type === "supervisor" || n.type === "hrd" || n.type === "peer") && (
+                        <circle cx={n.x + NODE_W / 2} cy={n.y + NODE_H} r={4} fill="white" stroke="#ef4444" strokeWidth={1.8} />
+                      )}
+
+                      {/* Top Reject Input Port */}
+                      {n.type === "rejected" && (
+                        <circle cx={n.x + NODE_W / 2} cy={n.y} r={4} fill="white" stroke="#ef4444" strokeWidth={1.8} />
+                      )}
                     </g>
                   );
                 })}
@@ -689,11 +872,21 @@ export default function ApprovalWorkflowPage() {
                               <label className="text-[10px] font-bold text-gray-500">Tipe Penyetuju</label>
                               <select
                                 value={step.approver_type}
-                                onChange={(e) => handleStepChange(index, "approver_type", e.target.value)}
+                                onChange={(e) => {
+                                  const newType = e.target.value as "supervisor" | "role" | "user";
+                                  handleStepChange(index, "approver_type", newType);
+                                  if (newType === "role" && !step.approver_role_id && roles.length > 0) {
+                                    handleStepChange(index, "approver_role_id", roles[0].id);
+                                  }
+                                  if (newType === "user" && !step.approver_user_id && users.length > 0) {
+                                    handleStepChange(index, "approver_user_id", users[0].id);
+                                  }
+                                }}
                                 className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
                               >
                                 <option value="supervisor">Supervisor (Atasan Langsung)</option>
-                                <option value="role">Role Jabatan Spesifik</option>
+                                <option value="role">Role Jabatan (COO, HRD, Direktur, dll)</option>
+                                <option value="user">User / Pejabat Tertentu</option>
                               </select>
                             </div>
 
@@ -709,6 +902,28 @@ export default function ApprovalWorkflowPage() {
                                   {roles.map(r => (
                                     <option key={r.id} value={r.id}>{r.name}</option>
                                   ))}
+                                </select>
+                              </div>
+                            )}
+
+                            {/* Specific User Dropdown */}
+                            {step.approver_type === "user" && (
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-gray-500">Pilih User / Pejabat</label>
+                                <select
+                                  value={step.approver_user_id || ""}
+                                  onChange={(e) => handleStepChange(index, "approver_user_id", parseInt(e.target.value))}
+                                  className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
+                                >
+                                  {users.length === 0 ? (
+                                    <option value="">Tidak ada karyawan tersedia</option>
+                                  ) : (
+                                    users.map(u => (
+                                      <option key={u.id} value={u.id}>
+                                        {u.name} {u.role?.name ? `(${u.role.name})` : ""}
+                                      </option>
+                                    ))
+                                  )}
                                 </select>
                               </div>
                             )}

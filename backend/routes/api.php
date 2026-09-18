@@ -180,6 +180,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
 
     // Custom Approval Workflows
     Route::get('/approval-workflows', [ApprovalWorkflowController::class, 'index']);
+    Route::get('/approval-workflows/companies', [ApprovalWorkflowController::class, 'getCompanies']);
     Route::get('/approval-workflows/modules', [ApprovalWorkflowController::class, 'getModuleKeys']);
     Route::get('/approval-workflows/roles', [ApprovalWorkflowController::class, 'getRoles']);
     Route::get('/approval-workflows/users', [ApprovalWorkflowController::class, 'getUsers']);
@@ -495,9 +496,14 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
 
     // Employee Tracking (Live Location)
     Route::post('/tracking/update', [TrackingController::class, 'store']);
+    Route::get('/tracking/my-status', [TrackingController::class, 'myStatus']);
     Route::middleware('permission:view-live-tracking')->group(function () {
         Route::get('/tracking/live', [TrackingController::class, 'live']);
         Route::get('/tracking/history/{userId}', [TrackingController::class, 'history']);
+        Route::get('/tracking/settings', [TrackingController::class, 'getSettings']);
+        Route::put('/tracking/settings/user/{id}', [TrackingController::class, 'toggleUser']);
+        Route::put('/tracking/settings/role/{id}', [TrackingController::class, 'toggleRole']);
+        Route::post('/tracking/settings/bulk', [TrackingController::class, 'bulkUpdate']);
     });
 });
 

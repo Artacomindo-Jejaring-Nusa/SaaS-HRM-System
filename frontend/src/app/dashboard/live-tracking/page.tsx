@@ -1,11 +1,15 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import TrackingMap from '@/components/TrackingMap';
-import { Radio, ShieldAlert } from 'lucide-react';
+import TrackingSettingsModal from '@/components/TrackingSettingsModal';
+import { Radio, ShieldAlert, Sliders } from 'lucide-react';
 import { PermissionGuard } from '@/components/PermissionGuard';
 
 export default function LiveTrackingPage() {
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
   return (
     <PermissionGuard
       slug="view-live-tracking"
@@ -35,12 +39,32 @@ export default function LiveTrackingPage() {
               </p>
             </div>
           </div>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl text-xs font-black shadow-lg shadow-orange-500/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Sliders size={15} className="stroke-[2.5]" />
+              <span>Pengaturan Live Tracking</span>
+            </button>
+          </div>
         </div>
         
         {/* Interactive Map Component */}
         <div className="w-full">
-          <TrackingMap />
+          <TrackingMap 
+            key={refreshKey}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+          />
         </div>
+
+        {/* Tracking Settings Modal (Divisions & Employees) */}
+        <TrackingSettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          onSettingsChanged={() => setRefreshKey(prev => prev + 1)}
+        />
       </div>
     </PermissionGuard>
   );

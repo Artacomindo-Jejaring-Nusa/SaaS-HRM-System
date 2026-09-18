@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ApprovalWorkflow;
+use App\Models\Company;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\ApprovalService;
@@ -11,11 +12,20 @@ use Illuminate\Support\Facades\DB;
 
 class ApprovalWorkflowController extends Controller
 {
+    private function resolveCompanyId(Request $request): ?int
+    {
+        $user = $request->user();
+        if (($user->role_id === 1 || $user->canAccessAllCompanies()) && $request->filled('company_id')) {
+            return (int) $request->company_id;
+        }
+        return $user->company_id;
+    }
+
     public function index(Request $request)
     {
-        $companyId = $request->user()->company_id;
+        $companyId = $this->resolveCompanyId($request);
 
-        $workflows = ApprovalWorkflow::with('steps.role')
+        $workflows = ApprovalWorkflow::with(['steps.role', 'steps.approverUser'])
             ->where('company_id', $companyId)
             ->get();
 
@@ -24,9 +34,9 @@ class ApprovalWorkflowController extends Controller
 
     public function show(Request $request, $moduleKey)
     {
-        $companyId = $request->user()->company_id;
+        $companyId = $this->resolveCompanyId($request);
 
-        $workflow = ApprovalWorkflow::with('steps.role')
+        $workflow = ApprovalWorkflow::with(['steps.role', 'steps.approverUser'])
             ->where('company_id', $companyId)
             ->where('module_key', $moduleKey)
             ->first();
@@ -54,6 +64,7 @@ class ApprovalWorkflowController extends Controller
         }
 
         $request->validate([
+            'company_id' => 'nullable|integer|exists:companies,id',
             'module_key' => 'required|string|in:'.implode(',', array_keys(ApprovalService::MODULE_KEYS)),
             'name' => 'required|string|max:100',
             'is_active' => 'required|boolean',
@@ -66,7 +77,7 @@ class ApprovalWorkflowController extends Controller
             'steps.*.sla_hours' => 'nullable|integer|min:1',
         ]);
 
-        $companyId = $request->user()->company_id;
+        $companyId = $this->resolveCompanyId($request);
 
         $workflow = DB::transaction(function () use ($request, $companyId) {
             $workflow = ApprovalWorkflow::updateOrCreate(
@@ -88,16 +99,16 @@ class ApprovalWorkflowController extends Controller
                 $workflow->steps()->create([
                     'step_number' => $stepData['step_number'],
                     'approver_type' => $stepData['approver_type'],
-                    'approver_role_id' => $stepData['approver_role_id'] ?? null,
-                    'approver_user_id' => $stepData['approver_user_id'] ?? null,
+                    'approver_role_id' => $stepData['approver_type'] === 'role' ? ($stepData['approver_role_id'] ?? null) : null,
+                    'approver_user_id' => $stepData['approver_type'] === 'user' ? ($stepData['approver_user_id'] ?? null) : null,
                     'sla_hours' => $stepData['sla_hours'] ?? 24,
                 ]);
             }
 
-            return $workflow->load('steps.role');
+            return $workflow->load(['steps.role', 'steps.approverUser']);
         });
 
-        $this->logActivity('UPDATE_WORKFLOW', "Updated approval workflow for module: {$request->module_key}");
+        $this->logActivity('UPDATE_WORKFLOW', "Updated approval workflow for module: {$request->module_key} (Company: {$companyId})");
 
         return $this->successResponse($workflow, 'Workflow saved successfully.');
     }
@@ -115,6 +126,21 @@ class ApprovalWorkflowController extends Controller
     }
 
     /**
+     * Get list of companies (for Super Admin selector).
+     */
+    public function getCompanies(Request $request)
+    {
+        $user = $request->user();
+        if ($user->role_id === 1 || $user->canAccessAllCompanies()) {
+            $companies = Company::select('id', 'name')->orderBy('name')->get();
+        } else {
+            $companies = Company::where('id', $user->company_id)->select('id', 'name')->get();
+        }
+
+        return $this->successResponse($companies, 'Companies retrieved successfully.');
+    }
+
+    /**
      * Get list of all roles (for dropdown in UI).
      */
     public function getRoles(Request $request)
@@ -129,7 +155,7 @@ class ApprovalWorkflowController extends Controller
      */
     public function getUsers(Request $request)
     {
-        $companyId = $request->user()->company_id;
+        $companyId = $this->resolveCompanyId($request);
 
         $users = User::where('company_id', $companyId)
             ->select('id', 'name', 'email', 'role_id')

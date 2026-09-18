@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -118,9 +119,9 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
           end: Alignment.bottomCenter,
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.12),
           borderRadius: BorderRadius.circular(20),
@@ -130,6 +131,7 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _buildSummaryCard("Cuti", _pendingCounts?['leave'] ?? 0, Icons.calendar_month_rounded, "leave"),
+            _buildSummaryCard("Izin", _pendingCounts?['permit'] ?? 0, Icons.assignment_turned_in_rounded, "permit"),
             _buildSummaryCard("Lembur", _pendingCounts?['overtime'] ?? 0, Icons.more_time_rounded, "overtime"),
             _buildSummaryCard("Klaim", _pendingCounts?['reimbursement'] ?? 0, Icons.payments_rounded, "reimbursement"),
             _buildSummaryCard("Fleet", _pendingCounts?['vehicle_log'] ?? 0, Icons.directions_car_rounded, "vehicle_log"),
@@ -144,31 +146,33 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
       onTap: () {
         String title = label == "Cuti"
             ? "Pengajuan Cuti"
-            : label == "Lembur"
-                ? "Pengajuan Lembur"
-                : label == "Klaim"
-                    ? "Pengajuan Klaim"
-                    : "Log Kendaraan";
+            : label == "Izin"
+                ? "Pengajuan Izin"
+                : label == "Lembur"
+                    ? "Pengajuan Lembur"
+                    : label == "Klaim"
+                        ? "Pengajuan Klaim"
+                        : "Log Kendaraan";
         _showApprovalList(title, type);
       },
       borderRadius: BorderRadius.circular(16),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: count > 0 ? Colors.amber.withOpacity(0.25) : Colors.white.withOpacity(0.18),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: count > 0 ? Colors.amberAccent : Colors.white, size: 22),
+              child: Icon(icon, color: count > 0 ? Colors.amberAccent : Colors.white, size: 20),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               "$count",
               style: GoogleFonts.outfit(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
@@ -263,6 +267,13 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
           icon: Icons.calendar_today_rounded,
           color: const Color(0xFFF59E0B),
           desc: "Persetujuan izin cuti tahunan, sakit, dan khusus",
+        ),
+        _buildApprovalSection(
+          title: "Pengajuan Izin",
+          type: "permit",
+          icon: Icons.assignment_turned_in_rounded,
+          color: const Color(0xFF8B5CF6),
+          desc: "Persetujuan izin terlambat, pulang cepat, sakit, dll.",
         ),
         _buildApprovalSection(
           title: "Pengajuan Lembur",
@@ -479,18 +490,35 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
     String info = "";
     String subtitle = "";
 
+    if (type == 'reimbursement') {
+      return _buildReimbursementApprovalCard(item, onItemProcessed);
+    }
+
     if (type == 'leave') {
       date = "${item['start_date']} s/d ${item['end_date']}";
       info = "Jenis: ${item['type'] ?? 'Cuti'}\nAlasan: ${item['reason'] ?? '-'}";
       subtitle = "${item['total_days'] ?? 1} Hari";
+    } else if (type == 'permit') {
+      final startDate = item['start_date'] ?? '-';
+      final endDate = item['end_date'];
+      date = (endDate != null && endDate != startDate) ? "$startDate s/d $endDate" : startDate;
+      final cat = item['category'] ?? 'I';
+      String catLabel = cat == 'I'
+          ? 'Izin'
+          : cat == 'S'
+              ? 'Sakit'
+              : cat == 'A'
+                  ? 'Alpha'
+                  : 'Lainnya';
+      String typeName = item['type'] ?? catLabel;
+      String potongGaji = (item['is_deducted'] == true || item['is_deducted'] == 1) ? ' • Potong Gaji' : ' • Tidak Potong';
+      String suratDokter = (item['has_doctor_note'] == true || item['has_doctor_note'] == 1) ? ' • Ada Surat Dokter' : '';
+      info = "Kategori: [$cat] $catLabel ($typeName$potongGaji$suratDokter)\nAlasan: ${item['reason'] ?? '-'}";
+      subtitle = catLabel;
     } else if (type == 'overtime') {
       date = "${item['date']}";
       info = "Pukul: ${item['start_time']} - ${item['end_time']}\nTugas: ${item['notes'] ?? item['reason'] ?? '-'}";
       subtitle = "Lembur";
-    } else if (type == 'reimbursement') {
-      date = "Rp " + NumberFormat("#,###").format(double.tryParse(item['amount'].toString()) ?? 0);
-      info = "Judul: ${item['title'] ?? '-'}\nKategori: ${item['category'] ?? '-'}\nKeterangan: ${item['description'] ?? '-'}";
-      subtitle = "Klaim Biaya";
     } else if (type == 'vehicle_log') {
       date = "${item['vehicle']?['name'] ?? item['vehicle_name'] ?? 'Kendaraan'} (${item['vehicle']?['license_plate'] ?? item['plate_number'] ?? '-'})";
       info = "Tujuan: ${item['destination'] ?? '-'}\nJarak: ${item['distance'] ?? item['end_mileage'] ?? '-'} KM";
@@ -538,12 +566,16 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: (type == 'permit' ? Colors.purple : Colors.blue).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   subtitle,
-                  style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11),
+                  style: TextStyle(
+                    color: type == 'permit' ? Colors.purple[700] : Colors.blue,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
                 ),
               ),
             ],
@@ -605,6 +637,451 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildReimbursementApprovalCard(dynamic item, VoidCallback onItemProcessed) {
+    String name = item['employee_name'] ?? item['user']?['name'] ?? "Pegawai";
+    String role = item['user']?['role']?['name'] ?? "Staff";
+    String divisi = item['divisi'] ?? (item['user']?['role']?['name'] ?? "Operasional");
+    String tujuan = item['tujuan'] ?? "-";
+    String title = item['title'] ?? "Klaim Biaya";
+    String desc = item['description'] ?? "-";
+    String priority = item['priority'] ?? "Normal";
+    double amount = double.tryParse(item['amount'].toString()) ?? 0;
+    String dateStr = item['created_at'] != null 
+        ? DateFormat('dd MMM yyyy, HH:mm').format(DateTime.parse(item['created_at']))
+        : '-';
+
+    // Extract items
+    List<dynamic> itemsList = [];
+    if (item['items'] != null) {
+      if (item['items'] is List) {
+        itemsList = item['items'];
+      } else if (item['items'] is String) {
+        try {
+          final decoded = jsonDecode(item['items']);
+          if (decoded is List) itemsList = decoded;
+        } catch (_) {}
+      }
+    }
+
+    // Extract attachments
+    List<String> attachments = [];
+    if (item['attachment'] != null) {
+      if (item['attachment'] is List) {
+        attachments = (item['attachment'] as List).map((e) => e.toString()).toList();
+      } else if (item['attachment'] is String) {
+        final str = item['attachment'].toString();
+        if (str.trim().startsWith('[') && str.trim().endsWith(']')) {
+          try {
+            final decoded = jsonDecode(str);
+            if (decoded is List) attachments = decoded.map((e) => e.toString()).toList();
+          } catch (_) {}
+        } else if (str.isNotEmpty) {
+          attachments = [str];
+        }
+      }
+    }
+
+    Color priorityColor = Colors.blue;
+    if (priority.toLowerCase().contains('urgent')) {
+      priorityColor = priority.toLowerCase().contains('top') ? Colors.red : Colors.orange;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+        border: Border.all(color: Colors.grey.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header: Requester & Badges
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: const Color(0xFF10B981).withOpacity(0.12),
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : "K",
+                  style: GoogleFonts.outfit(color: const Color(0xFF059669), fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text("$role • $divisi", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                    Text(dateStr, style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      "Klaim Biaya",
+                      style: TextStyle(color: Color(0xFF059669), fontWeight: FontWeight.bold, fontSize: 11),
+                    ),
+                  ),
+                  if (priority != 'Normal') ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: priorityColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        priority,
+                        style: TextStyle(color: priorityColor, fontWeight: FontWeight.bold, fontSize: 10),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+
+          // Judul & Keperluan
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.withOpacity(0.12)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.receipt_long_rounded, size: 16, color: Color(0xFF059669)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
+                      ),
+                    ),
+                  ],
+                ),
+                if (tujuan != '-' && tujuan.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text("Tujuan / Keperluan: $tujuan", style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                ],
+                if (desc != '-' && desc.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text("Keterangan: $desc", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                ],
+              ],
+            ),
+          ),
+
+          // Total Nominal Highlight Box
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFECFDF5), Color(0xFFD1FAE5)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFA7F3D0)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("TOTAL PENGAJUAN", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF065F46), letterSpacing: 0.5)),
+                    const SizedBox(height: 2),
+                    Text(
+                      "Rp " + NumberFormat("#,###", "id_ID").format(amount),
+                      style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF047857)),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
+                    ],
+                  ),
+                  child: const Icon(Icons.monetization_on_rounded, color: Color(0xFF059669), size: 24),
+                ),
+              ],
+            ),
+          ),
+
+          // Items Breakdown Table
+          if (itemsList.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Rincian Item Pengeluaran (${itemsList.length}):",
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey[800]),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: itemsList.length,
+                separatorBuilder: (ctx, i) => Divider(height: 1, color: Colors.grey.withOpacity(0.15)),
+                itemBuilder: (ctx, idx) {
+                  final itm = itemsList[idx];
+                  final spesifikasi = itm['spesifikasi'] ?? itm['name'] ?? '-';
+                  final qty = itm['qty'] ?? 1;
+                  final unit = itm['unit'] ?? 'Pcs';
+                  final harga = double.tryParse((itm['estimasi_harga'] ?? itm['harga'] ?? 0).toString()) ?? 0;
+                  final subtotal = double.tryParse((itm['subtotal'] ?? (qty * harga)).toString()) ?? (qty * harga);
+                  final ket = itm['keterangan'] ?? itm['notes'] ?? '';
+
+                  return Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 20,
+                          height: 20,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text("${idx + 1}", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(spesifikasi.toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              const SizedBox(height: 2),
+                              Text(
+                                "$qty $unit @ Rp ${NumberFormat('#,###', 'id_ID').format(harga)}",
+                                style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                              ),
+                              if (ket.toString().isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text("Ket: $ket", style: TextStyle(color: Colors.grey[500], fontSize: 10, fontStyle: FontStyle.italic)),
+                              ],
+                            ],
+                          ),
+                        ),
+                        Text(
+                          "Rp ${NumberFormat('#,###', 'id_ID').format(subtotal)}",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF065F46)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+
+          // Attachments Section
+          if (attachments.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              "Bukti Nota / Kuitansi (${attachments.length} foto):",
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey[800]),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 80,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: attachments.length,
+                itemBuilder: (ctx, aIdx) {
+                  final rawPath = attachments[aIdx];
+                  final fullUrl = rawPath.startsWith('http') 
+                      ? ApiClient.fixUrl(rawPath) 
+                      : ApiClient.fixUrl("${ApiClient.storageUrl}/$rawPath");
+
+                  return GestureDetector(
+                    onTap: () => _showImagePreviewDialog(fullUrl),
+                    child: Container(
+                      width: 80,
+                      margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.withOpacity(0.25)),
+                        image: DecorationImage(
+                          image: NetworkImage(fullUrl),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      child: Container(
+                        alignment: Alignment.bottomRight,
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          gradient: LinearGradient(
+                            colors: [Colors.transparent, Colors.black.withOpacity(0.6)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                        child: const Icon(Icons.zoom_in, color: Colors.white, size: 16),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+
+          // Signature
+          if (item['signature'] != null && item['signature'].toString().isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                const Icon(Icons.draw_rounded, size: 16, color: Colors.grey),
+                const SizedBox(width: 6),
+                Text("Tanda Tangan Pemohon:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[700])),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Container(
+              height: 50,
+              width: 140,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              ),
+              child: Image.memory(
+                base64Decode(item['signature'].toString().split(',').last),
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+          ],
+
+          // Actions
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _promptRemarkAndAction('reimbursement', item['id'], 'rejected', onItemProcessed),
+                  icon: const Icon(Icons.close_rounded, size: 16),
+                  label: const Text("Tolak"),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _handleApproval('reimbursement', item['id'], 'approved', null, onItemProcessed),
+                  icon: const Icon(Icons.check_rounded, size: 16),
+                  label: const Text("Setujui"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[700],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showImagePreviewDialog(String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxHeight: 600),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 4.0,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (ctx, err, stack) => const Center(
+                    child: Text("Gagal memuat gambar", style: TextStyle(color: Colors.white)),
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              icon: const CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: Icon(Icons.close, color: Colors.white, size: 18),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

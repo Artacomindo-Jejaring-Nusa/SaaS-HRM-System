@@ -142,8 +142,8 @@ class DynamicApprovalFlowTest extends TestCase
             'status' => 'approved',
         ]);
 
-        // Check leave balance deducted (12 - 3 days = 9)
-        $this->assertEquals(9, $this->employee->fresh()->leave_balance);
+        // Check leave balance remains intact (no auto-deduction)
+        $this->assertEquals(12, $this->employee->fresh()->leave_balance);
     }
 
     /** @test */
@@ -181,7 +181,7 @@ class DynamicApprovalFlowTest extends TestCase
             'start_date' => '2026-06-01',
             'end_date' => '2026-06-03',
             'type' => 'Cuti Tahunan',
-            'reason' => 'Mudik',
+            'reason' => 'Liburan',
             'signature' => 'data:image/png;base64,mocksignaturedata',
         ];
 
@@ -192,7 +192,6 @@ class DynamicApprovalFlowTest extends TestCase
         $response->assertStatus(201);
         $leaveId = $response->json('data.id');
 
-        // Should be pending at step 1
         $this->assertDatabaseHas('leaves', [
             'id' => $leaveId,
             'status' => 'pending',
@@ -201,7 +200,7 @@ class DynamicApprovalFlowTest extends TestCase
 
         // 2. Supervisor approves step 1
         $response = $this->actingAs($this->supervisor)
-            ->postJson("/api/leave/{$leaveId}/approve");
+            ->postJson("/api/leave/{$leaveId}/approve", ['remark' => 'Step 1 OK']);
 
         $response->assertStatus(200);
         $this->assertDatabaseHas('leaves', [
@@ -210,9 +209,9 @@ class DynamicApprovalFlowTest extends TestCase
             'current_approval_step' => 2,
         ]);
 
-        // 3. HR approves step 2
+        // 3. HR Manager approves step 2
         $response = $this->actingAs($this->hrManager)
-            ->postJson("/api/leave/{$leaveId}/approve");
+            ->postJson("/api/leave/{$leaveId}/approve", ['remark' => 'Step 2 OK']);
 
         $response->assertStatus(200);
         $this->assertDatabaseHas('leaves', [
@@ -234,8 +233,8 @@ class DynamicApprovalFlowTest extends TestCase
             'remark' => 'Enjoy your holiday',
         ]);
 
-        // Balance should be updated
-        $this->assertEquals(9, $this->employee->fresh()->leave_balance);
+        // Balance remains unchanged (no auto-deduction)
+        $this->assertEquals(12, $this->employee->fresh()->leave_balance);
     }
 
     /** @test */

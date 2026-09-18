@@ -26,6 +26,15 @@ class TrackingController extends Controller
 
         $user = $request->user();
 
+        // If tracking is disabled for this user/division, stop saving and inform client
+        if ($user->is_tracking_enabled === false) {
+            return response()->json([
+                'status' => 'disabled',
+                'message' => 'Live tracking dinonaktifkan untuk akun atau divisi Anda.',
+                'is_tracking_enabled' => false,
+            ]);
+        }
+
         $track = EmployeeTrack::create([
             'user_id' => $user->id,
             'latitude' => $request->latitude,
@@ -283,6 +292,242 @@ class TrackingController extends Controller
                 'duration_minutes' => $durationMinutes,
                 'start_time' => $firstPoint ? Carbon::parse($firstPoint->recorded_at)->format('H:i') : null,
                 'last_time' => $lastPoint ? Carbon::parse($lastPoint->recorded_at)->format('H:i') : null,
+            ]
+        ]);
+    }
+
+    /**
+     * Get user's own live tracking status for mobile app
+     */
+    public function myStatus(Request $request)
+    {
+        $user = $request->user();
+        return response()->json([
+            'status' => 'success',
+            'is_tracking_enabled' => (bool)($user->is_tracking_enabled ?? true),
+        ]);
+    }
+
+    /**
+     * Get Tracking Configuration Settings (Divisions and Employees) for Super Admin
+     */
+    public function getSettings(Request $request)
+    {
+        $user = $request->user();
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+        if (! $isSuperAdmin && ! $user->hasPermission('view-live-tracking')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Akses ditolak. Fitur ini hanya untuk Super Admin.',
+            ], 403);
+        }
+
+        // Get roles/divisions with stats
+        $rolesQuery = \App\Models\Role::withCount(['users' => function ($q) use ($user) {
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
+                $q->where('company_id', $user->company_id);
+            }
+        }]);
+
+        $roles = $rolesQuery->get()->map(function ($role) use ($user) {
+            $userQuery = User::where('role_id', $role->id);
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
+                $userQuery->where('company_id', $user->company_id);
+            }
+            $enabledCount = (clone $userQuery)->where('is_tracking_enabled', true)->count();
+            $totalCount = $userQuery->count();
+
+            return [
+                'id' => $role->id,
+                'name' => $role->name,
+                'is_tracking_enabled' => (bool)($role->is_tracking_enabled ?? true),
+                'total_users' => $totalCount,
+                'enabled_users' => $enabledCount,
+                'disabled_users' => $totalCount - $enabledCount,
+            ];
+        });
+
+        // Get individual users
+        $usersQuery = User::with(['role:id,name', 'company:id,name', 'office:id,name'])
+            ->select('id', 'name', 'nik', 'email', 'phone', 'profile_photo_path', 'company_id', 'role_id', 'office_id', 'is_tracking_enabled');
+
+        if ($user->company_id && !$user->canAccessAllCompanies()) {
+            $usersQuery->where('company_id', $user->company_id);
+        }
+
+        if ($request->filled('role_id') && $request->role_id !== 'all') {
+            $usersQuery->where('role_id', $request->role_id);
+        }
+
+        if ($request->filled('status') && in_array($request->status, ['enabled', 'disabled'])) {
+            $usersQuery->where('is_tracking_enabled', $request->status === 'enabled');
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $usersQuery->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('nik', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        $users = $usersQuery->orderBy('name')->get()->map(function ($u) {
+            $u->is_tracking_enabled = (bool)($u->is_tracking_enabled ?? true);
+            return $u;
+        });
+
+        $totalUsers = User::when($user->company_id && !$user->canAccessAllCompanies(), fn($q) => $q->where('company_id', $user->company_id))->count();
+        $totalEnabled = User::when($user->company_id && !$user->canAccessAllCompanies(), fn($q) => $q->where('company_id', $user->company_id))->where('is_tracking_enabled', true)->count();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'roles' => $roles,
+                'users' => $users,
+                'summary' => [
+                    'total_users' => $totalUsers,
+                    'total_enabled' => $totalEnabled,
+                    'total_disabled' => $totalUsers - $totalEnabled,
+                ]
+            ]
+        ]);
+    }
+
+    /**
+     * Toggle tracking for a single user
+     */
+    public function toggleUser(Request $request, $userId)
+    {
+        $user = $request->user();
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+        if (! $isSuperAdmin && ! $user->hasPermission('view-live-tracking')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Akses ditolak.',
+            ], 403);
+        }
+
+        $targetUser = User::when($user->company_id && !$user->canAccessAllCompanies(), fn($q) => $q->where('company_id', $user->company_id))->findOrFail($userId);
+
+        $newStatus = $request->has('is_tracking_enabled') 
+            ? (bool)$request->is_tracking_enabled 
+            : !($targetUser->is_tracking_enabled ?? true);
+
+        $targetUser->update(['is_tracking_enabled' => $newStatus]);
+
+        \App\Models\ActivityLog::create([
+            'company_id' => $targetUser->company_id,
+            'user_id' => $user->id,
+            'action' => 'UPDATE_TRACKING_SETTING',
+            'description' => "Super Admin {$user->name} mengubah status live tracking user {$targetUser->name} menjadi: " . ($newStatus ? 'AKTIF' : 'NONAKTIF'),
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Live tracking untuk {$targetUser->name} berhasil " . ($newStatus ? 'diaktifkan' : 'dinonaktifkan'),
+            'data' => [
+                'user_id' => $targetUser->id,
+                'is_tracking_enabled' => $newStatus,
+            ]
+        ]);
+    }
+
+    /**
+     * Toggle tracking for an entire role/division
+     */
+    public function toggleRole(Request $request, $roleId)
+    {
+        $user = $request->user();
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+        if (! $isSuperAdmin && ! $user->hasPermission('view-live-tracking')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Akses ditolak.',
+            ], 403);
+        }
+
+        $role = \App\Models\Role::findOrFail($roleId);
+
+        $newStatus = $request->has('is_tracking_enabled') 
+            ? (bool)$request->is_tracking_enabled 
+            : !($role->is_tracking_enabled ?? true);
+
+        $role->update(['is_tracking_enabled' => $newStatus]);
+
+        // Bulk update users in that role
+        $usersQuery = User::where('role_id', $roleId);
+        if ($user->company_id && !$user->canAccessAllCompanies()) {
+            $usersQuery->where('company_id', $user->company_id);
+        }
+        $affected = $usersQuery->update(['is_tracking_enabled' => $newStatus]);
+
+        \App\Models\ActivityLog::create([
+            'company_id' => $user->company_id,
+            'user_id' => $user->id,
+            'action' => 'UPDATE_ROLE_TRACKING_SETTING',
+            'description' => "Super Admin {$user->name} mengubah status live tracking divisi {$role->name} ({$affected} pegawai) menjadi: " . ($newStatus ? 'AKTIF' : 'NONAKTIF'),
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Live tracking divisi {$role->name} ({$affected} pegawai) berhasil " . ($newStatus ? 'diaktifkan' : 'dinonaktifkan'),
+            'data' => [
+                'role_id' => $role->id,
+                'is_tracking_enabled' => $newStatus,
+                'affected_users' => $affected,
+            ]
+        ]);
+    }
+
+    /**
+     * Bulk update tracking status for multiple users or roles
+     */
+    public function bulkUpdate(Request $request)
+    {
+        $user = $request->user();
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+        if (! $isSuperAdmin && ! $user->hasPermission('view-live-tracking')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Akses ditolak.',
+            ], 403);
+        }
+
+        $request->validate([
+            'is_tracking_enabled' => 'required|boolean',
+            'user_ids' => 'nullable|array',
+            'user_ids.*' => 'integer|exists:users,id',
+            'role_ids' => 'nullable|array',
+            'role_ids.*' => 'integer|exists:roles,id',
+        ]);
+
+        $status = (bool)$request->is_tracking_enabled;
+        $totalAffected = 0;
+
+        if (!empty($request->user_ids)) {
+            $query = User::whereIn('id', $request->user_ids);
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            }
+            $totalAffected += $query->update(['is_tracking_enabled' => $status]);
+        }
+
+        if (!empty($request->role_ids)) {
+            \App\Models\Role::whereIn('id', $request->role_ids)->update(['is_tracking_enabled' => $status]);
+            $query = User::whereIn('role_id', $request->role_ids);
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            }
+            $totalAffected += $query->update(['is_tracking_enabled' => $status]);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Pengaturan live tracking berhasil diperbarui untuk {$totalAffected} pegawai.",
+            'data' => [
+                'is_tracking_enabled' => $status,
+                'affected_count' => $totalAffected,
             ]
         ]);
     }

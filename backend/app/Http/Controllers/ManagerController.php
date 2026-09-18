@@ -19,18 +19,33 @@ class ManagerController extends Controller
     use Notifiable;
 
     /**
+     * Check if user is an executive, HR, or admin
+     */
+    private function isExecutiveOrAdmin($user): bool
+    {
+        $roleName = strtolower($user->role?->name ?? '');
+        return $user->role_id === 1
+            || $user->is_manager 
+            || $user->hasPermission('approve-leaves') 
+            || str_contains($roleName, 'admin') 
+            || str_contains($roleName, 'hrd') 
+            || str_contains($roleName, 'hr') 
+            || str_contains($roleName, 'direktur')
+            || str_contains($roleName, 'director')
+            || str_contains($roleName, 'coo')
+            || str_contains($roleName, 'ceo')
+            || str_contains($roleName, 'boc')
+            || str_contains($roleName, 'management');
+    }
+
+    /**
      * Get summary count for pending requests
      */
     public function getPendingCount()
     {
         $user = Auth::user();
         $isGlobalAdmin = $user->role_id === 1;
-        $roleName = strtolower($user->role?->name ?? '');
-        $isCompanyAdmin = $user->is_manager 
-            || $user->hasPermission('approve-leaves') 
-            || str_contains($roleName, 'admin') 
-            || str_contains($roleName, 'hrd') 
-            || str_contains($roleName, 'direktur');
+        $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
 
         $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
 
@@ -77,12 +92,7 @@ class ManagerController extends Controller
     {
         $user = Auth::user();
         $isGlobalAdmin = $user->role_id === 1;
-        $roleName = strtolower($user->role?->name ?? '');
-        $isCompanyAdmin = $user->is_manager 
-            || $user->hasPermission('approve-leaves') 
-            || str_contains($roleName, 'admin') 
-            || str_contains($roleName, 'hrd') 
-            || str_contains($roleName, 'direktur');
+        $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
 
         $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
         $type = $request->type; // leave, overtime, reimbursement, permit, vehicle_log
@@ -135,12 +145,7 @@ class ManagerController extends Controller
 
         $user = Auth::user();
         $isGlobalAdmin = $user->role_id === 1;
-        $roleName = strtolower($user->role?->name ?? '');
-        $isCompanyAdmin = $user->is_manager 
-            || $user->hasPermission('approve-leaves') 
-            || str_contains($roleName, 'admin') 
-            || str_contains($roleName, 'hrd') 
-            || str_contains($roleName, 'direktur');
+        $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
 
         $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
 
@@ -172,6 +177,93 @@ class ManagerController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Pengajuan tidak ditemukan atau Anda tidak memiliki hak akses.'], 404);
         }
 
+        // Handle dynamic multi-step approval if enabled on this item
+        if ($request->type !== 'vehicle_log' && !empty($item->current_approval_step)) {
+            $action = $request->status === 'approved' ? 'approve' : 'reject';
+            $result = \App\Services\ApprovalService::processApproval(
+                $request->type,
+                $item->company_id ?? $user->company_id,
+                $user,
+                $item->user,
+                $item->current_approval_step,
+                $action
+            );
+
+            if ($result && isset($result['error'])) {
+                return response()->json(['status' => 'error', 'message' => $result['error']], 403);
+            }
+
+            if ($result) {
+                $updateData = [
+                    'status' => $result['status'],
+                    'current_approval_step' => $result['current_approval_step'],
+                ];
+
+                if ($result['is_final']) {
+                    $updateData['approved_by'] = $user->id;
+                    $updateData['remark'] = $request->remark;
+                }
+
+                $item->update($updateData);
+
+                // If final approval on leave, adjust employee leave quota
+                if ($request->type === 'leave' && $result['is_final'] && $result['status'] === 'approved') {
+                    LeaveController::processLeaveApprovalDeduction($item);
+                }
+
+                $typeText = match ($request->type) {
+                    'leave' => 'Cuti',
+                    'overtime' => 'Lembur',
+                    'reimbursement' => 'Reimbursement',
+                    'permit' => 'Izin',
+                    default => ucfirst($request->type),
+                };
+
+                if ($result['is_final']) {
+                    $statusText = strtoupper($result['status'] === 'approved' ? 'DISETUJUI' : 'DITOLAK');
+                    if ($item->user) {
+                        $this->notify(
+                            $item->user,
+                            "PENGAJUAN {$typeText} {$statusText}",
+                            "Pengajuan {$typeText} Anda telah {$statusText}.".($request->remark ? " Catatan: {$request->remark}" : ''),
+                            $result['status'] === 'approved' ? 'success' : 'danger',
+                            $request->type === 'leave' ? '/dashboard/leaves' : ($request->type === 'overtime' ? '/dashboard/overtimes' : ($request->type === 'reimbursement' ? '/dashboard/reimbursements' : '/dashboard/permits'))
+                        );
+                    }
+                    $msg = "Pengajuan {$typeText} berhasil di-{$request->status} secara final.";
+                } else {
+                    if (isset($result['approvers'])) {
+                        foreach ($result['approvers'] as $nextApprover) {
+                            $this->notify(
+                                $nextApprover,
+                                "PENGAJUAN BUTUH PERSETUJUAN",
+                                "Pengajuan {$typeText} dari {$item->user?->name} telah disetujui pada tahap sebelumnya dan kini membutuhkan persetujuan Anda ({$result['step_label']}).",
+                                'warning',
+                                $request->type === 'leave' ? '/dashboard/leaves' : ($request->type === 'overtime' ? '/dashboard/overtimes' : ($request->type === 'reimbursement' ? '/dashboard/reimbursements' : '/dashboard/permits'))
+                            );
+                        }
+                    }
+                    if ($item->user) {
+                        $this->notify(
+                            $item->user,
+                            "PROGRESS PENGAJUAN {$typeText}",
+                            "Pengajuan {$typeText} Anda telah disetujui oleh {$user->name} dan berlanjut ke tahap berikutnya.",
+                            'info',
+                            $request->type === 'leave' ? '/dashboard/leaves' : ($request->type === 'overtime' ? '/dashboard/overtimes' : ($request->type === 'reimbursement' ? '/dashboard/reimbursements' : '/dashboard/permits'))
+                        );
+                    }
+                    $msg = "Persetujuan tahap {$item->current_approval_step} berhasil. Menunggu tahap berikutnya.";
+                }
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => $msg,
+                    'data' => $item,
+                ]);
+            }
+        }
+
+        // Fallback single-step flow
         $targetStatus = $request->status;
         if ($request->type === 'vehicle_log') {
             $targetStatus = $request->status === 'approved' ? 'validated' : 'rejected';
@@ -229,12 +321,7 @@ class ManagerController extends Controller
         $user = Auth::user();
         $today = Carbon::today()->toDateString();
         $isGlobalAdmin = $user->role_id === 1;
-        $roleName = strtolower($user->role?->name ?? '');
-        $isCompanyAdmin = $user->is_manager 
-            || $user->hasPermission('view-attendances') 
-            || str_contains($roleName, 'admin') 
-            || str_contains($roleName, 'hrd') 
-            || str_contains($roleName, 'direktur');
+        $isCompanyAdmin = $this->isExecutiveOrAdmin($user) || $user->hasPermission('view-attendances');
 
         $directSubordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
 

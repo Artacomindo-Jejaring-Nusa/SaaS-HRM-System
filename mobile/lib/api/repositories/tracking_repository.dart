@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../../services/secure_storage_service.dart';
 import '../api_client.dart';
 
@@ -42,5 +41,29 @@ class TrackingRepository {
     );
 
     return jsonDecode(res.body);
+  }
+
+  static Future<bool> getMyTrackingStatus() async {
+    try {
+      final secureStorage = await SecureStorageService.getInstance();
+      final token = await secureStorage.getAccessToken();
+      if (token == null) return true; // Default to true if not authenticated
+
+      final res = await ApiClient.client.get(
+        Uri.parse('${ApiClient.baseUrl}/tracking/my-status'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        return data['is_tracking_enabled'] ?? true;
+      }
+    } catch (e) {
+      // Fallback
+    }
+    return true;
   }
 }

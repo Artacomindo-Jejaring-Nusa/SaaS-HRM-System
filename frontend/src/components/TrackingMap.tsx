@@ -32,7 +32,8 @@ import {
   ChevronRight,
   Route,
   Activity,
-  Maximize2
+  Maximize2,
+  Sliders
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import echo from '@/lib/echo';
@@ -149,7 +150,11 @@ function MapControllerInner({ useMapHook, center, zoom, bounds }: any) {
   return null;
 }
 
-export default function TrackingMap() {
+interface TrackingMapProps {
+  onOpenSettings?: () => void;
+}
+
+export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
   const { user: currentUser } = useAuth();
   const isSuperAdmin = !currentUser?.company_id || 
                        currentUser?.role?.name?.toLowerCase().includes('super') || 
@@ -635,6 +640,17 @@ export default function TrackingMap() {
 
           {/* Floating Map Controls Overlay (Top Right) */}
           <div className="absolute top-4 right-4 z-[400] flex flex-col gap-2">
+            {onOpenSettings && isSuperAdmin && (
+              <button 
+                onClick={onOpenSettings}
+                className="bg-orange-500 hover:bg-orange-600 text-white p-2.5 rounded-2xl shadow-xl shadow-orange-500/30 border border-orange-400 transition-all flex items-center gap-2 text-xs font-black group hover:scale-[1.02] active:scale-[0.98]"
+                title="Pengaturan Live Tracking"
+              >
+                <Sliders size={16} className="stroke-[2.5]" />
+                <span className="hidden sm:inline">Pengaturan Tracking</span>
+              </button>
+            )}
+
             <button 
               onClick={handleResetView}
               className="bg-white/95 backdrop-blur-md hover:bg-white text-slate-800 p-2.5 rounded-2xl shadow-lg border border-slate-200/80 transition-all flex items-center gap-2 text-xs font-black group"
