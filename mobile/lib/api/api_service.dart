@@ -40,6 +40,7 @@ import 'repositories/settings_repository.dart';
 import 'repositories/kpi_repository.dart';
 import 'repositories/tracking_repository.dart';
 import 'repositories/organization_repository.dart';
+import 'repositories/face_repository.dart';
 
 class ApiService {
   // ============ CONFIG (delegated to ApiClient) ============
@@ -366,5 +367,16 @@ class ApiService {
 
   static Future<Map<String, dynamic>?> getOrganizationChart({int? companyId}) =>
       OrganizationRepository.getOrganizationChart(companyId: companyId);
+
+  // ============ FACE RECOGNITION (AI) ============
+
+  static Future<Map<String, dynamic>?> getFaceStatus() =>
+      FaceRepository.getFaceStatus();
+
+  static Future<Map<String, dynamic>?> registerFace(String imagePath) =>
+      FaceRepository.registerFace(imagePath);
+
+  static Future<Map<String, dynamic>?> resetFace() =>
+      FaceRepository.resetFace();
 }
 

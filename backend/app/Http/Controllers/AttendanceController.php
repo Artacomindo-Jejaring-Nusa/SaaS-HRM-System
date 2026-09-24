@@ -72,6 +72,8 @@ class AttendanceController extends Controller
             'latitude_in' => $request->latitude,
             'longitude_in' => $request->longitude,
             'image_in' => $imageName,
+            'face_similarity_score_in' => $request->attributes->get('face_similarity_score_in'),
+            'is_face_verified_in' => (bool) $request->attributes->get('is_face_verified_in', false),
             'status' => $status,
             'office_id' => $matchedOffice ? $matchedOffice->id : null,
             'attendance_type' => $isDinasLuar ? 'dinas_luar' : 'office',
@@ -124,8 +126,6 @@ class AttendanceController extends Controller
             ->whereNull('check_out')
             ->first();
 
-        $faceMatch = true;
-
         // Check minimum clock-out time (Default: 17:00 WIB / 5 PM, or Shift End Time)
         $now = now();
         $today = Carbon::today()->toDateString();
@@ -148,18 +148,8 @@ class AttendanceController extends Controller
             $mins = $diffMinutes % 60;
             $timeRemaining = ($hours > 0 ? $hours . ' jam ' : '') . $mins . ' menit';
             $response = $this->errorResponse("Belum saatnya pulang! Jam pulang Anda adalah pukul {$minCheckOutTime->format('H:i')} WIB (Kurang {$timeRemaining} lagi).", 400);
-        }
-
-        if ($response) {
-            return $response;
-        }
-
-        if ($request->is_mocked) {
-            $response = $this->errorResponse('Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli.', 403);
-        } elseif ($request->device_id && $user->device_id && $user->device_id !== $request->device_id) {
-            $response = $this->errorResponse('HP Anda tidak terdaftar. Gunakan HP yang sama saat absen masuk.', 403);
-        } elseif ($request->hasFile('image') && $user->profile_photo_path && ! $faceMatch) {
-            $response = $this->errorResponse('Wajah tidak cocok dengan profil Anda.', 403);
+        } elseif ($securityError = $this->validateDeviceAndSecurity($user, $request, 'out')) {
+            $response = $this->errorResponse($securityError['message'], $securityError['code']);
         } else {
             $response = $this->processCheckOut($attendance, $user, $request);
         }
@@ -176,6 +166,8 @@ class AttendanceController extends Controller
             'latitude_out' => $request->latitude,
             'longitude_out' => $request->longitude,
             'image_out' => $imageName,
+            'face_similarity_score_out' => $request->attributes->get('face_similarity_score_out'),
+            'is_face_verified_out' => (bool) $request->attributes->get('is_face_verified_out', false),
         ]);
 
         // Record checkout position into employee_tracks & broadcast live location
@@ -374,7 +366,7 @@ class AttendanceController extends Controller
         return $this->successResponse($attendance, 'Data absensi berhasil dikoreksi.');
     }
 
-    private function validateDeviceAndSecurity($user, $request)
+    private function validateDeviceAndSecurity($user, $request, string $type = 'in')
     {
         if ($request->is_mocked) {
             return ['message' => 'Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli perangkat Anda.', 'code' => 403];
@@ -388,10 +380,36 @@ class AttendanceController extends Controller
             }
         }
 
-        $faceMatch = true;
-        if ($request->hasFile('image') && $user->profile_photo_path && ! $faceMatch) {
-            return ['message' => 'Wajah tidak cocok dengan profil Anda. Pastikan wajah terlihat jelas!', 'code' => 403];
+        // 1. Verifikasi Status Pendaftaran Wajah Wajib
+        if ($user->face_status !== 'approved' || empty($user->face_embedding)) {
+            $msg = $user->face_status === 'pending'
+                ? 'Pendaftaran foto wajah Anda masih dalam status PENDING (Menunggu persetujuan Super Admin). Anda belum dapat melakukan absensi hingga disetujui.'
+                : ($user->face_status === 'rejected'
+                    ? 'Pendaftaran wajah Anda DITOLAK oleh Admin. Silakan lakukan pendaftaran ulang wajah di menu Pengaturan.'
+                    : 'Wajah Anda belum terdaftar di sistem. Silakan daftarkan wajah Anda terlebih dahulu pada menu Pengaturan -> Pendaftaran Wajah.');
+
+            return ['message' => $msg, 'code' => 422];
         }
+
+        // 2. Verifikasi Kecocokan Wajah AI Machine Learning
+        $imageInput = $request->hasFile('image') ? $request->file('image') : ($request->image ?? $request->image_base64);
+        if (!$imageInput) {
+            return ['message' => 'Foto selfie absensi wajib disertakan untuk verifikasi wajah.', 'code' => 422];
+        }
+
+        $faceService = app(\App\Services\FaceRecognitionService::class);
+        $verifyResult = $faceService->verifyFace($user->face_embedding, $imageInput);
+
+        if (!isset($verifyResult['is_match']) || !$verifyResult['is_match']) {
+            $similarityPercent = isset($verifyResult['similarity']) ? round($verifyResult['similarity'] * 100, 1) : 0;
+            return [
+                'message' => "Verifikasi Wajah Gagal: Wajah Anda tidak sesuai dengan data foto pendaftaran yang disetujui (Skor Kemiripan: {$similarityPercent}%). Absen tidak dapat diselesaikan.",
+                'code' => 422
+            ];
+        }
+
+        $request->attributes->set('face_similarity_score_' . $type, $verifyResult['similarity'] ?? 1.0);
+        $request->attributes->set('is_face_verified_' . $type, true);
 
         return null;
     }

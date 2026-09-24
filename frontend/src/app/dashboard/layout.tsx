@@ -73,6 +73,7 @@ const sidebarLinks: SidebarLink[] = [
     permission: 'view-employees',
     submenus: [
       { name: "employees", href: "/dashboard/employees", permission: 'view-employees' },
+      { name: "Approval Wajah (AI)", href: "/dashboard/face-approval", permission: 'view-employees' },
       { name: "company_profile", href: "/dashboard/company", permission: 'manage-company' },
       { name: "offices", href: "/dashboard/offices", permission: 'manage-offices' },
       { name: "kpi_reviews", href: "/dashboard/performance", permission: 'view-kpis' },

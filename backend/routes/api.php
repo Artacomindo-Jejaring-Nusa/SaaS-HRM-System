@@ -18,6 +18,7 @@ use App\Http\Controllers\CompanyDocumentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExportController;
+use App\Http\Controllers\FaceRecognitionController;
 use App\Http\Controllers\FundRequestController;
 use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\LeaveController;
@@ -102,10 +103,23 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::post('/attendance/check-in', [MobileAttendanceController::class, 'checkIn'])->middleware('throttle:attendance');
         Route::post('/attendance/check-out', [MobileAttendanceController::class, 'checkOut'])->middleware('throttle:attendance');
 
+        // Face Recognition (AI)
+        Route::post('/face/register', [FaceRecognitionController::class, 'registerMobile'])->middleware('throttle:10,1');
+        Route::get('/face/status', [FaceRecognitionController::class, 'getStatus']);
+        Route::post('/face/reset', [FaceRecognitionController::class, 'resetMyFace']);
+
         // Tasks
         Route::get('/tasks', [MobileTaskController::class, 'index']);
         Route::get('/tasks/{id}', [MobileTaskController::class, 'show']);
     });
+
+    // --- FACE RECOGNITION (ADMIN APPROVAL & DIRECT ENROLLMENT) ---
+    Route::get('/face-registrations', [FaceRecognitionController::class, 'getAdminRequests']);
+    Route::post('/face-registrations/{id}/approve', [FaceRecognitionController::class, 'approve']);
+    Route::post('/face-registrations/{id}/reject', [FaceRecognitionController::class, 'reject']);
+    Route::post('/face-registrations/{id}/reset', [FaceRecognitionController::class, 'resetFace']);
+    Route::post('/employees/{id}/face-register', [FaceRecognitionController::class, 'adminRegisterDirect']);
+    Route::post('/employees/{id}/face-reset', [FaceRecognitionController::class, 'resetFace']);
 
     // Company Settings
     Route::get('/company', [CompanyController::class, 'show']);

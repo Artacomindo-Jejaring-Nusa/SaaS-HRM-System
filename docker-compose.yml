@@ -96,6 +96,24 @@ services:
         limits:
           memory: 512M
 
+  # ── AI Face Recognition Service (Python / YOLOv11 + Keras 128-d) ─────
+  ai-service:
+    build:
+      context: ./ai_service
+      dockerfile: Dockerfile
+    container_name: hrms-ai-face-service
+    restart: unless-stopped
+    environment:
+      PORT: 8001
+    ports:
+      - "${AI_SERVICE_PORT_EXPOSE:-8001}:8001"
+    networks:
+      - hrms-network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
   # ── Backend 1 (Laravel API) ──────────────────────────────────
   backend1:
     build:
@@ -140,6 +158,8 @@ services:
       REVERB_APP_SECRET: ${REVERB_APP_SECRET:-reverb_secret_placeholder}
       REVERB_SCHEME: ${REVERB_SCHEME:-http}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-google_client_id_placeholder}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8001}
+      FACE_RECOGNITION_THRESHOLD: ${FACE_RECOGNITION_THRESHOLD:-0.70}
     volumes:
       - ./backend:/var/www/html
       - /var/www/html/vendor
@@ -203,6 +223,8 @@ services:
       REVERB_APP_SECRET: ${REVERB_APP_SECRET:-reverb_secret_placeholder}
       REVERB_SCHEME: ${REVERB_SCHEME:-http}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-google_client_id_placeholder}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8001}
+      FACE_RECOGNITION_THRESHOLD: ${FACE_RECOGNITION_THRESHOLD:-0.70}
     volumes:
       - ./backend:/var/www/html
       - /var/www/html/vendor

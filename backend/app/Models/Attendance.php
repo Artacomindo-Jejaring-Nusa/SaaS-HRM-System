@@ -16,6 +16,8 @@ class Attendance extends Model
         'latitude_in', 'longitude_in',
         'latitude_out', 'longitude_out',
         'image_in', 'image_out',
+        'face_similarity_score_in', 'is_face_verified_in',
+        'face_similarity_score_out', 'is_face_verified_out',
         'status', 'is_suspicious', 'suspicious_reason',
         'attendance_type', 'dinas_luar_destination', 'dinas_luar_notes',
         'dinas_luar_status', 'approved_by_spv', 'approved_at_spv',
@@ -24,6 +26,10 @@ class Attendance extends Model
 
     protected $casts = [
         'is_suspicious' => 'boolean',
+        'is_face_verified_in' => 'boolean',
+        'is_face_verified_out' => 'boolean',
+        'face_similarity_score_in' => 'float',
+        'face_similarity_score_out' => 'float',
         'approved_at_spv' => 'datetime',
         'approved_at_hr' => 'datetime',
     ];

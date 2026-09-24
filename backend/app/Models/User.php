@@ -26,6 +26,8 @@ class User extends Authenticatable
         'name', 'email', 'password', 'company_id', 'office_id', 'role_id', 'supervisor_id', 'device_id',
         'can_access_manager_portal',
         'profile_photo_path', 'face_embedding',
+        'face_status', 'face_registered_photo_path', 'face_rejection_reason',
+        'face_registered_at', 'face_approved_at', 'face_approved_by',
         'nik', 'ktp_no', 'phone', 'emergency_contact_name', 'emergency_contact_phone', 'address',
         'place_of_birth', 'date_of_birth', 'gender', 'marital_status', 'religion', 'blood_type',
         'join_date', 'fcm_token', 'leave_balance', 'is_wfh',
@@ -37,12 +39,29 @@ class User extends Authenticatable
         'leave_period_start', 'leave_accrued', 'leave_used', 'leave_expand_used', 'leave_expand_last_month',
     ];
 
+    protected $casts = [
+        'face_embedding' => 'array',
+        'face_registered_at' => 'datetime',
+        'face_approved_at' => 'datetime',
+    ];
+
     protected $hidden = [
         'password',
         'remember_token',
+        'face_embedding', // Vektor biometrik 128-d tidak boleh terexpose di API response
     ];
 
-    protected $appends = ['profile_photo_url', 'is_manager', 'can_access_manager_portal', 'permission_slugs', 'kemnaker_leave_balance', 'is_eligible_for_leave'];
+    protected $appends = ['profile_photo_url', 'face_registered_photo_url', 'is_face_approved', 'is_manager', 'can_access_manager_portal', 'permission_slugs', 'kemnaker_leave_balance', 'is_eligible_for_leave'];
+
+    public function getFaceRegisteredPhotoUrlAttribute()
+    {
+        return $this->face_registered_photo_path ? asset('storage/'.$this->face_registered_photo_path) : null;
+    }
+
+    public function getIsFaceApprovedAttribute(): bool
+    {
+        return $this->face_status === 'approved' && !empty($this->face_embedding);
+    }
 
     public function getProfilePhotoUrlAttribute()
     {
@@ -218,5 +237,10 @@ class User extends Authenticatable
     public function permits()
     {
         return $this->hasMany(Permit::class);
+    }
+
+    public function faceApprover()
+    {
+        return $this->belongsTo(User::class, 'face_approved_by');
     }
 }
