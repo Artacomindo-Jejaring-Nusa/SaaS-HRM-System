@@ -83,15 +83,33 @@ class _KpiScreenState extends State<KpiScreen> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    kpi['period'] ?? '-',
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red[50],
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          kpi['period'] ?? '-',
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF8B0000)),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  SizedBox(height: 4),
+                                  const SizedBox(height: 6),
                                   Text(
-                                    'Review Kinerja',
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                                    kpi['user']?['name'] != null 
+                                      ? 'Untuk: ${kpi['user']['name']}' 
+                                      : 'Review Kinerja Anda',
+                                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
                                   ),
+                                  if (kpi['user']?['role']?['name'] != null)
+                                    Text(
+                                      kpi['user']['role']['name'],
+                                      style: TextStyle(fontSize: 11, color: Colors.grey[600], fontWeight: FontWeight.w600),
+                                    ),
                                 ],
                               ),
                               Container(
@@ -130,24 +148,32 @@ class _KpiScreenState extends State<KpiScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Row(
-                                children: [
-                                  Icon(Icons.person_pin, size: 14, color: Colors.grey),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Penilai: ${kpi['reviewer']['name']}',
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey),
-                                  ),
-                                ],
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.verified_user_rounded, size: 14, color: Colors.grey[600]),
+                                    const SizedBox(width: 5),
+                                    Expanded(
+                                      child: Text(
+                                        'Penilai: ${kpi['reviewer']?['name'] ?? 'Super Admin'}',
+                                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey[600]),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
+                              const SizedBox(width: 8),
                               TextButton.icon(
                                 onPressed: () => ApiService.launchPdf('kpi', kpi['id']),
-                                icon: Icon(Icons.picture_as_pdf, size: 16, color: Color(0xFF8B0000)),
-                                label: Text('Download PDF', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF8B0000))),
+                                icon: const Icon(Icons.picture_as_pdf, size: 15, color: Color(0xFF8B0000)),
+                                label: const Text('Download PDF', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF8B0000))),
                                 style: TextButton.styleFrom(
-                                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                  backgroundColor: Color(0xFF8B0000).withOpacity(0.05),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                                  visualDensity: VisualDensity.compact,
+                                  backgroundColor: const Color(0xFF8B0000).withOpacity(0.06),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 ),
                               ),
                             ],

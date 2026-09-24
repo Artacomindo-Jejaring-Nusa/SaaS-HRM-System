@@ -137,7 +137,6 @@ const sidebarLinks: SidebarLink[] = [
     permission: 'view-overtimes',
     submenus: [
       { name: "overtime_requests", href: "/dashboard/overtimes", permission: 'view-overtimes' },
-      { name: "overtime_report", href: "/dashboard/reports/overtimes", permission: 'view-reports' },
     ]
   },
   {
@@ -145,7 +144,6 @@ const sidebarLinks: SidebarLink[] = [
     icon: ClipboardList,
     permission: 'view-directory',
     submenus: [
-      { name: "approvals", href: "/dashboard/approvals", permission: 'approve-leaves' },
       { name: "tasks", href: "/dashboard/tasks", permission: 'view-tasks' },
       { name: "announcements", href: "/dashboard/announcements", permission: 'view-announcements' },
       { name: "birthday_schedule", href: "/dashboard/birthdays", permission: 'view-directory' },
@@ -173,9 +171,8 @@ const sidebarLinks: SidebarLink[] = [
     icon: CreditCard,
     permission: 'view-salaries',
     submenus: [
-      { name: "payroll_process", href: "/dashboard/payroll/process", permission: 'manage-payroll' },
-      { name: "payroll_approval", href: "/dashboard/payroll/approval", permission: 'manage-payroll' },
-      { name: "payroll_history", href: "/dashboard/payroll", permission: 'manage-payroll' },
+      { name: "payroll_batches", href: "/dashboard/payroll", permission: 'manage-payroll' },
+      { name: "payroll_components", href: "/dashboard/payroll/components", permission: 'manage-payroll' },
       { name: "payroll_settings", href: "/dashboard/payroll/settings", permission: 'manage-payroll' },
     ]
   },

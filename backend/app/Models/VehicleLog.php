@@ -20,7 +20,9 @@ class VehicleLog extends Model
         'odometer_start_photo', 'odometer_end_photo',
         'fuel_cost', 'toll_cost', 'parking_cost', 'other_cost', 'total_cost',
         'expense_attachments',
-        'notes', 'status', 'approved_by', 'remark',
+        'notes', 'status', 'current_approval_step',
+        'driver_type', 'driver_name', 'departure_time', 'return_time',
+        'approved_by', 'remark',
     ];
 
     protected $casts = [

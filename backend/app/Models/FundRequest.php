@@ -37,6 +37,19 @@ class FundRequest extends Model
         'items' => 'array',
     ];
 
+    protected $appends = [
+        'current_step_info',
+    ];
+
+    public function getCurrentStepInfoAttribute()
+    {
+        if ($this->current_approval_step === null) {
+            return null;
+        }
+
+        return \App\Services\ApprovalService::getCurrentStepInfo('fund_request', $this->company_id, $this->current_approval_step);
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);

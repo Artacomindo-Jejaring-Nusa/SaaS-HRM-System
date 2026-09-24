@@ -531,7 +531,7 @@ class PayrollService
             $dateKey = $checkIn->toDateString();
 
             // Determine shift start time
-            $shiftStartTime = '09:00:00';
+            $shiftStartTime = $user->office?->work_start_time ?? $user->company?->work_start_time ?? '08:30:00';
             if (isset($schedulesMap[$dateKey]) && $schedulesMap[$dateKey]->shift && $schedulesMap[$dateKey]->shift->start_time) {
                 $shiftStartTime = $schedulesMap[$dateKey]->shift->start_time;
             }

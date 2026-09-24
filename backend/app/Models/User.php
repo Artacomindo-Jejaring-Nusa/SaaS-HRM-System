@@ -59,7 +59,27 @@ class User extends Authenticatable
             return (bool) $this->attributes['can_access_manager_portal'];
         }
 
-        return $this->hasPermission('view-manager-portal');
+        $roleName = strtolower($this->role?->name ?? '');
+        return $this->hasPermission('view-manager-portal')
+            || $this->hasPermission('approve-leaves')
+            || $this->hasPermission('approve-permits')
+            || $this->hasPermission('approve-overtimes')
+            || $this->hasPermission('approve-reimbursements')
+            || $this->hasPermission('approve-fund-requests')
+            || $this->hasPermission('approve-vehicle-logs')
+            || $this->hasPermission('approve-shift-swaps')
+            || $this->hasPermission('approve-project-costs')
+            || str_contains($roleName, 'manager')
+            || str_contains($roleName, 'supervisor')
+            || str_contains($roleName, 'admin')
+            || str_contains($roleName, 'hrd')
+            || str_contains($roleName, 'hr')
+            || str_contains($roleName, 'direktur')
+            || str_contains($roleName, 'director')
+            || str_contains($roleName, 'coo')
+            || str_contains($roleName, 'ceo')
+            || str_contains($roleName, 'boc')
+            || str_contains($roleName, 'management');
     }
 
     public function getIsManagerAttribute()

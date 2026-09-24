@@ -11,6 +11,7 @@ use App\Models\PayrollBatch;
 use App\Models\PayrollSetting;
 use App\Models\Salary;
 use App\Models\User;
+use App\Services\DynamicPayrollEngine;
 use App\Services\PayrollService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -22,10 +23,12 @@ use Maatwebsite\Excel\Facades\Excel;
 class PayrollController extends Controller
 {
     protected $payrollService;
+    protected $dynamicEngine;
 
-    public function __construct(PayrollService $payrollService)
+    public function __construct(PayrollService $payrollService, DynamicPayrollEngine $dynamicEngine)
     {
         $this->payrollService = $payrollService;
+        $this->dynamicEngine = $dynamicEngine;
     }
 
     // ─────────────────────────────────────────────
@@ -163,7 +166,7 @@ class PayrollController extends Controller
             $processedCount = 0;
 
             foreach ($users as $user) {
-                $this->processEmployeePayroll($user, $companyId, $batch, $monthName, $year, $holidays, $settings, $totalWorkingDays);
+                $this->processEmployeePayroll($user, $companyId, $batch, $monthName, $year, $holidays, $settings, $totalWorkingDays, $startDate, $endDate, $monthNum);
                 $processedCount++;
             }
 
@@ -175,7 +178,7 @@ class PayrollController extends Controller
             return response()->json([
                 'message' => "Berhasil memproses $processedCount karyawan.",
                 'batch_id' => $batch->id,
-                'data' => $batch->fresh()->load('salaries.user'),
+                'data' => $batch->fresh()->load(['salaries.user', 'salaries.detailsRecords']),
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -202,7 +205,7 @@ class PayrollController extends Controller
         return ['hours' => $totalOvertimeHours, 'amount' => $overtimeAmount];
     }
 
-    private function processEmployeePayroll($user, $companyId, $batch, $monthName, $year, $holidays, $settings, $totalWorkingDays)
+    private function processEmployeePayroll($user, $companyId, $batch, $monthName, $year, $holidays, $settings, $totalWorkingDays, $startDate, $endDate, $monthNum)
     {
         $basicSalary = (float) ($user->basic_salary ?? 0);
         $totalFixedAllowance = (float) ($user->fixed_allowance ?? 0);
@@ -317,6 +320,34 @@ class PayrollController extends Controller
             'breakdown' => ['gross' => $salary->total_earnings, 'net' => $salary->net_salary],
         ]);
         $salary->save();
+
+        // Generate immutable snapshot in payslip_details
+        $context = [
+            'basic_salary' => $basicSalary,
+            'gross_salary' => $salary->total_earnings,
+            'attended_days' => $attendedDays,
+            'total_working_days' => $totalWorkingDays,
+            'absent_days' => $absentDays,
+            'overtime_hours' => $totalOvertimeHours,
+            'late_minutes' => $lateResult['total_late_minutes'] ?? 0,
+            'tenure_years' => $user->join_date ? Carbon::parse($user->join_date)->diffInYears($startDate) : 0,
+        ];
+
+        $dynamicResults = $this->dynamicEngine->generateSnapshotDetails(
+            $salary,
+            $user,
+            $context,
+            $startDate,
+            $endDate,
+            $monthNum,
+            (int) $year
+        );
+
+        if ($dynamicResults['dynamic_earnings'] > 0) {
+            $salary->earning_others = ($salary->earning_others ?? 0) + $dynamicResults['dynamic_earnings'];
+            $salary->calculateTotals();
+            $salary->save();
+        }
     }
 
     public function updateSalary(Request $request, $id)
@@ -379,7 +410,7 @@ class PayrollController extends Controller
     public function getBatchDetail(Request $request, $id)
     {
         $batch = PayrollBatch::where('company_id', $request->user()->company_id)
-            ->with(['salaries.user', 'creator', 'approver'])
+            ->with(['salaries.user', 'salaries.detailsRecords', 'creator', 'approver'])
             ->findOrFail($id);
 
         return response()->json(['data' => $batch]);
@@ -580,7 +611,7 @@ class PayrollController extends Controller
 
     public function downloadSlip(Request $request, $id)
     {
-        $salary = Salary::with(['user', 'user.company', 'user.role', 'batch.creator'])->findOrFail($id);
+        $salary = Salary::with(['user', 'user.company', 'user.role', 'batch.creator', 'detailsRecords'])->findOrFail($id);
 
         $user = $request->user();
 
@@ -611,7 +642,7 @@ class PayrollController extends Controller
      */
     public function previewSlip(Request $request, $id)
     {
-        $salary = Salary::with(['user', 'user.company', 'user.role', 'batch.creator'])->findOrFail($id);
+        $salary = Salary::with(['user', 'user.company', 'user.role', 'batch.creator', 'detailsRecords'])->findOrFail($id);
 
         $user = $request->user();
 

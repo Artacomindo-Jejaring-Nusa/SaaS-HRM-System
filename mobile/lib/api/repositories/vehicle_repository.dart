@@ -62,13 +62,33 @@ class VehicleRepository {
     }
   }
 
-  static Future<Map<String, dynamic>> submitDeparture(
-    Map<String, String> data,
-    String? photoPath,
+  static Future<Map<String, dynamic>> submitLoanRequest(
+    Map<String, dynamic> data,
   ) async {
     try {
       final headers = await ApiClient.getHeaders();
-      final uri = Uri.parse('${ApiClient.baseUrl}/vehicle-logs/departure');
+      headers['Content-Type'] = 'application/json';
+      final response = await ApiClient.client.post(
+        Uri.parse('${ApiClient.baseUrl}/vehicle-logs/request'),
+        headers: headers,
+        body: jsonEncode(data),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'status': 'error', 'message': 'Koneksi gagal: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> submitDeparture(
+    Map<String, String> data,
+    String? photoPath, {
+    int? id,
+  }) async {
+    try {
+      final headers = await ApiClient.getHeaders();
+      final uri = id != null
+          ? Uri.parse('${ApiClient.baseUrl}/vehicle-logs/$id/departure')
+          : Uri.parse('${ApiClient.baseUrl}/vehicle-logs/departure');
 
       var request = http.MultipartRequest('POST', uri);
       request.headers.addAll(headers);

@@ -28,14 +28,42 @@ const getStorageUrl = (path: string) => {
   return `${backendUrl}/storage/${path}`;
 };
 
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case 'pending': return <span className="dash-badge dash-badge-warning font-semibold">Menunggu SPV</span>;
-    case 'approved_by_supervisor': return <span className="dash-badge dash-badge-neutral font-semibold">Acc SPV (Menunggu HRD)</span>;
-    case 'approved': return <span className="dash-badge dash-badge-success font-semibold">Disetujui</span>;
-    case 'rejected': return <span className="dash-badge dash-badge-danger font-semibold">Ditolak</span>;
-    default: return <span className="dash-badge dash-badge-neutral font-semibold">{status}</span>;
+const getStatusBadge = (item: FundRequestRecord) => {
+  if (item.status === 'approved') {
+    return <span className="dash-badge dash-badge-success font-semibold">Disetujui</span>;
   }
+  if (item.status === 'rejected') {
+    return <span className="dash-badge dash-badge-danger font-semibold">Ditolak</span>;
+  }
+  if (item.status === 'approved_by_supervisor') {
+    return <span className="dash-badge dash-badge-neutral font-semibold">Acc SPV (Menunggu HRD)</span>;
+  }
+
+  // If in dynamic workflow
+  if (item.current_step_info) {
+    const { step_number, total_steps, label } = item.current_step_info;
+    const isSpvApproved = step_number > 1 || !!item.supervisor_approved_at;
+    const shortLabel = label.split(' - ')[0] || label;
+    return (
+      <span className="dash-badge dash-badge-warning font-semibold inline-flex items-center gap-1" title={label}>
+        {isSpvApproved ? (
+          <span className="text-blue-700 font-bold">Acc SPV • Tahap {step_number}/{total_steps} ({shortLabel})</span>
+        ) : (
+          <span>Menunggu SPV (Tahap {step_number}/{total_steps})</span>
+        )}
+      </span>
+    );
+  }
+
+  if (item.current_approval_step && item.current_approval_step > 1) {
+    return (
+      <span className="dash-badge dash-badge-warning font-semibold text-blue-700 font-bold">
+        Acc SPV (Menunggu Tahap {item.current_approval_step})
+      </span>
+    );
+  }
+
+  return <span className="dash-badge dash-badge-warning font-semibold">Menunggu SPV</span>;
 };
 
 interface Employee {
@@ -388,7 +416,7 @@ export default function FundRequestsPage() {
                             {formatCurrency(item.amount || 0)}
                           </span>
                         </td>
-                        <td>{getStatusBadge(item.status)}</td>
+                        <td>{getStatusBadge(item)}</td>
                         <td className="text-right">
                           <button 
                             className="dash-action-btn view" 

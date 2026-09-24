@@ -105,6 +105,38 @@ interface DashboardData {
   }>;
 }
 
+const defaultDashboardData: DashboardData = {
+  summary: {
+    total_employees: 0,
+    present_today: 0,
+    late_today: 0,
+    on_leave_today: 0,
+    absent_today: 0,
+  },
+  pending_approvals: {
+    leaves: 0,
+    overtimes: 0,
+    reimbursements: 0,
+  },
+  attendance_trends: [],
+  upcoming_holidays: [],
+  recent_announcements: [],
+  upcoming_birthdays: [],
+  recent_activities: [],
+  role_distribution: [],
+  today_attendance: [],
+  attendance_stats: {
+    percentage: 0,
+    late_count: 0,
+    total_hours: 0,
+    work_days: 0,
+  },
+  calendar_events: [],
+  monthly_breakdown: [],
+  overtime_summary: [],
+  leave_distribution: [],
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const { user, hasPermission, loading: authLoading } = useAuth();
@@ -119,16 +151,22 @@ export default function DashboardPage() {
   useEffect(() => {
     async function fetchData() {
       if (authLoading) return;
-      if (!user) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
       try {
         setLoading(true);
-        const dashRes = await axiosInstance.get("/dashboard/summary");
+        const dashRes = await axiosInstance.get("/dashboard/summary", { timeout: 10000 });
         if (dashRes.data?.data) {
           setData(dashRes.data.data);
+        } else {
+          setData((prev) => prev || defaultDashboardData);
         }
       } catch (e) {
         console.error("Gagal mendapatkan data dashboard", e);
+        setData((prev) => prev || defaultDashboardData);
       } finally {
         setLoading(false);
       }
@@ -136,7 +174,7 @@ export default function DashboardPage() {
     fetchData();
   }, [user, authLoading]);
 
-  if (loading || authLoading || !data) {
+  if (authLoading || (loading && !data)) {
     return <DashboardSkeleton />;
   }
 

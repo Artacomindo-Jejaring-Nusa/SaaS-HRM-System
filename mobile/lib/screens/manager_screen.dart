@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../api/api_client.dart';
 import '../api/api_service.dart';
 import '../widgets/skeleton_loading.dart';
+import 'pdf_viewer_screen.dart';
 
 class ManagerScreen extends StatefulWidget {
   @override
@@ -23,6 +25,9 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
   final Color primaryDark = const Color(0xFF5A0000);
   final Color accentColor = const Color(0xFFB00000);
 
+  bool _isSuperAdmin = false;
+  Set<String> _permissions = {};
+
   @override
   void initState() {
     super.initState();
@@ -32,10 +37,29 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
+    final profile = await ApiService.getProfile();
     final counts = await ApiService.getManagerPendingCount();
     final team = await ApiService.getTeamAttendance();
     if (mounted) {
+      final roleName = (profile?['role']?['name'] ?? '').toString().toLowerCase();
+      final roleSlug = (profile?['role']?['slug'] ?? '').toString().toLowerCase();
+      final isSuperAdmin = roleName.contains('super admin') || roleSlug == 'super-admin' || profile?['role_id'] == 1;
+
+      final Set<String> perms = {};
+      if (profile?['permission_slugs'] is List) {
+        for (var p in profile!['permission_slugs']) {
+          if (p != null) perms.add(p.toString());
+        }
+      }
+      if (profile?['role'] != null && profile!['role']['permissions'] is List) {
+        for (var p in profile['role']['permissions']) {
+          if (p is Map && p['slug'] != null) perms.add(p['slug'].toString());
+        }
+      }
+
       setState(() {
+        _isSuperAdmin = isSuperAdmin;
+        _permissions = perms;
         _pendingCounts = counts;
         _teamAttendance = team ?? [];
         _filteredTeam = _teamAttendance;
@@ -57,6 +81,78 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
         }).toList();
       }
     });
+  }
+
+  List<Map<String, dynamic>> _getAllowedCategories() {
+    final all = [
+      {
+        'title': 'Pengajuan Cuti',
+        'short': 'Cuti',
+        'type': 'leave',
+        'icon': Icons.calendar_month_rounded,
+        'color': const Color(0xFFF59E0B),
+        'desc': 'Persetujuan cuti tahunan, sakit, & khusus',
+        'permission': 'approve-leaves',
+      },
+      {
+        'title': 'Pengajuan Izin',
+        'short': 'Izin',
+        'type': 'permit',
+        'icon': Icons.assignment_turned_in_rounded,
+        'color': const Color(0xFF8B5CF6),
+        'desc': 'Persetujuan izin terlambat, pulang cepat, dll.',
+        'permission': 'approve-permits',
+      },
+      {
+        'title': 'Pengajuan Lembur',
+        'short': 'Lembur',
+        'type': 'overtime',
+        'icon': Icons.more_time_rounded,
+        'color': const Color(0xFFEF4444),
+        'desc': 'Validasi jam kerja lembur & surat tugas',
+        'permission': 'approve-overtimes',
+      },
+      {
+        'title': 'Pengajuan Klaim',
+        'short': 'Klaim',
+        'type': 'reimbursement',
+        'icon': Icons.payments_rounded,
+        'color': const Color(0xFF10B981),
+        'desc': 'Verifikasi nota pengeluaran operasional / medis',
+        'permission': 'approve-reimbursements',
+      },
+      {
+        'title': 'Pengajuan Dana',
+        'short': 'Dana',
+        'type': 'fund_request',
+        'icon': Icons.account_balance_wallet_rounded,
+        'color': const Color(0xFFD97706),
+        'desc': 'Verifikasi permintaan uang muka & kasbon',
+        'permission': 'approve-fund-requests',
+      },
+      {
+        'title': 'Log Kendaraan',
+        'short': 'Fleet',
+        'type': 'vehicle_log',
+        'icon': Icons.directions_car_filled_rounded,
+        'color': const Color(0xFF6366F1),
+        'desc': 'Validasi fleet dan jarak tempuh kendaraan',
+        'permission': 'approve-vehicle-logs',
+      },
+    ];
+
+    if (_isSuperAdmin) return all;
+    return all.where((item) => _permissions.contains(item['permission'])).toList();
+  }
+
+  int get _totalAllowedPending {
+    final allowed = _getAllowedCategories();
+    int sum = 0;
+    for (var cat in allowed) {
+      final t = cat['type'] as String;
+      sum += ((_pendingCounts?[t] ?? 0) as int);
+    }
+    return sum;
   }
 
   @override
@@ -111,81 +207,150 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
   }
 
   Widget _buildSummaryHeader() {
+    final allowed = _getAllowedCategories();
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [primaryColor, primaryDark],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildSummaryCard("Cuti", _pendingCounts?['leave'] ?? 0, Icons.calendar_month_rounded, "leave"),
-            _buildSummaryCard("Izin", _pendingCounts?['permit'] ?? 0, Icons.assignment_turned_in_rounded, "permit"),
-            _buildSummaryCard("Lembur", _pendingCounts?['overtime'] ?? 0, Icons.more_time_rounded, "overtime"),
-            _buildSummaryCard("Klaim", _pendingCounts?['reimbursement'] ?? 0, Icons.payments_rounded, "reimbursement"),
-            _buildSummaryCard("Fleet", _pendingCounts?['vehicle_log'] ?? 0, Icons.directions_car_rounded, "vehicle_log"),
-          ],
-        ),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (allowed.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white.withOpacity(0.15)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.white70, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "Anda belum memiliki hak akses persetujuan. Hubungi Super Admin.",
+                      style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (allowed.length <= 3)
+            Row(
+              children: allowed.map((cat) {
+                final count = (_pendingCounts?[cat['type']] ?? 0) as int;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: _buildCompactSummaryCard(
+                      label: cat['short'],
+                      title: cat['title'],
+                      count: count,
+                      icon: cat['icon'],
+                      type: cat['type'],
+                      color: cat['color'],
+                    ),
+                  ),
+                );
+              }).toList(),
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: allowed.map((cat) {
+                  final count = (_pendingCounts?[cat['type']] ?? 0) as int;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: SizedBox(
+                      width: 76,
+                      child: _buildCompactSummaryCard(
+                        label: cat['short'],
+                        title: cat['title'],
+                        count: count,
+                        icon: cat['icon'],
+                        type: cat['type'],
+                        color: cat['color'],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _buildSummaryCard(String label, int count, IconData icon, String type) {
-    return InkWell(
-      onTap: () {
-        String title = label == "Cuti"
-            ? "Pengajuan Cuti"
-            : label == "Izin"
-                ? "Pengajuan Izin"
-                : label == "Lembur"
-                    ? "Pengajuan Lembur"
-                    : label == "Klaim"
-                        ? "Pengajuan Klaim"
-                        : "Log Kendaraan";
-        _showApprovalList(title, type);
-      },
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: count > 0 ? Colors.amber.withOpacity(0.25) : Colors.white.withOpacity(0.18),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: count > 0 ? Colors.amberAccent : Colors.white, size: 20),
+  Widget _buildCompactSummaryCard({
+    required String label,
+    required String title,
+    required int count,
+    required IconData icon,
+    required String type,
+    required Color color,
+  }) {
+    final bool hasPending = count > 0;
+    return Material(
+      color: Colors.white.withOpacity(hasPending ? 0.22 : 0.12),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: () => _showApprovalList(title, type),
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: hasPending ? Colors.amberAccent.withOpacity(0.6) : Colors.white.withOpacity(0.18),
+              width: hasPending ? 1.2 : 0.8,
             ),
-            const SizedBox(height: 6),
-            Text(
-              "$count",
-              style: GoogleFonts.outfit(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: hasPending ? Colors.amberAccent : Colors.white,
+                size: 20,
               ),
-            ),
-            Text(
-              label,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.85),
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
+              const SizedBox(height: 4),
+              Text(
+                "$count",
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: hasPending ? Colors.amberAccent : Colors.white,
+                ),
               ),
-            ),
-          ],
+              Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.85),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -193,110 +358,124 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
 
   Widget _buildTabBar() {
     return Container(
-      color: primaryDark,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: TabBar(
-          controller: _tabController,
-          indicator: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              )
-            ],
-          ),
-          indicatorSize: TabBarIndicatorSize.tab,
-          labelColor: primaryColor,
-          unselectedLabelColor: Colors.white.withOpacity(0.85),
-          labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
-          unselectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14),
-          tabs: [
-            Tab(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.check_circle_outline_rounded, size: 18),
-                  const SizedBox(width: 8),
-                  const Text("Persetujuan"),
-                  if ((_pendingCounts?['total'] ?? 0) > 0) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                      child: Text(
-                        "${_pendingCounts!['total']}",
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            Tab(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.people_outline_rounded, size: 18),
-                  const SizedBox(width: 8),
-                  const Text("Tim Saya"),
-                ],
-              ),
-            ),
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE9ECEF),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        indicator: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            )
           ],
         ),
+        indicatorSize: TabBarIndicatorSize.tab,
+        labelColor: primaryColor,
+        unselectedLabelColor: Colors.blueGrey[600],
+        labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13.5),
+        unselectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13.5),
+        tabs: [
+          Tab(
+            height: 38,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.check_circle_outline_rounded, size: 17),
+                const SizedBox(width: 6),
+                const Text("Persetujuan"),
+                if (_totalAllowedPending > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: primaryColor,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      "$_totalAllowedPending",
+                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Tab(
+            height: 38,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.people_outline_rounded, size: 17),
+                const SizedBox(width: 6),
+                const Text("Tim Saya"),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildApprovalTab() {
+    final allowed = _getAllowedCategories();
+
+    if (allowed.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _loadData,
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            SizedBox(height: MediaQuery.of(context).size.height * 0.15),
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.shield_outlined, size: 48, color: Colors.grey[400]),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "Tidak Ada Akses Persetujuan",
+                    style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    "Role Anda saat ini belum memiliki hak untuk menyetujui pengajuan apapun.\nSilakan hubungi Super Admin.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
-      children: [
-        _buildApprovalSection(
-          title: "Pengajuan Cuti",
-          type: "leave",
-          icon: Icons.calendar_today_rounded,
-          color: const Color(0xFFF59E0B),
-          desc: "Persetujuan izin cuti tahunan, sakit, dan khusus",
-        ),
-        _buildApprovalSection(
-          title: "Pengajuan Izin",
-          type: "permit",
-          icon: Icons.assignment_turned_in_rounded,
-          color: const Color(0xFF8B5CF6),
-          desc: "Persetujuan izin terlambat, pulang cepat, sakit, dll.",
-        ),
-        _buildApprovalSection(
-          title: "Pengajuan Lembur",
-          type: "overtime",
-          icon: Icons.access_time_filled_rounded,
-          color: const Color(0xFFEF4444),
-          desc: "Validasi jam kerja lembur dan instruksi tugas",
-        ),
-        _buildApprovalSection(
-          title: "Pengajuan Klaim",
-          type: "reimbursement",
-          icon: Icons.monetization_on_rounded,
-          color: const Color(0xFF10B981),
-          desc: "Verifikasi nota pengeluaran operasional / medis",
-        ),
-        _buildApprovalSection(
-          title: "Log Kendaraan",
-          type: "vehicle_log",
-          icon: Icons.directions_car_filled_rounded,
-          color: const Color(0xFF6366F1),
-          desc: "Validasi penggunaan fleet dan jarak tempuh",
-        ),
-      ],
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 30),
+      children: allowed.map((cat) {
+        return _buildApprovalSection(
+          title: cat['title'],
+          type: cat['type'],
+          icon: cat['icon'],
+          color: cat['color'],
+          desc: cat['desc'],
+        );
+      }).toList(),
     );
   }
 
@@ -390,6 +569,14 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
   }
 
   void _showApprovalList(String title, String type) async {
+    final allowedTypes = _getAllowedCategories().map((e) => e['type']).toSet();
+    if (!_isSuperAdmin && !allowedTypes.contains(type)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Anda tidak memiliki hak akses untuk melihat pengajuan ini."), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -493,6 +680,9 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
     if (type == 'reimbursement') {
       return _buildReimbursementApprovalCard(item, onItemProcessed);
     }
+    if (type == 'fund_request') {
+      return _buildFundRequestApprovalCard(item, onItemProcessed);
+    }
 
     if (type == 'leave') {
       date = "${item['start_date']} s/d ${item['end_date']}";
@@ -520,9 +710,27 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
       info = "Pukul: ${item['start_time']} - ${item['end_time']}\nTugas: ${item['notes'] ?? item['reason'] ?? '-'}";
       subtitle = "Lembur";
     } else if (type == 'vehicle_log') {
-      date = "${item['vehicle']?['name'] ?? item['vehicle_name'] ?? 'Kendaraan'} (${item['vehicle']?['license_plate'] ?? item['plate_number'] ?? '-'})";
-      info = "Tujuan: ${item['destination'] ?? '-'}\nJarak: ${item['distance'] ?? item['end_mileage'] ?? '-'} KM";
-      subtitle = "Fleet Log";
+      final vName = item['vehicle']?['name'] ?? item['vehicle_name'] ?? 'Kendaraan';
+      final vPlate = item['vehicle']?['license_plate'] ?? item['plate_number'] ?? '-';
+      date = "$vName ($vPlate)";
+      final depDate = item['departure_date'] ?? '-';
+      final retDate = item['return_date'] ?? '-';
+      final depTime = item['departure_time'] ?? '';
+      final retTime = item['return_time'] ?? '';
+      final driver = (item['driver_type'] == 'driver')
+          ? "Driver (${item['driver_name'] ?? 'Supir'})"
+          : "Sendiri (${item['driver_name'] ?? name})";
+      final purpose = item['purpose'] ?? '-';
+      final destination = item['destination'] ?? '-';
+      final status = item['status'] ?? 'pending';
+
+      if (status == 'pending') {
+        info = "Jadwal: $depDate ${depTime.isNotEmpty ? '($depTime)' : ''} s/d $retDate ${retTime.isNotEmpty ? '($retTime)' : ''}\nPengemudi: $driver\nTujuan: $destination\nKeperluan: $purpose";
+        subtitle = "Peminjaman Armada";
+      } else {
+        info = "Tujuan: $destination\nKeperluan: $purpose\nJarak: ${item['distance'] ?? '-'} KM";
+        subtitle = "Log Pasca Perjalanan";
+      }
     }
 
     return Container(
@@ -580,6 +788,32 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
               ),
             ],
           ),
+          if (item['current_step_info'] != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.amber[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.withOpacity(0.4)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.layers_rounded, size: 14, color: Colors.amber[900]),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      "Tahap ${item['current_step_info']['step_number']}/${item['current_step_info']['total_steps']}: ${item['current_step_info']['label'] ?? ''}",
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber[900]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const Divider(height: 20),
           Container(
             padding: const EdgeInsets.all(10),
@@ -1026,6 +1260,452 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () => _handleApproval('reimbursement', item['id'], 'approved', null, onItemProcessed),
+                  icon: const Icon(Icons.check_rounded, size: 16),
+                  label: const Text("Setujui"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[700],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFundRequestApprovalCard(dynamic item, VoidCallback onItemProcessed) {
+    String name = item['employee_name'] ?? item['user']?['name'] ?? "Pegawai";
+    String role = item['user']?['role']?['name'] ?? "Staff";
+    String divisi = item['divisi'] ?? (item['user']?['office']?['name'] ?? "Operasional");
+    String tujuan = item['tujuan'] ?? "-";
+    String title = item['title'] ?? item['reason'] ?? "Pengajuan Dana";
+    String reason = item['reason'] ?? "-";
+    String priority = item['priority'] ?? "Normal";
+    double amount = double.tryParse(item['amount'].toString()) ?? 0;
+    String dateStr = item['created_at'] != null 
+        ? DateFormat('dd MMM yyyy, HH:mm').format(DateTime.parse(item['created_at']))
+        : '-';
+
+    // Extract items
+    List<dynamic> itemsList = [];
+    if (item['items'] != null) {
+      if (item['items'] is List) {
+        itemsList = item['items'];
+      } else if (item['items'] is String) {
+        try {
+          final decoded = jsonDecode(item['items']);
+          if (decoded is List) itemsList = decoded;
+        } catch (_) {}
+      }
+    }
+
+    // Extract attachments
+    List<String> attachments = [];
+    if (item['attachment'] != null) {
+      if (item['attachment'] is List) {
+        attachments = (item['attachment'] as List).map((e) => e.toString()).toList();
+      } else if (item['attachment'] is String) {
+        final str = item['attachment'].toString();
+        if (str.trim().startsWith('[') && str.trim().endsWith(']')) {
+          try {
+            final decoded = jsonDecode(str);
+            if (decoded is List) attachments = decoded.map((e) => e.toString()).toList();
+          } catch (_) {}
+        } else if (str.isNotEmpty) {
+          attachments = [str];
+        }
+      }
+    }
+
+    Color priorityColor = Colors.brown;
+    if (priority.toLowerCase().contains('urgent')) {
+      priorityColor = priority.toLowerCase().contains('top') ? Colors.red : Colors.orange;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+        border: Border.all(color: Colors.grey.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header: Requester & Badges
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: const Color(0xFF8B4513).withOpacity(0.12),
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : "D",
+                  style: GoogleFonts.outfit(color: const Color(0xFF8B4513), fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text("$role • $divisi", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                    Text(dateStr, style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B4513).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      "Pengajuan Dana",
+                      style: TextStyle(color: Color(0xFF8B4513), fontWeight: FontWeight.bold, fontSize: 11),
+                    ),
+                  ),
+                  if (item['current_approval_step'] != null) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        item['current_step_info'] != null
+                            ? "Tahap ${item['current_step_info']['step_number']}/${item['current_step_info']['total_steps']}"
+                            : "Tahap ${item['current_approval_step']}",
+                        style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 10),
+                      ),
+                    ),
+                  ],
+                  if (priority != 'Normal') ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: priorityColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        priority,
+                        style: TextStyle(color: priorityColor, fontWeight: FontWeight.bold, fontSize: 10),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+
+          // Judul & Keperluan
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.withOpacity(0.12)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.account_balance_wallet_rounded, size: 16, color: Color(0xFF8B4513)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
+                      ),
+                    ),
+                  ],
+                ),
+                if (tujuan != '-' && !tujuan.isEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text("Tujuan / Keperluan: $tujuan", style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                ],
+                if (reason != '-' && !reason.isEmpty && reason != title) ...[
+                  const SizedBox(height: 4),
+                  Text("Keterangan: $reason", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                ],
+              ],
+            ),
+          ),
+
+          // Total Nominal Highlight Box
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFEF3C7), Color(0xFFFDE68A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFFCD34D)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("TOTAL PENGAJUAN DANA", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF92400E), letterSpacing: 0.5)),
+                    const SizedBox(height: 2),
+                    Text(
+                      "Rp " + NumberFormat("#,###", "id_ID").format(amount),
+                      style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF78350F)),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
+                    ],
+                  ),
+                  child: const Icon(Icons.payments_rounded, color: Color(0xFF92400E), size: 24),
+                ),
+              ],
+            ),
+          ),
+
+          // Items Breakdown Table (if available)
+          if (itemsList.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Rincian Item (${itemsList.length}):",
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey[800]),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: itemsList.length,
+                separatorBuilder: (ctx, i) => Divider(height: 1, color: Colors.grey.withOpacity(0.15)),
+                itemBuilder: (ctx, idx) {
+                  final itm = itemsList[idx];
+                  final spesifikasi = itm['spesifikasi'] ?? itm['name'] ?? itm['item_name'] ?? '-';
+                  final qty = itm['qty'] ?? 1;
+                  final unit = itm['unit'] ?? 'Pcs';
+                  final harga = double.tryParse((itm['estimasi_harga'] ?? itm['harga'] ?? itm['price'] ?? 0).toString()) ?? 0;
+                  final subtotal = double.tryParse((itm['subtotal'] ?? (qty * harga)).toString()) ?? (qty * harga);
+                  final ket = itm['keterangan'] ?? itm['notes'] ?? '';
+
+                  return Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 20,
+                          height: 20,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text("${idx + 1}", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(spesifikasi.toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              const SizedBox(height: 2),
+                              Text(
+                                "$qty $unit @ Rp ${NumberFormat('#,###', 'id_ID').format(harga)}",
+                                style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                              ),
+                              if (ket.toString().isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text("Ket: $ket", style: TextStyle(color: Colors.grey[500], fontSize: 10, fontStyle: FontStyle.italic)),
+                              ],
+                            ],
+                          ),
+                        ),
+                        Text(
+                          "Rp ${NumberFormat('#,###', 'id_ID').format(subtotal)}",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF78350F)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+
+          // Attachments Section
+          if (attachments.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              "Lampiran Pendukung (${attachments.length} file):",
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey[800]),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 80,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: attachments.length,
+                itemBuilder: (ctx, aIdx) {
+                  final rawPath = attachments[aIdx];
+                  final isPdf = rawPath.toLowerCase().endsWith('.pdf');
+                  final fullUrl = rawPath.startsWith('http') 
+                      ? ApiClient.fixUrl(rawPath) 
+                      : ApiClient.fixUrl("${ApiClient.storageUrl}/$rawPath");
+
+                  return GestureDetector(
+                    onTap: () {
+                      if (isPdf) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => PdfViewerScreen(
+                              url: fullUrl,
+                              title: "Lampiran PDF",
+                            ),
+                          ),
+                        );
+                      } else {
+                        _showImagePreviewDialog(fullUrl);
+                      }
+                    },
+                    child: Container(
+                      width: 80,
+                      margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(
+                        color: isPdf ? Colors.red[50] : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.withOpacity(0.25)),
+                        image: isPdf
+                            ? null
+                            : DecorationImage(
+                                image: NetworkImage(fullUrl),
+                                fit: BoxFit.cover,
+                              ),
+                      ),
+                      child: isPdf
+                          ? const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.picture_as_pdf, color: Colors.red, size: 28),
+                                SizedBox(height: 4),
+                                Text("PDF", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
+                              ],
+                            )
+                          : Container(
+                              alignment: Alignment.bottomRight,
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                gradient: LinearGradient(
+                                  colors: [Colors.transparent, Colors.black.withOpacity(0.6)],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
+                              ),
+                              child: const Icon(Icons.zoom_in, color: Colors.white, size: 16),
+                            ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+
+          // Signature
+          if (item['signature'] != null && item['signature'].toString().isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                const Icon(Icons.draw_rounded, size: 16, color: Colors.grey),
+                const SizedBox(width: 6),
+                Text("Tanda Tangan Pemohon:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[700])),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Container(
+              height: 50,
+              width: 140,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              ),
+              child: Image.memory(
+                base64Decode(item['signature'].toString().split(',').last),
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+          ],
+
+          // Actions
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _promptRemarkAndAction('fund_request', item['id'], 'rejected', onItemProcessed),
+                  icon: const Icon(Icons.close_rounded, size: 16),
+                  label: const Text("Tolak"),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _handleApproval('fund_request', item['id'], 'approved', null, onItemProcessed),
                   icon: const Icon(Icons.check_rounded, size: 16),
                   label: const Text("Setujui"),
                   style: ElevatedButton.styleFrom(

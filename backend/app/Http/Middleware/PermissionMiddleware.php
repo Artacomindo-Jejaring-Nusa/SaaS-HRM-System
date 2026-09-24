@@ -29,7 +29,16 @@ class PermissionMiddleware
             $user->load('role');
         }
 
-        if (! $user->role || ! $user->hasPermission($permission)) {
+        $permissions = preg_split('/[,|]/', $permission);
+        $hasAny = false;
+        foreach ($permissions as $p) {
+            if ($user->hasPermission(trim($p))) {
+                $hasAny = true;
+                break;
+            }
+        }
+
+        if (! $user->role || ! $hasAny) {
             \App\Services\AuditLogger::log('unauthorized_access', "User tried to access unauthorized permission: {$permission}", ['permission' => $permission], 'warning');
             return response()->json([
                 'status' => 'error',

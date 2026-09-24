@@ -53,11 +53,37 @@ export default function RolesPage() {
     }
   };
 
+  const SUPERADMIN_ONLY_SLUGS = [
+    'create-employees',
+    'edit-employees',
+    'delete-employees',
+    'manage-company',
+    'manage-roles',
+    'manage-wfh',
+    'manage-offices',
+    'view-directory',
+    'manage-shifts',
+    'manage-schedules',
+    'manage-holidays',
+    'manage-announcements',
+    'manage-approvals',
+    'manage-documents',
+    'manage-kpis',
+  ];
+
   const fetchPermissions = async () => {
     try {
       const res = await axiosInstance.get("/permissions");
       const rawData = res.data.data;
-      setAllPermissions(Array.isArray(rawData) ? {} : (rawData?.data || rawData || {}));
+      const grouped: Record<string, Permission[]> = Array.isArray(rawData) ? {} : (rawData?.data || rawData || {});
+      const cleanGrouped: Record<string, Permission[]> = {};
+      Object.entries(grouped).forEach(([group, perms]) => {
+        const filtered = perms.filter(p => !SUPERADMIN_ONLY_SLUGS.includes(p.slug));
+        if (filtered.length > 0) {
+          cleanGrouped[group] = filtered;
+        }
+      });
+      setAllPermissions(cleanGrouped);
     } catch (e) {
       console.error("Gagal ambil permission", e);
     }
@@ -81,7 +107,11 @@ export default function RolesPage() {
       const res = await axiosInstance.get(`/roles/${role.id}`);
       const detailedRole = res.data.data;
       setSelectedRole(detailedRole);
-      setRolePermissions(detailedRole.permissions.map((p: any) => p.id));
+      setRolePermissions(
+        detailedRole.permissions
+          ?.filter((p: any) => !SUPERADMIN_ONLY_SLUGS.includes(p.slug))
+          .map((p: any) => p.id) || []
+      );
       setPermissionModalOpen(true);
     } catch (e) {
       console.error("Gagal ambil detail role", e);

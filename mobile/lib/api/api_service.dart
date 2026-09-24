@@ -39,6 +39,7 @@ import 'repositories/fund_request_repository.dart';
 import 'repositories/settings_repository.dart';
 import 'repositories/kpi_repository.dart';
 import 'repositories/tracking_repository.dart';
+import 'repositories/organization_repository.dart';
 
 class ApiService {
   // ============ CONFIG (delegated to ApiClient) ============
@@ -309,9 +310,13 @@ class ApiService {
   static Future<Map<String, dynamic>?> getVehicleReport() =>
       VehicleRepository.getVehicleReport();
 
+  static Future<Map<String, dynamic>> submitLoanRequest(
+          Map<String, dynamic> data) =>
+      VehicleRepository.submitLoanRequest(data);
+
   static Future<Map<String, dynamic>> submitDeparture(
-          Map<String, String> data, String? photoPath) =>
-      VehicleRepository.submitDeparture(data, photoPath);
+          Map<String, String> data, String? photoPath, {int? id}) =>
+      VehicleRepository.submitDeparture(data, photoPath, id: id);
 
   static Future<Map<String, dynamic>> submitReturn(
           int id, Map<String, String> data,
@@ -356,5 +361,10 @@ class ApiService {
 
   static Future<bool> getMyTrackingStatus() =>
       TrackingRepository.getMyTrackingStatus();
+
+  // ============ ORGANIZATION CHART ============
+
+  static Future<Map<String, dynamic>?> getOrganizationChart({int? companyId}) =>
+      OrganizationRepository.getOrganizationChart(companyId: companyId);
 }
 

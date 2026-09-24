@@ -26,12 +26,12 @@ class FundRequestController extends Controller
 
         if ($user->role_id === 1) {
             // Master Admin sees all
-        } elseif ($user->is_manager || $user->hasPermission('approve-permits')) {
+        } elseif ($user->is_manager || $user->hasPermission('approve-fund-requests') || $user->hasPermission('approve-permits')) {
             $query->where('company_id', $user->company_id);
 
-            // If strictly a manager/supervisor (not HRD/Admin), see only subordinates OR assigned approvals
+            // If strictly a manager/supervisor (not HRD/Admin/Finance Approver), see only subordinates OR assigned approvals
             $roleName = $user->role ? $user->role->name : '';
-            if (! in_array($roleName, ['HRD', self::ROLE_HRD_MANAGER, 'Admin', 'Super Admin'])) {
+            if (! in_array($roleName, ['HRD', self::ROLE_HRD_MANAGER, 'Admin', 'Super Admin']) && ! $user->hasPermission('approve-fund-requests')) {
                 $query->where(function ($q) use ($user) {
                     $q->where('supervisor_id', $user->id)
                         ->orWhere('user_id', $user->id)
@@ -140,6 +140,11 @@ class FundRequestController extends Controller
                 'current_approval_step' => $result['current_approval_step'],
             ];
 
+            if (empty($fundRequest->supervisor_approved_at)) {
+                $updateData['supervisor_id'] = $user->id;
+                $updateData['supervisor_approved_at'] = now();
+            }
+
             if ($result['is_final'] && $result['status'] === 'approved') {
                 $updateData['hrd_id'] = $user->id;
                 $updateData['hrd_approved_at'] = now();
@@ -170,8 +175,8 @@ class FundRequestController extends Controller
         }
 
         // ── Fallback: Default 2-step logic ──
-        $isSupervisor = $fundRequest->user->supervisor_id === $user->id;
-        $isHR = $user->hasPermission('approve-permits') || in_array($user->role->name, ['HRD', self::ROLE_HRD_MANAGER, 'Admin', 'Super Admin']);
+        $isSupervisor = ($fundRequest->user?->supervisor_id === $user->id) || ($fundRequest->supervisor_id === $user->id);
+        $isHR = $user->hasPermission('approve-fund-requests') || in_array($user->role?->name, ['HRD', self::ROLE_HRD_MANAGER, 'Admin', 'Super Admin']);
 
         if ($fundRequest->status === 'pending') {
             if (! $isSupervisor && ! $isHR) {

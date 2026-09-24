@@ -97,6 +97,8 @@ class RolePermissionSeeder extends Seeder
 
             // Tugas (Tasks)
             ['name' => 'Lihat Tugas', 'slug' => 'view-tasks', 'group' => 'Tugas'],
+            ['name' => 'Memberikan Tugas', 'slug' => 'assign-tasks', 'group' => 'Tugas'],
+            ['name' => 'Menerima Tugas', 'slug' => 'receive-tasks', 'group' => 'Tugas'],
             ['name' => 'Kelola Tugas', 'slug' => 'manage-tasks', 'group' => 'Tugas'],
 
             // Payroll
@@ -149,39 +151,55 @@ class RolePermissionSeeder extends Seeder
         $spvSales = Role::updateOrCreate(['name' => 'Supervisor Sales']);
         $spvNOC = Role::updateOrCreate(['name' => 'Supervisor NOC']);
 
+        $superAdminOnlySlugs = [
+            'create-employees',
+            'edit-employees',
+            'delete-employees',
+            'manage-company',
+            'manage-roles',
+            'manage-wfh',
+            'manage-offices',
+            'view-directory',
+            'manage-shifts',
+            'manage-schedules',
+            'manage-holidays',
+            'manage-announcements',
+            'manage-approvals',
+            'manage-documents',
+            'manage-kpis',
+            'view-attendance-map',
+            'view-live-tracking',
+        ];
+
         $allPermissions = Permission::all()->pluck('id');
         // Only Super Admin has all permissions including live tracking & attendance map
         $admin->permissions()->sync($allPermissions);
 
-        // Direktur & CEO (All except Super Admin exclusive tracking / map / system settings)
-        $executivePermissions = Permission::whereNotIn('slug', [
-            'view-attendance-map', 'view-live-tracking', 'manage-roles', 'manage-company',
-        ])->pluck('id');
+        // Direktur & CEO (All except Super Admin exclusive)
+        $executivePermissions = Permission::whereNotIn('slug', $superAdminOnlySlugs)->pluck('id');
         $direktur->permissions()->sync($executivePermissions);
         $ceo->permissions()->sync($executivePermissions);
 
-        // HRD Manager Permissions (All except super admin exclusive & system settings)
-        $hrdManagerPermissions = Permission::whereNotIn('slug', [
-            'manage-roles', 'manage-company', 'view-attendance-map', 'view-live-tracking',
-        ])->pluck('id');
+        // HRD Manager Permissions (All except super admin exclusive)
+        $hrdManagerPermissions = Permission::whereNotIn('slug', $superAdminOnlySlugs)->pluck('id');
         $hrdManager->permissions()->sync($hrdManagerPermissions);
 
         // HRD Permissions
         $hrdPermissions = Permission::whereIn('group', [
             'Pegawai', 'Cuti', 'Perizinan', 'Reimbursement', 'Lembur', 'Operasional', 'Performa', 'Kehadiran', 'Tukar Shift', 'Payroll', 'Dokumen', 'Keuangan',
-        ])->whereNotIn('slug', ['manage-roles', 'manage-company', 'view-attendance-map', 'view-live-tracking'])->pluck('id');
+        ])->whereNotIn('slug', $superAdminOnlySlugs)->pluck('id');
         $hrd->permissions()->sync($hrdPermissions);
 
         // Manager Permissions
         $managerPermissions = Permission::whereIn('group', [
             'Pegawai', 'Cuti', 'Perizinan', 'Reimbursement', 'Lembur', 'Operasional', 'Performa', 'Kehadiran', 'Tukar Shift', 'Proyek', 'Kendaraan', 'Tugas', 'Dokumen', 'Keuangan',
-        ])->whereNotIn('slug', ['delete-employees', 'manage-roles', 'manage-company', 'view-attendance-map', 'view-live-tracking'])->pluck('id');
+        ])->whereNotIn('slug', $superAdminOnlySlugs)->pluck('id');
         $manager->permissions()->sync($managerPermissions);
 
         // Finance Manager Permissions
         $financePermissions = Permission::whereIn('slug', [
             'view-manager-portal',
-            'view-employees', 'view-directory', 'view-organization',
+            'view-employees', 'view-organization',
             'view-leaves', 'apply-leaves', 'approve-leaves',
             'view-permits', 'apply-permits', 'approve-permits',
             'view-reimbursements', 'apply-reimbursements', 'approve-reimbursements',
@@ -189,26 +207,25 @@ class RolePermissionSeeder extends Seeder
             'view-salaries', 'manage-payroll', 'view-payroll-reports',
             'view-fund-requests', 'apply-fund-requests', 'approve-fund-requests',
             'view-projects', 'manage-project-budgets', 'approve-project-costs',
-            'view-reports', 'view-documents', 'manage-documents', 'view-announcements',
-        ])->pluck('id');
+            'view-reports', 'view-documents',
+        ])->whereNotIn('slug', $superAdminOnlySlugs)->pluck('id');
         $financeManager->permissions()->sync($financePermissions);
 
         // Supervisor Permissions (General)
         $supervisorPermissions = Permission::whereIn('slug', [
             'view-manager-portal',
-            'view-employees', 'view-directory', 'view-organization',
+            'view-employees', 'view-organization',
             'view-leaves', 'apply-leaves', 'approve-leaves',
             'view-permits', 'apply-permits', 'approve-permits',
             'view-reimbursements', 'apply-reimbursements', 'approve-reimbursements',
             'view-overtimes', 'apply-overtimes', 'approve-overtimes',
             'view-kpis', 'view-attendance-reports', 'view-attendances', 'view-reports',
-            'manage-shifts', 'manage-schedules', 'manage-approvals', 'view-announcements',
             'view-shift-swaps', 'apply-shift-swaps', 'approve-shift-swaps', 'view-shift-swap-reports', 'export-shift-swaps',
             'view-projects', 'approve-project-costs',
             'view-vehicle-logs', 'apply-vehicle-logs', 'approve-vehicle-logs', 'view-vehicle-reports',
-            'view-tasks', 'manage-tasks', 'view-documents',
+            'view-tasks', 'manage-tasks', 'assign-tasks', 'receive-tasks', 'view-documents',
             'view-fund-requests', 'apply-fund-requests', 'approve-fund-requests', 'view-salaries',
-        ])->pluck('id');
+        ])->whereNotIn('slug', $superAdminOnlySlugs)->pluck('id');
         $supervisor->permissions()->sync($supervisorPermissions);
         $spvOps->permissions()->sync($supervisorPermissions);
         $spvFinance->permissions()->sync($supervisorPermissions);
@@ -220,7 +237,7 @@ class RolePermissionSeeder extends Seeder
         // Supervisor Engineer Permissions
         $spvEngPermissions = Permission::whereIn('slug', [
             'view-manager-portal',
-            'view-employees', 'view-directory', 'view-organization',
+            'view-employees', 'view-organization',
             'view-leaves', 'apply-leaves', 'approve-leaves',
             'view-permits', 'apply-permits', 'approve-permits',
             'view-reimbursements', 'apply-reimbursements', 'approve-reimbursements',
@@ -228,14 +245,14 @@ class RolePermissionSeeder extends Seeder
             'view-kpis', 'view-attendances', 'view-reports',
             'view-projects', 'create-projects', 'edit-projects', 'manage-project-budgets', 'approve-project-costs',
             'view-vehicle-logs', 'apply-vehicle-logs', 'approve-vehicle-logs',
-            'view-tasks', 'manage-tasks', 'view-documents', 'manage-documents',
+            'view-tasks', 'manage-tasks', 'assign-tasks', 'receive-tasks', 'view-documents',
             'view-fund-requests', 'apply-fund-requests', 'approve-fund-requests', 'view-salaries',
-        ])->pluck('id');
+        ])->whereNotIn('slug', $superAdminOnlySlugs)->pluck('id');
         $spvEng->permissions()->sync($spvEngPermissions);
 
         // Staff Karyawan & Staff Teknisi (Self-Service)
         $staffPermissions = Permission::whereIn('slug', [
-            'view-directory', 'view-organization', 'view-announcements',
+            'view-organization',
             'view-leaves', 'apply-leaves',
             'view-permits', 'apply-permits',
             'view-reimbursements', 'apply-reimbursements',
@@ -245,9 +262,9 @@ class RolePermissionSeeder extends Seeder
             'view-shift-swaps', 'apply-shift-swaps',
             'view-projects',
             'view-vehicle-logs', 'apply-vehicle-logs',
-            'view-tasks', 'view-salaries', 'view-documents',
+            'view-tasks', 'receive-tasks', 'view-salaries', 'view-documents',
             'view-fund-requests', 'apply-fund-requests',
-        ])->pluck('id');
+        ])->whereNotIn('slug', $superAdminOnlySlugs)->pluck('id');
         $staffKaryawan->permissions()->sync($staffPermissions);
         $staffTeknisi->permissions()->sync($staffPermissions);
 

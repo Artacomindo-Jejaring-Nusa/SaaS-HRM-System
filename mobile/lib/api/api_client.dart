@@ -22,7 +22,7 @@ class ApiClient {
   /// Toggle between Development and Production
   static const String _prodIp = 'ontime.jelantik.com';
   static const String _devIp =
-      '2.2.2.104'; // Standard Android Emulator local address
+      '2.2.2.104'; // Current local Wi-Fi IP address 2.2.2.104
 
   static String get serverIp => kDebugMode ? _devIp : _prodIp;
 
@@ -50,7 +50,8 @@ class ApiClient {
         .replaceAll('localhost', serverIp)
         .replaceAll('127.0.0.1', serverIp)
         .replaceAll('192.168.1.8', serverIp)
-        .replaceAll('2.2.2.42', serverIp);
+        .replaceAll('2.2.2.42', serverIp)
+        .replaceAll('2.2.2.104', serverIp);
 
     // Production specific cleanup (Force HTTPS and remove dev port)
     if (!kDebugMode) {

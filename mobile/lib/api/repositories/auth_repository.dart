@@ -112,7 +112,7 @@ class AuthRepository {
       final response = await ApiClient.client.get(
         Uri.parse('${ApiClient.baseUrl}/companies/search?q=$query'),
         headers: {'Accept': 'application/json'},
-      );
+      ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

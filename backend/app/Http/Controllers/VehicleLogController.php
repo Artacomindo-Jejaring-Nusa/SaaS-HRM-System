@@ -70,10 +70,143 @@ class VehicleLogController extends Controller
     }
 
     /**
-     * Step 1: Record departure (KM Awal + Foto Dashboard)
+     * Step 1 (NEW): Request vehicle loan (Pengajuan Peminjaman Kendaraan)
      */
-    public function storeDeparture(Request $request)
+    public function storeRequest(Request $request)
     {
+        $request->validate([
+            'vehicle_name' => 'required|string|max:255',
+            'plate_number' => 'required|string|max:20',
+            'purpose' => 'required|string|max:500',
+            'destination' => 'required|string|max:255',
+            'departure_date' => 'required|date',
+            'return_date' => 'required|date|after_or_equal:departure_date',
+            'departure_time' => 'nullable|string|max:10',
+            'return_time' => 'nullable|string|max:10',
+            'driver_type' => 'nullable|in:self,driver',
+            'driver_name' => 'nullable|string|max:255',
+            'notes' => 'nullable|string',
+        ]);
+
+        $user = $request->user();
+        $companyId = $user->company_id;
+
+        // Check dynamic approval workflow
+        $workflowResult = \App\Services\ApprovalService::initApproval('vehicle_log', $companyId, $user);
+
+        $driverType = $request->driver_type ?? 'self';
+        $driverName = $driverType === 'driver' ? ($request->driver_name ?: 'Supir Kantor') : $user->name;
+
+        $logData = [
+            'company_id' => $companyId,
+            'user_id' => $user->id,
+            'vehicle_name' => $request->vehicle_name,
+            'plate_number' => strtoupper($request->plate_number),
+            'purpose' => $request->purpose,
+            'destination' => $request->destination,
+            'departure_date' => $request->departure_date,
+            'return_date' => $request->return_date,
+            'departure_time' => $request->departure_time ?: '08:00',
+            'return_time' => $request->return_time ?: '17:00',
+            'driver_type' => $driverType,
+            'driver_name' => $driverName,
+            'notes' => $request->notes,
+        ];
+
+        if ($workflowResult) {
+            $logData['status'] = $workflowResult['status']; // 'pending'
+            $logData['current_approval_step'] = $workflowResult['current_approval_step'];
+            $log = VehicleLog::create($logData);
+
+            // Notify the submitter
+            $this->notify(
+                $user,
+                'PENGAJUAN PEMINJAMAN KENDARAAN',
+                "Pengajuan peminjaman {$log->vehicle_name} ({$log->plate_number}) untuk tanggal {$log->departure_date} berhasil diajukan. Status: Menunggu {$workflowResult['step_label']}.",
+                'info',
+                self::URL_FLEET_LOGS
+            );
+
+            // Notify approvers of current step
+            foreach ($workflowResult['approvers'] as $approver) {
+                $this->notify(
+                    $approver,
+                    'PERSETUJUAN PEMINJAMAN KENDARAAN',
+                    "Permohonan peminjaman armada dari {$user->name} untuk unit {$log->vehicle_name} ({$log->plate_number}) ke {$log->destination}. Mohon kesediaannya meninjau pengajuan ini.",
+                    'warning',
+                    self::URL_FLEET_LOGS
+                );
+            }
+        } else {
+            // Direct approval if no workflow configured
+            $logData['status'] = 'approved';
+            $logData['current_approval_step'] = null;
+            $log = VehicleLog::create($logData);
+
+            $this->notify(
+                $user,
+                'PEMINJAMAN KENDARAAN DISETUJUI',
+                "Peminjaman kendaraan {$log->vehicle_name} ({$log->plate_number}) otomatis disetujui. Unit siap digunakan dan dicatat keberangkatannya.",
+                'success',
+                self::URL_FLEET_LOGS
+            );
+        }
+
+        $this->logActivity('REQUEST_VEHICLE_LOG', "Mengajukan peminjaman kendaraan {$request->vehicle_name} ({$request->plate_number}) ke {$request->destination}", $log);
+
+        return $this->successResponse($log, 'Pengajuan peminjaman kendaraan berhasil dikirim.', 201);
+    }
+
+    /**
+     * Step 2: Record departure (KM Awal + Foto Dashboard)
+     * Supports either existing approved booking (pass id) or legacy on-the-fly departure
+     */
+    public function storeDeparture(Request $request, $id = null)
+    {
+        $logId = $id ?: $request->input('vehicle_log_id');
+
+        if ($logId) {
+            $log = VehicleLog::where('user_id', $request->user()->id)
+                ->whereIn('status', ['approved', 'departure', 'pending'])
+                ->findOrFail($logId);
+
+            $request->validate([
+                'odometer_start' => 'required|integer|min:0',
+                'odometer_start_photo' => 'nullable|image|max:10240',
+                'notes' => 'nullable|string',
+            ]);
+
+            $photoPath = $log->odometer_start_photo;
+            if ($request->hasFile('odometer_start_photo')) {
+                $file = $request->file('odometer_start_photo');
+                $photoPath = 'vehicle-logs/odometer/'.Str::random(40).'.jpg';
+
+                $img = Image::decode($file);
+                $img->scale(width: 1000);
+                Storage::disk('public')->put($photoPath, (string) $img->encodeUsingFileExtension('jpg', 80));
+            }
+
+            $log->update([
+                'odometer_start' => $request->odometer_start,
+                'odometer_start_photo' => $photoPath,
+                'notes' => $request->notes ?? $log->notes,
+                'status' => 'in_use',
+            ]);
+
+            $this->notify(
+                $request->user(),
+                'LOG KENDARAAN — KEBERANGKATAN',
+                "Keberangkatan dimulai. Kendaraan {$log->vehicle_name} ({$log->plate_number}) dengan KM Awal {$log->odometer_start}.",
+                'info',
+                self::URL_FLEET_LOGS
+            );
+
+            $this->logActivity('START_VEHICLE_TRIP', "Mencatat keberangkatan kendaraan {$log->vehicle_name} ({$log->plate_number}), KM: {$log->odometer_start}", $log);
+
+            return $this->successResponse($log, 'Pencatatan keberangkatan berhasil. Selamat berkendara!');
+        }
+
+        // Legacy / Fallback direct creation
         $request->validate([
             'vehicle_name' => 'required|string|max:255',
             'plate_number' => 'required|string|max:20',
@@ -90,7 +223,6 @@ class VehicleLogController extends Controller
             $file = $request->file('odometer_start_photo');
             $photoPath = 'vehicle-logs/odometer/'.Str::random(40).'.jpg';
 
-            // Compress and scale (1000px for better odometer readability)
             $img = Image::decode($file);
             $img->scale(width: 1000);
             Storage::disk('public')->put($photoPath, (string) $img->encodeUsingFileExtension('jpg', 80));
@@ -107,50 +239,18 @@ class VehicleLogController extends Controller
             'odometer_start' => $request->odometer_start,
             'odometer_start_photo' => $photoPath,
             'notes' => $request->notes,
-            'status' => 'departure',
+            'status' => 'in_use',
         ]);
 
-        // Notify the submitter
         $this->notify(
             $request->user(),
             'LOG KENDARAAN — KEBERANGKATAN',
-            "Pencatatan keberangkatan berhasil. Kendaraan {$request->vehicle_name} ({$request->plate_number}) dengan KM Awal {$request->odometer_start} ke {$request->destination}.",
+            "Pencatatan keberangkatan berhasil. Kendaraan {$request->vehicle_name} ({$request->plate_number}) dengan KM Awal {$request->odometer_start}.",
             'info',
             self::URL_FLEET_LOGS
         );
 
-        // Notify Supervisor
-        if ($request->user()->supervisor_id) {
-            $supervisor = $request->user()->supervisor;
-            if ($supervisor) {
-                $this->notify(
-                    $supervisor,
-                    'PENGGUNAAN KENDARAAN BAWAHAN',
-                    "Karyawan {$request->user()->name} menggunakan kendaraan {$request->vehicle_name} ({$request->plate_number}) untuk perjalanan dinas ke {$request->destination}.",
-                    'warning',
-                    self::URL_FLEET_LOGS
-                );
-            }
-        }
-
-        // Notify Admins & HR (Untuk monitoring unit keluar secara real-time)
-        $admins = User::where('company_id', $request->user()->company_id)
-            ->whereIn('role_id', [7, 2, 10, 8]) // Super Admin, HR, dll
-            ->where('id', '!=', $request->user()->id)
-            ->where('id', '!=', $request->user()->supervisor_id)
-            ->get();
-
-        foreach ($admins as $admin) {
-            $this->notify(
-                $admin,
-                'KENDARAAN DINAS KELUAR',
-                "Karyawan {$request->user()->name} baru saja membawa kendaraan {$request->vehicle_name} ({$request->plate_number}) menuju {$request->destination}.",
-                'info',
-                self::URL_FLEET_LOGS
-            );
-        }
-
-        $this->logActivity('CREATE_VEHICLE_LOG', "Mencatat keberangkatan kendaraan {$request->vehicle_name} ({$request->plate_number}) ke {$request->destination}", $log);
+        $this->logActivity('CREATE_VEHICLE_LOG', "Mencatat keberangkatan langsung kendaraan {$request->vehicle_name} ({$request->plate_number})", $log);
 
         return $this->successResponse($log, 'Pencatatan keberangkatan berhasil.', 201);
     }
@@ -161,12 +261,12 @@ class VehicleLogController extends Controller
     public function storeReturn(Request $request, $id)
     {
         $log = VehicleLog::where('user_id', $request->user()->id)
-            ->where('status', 'departure')
+            ->whereIn('status', ['departure', 'in_use'])
             ->findOrFail($id);
 
         $request->validate([
             'return_date' => 'required|date|after_or_equal:'.Carbon::parse($log->departure_date)->format('Y-m-d'),
-            'odometer_end' => 'required|integer|min:'.$log->odometer_start,
+            'odometer_end' => 'required|integer|min:'.($log->odometer_start ?: 0),
             'odometer_end_photo' => 'nullable|image|max:10240',
             'fuel_cost' => self::RULE_NULL_NUM,
             'toll_cost' => self::RULE_NULL_NUM,
@@ -219,41 +319,10 @@ class VehicleLogController extends Controller
         $this->notify(
             $request->user(),
             'LOG KENDARAAN — SELESAI',
-            "Perjalanan dinas selesai dicatat. Jarak tempuh: {$distance} KM. Total biaya: Rp ".number_format((float) $totalCost, 0, ',', '.').'. Menunggu validasi admin.',
+            "Perjalanan dinas selesai dicatat. Jarak tempuh: {$distance} KM. Total biaya: Rp ".number_format((float) $totalCost, 0, ',', '.').'.',
             'success',
             self::URL_FLEET_LOGS
         );
-
-        // Notify Supervisor & approvers
-        if ($request->user()->supervisor_id) {
-            $supervisor = $request->user()->supervisor;
-            if ($supervisor) {
-                $this->notify(
-                    $supervisor,
-                    'LOG KENDARAAN SELESAI — PERLU VALIDASI',
-                    "Karyawan {$request->user()->name} telah menyelesaikan perjalanan dinas dengan {$log->vehicle_name} ({$log->plate_number}). Jarak: {$distance} KM, Biaya: Rp ".number_format((float) $totalCost, 0, ',', '.').'. Mohon validasi.',
-                    'warning',
-                    self::URL_FLEET_LOGS
-                );
-            }
-        }
-
-        // Notify Admins
-        $admins = User::where('company_id', $request->user()->company_id)
-            ->whereIn('role_id', [7, 2, 10, 8])
-            ->where('id', '!=', $request->user()->id)
-            ->where('id', '!=', $request->user()->supervisor_id)
-            ->get();
-
-        foreach ($admins as $admin) {
-            $this->notify(
-                $admin,
-                'LOG KENDARAAN SELESAI (ADMIN)',
-                "Karyawan {$request->user()->name} menyelesaikan perjalanan dengan {$log->vehicle_name}. Jarak: {$distance} KM, Biaya: Rp ".number_format((float) $totalCost, 0, ',', '.'),
-                'warning',
-                self::URL_FLEET_LOGS
-            );
-        }
 
         $this->logActivity('COMPLETE_VEHICLE_LOG', "Menyelesaikan log kendaraan {$log->vehicle_name} ({$log->plate_number}), jarak {$distance} KM", $log);
 
@@ -261,7 +330,7 @@ class VehicleLogController extends Controller
     }
 
     /**
-     * Approve a completed vehicle log
+     * Approve a vehicle loan request or completed vehicle log
      */
     public function approve(Request $request, $id)
     {
@@ -269,36 +338,85 @@ class VehicleLogController extends Controller
 
         $log = VehicleLog::with('user')->findOrFail($id);
 
-        if ($log->status !== 'completed') {
-            return $this->errorResponse('Hanya log dengan status "completed" yang bisa disetujui.', 422);
+        if (! in_array($log->status, ['pending', 'completed'])) {
+            return $this->errorResponse('Hanya pengajuan dengan status "pending" atau "completed" yang bisa disetujui.', 422);
         }
 
+        // Dynamic multi-step approval
+        if ($log->current_approval_step) {
+            $result = \App\Services\ApprovalService::processApproval(
+                'vehicle_log',
+                $log->company_id,
+                $request->user(),
+                $log->user,
+                $log->current_approval_step,
+                'approve'
+            );
+
+            if ($result && isset($result['error'])) {
+                return $this->errorResponse($result['error'], 403);
+            }
+
+            if ($result) {
+                if ($result['is_final']) {
+                    $log->update([
+                        'status' => 'approved',
+                        'current_approval_step' => null,
+                        'approved_by' => $request->user()->id,
+                        'remark' => $request->remark,
+                    ]);
+
+                    $this->notify(
+                        $log->user,
+                        'PEMINJAMAN KENDARAAN DISETUJUI',
+                        "Pengajuan peminjaman unit {$log->vehicle_name} ({$log->plate_number}) telah DISETUJUI sepenuhnya. Unit siap diambil & digunakan.",
+                        'success',
+                        self::URL_FLEET_LOGS
+                    );
+                } else {
+                    $log->update([
+                        'current_approval_step' => $result['current_approval_step'],
+                    ]);
+
+                    foreach ($result['approvers'] as $approver) {
+                        $this->notify(
+                            $approver,
+                            'PERSETUJUAN PEMINJAMAN KENDARAAN',
+                            "Ada pengajuan peminjaman unit {$log->vehicle_name} ({$log->plate_number}) dari {$log->user->name} yang memerlukan persetujuan Anda ({$result['step_label']}).",
+                            'warning',
+                            self::URL_FLEET_LOGS
+                        );
+                    }
+                }
+
+                $this->logActivity('APPROVE_VEHICLE_LOG', "Menyetujui tahap pengajuan peminjaman kendaraan {$log->vehicle_name} dari {$log->user->name}", $log);
+
+                return $this->successResponse($log, 'Persetujuan peminjaman kendaraan berhasil.');
+            }
+        }
+
+        // Single step approval fallback
         $log->update([
             'status' => 'approved',
             'approved_by' => $request->user()->id,
             'remark' => $request->remark,
         ]);
 
-        $msg = "Log kendaraan Anda ({$log->vehicle_name} - {$log->plate_number}) telah DISETUJUI/DIVALIDASI.";
-        if ($request->remark) {
-            $msg .= " Catatan: {$request->remark}";
-        }
-
         $this->notify(
             $log->user,
-            'LOG KENDARAAN DIVALIDASI',
-            $msg,
+            'LOG KENDARAAN DISETUJUI',
+            "Pengajuan / log kendaraan Anda ({$log->vehicle_name} - {$log->plate_number}) telah disetujui.",
             'success',
             self::URL_FLEET_LOGS
         );
 
-        $this->logActivity('APPROVE_VEHICLE_LOG', "Menyetujui log kendaraan {$log->vehicle_name} dari {$log->user->name}, jarak {$log->distance} KM", $log);
+        $this->logActivity('APPROVE_VEHICLE_LOG', "Menyetujui log kendaraan {$log->vehicle_name} dari {$log->user->name}", $log);
 
-        return $this->successResponse($log, 'Log kendaraan berhasil divalidasi.');
+        return $this->successResponse($log, 'Log kendaraan berhasil disetujui.');
     }
 
     /**
-     * Reject a completed vehicle log
+     * Reject a vehicle loan request or completed vehicle log
      */
     public function reject(Request $request, $id)
     {
@@ -306,17 +424,33 @@ class VehicleLogController extends Controller
 
         $log = VehicleLog::with('user')->findOrFail($id);
 
-        if ($log->status !== 'completed') {
-            return $this->errorResponse('Hanya log dengan status "completed" yang bisa ditolak.', 422);
+        if (! in_array($log->status, ['pending', 'completed'])) {
+            return $this->errorResponse('Hanya pengajuan dengan status "pending" atau "completed" yang bisa ditolak.', 422);
+        }
+
+        if ($log->current_approval_step) {
+            $result = \App\Services\ApprovalService::processApproval(
+                'vehicle_log',
+                $log->company_id,
+                $request->user(),
+                $log->user,
+                $log->current_approval_step,
+                'reject'
+            );
+
+            if ($result && isset($result['error'])) {
+                return $this->errorResponse($result['error'], 403);
+            }
         }
 
         $log->update([
             'status' => 'rejected',
+            'current_approval_step' => null,
             'approved_by' => $request->user()->id,
             'remark' => $request->remark,
         ]);
 
-        $msg = "Log kendaraan Anda ({$log->vehicle_name} - {$log->plate_number}) DITOLAK.";
+        $msg = "Pengajuan peminjaman / log kendaraan Anda ({$log->vehicle_name} - {$log->plate_number}) DITOLAK.";
         if ($request->remark) {
             $msg .= " Alasan: {$request->remark}";
         }
@@ -331,23 +465,22 @@ class VehicleLogController extends Controller
 
         $this->logActivity('REJECT_VEHICLE_LOG', "Menolak log kendaraan {$log->vehicle_name} dari {$log->user->name}", $log);
 
-        return $this->successResponse($log, 'Log kendaraan ditolak.');
+        return $this->successResponse($log, 'Pengajuan kendaraan ditolak.');
     }
 
     /**
-     * Delete a vehicle log (only departure status)
+     * Delete a vehicle log (only departure, pending, or rejected status)
      */
     public function destroy(Request $request, $id)
     {
         $log = VehicleLog::findOrFail($id);
 
-        // Only owner can delete their own departure logs, or admin can delete
         if ($log->user_id !== $request->user()->id && ! $request->user()->hasPermission('approve-vehicle-logs')) {
             return $this->errorResponse(self::MSG_FORBIDDEN, 403);
         }
 
-        if (! in_array($log->status, ['departure', 'rejected'])) {
-            return $this->errorResponse('Hanya log dengan status keberangkatan atau ditolak yang bisa dihapus.', 403);
+        if (! in_array($log->status, ['departure', 'pending', 'rejected'])) {
+            return $this->errorResponse('Hanya pengajuan belum berjalan atau ditolak yang bisa dihapus.', 403);
         }
 
         $vehicleName = $log->vehicle_name;
@@ -367,7 +500,7 @@ class VehicleLogController extends Controller
         abort_if(! $request->user()->hasPermission('view-vehicle-reports'), 403, self::MSG_FORBIDDEN);
 
         $query = VehicleLog::with('user')
-            ->where('status', 'approved');
+            ->whereIn('status', ['approved', 'completed']);
 
         if ($request->user()->company_id && ! $request->user()->canAccessAllCompanies()) {
             $query->where('company_id', $request->user()->company_id);
@@ -412,15 +545,40 @@ class VehicleLogController extends Controller
     }
 
     /**
-     * Get list of unique vehicles used by company (for autocomplete)
+     * Get list of vehicles with real-time status (available / in use)
      */
     public function vehicles(Request $request)
     {
-        $vehicles = VehicleLog::where('company_id', $request->user()->company_id)
+        $companyId = $request->user()->company_id;
+
+        // Distinct fleet
+        $rawVehicles = VehicleLog::where('company_id', $companyId)
             ->selectRaw('DISTINCT plate_number, vehicle_name')
             ->orderBy('vehicle_name')
             ->get();
 
-        return $this->successResponse($vehicles, 'Daftar kendaraan berhasil diambil.');
+        // Check currently active / in-use trips
+        $activeTrips = VehicleLog::with('user:id,name')
+            ->where('company_id', $companyId)
+            ->whereIn('status', ['in_use', 'departure', 'approved'])
+            ->get()
+            ->keyBy('plate_number');
+
+        $result = $rawVehicles->map(function ($v) use ($activeTrips) {
+            $active = $activeTrips->get($v->plate_number);
+            $isAvailable = ! $active;
+
+            return [
+                'vehicle_name' => $v->vehicle_name,
+                'plate_number' => $v->plate_number,
+                'is_available' => $isAvailable,
+                'status_label' => $isAvailable ? 'Tersedia' : ($active->status === 'in_use' ? 'Sedang Digunakan' : 'Sudah Dipesan'),
+                'current_user' => $active?->user?->name,
+                'destination' => $active?->destination,
+                'until' => $active?->return_date ? Carbon::parse($active->return_date)->format('d M Y') : null,
+            ];
+        });
+
+        return $this->successResponse($result, 'Daftar armada kendaraan berhasil diambil.');
     }
 }

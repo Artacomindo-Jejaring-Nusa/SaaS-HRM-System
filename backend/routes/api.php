@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Mobile\MobileAttendanceController;
 use App\Http\Controllers\Api\Mobile\MobileDashboardController;
 use App\Http\Controllers\Api\Mobile\MobileTaskController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\PayrollComponentController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\ProfileRequestController;
 use App\Http\Controllers\Api\RoleController;
@@ -68,7 +69,7 @@ Route::get('/health', function () {
 });
 
 // Auth
-Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
+Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware('throttle:login');
 Route::post('/login-google', [AuthController::class, 'loginWithGoogle'])->middleware('throttle:login');
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:password_reset');
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:password_reset');
@@ -184,6 +185,13 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::get('/approval-workflows/modules', [ApprovalWorkflowController::class, 'getModuleKeys']);
     Route::get('/approval-workflows/roles', [ApprovalWorkflowController::class, 'getRoles']);
     Route::get('/approval-workflows/users', [ApprovalWorkflowController::class, 'getUsers']);
+    Route::post('/approval-workflows/custom-module', [ApprovalWorkflowController::class, 'createCustomModule']);
+    Route::post('/approval-workflows/duplicate', [ApprovalWorkflowController::class, 'duplicateWorkflow']);
+    Route::patch('/approval-workflows/{id}/toggle-active', [ApprovalWorkflowController::class, 'toggleActive']);
+    Route::patch('/approval-workflows/module/{moduleKey}/toggle-active', [ApprovalWorkflowController::class, 'toggleModuleActive']);
+    Route::delete('/approval-workflows/variants/{id}', [ApprovalWorkflowController::class, 'destroyVariant']);
+    Route::post('/approval-workflows/override', [ApprovalWorkflowController::class, 'godModeOverride']);
+    Route::delete('/approval-workflows/{moduleKey}', [ApprovalWorkflowController::class, 'destroyCustomModule']);
     Route::get('/approval-workflows/{moduleKey}', [ApprovalWorkflowController::class, 'show']);
     Route::post('/approval-workflows', [ApprovalWorkflowController::class, 'store']);
 
@@ -337,6 +345,15 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::group(['prefix' => 'payroll'], function () {
         // Restricted to Payroll Managers (HRD, CEO, Super Admin)
         Route::middleware('permission:manage-payroll')->group(function () {
+            // Dynamic Components Engine & Triggers (Multi-Tenant)
+            Route::get('/components', [PayrollComponentController::class, 'index']);
+            Route::post('/components', [PayrollComponentController::class, 'store']);
+            Route::get('/components/{id}', [PayrollComponentController::class, 'show']);
+            Route::put('/components/{id}', [PayrollComponentController::class, 'update']);
+            Route::delete('/components/{id}', [PayrollComponentController::class, 'destroy']);
+            Route::post('/salaries/{salaryId}/adhoc-item', [PayrollComponentController::class, 'addAdhocItem']);
+            Route::delete('/salaries/{salaryId}/adhoc-item/{detailId}', [PayrollComponentController::class, 'removeAdhocItem']);
+
             // Settings
             Route::get('/settings', [PayrollController::class, 'getSettings']);
             Route::post('/settings', [PayrollController::class, 'updateSettings']);
@@ -378,6 +395,8 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::get('/tasks/{id}', [TaskController::class, 'show']);
     Route::post('/tasks', [TaskController::class, 'store']);
     Route::post('/tasks/{id}/status', [TaskController::class, 'updateStatus']);
+    Route::post('/tasks/{id}/approve', [TaskController::class, 'approve']);
+    Route::post('/tasks/{id}/reject', [TaskController::class, 'reject']);
     Route::delete('/tasks/{id}', [TaskController::class, 'destroy']);
 
     // Task Activities & Evidence
@@ -394,6 +413,9 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::get('/kpi-reviews/{id}', [PerformanceReviewController::class, 'show']);
     });
     Route::middleware('permission:manage-kpis')->group(function () {
+        Route::post('/kpi-reviews/batch', [PerformanceReviewController::class, 'batchStore']);
+        Route::post('/kpi-reviews/batch-publish', [PerformanceReviewController::class, 'batchPublish']);
+        Route::post('/kpi-reviews/{id}/publish', [PerformanceReviewController::class, 'publish']);
         Route::post('/kpi-reviews', [PerformanceReviewController::class, 'store']);
         Route::put('/kpi-reviews/{id}', [PerformanceReviewController::class, 'update']);
         Route::delete('/kpi-reviews/{id}', [PerformanceReviewController::class, 'destroy']);
@@ -419,7 +441,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
 
     // Employee Directory & Org Chart
     Route::middleware('permission:view-directory')->get('/directory', [EmployeeController::class, 'directory']);
-    Route::middleware('permission:view-organization')->get('/organization-chart', [OrganizationController::class, 'getChart']);
+    Route::get('/organization-chart', [OrganizationController::class, 'getChart']);
     Route::middleware('permission:edit-employees')->put('/organization-chart/update-node', [OrganizationController::class, 'updateNode']);
 
     // MassLeave
@@ -485,7 +507,9 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::get('/vehicle-logs/{id}', [VehicleLogController::class, 'show']);
     });
     Route::middleware('permission:apply-vehicle-logs')->group(function () {
+        Route::post('/vehicle-logs/request', [VehicleLogController::class, 'storeRequest']);
         Route::post('/vehicle-logs/departure', [VehicleLogController::class, 'storeDeparture']);
+        Route::post('/vehicle-logs/{id}/departure', [VehicleLogController::class, 'storeDeparture']);
         Route::post('/vehicle-logs/{id}/return', [VehicleLogController::class, 'storeReturn']);
     });
     Route::middleware('permission:approve-vehicle-logs')->group(function () {

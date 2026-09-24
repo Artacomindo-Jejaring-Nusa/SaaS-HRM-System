@@ -21,20 +21,20 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
-    await Firebase.initializeApp();
-    await FcmService.init();
+    await Firebase.initializeApp().timeout(const Duration(seconds: 3));
+    FcmService.init();
   } catch (e) {
     debugPrint("Firebase initialization error: $e");
   }
 
   try {
-    await GoogleSignIn.instance.initialize();
+    GoogleSignIn.instance.initialize();
   } catch (e) {
     debugPrint("Google Sign In initialize note: $e");
   }
 
   try {
-    await TrackingService.initializeService();
+    await TrackingService.initializeService().timeout(const Duration(seconds: 3));
   } catch (e) {
     debugPrint("TrackingService initialization error: $e");
   }
@@ -42,19 +42,19 @@ void main() async {
   bool hasToken = false;
   try {
     // Load Settings
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance().timeout(const Duration(seconds: 3));
     final isDark = prefs.getBool('dark_mode') ?? false;
     themeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
     languageNotifier.value = prefs.getString('language') ?? 'ID';
     
-    await NotificationService().init();
+    NotificationService().init();
     
     // Initialize secure storage and migrate old plaintext tokens
-    final secureStorage = await SecureStorageService.getInstance();
-    await secureStorage.migrateFromPlainPrefs();
+    final secureStorage = await SecureStorageService.getInstance().timeout(const Duration(seconds: 3));
+    await secureStorage.migrateFromPlainPrefs().timeout(const Duration(seconds: 2));
     
     // Check for valid token (encrypted)
-    hasToken = await secureStorage.hasValidToken();
+    hasToken = await secureStorage.hasValidToken().timeout(const Duration(seconds: 2));
     
     if (hasToken) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {

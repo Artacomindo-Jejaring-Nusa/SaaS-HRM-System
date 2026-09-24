@@ -30,12 +30,15 @@ class CompanyController extends Controller
             'latitude' => self::RULE_SOME_NUM,
             'longitude' => self::RULE_SOME_NUM,
             'radius_meters' => self::RULE_SOME_NUM,
+            'work_start_time' => 'sometimes|nullable|string',
+            'work_end_time' => 'sometimes|nullable|string',
+            'late_tolerance_minutes' => 'sometimes|nullable|integer|min:0',
             'watzap_api_key' => self::RULE_SOME_STRING,
             'watzap_number_key' => self::RULE_SOME_STRING,
             'watzap_base_url' => 'sometimes|nullable|url',
         ]);
 
-        $data = $request->only(['name', 'email', 'phone', 'address', 'latitude', 'longitude', 'radius_meters', 'watzap_api_key', 'watzap_number_key', 'watzap_base_url']);
+        $data = $request->only(['name', 'email', 'phone', 'address', 'latitude', 'longitude', 'radius_meters', 'work_start_time', 'work_end_time', 'late_tolerance_minutes', 'watzap_api_key', 'watzap_number_key', 'watzap_base_url']);
 
         // Trim WhatsApp fields to prevent copy-paste errors (spaces)
         if (isset($data['watzap_api_key'])) {

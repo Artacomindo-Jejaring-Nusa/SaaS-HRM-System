@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
-import { Building2, Plus, Pencil, Trash2, MapPin, Users, Search, X, ChevronDown } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, MapPin, Users, Search, X, ChevronDown, Clock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -13,6 +13,8 @@ interface Office {
   latitude: number;
   longitude: number;
   radius: number;
+  work_start_time?: string | null;
+  work_end_time?: string | null;
   is_active: boolean;
   users_count?: number;
 }
@@ -32,6 +34,8 @@ export default function OfficesPage() {
     latitude: "",
     longitude: "",
     radius: "100",
+    work_start_time: "",
+    work_end_time: "",
     is_active: true,
   });
 
@@ -53,7 +57,7 @@ export default function OfficesPage() {
 
   const openCreateModal = () => {
     setEditingOffice(null);
-    setFormData({ name: "", address: "", latitude: "", longitude: "", radius: "100", is_active: true });
+    setFormData({ name: "", address: "", latitude: "", longitude: "", radius: "100", work_start_time: "", work_end_time: "", is_active: true });
     setShowModal(true);
   };
 
@@ -65,6 +69,8 @@ export default function OfficesPage() {
       latitude: String(office.latitude),
       longitude: String(office.longitude),
       radius: String(office.radius),
+      work_start_time: office.work_start_time ? office.work_start_time.substring(0, 5) : "",
+      work_end_time: office.work_end_time ? office.work_end_time.substring(0, 5) : "",
       is_active: office.is_active,
     });
     setShowModal(true);
@@ -97,6 +103,8 @@ export default function OfficesPage() {
         latitude: parseFloat(formData.latitude),
         longitude: parseFloat(formData.longitude),
         radius: parseInt(formData.radius),
+        work_start_time: formData.work_start_time ? (formData.work_start_time.length === 5 ? `${formData.work_start_time}:00` : formData.work_start_time) : null,
+        work_end_time: formData.work_end_time ? (formData.work_end_time.length === 5 ? `${formData.work_end_time}:00` : formData.work_end_time) : null,
       };
 
       if (editingOffice) {
@@ -335,6 +343,37 @@ export default function OfficesPage() {
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#8B0000]/20 focus:border-[#8B0000] outline-none text-sm font-medium"
                 />
                 <p className="text-xs text-gray-400 mt-1">Jarak maksimal karyawan boleh absen dari titik kantor (10-5000 meter).</p>
+              </div>
+
+              {/* Optional Branch Work Hours */}
+              <div className="bg-gray-50/70 border border-gray-100 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center gap-2 text-gray-800">
+                  <Clock size={16} className="text-[#8B0000]" />
+                  <span className="text-xs font-bold">Jam Kerja Khusus Cabang (Opsional)</span>
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  Kosongkan jika kantor cabang ini mengikuti jam kerja standar perusahaan (pusat).
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Jam Masuk</label>
+                    <input
+                      type="time"
+                      value={formData.work_start_time}
+                      onChange={(e) => setFormData(prev => ({ ...prev, work_start_time: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-bold text-gray-800 focus:border-[#8B0000] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Jam Pulang</label>
+                    <input
+                      type="time"
+                      value={formData.work_end_time}
+                      onChange={(e) => setFormData(prev => ({ ...prev, work_end_time: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-bold text-gray-800 focus:border-[#8B0000] outline-none"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Active Toggle */}

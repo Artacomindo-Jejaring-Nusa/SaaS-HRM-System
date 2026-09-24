@@ -27,6 +27,8 @@ import 'leaderboard_screen.dart';
 import 'fleet_log_screen.dart';
 import 'document_screen.dart';
 import 'fund_request_screen.dart';
+import 'artacom_bot_screen.dart';
+import 'organization_chart_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/skeleton_loading.dart';
 
@@ -324,13 +326,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _permissions = perms;
 
         // Determine Manager Portal access:
-        // 1. If explicitly set on account (can_access_manager_portal true/false), use that
-        // 2. Otherwise check view-manager-portal permission
-        if (userData['can_access_manager_portal'] != null) {
-          _isManager = userData['can_access_manager_portal'] == true;
-        } else {
-          _isManager = _hasPermission('view-manager-portal');
-        }
+        // 1. If explicitly true on account (can_access_manager_portal true)
+        // 2. Or has approval / manager portal permissions
+        _isManager = userData['can_access_manager_portal'] == true ||
+            userData['is_manager'] == true ||
+            _hasPermission('view-manager-portal') ||
+            _hasPermission('approve-leaves') ||
+            _hasPermission('approve-permits') ||
+            _hasPermission('approve-overtimes') ||
+            _hasPermission('approve-reimbursements') ||
+            _hasPermission('approve-fund-requests') ||
+            _hasPermission('approve-vehicle-logs') ||
+            _hasPermission('approve-shift-swaps') ||
+            _hasPermission('approve-project-costs');
 
         _attendanceType = userData['attendance_type'];
       });
@@ -693,11 +701,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             unselectedItemColor: Colors.grey,
             showUnselectedLabels: true,
             type: BottomNavigationBarType.fixed,
+            selectedFontSize: 11,
+            unselectedFontSize: 10,
+            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, height: 1.2),
+            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, height: 1.2),
+            iconSize: 22,
             items: [
               BottomNavigationBarItem(
                 icon: const Icon(Icons.home_outlined),
                 activeIcon: const Icon(Icons.home),
                 label: "Beranda",
+              ),
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.smart_toy_outlined),
+                activeIcon: const Icon(Icons.smart_toy),
+                label: "Bot",
               ),
               BottomNavigationBarItem(
                 icon: const Icon(Icons.list_alt_outlined),
@@ -771,12 +789,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           MaterialPageRoute(builder: (_) => OvertimeScreen()),
         ),
       },
-      'profile': {
-        'icon': Icons.person,
-        'label': 'Profil',
-        'color': Colors.indigo[800],
-        'onTap': () => _onItemTapped(2),
-      },
       'gaji': {
         'icon': Icons.receipt_long,
         'label': 'Gaji',
@@ -808,13 +820,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'icon': Icons.history_edu,
         'label': 'Riwayat',
         'color': Colors.purple[800],
-        'onTap': () => _onItemTapped(1),
-      },
-      'setting': {
-        'icon': Icons.settings,
-        'label': 'Setting',
-        'color': Colors.blueGrey,
-        'onTap': () => _onItemTapped(_isManager ? 4 : 3),
+        'onTap': () => _onItemTapped(2),
       },
       'kpi': {
         'icon': Icons.star_rate_rounded,
@@ -888,6 +894,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'color': Colors.orange[900],
         'onTap': () => _showUnderDevelopmentAlert(context),
       },
+      'organisasi': {
+        'icon': Icons.account_tree_outlined,
+        'label': 'Organisasi',
+        'color': Colors.indigo[800],
+        'onTap': () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const OrganizationChartScreen()),
+        ),
+      },
     };
 
     // Filter dynamic menu items based on Super Admin configured permissions
@@ -909,7 +924,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!_hasPermission('view-salaries')) {
       items.remove('gaji');
     }
-    if (!_hasPermission('view-tasks', 'manage-tasks')) {
+    if (!_hasPermission('view-tasks', 'manage-tasks') && !_hasPermission('assign-tasks') && !_hasPermission('receive-tasks')) {
       items.remove('tugas');
     }
     if (!_hasPermission('view-kpis')) {
@@ -1169,13 +1184,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 0:
         return _buildHomeContent();
       case 1:
-        return RiwayatScreen();
+        return ArtacomBotScreen(
+          userName: _userName,
+          attendanceData: _attendanceData,
+        );
       case 2:
-        return ProfileScreen();
+        return RiwayatScreen();
       case 3:
+        return ProfileScreen();
+      case 4:
         if (_isManager) return ManagerScreen();
         return SettingsTab(onLogout: _handleLogout);
-      case 4:
+      case 5:
         return SettingsTab(onLogout: _handleLogout);
       default:
         return _buildHomeContent();

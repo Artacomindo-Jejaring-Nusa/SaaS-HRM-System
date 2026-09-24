@@ -40,10 +40,12 @@ class OrganizationController extends Controller
         });
 
         $rolesQuery = Role::query();
-        if ($companyId && ! $user->canAccessAllCompanies()) {
-            $rolesQuery->where(function ($q) use ($companyId) {
-                $q->where('company_id', $companyId)->orWhereNull('company_id');
-            });
+        if (\Illuminate\Support\Facades\Schema::hasColumn('roles', 'company_id')) {
+            if ($companyId && ! $user->canAccessAllCompanies()) {
+                $rolesQuery->where(function ($q) use ($companyId) {
+                    $q->where('company_id', $companyId)->orWhereNull('company_id');
+                });
+            }
         }
         $roles = $rolesQuery->get(['id', 'name']);
 

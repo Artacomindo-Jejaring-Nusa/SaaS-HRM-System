@@ -24,7 +24,8 @@ class _TaskScreenState extends State<TaskScreen> with SingleTickerProviderStateM
   List<dynamic> _receivedTasks = [];
   List<dynamic> _sentTasks = [];
   bool _isLoading = true;
-  bool _isManager = false;
+  bool _canAssign = false;
+  bool _canReceive = true;
 
   @override
   void initState() {
@@ -49,12 +50,36 @@ class _TaskScreenState extends State<TaskScreen> with SingleTickerProviderStateM
 
   Future<void> _checkPermissions() async {
     final profile = await ApiService.getProfile();
-    // In GreetDay, usually supervisors/above can assign tasks.
-    // Based on our RBAC, roles like Supervisor, Manager, HR, Admin, etc.
-    if (mounted) {
+    if (mounted && profile != null) {
+      final roleName = (profile['role']?['name'] ?? '').toString().toLowerCase();
+      final roleSlug = (profile['role']?['slug'] ?? '').toString().toLowerCase();
+      final isSuperAdmin = roleName.contains('super admin') || roleSlug == 'super-admin' || profile['role_id'] == 1;
+
+      final Set<String> perms = {};
+      if (profile['permission_slugs'] is List) {
+        for (var p in profile['permission_slugs']) {
+          if (p != null) perms.add(p.toString());
+        }
+      }
+      if (profile['role'] != null && profile['role']['permissions'] is List) {
+        for (var p in profile['role']['permissions']) {
+          if (p is Map && p['slug'] != null) perms.add(p['slug'].toString());
+        }
+      }
+
       setState(() {
-        final role = profile?['role']?['slug'] ?? '';
-        _isManager = ['super-admin', 'admin', 'hr', 'direktur', 'manager', 'supervisor'].contains(role);
+        // User can assign if Super Admin, has 'assign-tasks' or 'manage-tasks'
+        _canAssign = isSuperAdmin ||
+            perms.contains('assign-tasks') ||
+            perms.contains('manage-tasks') ||
+            ['super-admin', 'admin', 'hr', 'direktur', 'manager', 'supervisor'].contains(roleSlug);
+        // User can receive tasks if Super Admin, has 'receive-tasks', or has 'view-tasks'
+        _canReceive = isSuperAdmin || perms.contains('receive-tasks') || perms.contains('view-tasks') || perms.isEmpty;
+
+        // If user can only assign and cannot receive, default tab to 'Diberikan' (index 1)
+        if (_canAssign && !_canReceive) {
+          _tabController.index = 1;
+        }
       });
     }
   }
@@ -295,7 +320,7 @@ class _TaskScreenState extends State<TaskScreen> with SingleTickerProviderStateM
           ],
         ),
       ),
-      floatingActionButton: _isManager ? FloatingActionButton(
+      floatingActionButton: _canAssign ? FloatingActionButton(
         onPressed: _showCreateTaskModal,
         backgroundColor: primaryColor,
         child: const Icon(Icons.add, color: Colors.white),

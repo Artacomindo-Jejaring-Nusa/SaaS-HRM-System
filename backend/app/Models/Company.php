@@ -8,6 +8,7 @@ class Company extends Model
 {
     protected $fillable = [
         'name', 'email', 'logo', 'address', 'phone', 'default_radius', 'latitude', 'longitude', 'radius_meters',
+        'work_start_time', 'work_end_time', 'late_tolerance_minutes',
         'watzap_api_key', 'watzap_number_key', 'watzap_base_url',
     ];
 

@@ -45,6 +45,8 @@ class OfficeController extends Controller
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
             'radius' => 'required|integer|min:10|max:5000',
+            'work_start_time' => 'nullable|string',
+            'work_end_time' => 'nullable|string',
         ]);
 
         $office = Office::create([
@@ -54,6 +56,8 @@ class OfficeController extends Controller
             'latitude' => $request->latitude,
             'longitude' => $request->longitude,
             'radius' => $request->radius,
+            'work_start_time' => $request->work_start_time,
+            'work_end_time' => $request->work_end_time,
             'is_active' => true,
         ]);
 
@@ -85,11 +89,13 @@ class OfficeController extends Controller
             'latitude' => 'sometimes|numeric|between:-90,90',
             'longitude' => 'sometimes|numeric|between:-180,180',
             'radius' => 'sometimes|integer|min:10|max:5000',
+            'work_start_time' => 'nullable|string',
+            'work_end_time' => 'nullable|string',
             'is_active' => 'sometimes|boolean',
         ]);
 
         $office->update($request->only([
-            'name', 'address', 'latitude', 'longitude', 'radius', 'is_active',
+            'name', 'address', 'latitude', 'longitude', 'radius', 'work_start_time', 'work_end_time', 'is_active',
         ]));
 
         return $this->successResponse($office, 'Kantor cabang berhasil diperbarui.');
