@@ -42,11 +42,19 @@ class EmployeeController extends Controller
             $query->where('supervisor_id', $user->id);
         }
 
+        if ($request->filled('role_id') && $request->role_id !== 'all') {
+            $query->where('role_id', $request->role_id);
+        }
+
         $employees = $query
             ->when($request->search, function ($q) use ($request) {
                 $q->where(function ($qq) use ($request) {
                     $qq->where('name', 'like', "%{$request->search}%")
-                        ->orWhere('email', 'like', "%{$request->search}%");
+                        ->orWhere('email', 'like', "%{$request->search}%")
+                        ->orWhere('nik', 'like', "%{$request->search}%")
+                        ->orWhereHas('role', function ($r) use ($request) {
+                            $r->where('name', 'like', "%{$request->search}%");
+                        });
                 });
             })
             ->when($request->id, function ($q) use ($request) {
@@ -82,17 +90,27 @@ class EmployeeController extends Controller
             $query->whereNull('email_verified_at');
         }
 
+        if ($request->filled('role_id') && $request->role_id !== 'all') {
+            $query->where('role_id', $request->role_id);
+        }
+
         return DataTables::of($query)
             ->with([
                 'unverified_count' => User::where('company_id', $user->company_id)->whereNull('email_verified_at')->count(),
             ])
             ->filter(function ($query) use ($request) {
+                if ($request->filled('role_id') && $request->role_id !== 'all') {
+                    $query->where('role_id', $request->role_id);
+                }
                 if ($request->has('search') && $request->search['value']) {
                     $searchTerm = $request->search['value'];
                     $query->where(function ($q) use ($searchTerm) {
                         $q->where('name', 'like', "%{$searchTerm}%")
                             ->orWhere('email', 'like', "%{$searchTerm}%")
-                            ->orWhere('nik', 'like', "%{$searchTerm}%");
+                            ->orWhere('nik', 'like', "%{$searchTerm}%")
+                            ->orWhereHas('role', function ($r) use ($searchTerm) {
+                                $r->where('name', 'like', "%{$searchTerm}%");
+                            });
                     });
                 }
             })
@@ -137,6 +155,7 @@ class EmployeeController extends Controller
             'emergency_contact_phone' => self::RULE_NULLABLE_STRING,
             'office_id' => 'nullable|exists:offices,id',
             'cost_center' => self::RULE_NULLABLE_STRING,
+            'can_access_manager_portal' => 'nullable|boolean',
         ]);
 
         $path = null;
@@ -150,6 +169,7 @@ class EmployeeController extends Controller
         $employee->password = Hash::make($request->password);
         $employee->company_id = $request->user()->company_id;
         $employee->role_id = $request->role_id;
+        $employee->can_access_manager_portal = $request->has('can_access_manager_portal') ? $request->can_access_manager_portal : null;
         $employee->nik = $request->nik;
         $employee->phone = $request->phone;
         $employee->address = $request->address;
@@ -207,6 +227,12 @@ class EmployeeController extends Controller
             'email' => 'sometimes|email|unique:users,email,'.$id,
             'role_id' => 'sometimes|exists:roles,id',
             'photo' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+            'phone' => self::RULE_NULLABLE_STRING,
+            'nik' => self::RULE_NULLABLE_STRING,
+            'address' => self::RULE_NULLABLE_STRING,
+            'join_date' => self::RULE_NULLABLE_DATE,
+            'supervisor_id' => 'nullable|exists:users,id',
+            'leave_balance' => 'nullable|numeric',
             'attendance_type' => 'nullable|string|in:office_hour,shift',
             'ktp_no' => self::RULE_NULLABLE_STRING,
             'place_of_birth' => self::RULE_NULLABLE_STRING,
@@ -219,6 +245,11 @@ class EmployeeController extends Controller
             'emergency_contact_phone' => self::RULE_NULLABLE_STRING,
             'office_id' => 'nullable|exists:offices,id',
             'cost_center' => self::RULE_NULLABLE_STRING,
+            'bank_name' => self::RULE_NULLABLE_STRING,
+            'bank_account_no' => self::RULE_NULLABLE_STRING,
+            'bank_account_name' => self::RULE_NULLABLE_STRING,
+            'can_access_manager_portal' => 'nullable|boolean',
+            'password' => 'nullable|min:6',
         ]);
 
         if ($request->hasFile('photo')) {
@@ -231,6 +262,10 @@ class EmployeeController extends Controller
 
         $employee->update($request->except(['photo', 'password']));
 
+        if ($request->has('can_access_manager_portal')) {
+            $employee->can_access_manager_portal = $request->can_access_manager_portal;
+        }
+
         if ($request->has('employment_status')) {
             $employee->employment_status = $request->employment_status;
         }
@@ -239,11 +274,11 @@ class EmployeeController extends Controller
             $employee->work_location = $request->work_location;
         }
 
-        $employee->save();
-
-        if ($request->password) {
-            $employee->update(['password' => Hash::make($request->password)]);
+        if ($request->filled('password')) {
+            $employee->password = Hash::make($request->password);
         }
+
+        $employee->save();
 
         $this->logActivity('UPDATE_EMPLOYEE', "Memperbarui data karyawan: {$employee->name}", $employee);
 
@@ -319,7 +354,11 @@ class EmployeeController extends Controller
             ->when($request->search, function ($q) use ($request) {
                 $q->where(function ($qq) use ($request) {
                     $qq->where('name', 'like', "%{$request->search}%")
-                        ->orWhere('email', 'like', "%{$request->search}%");
+                        ->orWhere('email', 'like', "%{$request->search}%")
+                        ->orWhere('nik', 'like', "%{$request->search}%")
+                        ->orWhereHas('role', function ($r) use ($request) {
+                            $r->where('name', 'like', "%{$request->search}%");
+                        });
                 });
             })
             ->with(['role', 'company'])
@@ -567,14 +606,16 @@ class EmployeeController extends Controller
     public function potentialSupervisors(Request $request)
     {
         $user = $request->user();
-        $query = User::select('id', 'name')->where('company_id', $user->company_id);
+        $query = User::with('role:id,name')->select('id', 'name', 'role_id')->where('company_id', $user->company_id);
 
         // Exclude current employee if editing
         if ($request->exclude_id) {
             $query->where('id', '!=', $request->exclude_id);
         }
 
-        $supervisors = $query->orderBy('name', 'asc')->get();
+        $supervisors = $query->get()->sortBy(function ($emp) {
+            return $emp->role ? $emp->role->name : 'ZZZ';
+        })->values();
 
         return $this->successResponse($supervisors, 'Data calon atasan berhasil diambil.');
     }

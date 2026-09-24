@@ -9,7 +9,7 @@ class Office extends Model
 {
     use BelongsToCompany;
 
-    protected $fillable = ['company_id', 'name', 'address', 'latitude', 'longitude', 'radius', 'is_active'];
+    protected $fillable = ['company_id', 'name', 'address', 'latitude', 'longitude', 'radius', 'is_active', 'work_start_time', 'work_end_time'];
 
     protected $casts = [
         'is_active' => 'boolean',

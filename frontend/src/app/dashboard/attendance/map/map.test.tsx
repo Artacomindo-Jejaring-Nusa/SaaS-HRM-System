@@ -12,6 +12,15 @@ vi.mock('@/components/AttendanceMap', () => ({
   default: () => <div data-testid="attendance-map">Mocked Attendance Map</div>
 }))
 
+jest.mock('@/components/PermissionGuard', () => ({
+  __esModule: true,
+  PermissionGuard: ({ children }: any) => <>{children}</>
+}))
+vi.mock('@/components/PermissionGuard', () => ({
+  __esModule: true,
+  PermissionGuard: ({ children }: any) => <>{children}</>
+}))
+
 describe('AttendanceMapPage', () => {
   it('renders page title and description', () => {
     render(<AttendanceMapPage />)

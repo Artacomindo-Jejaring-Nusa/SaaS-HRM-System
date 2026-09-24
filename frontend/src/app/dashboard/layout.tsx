@@ -73,6 +73,7 @@ const sidebarLinks: SidebarLink[] = [
     permission: 'view-employees',
     submenus: [
       { name: "employees", href: "/dashboard/employees", permission: 'view-employees' },
+      { name: "Approval Wajah (AI)", href: "/dashboard/face-approval", permission: 'view-employees' },
       { name: "company_profile", href: "/dashboard/company", permission: 'manage-company' },
       { name: "offices", href: "/dashboard/offices", permission: 'manage-offices' },
       { name: "kpi_reviews", href: "/dashboard/performance", permission: 'view-kpis' },
@@ -84,14 +85,13 @@ const sidebarLinks: SidebarLink[] = [
     icon: Clock,
     permission: 'view-attendances',
     submenus: [
-      { name: "Live Attendance", href: "/dashboard/live-attendance", permission: 'apply-attendances' },
-      { name: "Live Tracking", href: "/dashboard/live-tracking", permission: 'view-attendances' },
+      { name: "Live Tracking", href: "/dashboard/live-tracking", permission: 'view-live-tracking' },
+      { name: "attendance_map", href: "/dashboard/attendance/map", permission: 'view-attendance-map' },
       { name: "attendance_history", href: "/dashboard/attendance", permission: 'view-attendances' },
+      { name: "schedules", href: "/dashboard/schedules", permission: 'manage-schedules' },
       { name: "shift_swap", href: "/dashboard/shift-swap", permission: 'view-shift-swaps' },
       { name: "attendance_correction", href: "/dashboard/attendance-corrections", permission: 'manage-attendance-corrections' },
-      { name: "attendance_map", href: "/dashboard/attendance/map", permission: 'view-attendance-map' },
       { name: "wfh_delegation", href: "/dashboard/attendance/wfh", permission: 'manage-wfh' },
-      { name: "schedules", href: "/dashboard/schedules", permission: 'manage-schedules' },
       { name: "holidays", href: "/dashboard/holidays", permission: 'manage-holidays' },
     ]
   },
@@ -138,7 +138,6 @@ const sidebarLinks: SidebarLink[] = [
     permission: 'view-overtimes',
     submenus: [
       { name: "overtime_requests", href: "/dashboard/overtimes", permission: 'view-overtimes' },
-      { name: "overtime_report", href: "/dashboard/reports/overtimes", permission: 'view-reports' },
     ]
   },
   {
@@ -146,8 +145,6 @@ const sidebarLinks: SidebarLink[] = [
     icon: ClipboardList,
     permission: 'view-directory',
     submenus: [
-      { name: "approvals", href: "/dashboard/approvals", permission: 'approve-leaves' },
-      { name: "approval_workflow", href: "/dashboard/approval-workflow", permission: 'manage-approvals' },
       { name: "tasks", href: "/dashboard/tasks", permission: 'view-tasks' },
       { name: "announcements", href: "/dashboard/announcements", permission: 'view-announcements' },
       { name: "birthday_schedule", href: "/dashboard/birthdays", permission: 'view-directory' },
@@ -175,10 +172,8 @@ const sidebarLinks: SidebarLink[] = [
     icon: CreditCard,
     permission: 'view-salaries',
     submenus: [
-      { name: "payroll_process", href: "/dashboard/payroll/process", permission: 'manage-payroll' },
-      { name: "payroll_approval", href: "/dashboard/payroll/approval", permission: 'manage-payroll' },
-      { name: "payroll_history", href: "/dashboard/payroll", permission: 'manage-payroll' },
-      { name: "my_payroll_slip", href: "/dashboard/payroll/my-payroll", permission: 'view-salaries' },
+      { name: "payroll_batches", href: "/dashboard/payroll", permission: 'manage-payroll' },
+      { name: "payroll_components", href: "/dashboard/payroll/components", permission: 'manage-payroll' },
       { name: "payroll_settings", href: "/dashboard/payroll/settings", permission: 'manage-payroll' },
     ]
   },
@@ -210,6 +205,7 @@ const sidebarLinks: SidebarLink[] = [
     permission: 'manage-roles',
     submenus: [
       { name: "role_management", href: "/dashboard/roles", permission: 'manage-roles' },
+      { name: "approval_workflow", href: "/dashboard/approval-workflow", permission: 'manage-approvals' },
       { name: "permissions", href: "/dashboard/permissions", permission: 'manage-roles' },
       { name: "activity_logs", href: "/dashboard/activity-logs", permission: 'view-activity-logs' },
       { name: "api_tokens", href: "/dashboard/api-tokens", permission: 'manage-roles' },
@@ -217,7 +213,7 @@ const sidebarLinks: SidebarLink[] = [
   }
 ];
 
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
 import { LanguageProvider, useLanguage } from "@/contexts/LanguageContext";
 
 export default function DashboardLayout({
@@ -245,6 +241,17 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [activeHeaderDropdown, setActiveHeaderDropdown] = useState<'mail' | 'notif' | 'settings' | 'search' | null>(null);
+
+  // Strict Super Admin Access Guard
+  useEffect(() => {
+    if (!authLoading && user) {
+      if (!isSuperAdminUser(user)) {
+        Cookies.remove("token");
+        Cookies.remove("refresh_token");
+        router.replace("/login?unauthorized=1");
+      }
+    }
+  }, [authLoading, user, router]);
 
   // Search Logic
   const [searchQuery, setSearchQuery] = useState("");
@@ -527,14 +534,11 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       // 1. Dashboard is always visible
       if (link.name === "dashboard") return true;
 
-      // 2. Filter submenus based on permissions only
+      // 2. Filter submenus based on permissions without mutating original array
       if (link.submenus) {
-        link.submenus = link.submenus.filter(sub => {
-          return hasPermission(sub.permission);
-        });
-
+        const allowedSubmenus = link.submenus.filter(sub => hasPermission(sub.permission));
         // If no submenus left after filtering, don't show the group
-        if (link.submenus.length === 0) return false;
+        return allowedSubmenus.length > 0;
       }
 
       // 3. Standalone link or heading validation
@@ -580,20 +584,33 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
             return (
               <li key={link.name}>
                 <button
-                  className={`dash-nav-link w-full dash-nav-group-btn ${hasActiveChild ? "dash-nav-group-active" : ""}`}
+                  type="button"
+                  className={`dash-nav-link w-full dash-nav-group-btn text-left ${hasActiveChild ? "dash-nav-group-active" : ""}`}
                   onClick={() => toggleGroup(link.name)}
                   title={!isSidebarOpen ? t(link.name) : undefined}
                 >
-                  <div className="flex items-center gap-[10px]">
-                    <Icon className="dash-nav-icon" />
-                    <span>{t(link.name)}</span>
+                  <div className="flex items-center gap-[10px] min-w-0 text-left">
+                    <Icon className="dash-nav-icon shrink-0" />
+                    <span className="truncate">{t(link.name)}</span>
                   </div>
-                  {isOpen ? <ChevronDown size={14} className="text-gray-400 group-chevron" /> : <ChevronRight size={14} className="text-gray-400 group-chevron" />}
+                  {isOpen ? <ChevronDown size={14} className="text-gray-400 group-chevron shrink-0" /> : <ChevronRight size={14} className="text-gray-400 group-chevron shrink-0" />}
                 </button>
                 {isOpen && (
                   <ul className="dash-submenu-list">
                     {filteredSubmenus.map((sub) => {
-                      const isActive = pathname === sub.href || pathname.startsWith(`${sub.href}/`);
+                      const isActive = (() => {
+                        if (pathname === sub.href) return true;
+                        if (pathname.startsWith(`${sub.href}/`)) {
+                          const hasMoreSpecificMatch = filteredSubmenus.some(
+                            otherSub => otherSub.href !== sub.href && 
+                                        otherSub.href.startsWith(sub.href) && 
+                                        (pathname === otherSub.href || pathname.startsWith(`${otherSub.href}/`))
+                          );
+                          return !hasMoreSpecificMatch;
+                        }
+                        return false;
+                      })();
+
                       return (
                         <li key={sub.href}>
                           <Link
@@ -601,8 +618,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                             onClick={onNavigate}
                             className={`dash-submenu-link ${isActive ? "dash-submenu-active" : ""}`}
                           >
-                            <span className="dash-submenu-dot" />
-                            {t(sub.name)}
+                            <span className="dash-submenu-dot shrink-0" />
+                            <span className="truncate">{t(sub.name)}</span>
                           </Link>
                         </li>
                       );
@@ -614,7 +631,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           }
 
           // Regular standalone links
-          const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
+          const isActive = pathname === link.href || (link.href !== "/dashboard" && pathname.startsWith(`${link.href}/`));
           return (
             <li key={link.href}>
               <Link
@@ -623,8 +640,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                 className={`dash-nav-link ${isActive ? "dash-nav-link-active" : ""}`}
                 title={!isSidebarOpen ? t(link.name) : undefined}
               >
-                <Icon className="dash-nav-icon" />
-                <span>{t(link.name)}</span>
+                <Icon className="dash-nav-icon shrink-0" />
+                <span className="truncate">{t(link.name)}</span>
               </Link>
             </li>
           );
@@ -958,17 +975,26 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
             </div>
             
             <div className="dash-header-user">
-              <div className="dash-header-info text-right">
-                <span className="dash-header-name">{user?.name || "User"}</span>
-                <span className="dash-header-role">{user?.role?.name || "Karyawan"}</span>
-              </div>
-              <div className="dash-header-avatar overflow-hidden">
-                {user?.profile_photo_url ? (
-                  <img src={user.profile_photo_url} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  (user?.name || "U").charAt(0)
-                )}
-              </div>
+              {authLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-16 h-4 bg-gray-200 animate-pulse rounded" />
+                  <div className="w-9 h-9 bg-gray-200 animate-pulse rounded-full" />
+                </div>
+              ) : (
+                <>
+                  <div className="dash-header-info text-right">
+                    <span className="dash-header-name">{user?.name || "Super Admin"}</span>
+                    <span className="dash-header-role">{user?.role?.name || (isSuperAdminUser(user) ? "Super Admin" : "Karyawan")}</span>
+                  </div>
+                  <div className="dash-header-avatar overflow-hidden">
+                    {user?.profile_photo_url ? (
+                      <img src={user.profile_photo_url} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      (user?.name || "S").charAt(0)
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </header>

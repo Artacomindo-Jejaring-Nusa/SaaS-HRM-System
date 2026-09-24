@@ -12,9 +12,12 @@ import {
   ChevronRight,
   User,
   Filter,
-  Loader2
+  Loader2,
+  UserCog
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useDebounce } from "@/hooks/useDebounce";
 
@@ -35,6 +38,12 @@ interface Employee {
 
 export default function DirectoryPage() {
   const { t } = useLanguage();
+  const router = useRouter();
+  const { hasPermission, user: currentUser } = useAuth();
+  const isHRorAdmin = hasPermission('edit-employees') || 
+                      hasPermission('manage-employees') || 
+                      currentUser?.role_id === 1 || 
+                      currentUser?.role?.name === 'Super Admin';
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -180,23 +189,33 @@ export default function DirectoryPage() {
                 </div>
               </div>
 
-              <div className="mt-6 pt-6 border-t border-gray-50 flex items-center gap-3 relative">
+              <div className="mt-6 pt-6 border-t border-gray-50 flex flex-wrap items-center gap-2 relative">
                 <a 
                   href={`mailto:${emp.email}`}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-50 hover:bg-red-50 text-gray-600 hover:text-[#8B0000] rounded-xl text-[11px] font-bold transition-all"
+                  className="flex-1 min-w-[70px] flex items-center justify-center gap-1.5 py-2.5 bg-gray-50 hover:bg-red-50 text-gray-600 hover:text-[#8B0000] rounded-xl text-[11px] font-bold transition-all"
                 >
-                  <Mail size={14} />
+                  <Mail size={13} />
                   Email
                 </a>
                 {emp.phone && (
                   <a 
                     href={`https://wa.me/${emp.phone.replace(/[^0-9]/g, '')}`}
                     target="_blank"
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-xl text-[11px] font-bold transition-all"
+                    className="flex-1 min-w-[70px] flex items-center justify-center gap-1.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-xl text-[11px] font-bold transition-all"
                   >
-                    <MessageSquare size={14} />
+                    <MessageSquare size={13} />
                     WhatsApp
                   </a>
+                )}
+                {isHRorAdmin && (
+                  <button
+                    onClick={() => router.push(`/dashboard/employees?search=${encodeURIComponent(emp.name)}&id=${emp.id}`)}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-orange-50 hover:bg-orange-100 text-orange-600 rounded-xl text-[11px] font-bold transition-all"
+                    title="Edit Profil Karyawan"
+                  >
+                    <UserCog size={14} />
+                    <span>Edit Profil</span>
+                  </button>
                 )}
               </div>
             </div>

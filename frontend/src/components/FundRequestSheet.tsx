@@ -16,6 +16,18 @@ export interface FundRequestRecord {
   title?: string | null;
   reason?: string;
   status: string;
+  current_approval_step?: number | null;
+  current_step_info?: {
+    step_number: number;
+    total_steps: number;
+    label: string;
+    approver_type: string;
+    sla_hours?: number;
+  } | null;
+  supervisor_id?: number | null;
+  supervisor_approved_at?: string | null;
+  hrd_id?: number | null;
+  hrd_approved_at?: string | null;
   employee_name?: string;
   is_custom_employee_name?: boolean;
   divisi?: string;
@@ -99,11 +111,17 @@ export const calculateTotal = (items: FundRequestItem[]): number => {
   }, 0);
 };
 
-export const renderSignatureStatus = (status: string | undefined, type: 'hrd' | 'spv') => {
-  if (status === 'approved') {
+export const renderSignatureStatus = (
+  status: string | undefined, 
+  type: 'hrd' | 'spv',
+  currentStep?: number | null,
+  supervisorApprovedAt?: string | null,
+  hrdApprovedAt?: string | null
+) => {
+  if (status === 'approved' || hrdApprovedAt) {
     return <div className="inline-block border-2 border-green-600 text-green-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-green-50/50">VERIFIED</div>;
   }
-  if (status === 'approved_by_supervisor' && type === 'spv') {
+  if (type === 'spv' && (status === 'approved_by_supervisor' || (currentStep && currentStep > 1) || supervisorApprovedAt)) {
     return <div className="inline-block border-2 border-blue-600 text-blue-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-blue-50/50">ACC SPV</div>;
   }
   if (status === 'rejected') {
@@ -240,6 +258,9 @@ export interface FundRequestSheetInnerProps {
   dateStr: string;
   noStr: string;
   status?: string;
+  currentStep?: number | null;
+  supervisorApprovedAt?: string | null;
+  hrdApprovedAt?: string | null;
   isDetailView?: boolean;
 }
 
@@ -255,6 +276,9 @@ export const FundRequestSheetInner = ({
   dateStr,
   noStr,
   status,
+  currentStep,
+  supervisorApprovedAt,
+  hrdApprovedAt,
   isDetailView = false
 }: FundRequestSheetInnerProps) => {
   const styles = getSizeStyles(isDetailView);
@@ -350,7 +374,7 @@ export const FundRequestSheetInner = ({
         <div className="grid grid-cols-4 text-center">
           <div className="border-r border-black p-2 flex flex-col justify-between min-h-[60px] items-center">
             <div className="h-10 flex items-center justify-center w-full">
-              {renderSignatureStatus(status, 'hrd')}
+              {renderSignatureStatus(status, 'hrd', currentStep, supervisorApprovedAt, hrdApprovedAt)}
             </div>
             <div className={`border-t border-dotted border-gray-400 w-full pt-0.5 text-gray-500 italic ${styles.sizeSigName}`}>
               Direktur Utama
@@ -358,7 +382,7 @@ export const FundRequestSheetInner = ({
           </div>
           <div className="border-r border-black p-2 flex flex-col justify-between min-h-[60px] items-center">
             <div className="h-10 flex items-center justify-center w-full">
-              {renderSignatureStatus(status, 'spv')}
+              {renderSignatureStatus(status, 'spv', currentStep, supervisorApprovedAt, hrdApprovedAt)}
             </div>
             <div className={`border-t border-dotted border-gray-400 w-full pt-0.5 text-gray-500 italic ${styles.sizeSigName}`}>
               Pending Accounting
@@ -366,7 +390,7 @@ export const FundRequestSheetInner = ({
           </div>
           <div className="border-r border-black p-2 flex flex-col justify-between min-h-[60px] items-center">
             <div className="h-10 flex items-center justify-center w-full">
-              {renderSignatureStatus(status, 'spv')}
+              {renderSignatureStatus(status, 'spv', currentStep, supervisorApprovedAt, hrdApprovedAt)}
             </div>
             <div className={`border-t border-dotted border-gray-400 w-full pt-0.5 text-gray-500 italic ${styles.sizeSigName}`}>
               Pending Unit Head
@@ -443,6 +467,9 @@ export const PrintableSheet = ({ selectedItem }: PrintableSheetProps) => {
         dateStr={dateStr}
         noStr={noStr}
         status={selectedItem.status}
+        currentStep={selectedItem.current_approval_step}
+        supervisorApprovedAt={selectedItem.supervisor_approved_at}
+        hrdApprovedAt={selectedItem.hrd_approved_at}
         isDetailView={true}
       />
     </div>

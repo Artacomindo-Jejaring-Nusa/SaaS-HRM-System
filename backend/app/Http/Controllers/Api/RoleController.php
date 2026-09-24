@@ -11,7 +11,7 @@ class RoleController extends Controller
 {
     public function index()
     {
-        $roles = Role::withCount('users')->get();
+        $roles = Role::withCount('users')->orderBy('id', 'asc')->get();
 
         return response()->json([
             'success' => true,
@@ -65,6 +65,13 @@ class RoleController extends Controller
     {
         $role = Role::findOrFail($id);
 
+        if ((int) $id === 1 || $role->name === 'Super Admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Role bawaan Super Admin tidak dapat dihapus',
+            ], 403);
+        }
+
         if ($role->users()->count() > 0) {
             return response()->json([
                 'success' => false,
@@ -80,9 +87,29 @@ class RoleController extends Controller
         ]);
     }
 
+    public const SUPERADMIN_ONLY_PERMISSIONS = [
+        'create-employees',
+        'edit-employees',
+        'delete-employees',
+        'manage-company',
+        'manage-roles',
+        'manage-wfh',
+        'manage-offices',
+        'view-directory',
+        'manage-shifts',
+        'manage-schedules',
+        'manage-holidays',
+        'manage-announcements',
+        'manage-approvals',
+        'manage-documents',
+        'manage-kpis',
+    ];
+
     public function permissions()
     {
-        $permissions = Permission::all()->groupBy('group');
+        $permissions = Permission::whereNotIn('slug', self::SUPERADMIN_ONLY_PERMISSIONS)
+            ->get()
+            ->groupBy('group');
 
         return response()->json([
             'success' => true,
@@ -94,10 +121,20 @@ class RoleController extends Controller
     {
         $role = Role::findOrFail($id);
         $request->validate([
-            'permissions' => 'required|array',
+            'permissions' => 'present|array',
         ]);
 
-        $role->permissions()->sync($request->permissions);
+        $permissions = $request->permissions ?? [];
+
+        // If not Super Admin role, strictly exclude superadmin-only permissions
+        if ((int) $id !== 1 && $role->name !== 'Super Admin') {
+            $superAdminOnlyIds = Permission::whereIn('slug', self::SUPERADMIN_ONLY_PERMISSIONS)
+                ->pluck('id')
+                ->toArray();
+            $permissions = array_values(array_diff($permissions, $superAdminOnlyIds));
+        }
+
+        $role->permissions()->sync($permissions);
 
         return response()->json([
             'success' => true,

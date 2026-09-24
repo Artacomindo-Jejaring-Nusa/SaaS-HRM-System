@@ -484,4 +484,156 @@ class PayrollService
             ],
         ];
     }
+
+    // ──────────────────────────────────────────────────────
+    //  DISCIPLINARY DEDUCTIONS (Late & Absence with Tiers)
+    // ──────────────────────────────────────────────────────
+
+    /**
+     * Calculate late deduction based on configured tiers, shift schedules, and base type.
+     *
+     * @param \Illuminate\Support\Collection $attendances
+     * @param array $schedulesMap Keyed by 'Y-m-d' date -> Schedule with Shift
+     * @param float $basicSalary
+     * @param int $totalWorkingDays
+     * @param float $totalFixedAllowance
+     * @param PayrollSetting $settings
+     * @return array ['amount' => float, 'late_count' => int, 'total_late_minutes' => int, 'breakdown' => array]
+     */
+    public function calculateLateDeduction($attendances, array $schedulesMap, $basicSalary, $totalWorkingDays, $totalFixedAllowance, PayrollSetting $settings)
+    {
+        if (!($settings->late_deduction_enabled ?? true)) {
+            return [
+                'amount' => 0,
+                'late_count' => 0,
+                'total_late_minutes' => 0,
+                'breakdown' => [],
+            ];
+        }
+
+        $dailySalary = $totalWorkingDays > 0 ? ($basicSalary / $totalWorkingDays) : 0;
+        $dailyAllowance = $totalWorkingDays > 0 ? ($totalFixedAllowance / $totalWorkingDays) : 0;
+        $baseType = $settings->late_deduction_base ?? 'daily_salary';
+        $gracePeriod = (int) ($settings->late_grace_period_minutes ?? 0);
+        $tiers = $settings->effective_late_tiers;
+
+        $totalLateDeduction = 0;
+        $lateCount = 0;
+        $totalLateMinutes = 0;
+        $breakdown = [];
+
+        foreach ($attendances as $att) {
+            if (!$att->check_in) {
+                continue;
+            }
+
+            $checkIn = \Carbon\Carbon::parse($att->check_in);
+            $dateKey = $checkIn->toDateString();
+
+            // Determine shift start time
+            $shiftStartTime = $user->office?->work_start_time ?? $user->company?->work_start_time ?? '08:30:00';
+            if (isset($schedulesMap[$dateKey]) && $schedulesMap[$dateKey]->shift && $schedulesMap[$dateKey]->shift->start_time) {
+                $shiftStartTime = $schedulesMap[$dateKey]->shift->start_time;
+            }
+
+            $shiftStart = \Carbon\Carbon::parse($dateKey . ' ' . $shiftStartTime);
+            $lateThreshold = $shiftStart->copy()->addMinutes($gracePeriod);
+
+            if ($checkIn->gt($lateThreshold)) {
+                $lateMinutes = (int) $shiftStart->diffInMinutes($checkIn);
+                $totalLateMinutes += $lateMinutes;
+                $lateCount++;
+
+                // Find matching tier
+                $matchedTier = null;
+                foreach ($tiers as $tier) {
+                    $min = (int) ($tier['min_minutes'] ?? 0);
+                    $max = (int) ($tier['max_minutes'] ?? 99999);
+                    if ($lateMinutes >= $min && $lateMinutes <= $max) {
+                        $matchedTier = $tier;
+                        break;
+                    }
+                }
+
+                // Fallback to highest tier if exceeding max
+                if (!$matchedTier && !empty($tiers)) {
+                    $matchedTier = end($tiers);
+                }
+
+                $penaltyVal = (float) ($matchedTier['penalty_value'] ?? 0);
+                $penaltyType = $matchedTier['penalty_type'] ?? 'percentage';
+
+                $eventDeduction = 0;
+                if ($penaltyType === 'percentage') {
+                    $baseAmount = match ($baseType) {
+                        'basic_salary' => $basicSalary,
+                        'attendance_allowance' => $dailyAllowance,
+                        'fixed_amount' => 0,
+                        default => $dailySalary, // daily_salary
+                    };
+                    $eventDeduction = round($baseAmount * ($penaltyVal / 100));
+                } else {
+                    $eventDeduction = $penaltyVal; // Fixed nominal amount
+                }
+
+                $totalLateDeduction += $eventDeduction;
+
+                $breakdown[] = [
+                    'date' => $dateKey,
+                    'check_in' => $checkIn->format('H:i:s'),
+                    'shift_start' => $shiftStartTime,
+                    'late_minutes' => $lateMinutes,
+                    'tier_matched' => $matchedTier,
+                    'deduction' => $eventDeduction,
+                ];
+            }
+        }
+
+        return [
+            'amount' => $totalLateDeduction,
+            'late_count' => $lateCount,
+            'total_late_minutes' => $totalLateMinutes,
+            'breakdown' => $breakdown,
+        ];
+    }
+
+    /**
+     * Calculate absence / alfa deduction.
+     *
+     * @param int $absentDays
+     * @param int $totalWorkingDays
+     * @param float $basicSalary
+     * @param PayrollSetting $settings
+     * @return array ['amount' => float, 'rate_pct' => float, 'daily_deduction' => float]
+     */
+    public function calculateAbsenceDeduction($absentDays, $totalWorkingDays, $basicSalary, PayrollSetting $settings)
+    {
+        if ($absentDays <= 0 || !($settings->absence_deduction_enabled ?? true)) {
+            return [
+                'amount' => 0,
+                'rate_pct' => 0,
+                'daily_deduction' => 0,
+            ];
+        }
+
+        $dailySalary = $totalWorkingDays > 0 ? ($basicSalary / $totalWorkingDays) : 0;
+        $ratePct = (float) ($settings->absence_deduction_pct ?? 100);
+        $baseType = $settings->absence_deduction_base ?? 'daily_salary';
+
+        $unitDeduction = match ($baseType) {
+            'basic_salary' => $basicSalary * ($ratePct / 100),
+            'fixed_amount' => $ratePct,
+            default => $dailySalary * ($ratePct / 100), // daily_salary
+        };
+
+        $totalAbsenceDeduction = round($absentDays * $unitDeduction);
+
+        return [
+            'amount' => $totalAbsenceDeduction,
+            'rate_pct' => $ratePct,
+            'daily_deduction' => $unitDeduction,
+            'absent_days' => $absentDays,
+        ];
+    }
 }
+

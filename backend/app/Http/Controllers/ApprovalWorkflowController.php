@@ -3,33 +3,80 @@
 namespace App\Http\Controllers;
 
 use App\Models\ApprovalWorkflow;
+use App\Models\Company;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\Task;
+use App\Models\Leave;
+use App\Models\Overtime;
+use App\Models\Permit;
+use App\Models\Reimbursement;
+use App\Models\FundRequest;
+use App\Models\AttendanceCorrection;
 use App\Services\ApprovalService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ApprovalWorkflowController extends Controller
 {
+    private function resolveCompanyId(Request $request): ?int
+    {
+        $user = $request->user();
+        if ($user && ($user->role_id === 1 || (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies())) && $request->filled('company_id')) {
+            return (int) $request->company_id;
+        }
+        return $user ? $user->company_id : 1;
+    }
+
+    private function isSuperAdmin(User $user): bool
+    {
+        $user->loadMissing('role');
+        return $user->role_id === 1 ||
+            $user->role?->name === 'Super Admin' ||
+            (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies());
+    }
+
+    private function isAuthorizedUser(User $user): bool
+    {
+        $user->loadMissing('role');
+        $roleName = $user->role ? $user->role->name : '';
+
+        return $this->isSuperAdmin($user) ||
+            in_array($roleName, ['Super Admin', 'Admin', 'HRD Manager', 'HRD Staff', 'Management']) ||
+            str_contains(strtolower($roleName), 'hrd') ||
+            str_contains(strtolower($roleName), 'admin');
+    }
+
     public function index(Request $request)
     {
-        $companyId = $request->user()->company_id;
+        $companyId = $this->resolveCompanyId($request);
 
-        $workflows = ApprovalWorkflow::with('steps.role')
+        $workflows = ApprovalWorkflow::with(['steps.role', 'steps.approverUser', 'scopeRole', 'scopeUser'])
             ->where('company_id', $companyId)
             ->get();
 
         return $this->successResponse($workflows, 'Workflows retrieved successfully.');
     }
 
-    public function show(Request $request, $moduleKey)
+    public function show(Request $request, $idOrModuleKey)
     {
-        $companyId = $request->user()->company_id;
+        $companyId = $this->resolveCompanyId($request);
 
-        $workflow = ApprovalWorkflow::with('steps.role')
-            ->where('company_id', $companyId)
-            ->where('module_key', $moduleKey)
-            ->first();
+        $query = ApprovalWorkflow::with(['steps.role', 'steps.approverUser', 'scopeRole', 'scopeUser'])
+            ->where('company_id', $companyId);
+
+        if (is_numeric($idOrModuleKey)) {
+            $workflow = $query->where('id', $idOrModuleKey)->first();
+        } else {
+            if ($request->has('workflow_id') && !empty($request->workflow_id)) {
+                $workflow = (clone $query)->where('id', $request->workflow_id)->first();
+            } else {
+                $workflow = (clone $query)->where('module_key', $idOrModuleKey)
+                    ->orderByRaw("CASE WHEN scope_type = 'company' OR scope_type IS NULL THEN 0 ELSE 1 END")
+                    ->first();
+            }
+        }
 
         if (! $workflow) {
             return $this->successResponse(null, 'No custom workflow set. Using default hardcoded hierarchy.');
@@ -41,23 +88,23 @@ class ApprovalWorkflowController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        $user->loadMissing('role');
-        $roleName = $user->role ? $user->role->name : '';
-
-        $isAuthorized = $user->role_id === 1 ||
-            in_array($roleName, ['Super Admin', 'Admin', 'HRD Manager', 'HRD Staff', 'Management']) ||
-            str_contains(strtolower($roleName), 'hrd') ||
-            str_contains(strtolower($roleName), 'admin');
-
-        if (! $isAuthorized) {
+        if (! $this->isAuthorizedUser($user)) {
             return $this->errorResponse('Hanya HRD dan Super Admin yang dapat mengubah alur persetujuan.', 403);
         }
 
         $request->validate([
-            'module_key' => 'required|string|in:'.implode(',', array_keys(ApprovalService::MODULE_KEYS)),
+            'id' => 'nullable|integer|exists:approval_workflows,id',
+            'company_id' => 'nullable|integer|exists:companies,id',
+            'module_key' => 'required|string|regex:/^[a-z0-9_]+$/|max:50',
             'name' => 'required|string|max:100',
+            'description' => 'nullable|string|max:255',
+            'icon' => 'nullable|string|max:50',
+            'category' => 'nullable|string|max:50',
+            'is_custom' => 'nullable|boolean',
             'is_active' => 'required|boolean',
             'flow_json' => 'nullable|string',
+            'scope_type' => 'nullable|string|in:company,role,user',
+            'scope_id' => 'nullable|integer',
             'steps' => 'required|array|min:1',
             'steps.*.step_number' => 'required|integer|min:1',
             'steps.*.approver_type' => 'required|string|in:supervisor,role,user',
@@ -66,20 +113,44 @@ class ApprovalWorkflowController extends Controller
             'steps.*.sla_hours' => 'nullable|integer|min:1',
         ]);
 
-        $companyId = $request->user()->company_id;
+        $companyId = $this->resolveCompanyId($request);
 
         $workflow = DB::transaction(function () use ($request, $companyId) {
-            $workflow = ApprovalWorkflow::updateOrCreate(
-                [
-                    'company_id' => $companyId,
-                    'module_key' => $request->module_key,
-                ],
-                [
+            if ($request->filled('id')) {
+                $workflow = ApprovalWorkflow::where('company_id', $companyId)->findOrFail($request->id);
+                $workflow->update([
                     'name' => $request->name,
+                    'description' => $request->description,
+                    'icon' => $request->icon ?? $workflow->icon,
+                    'category' => $request->category ?? $workflow->category,
                     'is_active' => $request->is_active,
+                    'is_custom' => $request->boolean('is_custom', $workflow->is_custom),
                     'flow_json' => $request->flow_json,
-                ]
-            );
+                    'scope_type' => $request->scope_type ?? $workflow->scope_type,
+                    'scope_id' => $request->scope_id ?? $workflow->scope_id,
+                    'priority' => ($request->scope_type === 'user') ? 2 : (($request->scope_type === 'role') ? 1 : 0),
+                ]);
+            } else {
+                $scopeType = $request->scope_type ?? 'company';
+                $workflow = ApprovalWorkflow::updateOrCreate(
+                    [
+                        'company_id' => $companyId,
+                        'module_key' => $request->module_key,
+                        'scope_type' => $scopeType,
+                        'scope_id' => $request->scope_id,
+                    ],
+                    [
+                        'name' => $request->name,
+                        'description' => $request->description,
+                        'icon' => $request->icon ?? 'GitBranch',
+                        'category' => $request->category ?? 'operasional',
+                        'is_active' => $request->is_active,
+                        'is_custom' => $request->boolean('is_custom', false),
+                        'flow_json' => $request->flow_json,
+                        'priority' => ($scopeType === 'user') ? 2 : (($scopeType === 'role') ? 1 : 0),
+                    ]
+                );
+            }
 
             // Delete old steps and recreate
             $workflow->steps()->delete();
@@ -88,30 +159,537 @@ class ApprovalWorkflowController extends Controller
                 $workflow->steps()->create([
                     'step_number' => $stepData['step_number'],
                     'approver_type' => $stepData['approver_type'],
-                    'approver_role_id' => $stepData['approver_role_id'] ?? null,
-                    'approver_user_id' => $stepData['approver_user_id'] ?? null,
+                    'approver_role_id' => $stepData['approver_type'] === 'role' ? ($stepData['approver_role_id'] ?? null) : null,
+                    'approver_user_id' => $stepData['approver_type'] === 'user' ? ($stepData['approver_user_id'] ?? null) : null,
                     'sla_hours' => $stepData['sla_hours'] ?? 24,
                 ]);
             }
 
-            return $workflow->load('steps.role');
+            return $workflow->load(['steps.role', 'steps.approverUser', 'scopeRole', 'scopeUser']);
         });
 
-        $this->logActivity('UPDATE_WORKFLOW', "Updated approval workflow for module: {$request->module_key}");
+        $this->logActivity('UPDATE_WORKFLOW', "Updated approval workflow ID {$workflow->id} for module: {$request->module_key} (Company: {$companyId})");
 
         return $this->successResponse($workflow, 'Workflow saved successfully.');
     }
 
     /**
-     * Get list of available module keys with labels.
+     * Create a new custom workflow (Super Admin only).
      */
-    public function getModuleKeys()
+    public function createCustomModule(Request $request)
     {
-        $modules = collect(ApprovalService::MODULE_KEYS)->map(function ($label, $key) {
-            return ['key' => $key, 'label' => $label];
+        $user = $request->user();
+        if (! $this->isSuperAdmin($user)) {
+            return $this->errorResponse('Hanya Super Admin yang berhak menambahkan alur persetujuan baru.', 403);
+        }
+
+        $request->validate([
+            'name' => 'required|string|max:100',
+            'module_key' => 'nullable|string|regex:/^[a-z0-9_]+$/|max:50',
+            'description' => 'nullable|string|max:255',
+            'icon' => 'nullable|string|max:50',
+            'category' => 'nullable|string|max:50',
+            'company_id' => 'nullable|integer|exists:companies,id',
+            'steps' => 'nullable|array',
+        ]);
+
+        $companyId = $this->resolveCompanyId($request);
+        $moduleKey = $request->module_key ?: Str::slug($request->name, '_');
+
+        // Check if workflow already exists for this company
+        $existing = ApprovalWorkflow::where('company_id', $companyId)
+            ->where('module_key', $moduleKey)
+            ->first();
+
+        if ($existing) {
+            return $this->errorResponse("Alur dengan modul '{$moduleKey}' sudah ada di perusahaan ini.", 422);
+        }
+
+        $workflow = DB::transaction(function () use ($request, $companyId, $moduleKey) {
+            $workflow = ApprovalWorkflow::create([
+                'company_id' => $companyId,
+                'module_key' => $moduleKey,
+                'name' => $request->name,
+                'description' => $request->description ?? 'Alur persetujuan kustom yang dikonfigurasi Super Admin.',
+                'icon' => $request->icon ?? 'CheckCircle2',
+                'category' => $request->category ?? 'Tugas & Proyek',
+                'is_active' => true,
+                'is_custom' => true,
+            ]);
+
+            $stepsData = $request->input('steps');
+            if (empty($stepsData)) {
+                // Default step 1: Atasan Langsung
+                $workflow->steps()->create([
+                    'step_number' => 1,
+                    'approver_type' => 'supervisor',
+                    'sla_hours' => 24,
+                ]);
+            } else {
+                foreach ($stepsData as $step) {
+                    $workflow->steps()->create([
+                        'step_number' => $step['step_number'],
+                        'approver_type' => $step['approver_type'],
+                        'approver_role_id' => $step['approver_type'] === 'role' ? ($step['approver_role_id'] ?? null) : null,
+                        'approver_user_id' => $step['approver_type'] === 'user' ? ($step['approver_user_id'] ?? null) : null,
+                        'sla_hours' => $step['sla_hours'] ?? 24,
+                    ]);
+                }
+            }
+
+            return $workflow->load(['steps.role', 'steps.approverUser']);
+        });
+
+        $this->logActivity('CREATE_CUSTOM_WORKFLOW', "Created new custom workflow: {$workflow->name} ({$moduleKey})");
+
+        return $this->successResponse($workflow, 'Alur persetujuan baru berhasil ditambahkan.', 201);
+    }
+
+    /**
+     * Delete a custom workflow (Super Admin only).
+     */
+    public function destroyCustomModule(Request $request, $moduleKey)
+    {
+        $user = $request->user();
+        if (! $this->isAuthorizedUser($user)) {
+            return $this->errorResponse('Hanya Super Admin dan HRD yang berhak mengelola alur persetujuan.', 403);
+        }
+
+        $companyId = $this->resolveCompanyId($request);
+
+        $workflow = ApprovalWorkflow::where('company_id', $companyId)
+            ->where('module_key', $moduleKey)
+            ->first();
+
+        if (! $workflow) {
+            return $this->errorResponse('Alur persetujuan tidak ditemukan.', 404);
+        }
+
+        if (! $workflow->is_custom && array_key_exists($moduleKey, ApprovalService::SYSTEM_MODULES)) {
+            // Cannot delete built-in system modules, but can deactivate
+            $workflow->update(['is_active' => false]);
+            return $this->successResponse(null, 'Alur sistem inti dinonaktifkan (tidak dapat dihapus permanen).');
+        }
+
+        $workflow->steps()->delete();
+        $workflow->delete();
+
+        $this->logActivity('DELETE_CUSTOM_WORKFLOW', "Deleted workflow: {$moduleKey} (Company: {$companyId})");
+
+        return $this->successResponse(null, 'Alur persetujuan berhasil dihapus.');
+    }
+
+    /**
+     * Duplicate an existing workflow to create a scoped variant (by role/division or user).
+     */
+    public function duplicateWorkflow(Request $request)
+    {
+        $user = $request->user();
+        if (! $this->isAuthorizedUser($user)) {
+            return $this->errorResponse('Hanya HRD dan Super Admin yang dapat menduplikasi alur persetujuan.', 403);
+        }
+
+        $request->validate([
+            'source_workflow_id' => 'required|integer|exists:approval_workflows,id',
+            'name' => 'nullable|string|max:100',
+            'scope_type' => 'required|in:company,role,user',
+            'scope_id' => 'nullable|integer',
+            'company_id' => 'nullable|integer|exists:companies,id',
+        ]);
+
+        $companyId = $this->resolveCompanyId($request);
+        $source = ApprovalWorkflow::with('steps')->findOrFail($request->source_workflow_id);
+
+        // Compute automatic numeric tag (e.g. Perizinan-2, Perizinan-3, etc.)
+        $rawName = $request->filled('name') ? trim($request->name) : $source->name;
+        $baseName = preg_replace('/(\s*\(\s*Khusus\s*\)|-\d+)$/i', '', $rawName);
+        if (empty($baseName)) {
+            $baseName = $source->name;
+        }
+
+        $existingNames = ApprovalWorkflow::where('company_id', $companyId)
+            ->where('module_key', $source->module_key)
+            ->pluck('name')
+            ->toArray();
+
+        $maxNum = 1;
+        foreach ($existingNames as $name) {
+            if (preg_match('/^' . preg_quote($baseName, '/') . '-(\d+)$/i', trim($name), $matches)) {
+                $num = (int) $matches[1];
+                if ($num > $maxNum) {
+                    $maxNum = $num;
+                }
+            }
+        }
+        $nextTag = $maxNum + 1;
+
+        if ($rawName === $baseName || preg_match('/^' . preg_quote($baseName, '/') . '(-\d+)?$/i', $rawName) || str_contains($rawName, '(Khusus)')) {
+            $finalName = "{$baseName}-{$nextTag}";
+        } else {
+            $finalName = in_array($rawName, $existingNames) ? "{$rawName}-{$nextTag}" : $rawName;
+        }
+
+        $newWorkflow = DB::transaction(function () use ($request, $source, $companyId, $finalName) {
+            $priority = $request->scope_type === 'user' ? 2 : ($request->scope_type === 'role' ? 1 : 0);
+
+            $duplicate = ApprovalWorkflow::create([
+                'company_id' => $companyId,
+                'module_key' => $source->module_key,
+                'name' => $finalName,
+                'description' => $source->description ?? "Alur spesifik untuk {$finalName}",
+                'icon' => $source->icon ?? 'GitBranch',
+                'category' => $source->category ?? 'operasional',
+                'is_active' => true,
+                'is_custom' => true,
+                'flow_json' => $source->flow_json,
+                'scope_type' => $request->scope_type,
+                'scope_id' => $request->scope_id,
+                'priority' => $priority,
+            ]);
+
+            foreach ($source->steps as $step) {
+                $duplicate->steps()->create([
+                    'step_number' => $step->step_number,
+                    'approver_type' => $step->approver_type,
+                    'approver_role_id' => $step->approver_role_id,
+                    'approver_user_id' => $step->approver_user_id,
+                    'sla_hours' => $step->sla_hours ?? 24,
+                ]);
+            }
+
+            return $duplicate->load(['steps.role', 'steps.approverUser', 'scopeRole', 'scopeUser']);
+        });
+
+        $this->logActivity('DUPLICATE_WORKFLOW', "Duplicated workflow {$source->id} -> {$newWorkflow->id} ({$newWorkflow->name}) (Company: {$companyId})");
+
+        return $this->successResponse($newWorkflow, 'Alur persetujuan berhasil diduplikasi.');
+    }
+
+    /**
+     * Toggle active status of a workflow or variant.
+     */
+    public function toggleActive(Request $request, $id)
+    {
+        $user = $request->user();
+        if (! $this->isAuthorizedUser($user)) {
+            return $this->errorResponse('Hanya HRD dan Super Admin yang berhak mengubah status alur persetujuan.', 403);
+        }
+
+        $companyId = $this->resolveCompanyId($request);
+        $workflow = ApprovalWorkflow::where('company_id', $companyId)->findOrFail($id);
+
+        $workflow->update([
+            'is_active' => ! $workflow->is_active,
+        ]);
+
+        $statusStr = $workflow->is_active ? 'diaktifkan' : 'dinonaktifkan';
+        $this->logActivity('TOGGLE_WORKFLOW_STATUS', "Alur persetujuan '{$workflow->name}' (ID: {$workflow->id}) {$statusStr}");
+
+        return $this->successResponse($workflow, "Alur persetujuan '{$workflow->name}' berhasil {$statusStr}.");
+    }
+
+    /**
+     * Toggle active status by module key (creates default workflow if none exists yet).
+     */
+    public function toggleModuleActive(Request $request, $moduleKey)
+    {
+        $user = $request->user();
+        if (! $this->isAuthorizedUser($user)) {
+            return $this->errorResponse('Hanya HRD dan Super Admin yang berhak mengubah status alur persetujuan.', 403);
+        }
+
+        $companyId = $this->resolveCompanyId($request);
+        $workflow = ApprovalWorkflow::where('company_id', $companyId)
+            ->where('module_key', $moduleKey)
+            ->where(function ($q) {
+                $q->where('scope_type', 'company')->orWhereNull('scope_type');
+            })
+            ->first();
+
+        if (! $workflow) {
+            if (! array_key_exists($moduleKey, ApprovalService::SYSTEM_MODULES)) {
+                return $this->errorResponse("Modul '{$moduleKey}' tidak dikenal.", 404);
+            }
+            $meta = ApprovalService::SYSTEM_MODULES[$moduleKey];
+            $workflow = ApprovalWorkflow::create([
+                'company_id' => $companyId,
+                'module_key' => $moduleKey,
+                'name' => $meta['name'],
+                'description' => $meta['description'] ?? '',
+                'icon' => $meta['icon'] ?? 'GitBranch',
+                'category' => $meta['category'] ?? 'operasional',
+                'is_active' => false,
+                'is_custom' => false,
+                'scope_type' => 'company',
+                'priority' => 0,
+            ]);
+
+            $workflow->steps()->create([
+                'step_number' => 1,
+                'approver_type' => 'supervisor',
+                'sla_hours' => 24,
+            ]);
+        } else {
+            $workflow->update([
+                'is_active' => ! $workflow->is_active,
+            ]);
+        }
+
+        $statusStr = $workflow->is_active ? 'diaktifkan' : 'dinonaktifkan';
+        $this->logActivity('TOGGLE_WORKFLOW_STATUS', "Alur persetujuan '{$workflow->name}' {$statusStr}");
+
+        return $this->successResponse($workflow, "Alur persetujuan '{$workflow->name}' berhasil {$statusStr}.");
+    }
+
+    /**
+     * Delete a specific scoped workflow variant.
+     */
+    public function destroyVariant(Request $request, $id)
+    {
+        $user = $request->user();
+        if (! $this->isAuthorizedUser($user)) {
+            return $this->errorResponse('Hanya HRD dan Super Admin yang berhak menghapus alur persetujuan.', 403);
+        }
+
+        $workflow = ApprovalWorkflow::findOrFail($id);
+
+        // Security check: non-super-admin can only delete workflows belonging to their company
+        if (! $this->isSuperAdmin($user) && $workflow->company_id !== $user->company_id) {
+            return $this->errorResponse('Tidak memiliki izin menghapus alur persetujuan ini.', 403);
+        }
+
+        // If it's the only workflow for a system module and is default company scope, don't delete permanently; deactivate instead
+        $count = ApprovalWorkflow::where('company_id', $workflow->company_id)
+            ->where('module_key', $workflow->module_key)
+            ->count();
+        if ($count <= 1 && ($workflow->scope_type === 'company' || empty($workflow->scope_type)) && array_key_exists($workflow->module_key, ApprovalService::SYSTEM_MODULES)) {
+            $workflow->update(['is_active' => false]);
+            return $this->successResponse(null, 'Alur default dinonaktifkan (karena merupakan alur utama fitur).');
+        }
+
+        $workflow->steps()->delete();
+        $workflow->delete();
+
+        $this->logActivity('DELETE_WORKFLOW_VARIANT', "Deleted workflow variant ID {$id}: {$workflow->name}");
+
+        return $this->successResponse(null, 'Varian alur persetujuan berhasil dihapus.');
+    }
+
+    /**
+     * Get list of all available modules with real HRMS catalog metadata and scoped variants.
+     */
+    public function getModuleKeys(Request $request)
+    {
+        $companyId = $this->resolveCompanyId($request);
+
+        // Fetch all workflows for this company, grouped by module_key
+        $configuredWorkflows = ApprovalWorkflow::with(['steps.role', 'steps.approverUser', 'scopeRole', 'scopeUser'])
+            ->where('company_id', $companyId)
+            ->orderBy('priority', 'asc')
+            ->orderBy('id', 'asc')
+            ->get()
+            ->groupBy('module_key');
+
+        $resultModules = collect();
+
+        // 1. Process standard System Modules (from ApprovalService::SYSTEM_MODULES)
+        foreach (ApprovalService::SYSTEM_MODULES as $key => $meta) {
+            $variants = $configuredWorkflows->get($key, collect());
+            $defaultVariant = $variants->first(fn ($w) => $w->scope_type === 'company' || empty($w->scope_type)) ?? $variants->first();
+
+            $stepCount = $defaultVariant && $defaultVariant->steps->count() > 0
+                ? $defaultVariant->steps->count()
+                : ($meta['default_layers'] ?? 1);
+
+            $mappedVariants = $variants->map(function ($wf) {
+                $scopeLabel = 'Semua Karyawan (Default)';
+                if ($wf->scope_type === 'role') {
+                    $scopeLabel = 'Divisi/Jabatan: ' . ($wf->scopeRole ? $wf->scopeRole->name : "Role #{$wf->scope_id}");
+                } elseif ($wf->scope_type === 'user') {
+                    $scopeLabel = 'Karyawan: ' . ($wf->scopeUser ? $wf->scopeUser->name : "User #{$wf->scope_id}");
+                }
+
+                return [
+                    'id' => $wf->id,
+                    'name' => $wf->name,
+                    'scope_type' => $wf->scope_type ?? 'company',
+                    'scope_id' => $wf->scope_id,
+                    'scope_label' => $scopeLabel,
+                    'is_active' => $wf->is_active,
+                    'layers' => $wf->steps->count(),
+                    'is_default' => ($wf->scope_type === 'company' || empty($wf->scope_type)),
+                ];
+            })->values();
+
+            $resultModules->push([
+                'key' => $key,
+                'label' => $meta['name'],
+                'category' => $meta['category'] ?? 'Umum',
+                'icon' => $meta['icon'] ?? 'GitBranch',
+                'description' => $meta['description'] ?? '',
+                'layers' => $stepCount,
+                'is_custom' => false,
+                'is_active' => $defaultVariant ? $defaultVariant->is_active : false,
+                'is_configured' => $variants->isNotEmpty(),
+                'active_workflow_id' => $defaultVariant ? $defaultVariant->id : null,
+                'variants' => $mappedVariants,
+            ]);
+        }
+
+        // 2. Process Custom Modules added previously (if any exist)
+        foreach ($configuredWorkflows as $key => $variants) {
+            if (! array_key_exists($key, ApprovalService::SYSTEM_MODULES)) {
+                $first = $variants->first();
+                $resultModules->push([
+                    'key' => $key,
+                    'label' => $first->name,
+                    'category' => $first->category ?? 'Kustom',
+                    'icon' => $first->icon ?? 'CheckCircle2',
+                    'description' => $first->description ?? 'Alur persetujuan kustom',
+                    'layers' => $first->steps->count() ?: 1,
+                    'is_custom' => true,
+                    'is_active' => $first->is_active,
+                    'is_configured' => true,
+                    'active_workflow_id' => $first->id,
+                    'variants' => $variants->map(fn ($wf) => [
+                        'id' => $wf->id,
+                        'name' => $wf->name,
+                        'scope_type' => $wf->scope_type ?? 'company',
+                        'scope_id' => $wf->scope_id,
+                        'scope_label' => 'Semua Karyawan (Default)',
+                        'is_active' => $wf->is_active,
+                        'layers' => $wf->steps->count(),
+                        'is_default' => true,
+                    ])->values(),
+                ]);
+            }
+        }
+
+        // 3. Catalog of selectable HRMS features to activate
+        $availableSystemCatalog = collect(ApprovalService::SYSTEM_MODULES)->map(function ($meta, $key) {
+            return [
+                'key' => $key,
+                'name' => $meta['name'],
+                'category' => $meta['category'],
+                'icon' => $meta['icon'],
+                'description' => $meta['description'],
+                'default_layers' => $meta['default_layers'],
+            ];
         })->values();
 
-        return $this->successResponse($modules, 'Module keys retrieved successfully.');
+        return $this->successResponse([
+            'modules' => $resultModules->values(),
+            'system_catalog' => $availableSystemCatalog,
+        ], 'Module keys retrieved successfully.');
+    }
+
+    /**
+     * Super Admin God Mode: Force-approve or Force-reject ANY pending item in the system.
+     */
+    public function godModeOverride(Request $request)
+    {
+        $user = $request->user();
+        if (! $this->isSuperAdmin($user)) {
+            return $this->errorResponse('Akses ditolak. Fitur God Mode Override hanya untuk Super Admin.', 403);
+        }
+
+        $request->validate([
+            'module_key' => 'required|string',
+            'target_id' => 'required|integer',
+            'action' => 'required|in:approve,reject',
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $action = $request->action;
+        $status = $action === 'approve' ? 'approved' : 'rejected';
+        $reason = $request->reason ?: 'Disetujui via Super Admin God Mode Override';
+
+        switch ($request->module_key) {
+            case 'task':
+                $item = Task::findOrFail($request->target_id);
+                $item->update([
+                    'status' => $action === 'approve' ? 'ongoing' : 'cancelled',
+                    'current_approval_step' => null,
+                    'approved_by' => $user->id,
+                ]);
+                break;
+
+            case 'leave':
+                $item = Leave::findOrFail($request->target_id);
+                $item->update([
+                    'status' => $status,
+                    'current_approval_step' => null,
+                    'approved_by' => $user->id,
+                ]);
+                break;
+
+            case 'overtime':
+                $item = Overtime::findOrFail($request->target_id);
+                $item->update([
+                    'status' => $status,
+                    'current_approval_step' => null,
+                    'approved_by' => $user->id,
+                ]);
+                break;
+
+            case 'permit':
+                $item = Permit::findOrFail($request->target_id);
+                $item->update([
+                    'status' => $status,
+                    'current_approval_step' => null,
+                    'approved_by' => $user->id,
+                ]);
+                break;
+
+            case 'reimbursement':
+                $item = Reimbursement::findOrFail($request->target_id);
+                $item->update([
+                    'status' => $status,
+                    'current_approval_step' => null,
+                    'approved_by' => $user->id,
+                ]);
+                break;
+
+            case 'fund_request':
+                $item = FundRequest::findOrFail($request->target_id);
+                $item->update([
+                    'status' => $status,
+                    'current_approval_step' => null,
+                    'approved_by' => $user->id,
+                ]);
+                break;
+
+            case 'attendance_correction':
+                $item = AttendanceCorrection::findOrFail($request->target_id);
+                $item->update([
+                    'status' => $status,
+                    'current_approval_step' => null,
+                    'approved_by' => $user->id,
+                ]);
+                break;
+
+            default:
+                return $this->errorResponse("Modul '{$request->module_key}' belum mendukung override instan.", 400);
+        }
+
+        $this->logActivity('GOD_MODE_OVERRIDE', "Super Admin force-{$action} on {$request->module_key} #{$request->target_id}. Alasan: {$reason}");
+
+        return $this->successResponse($item, "Pengajuan {$request->module_key} berhasil di-{$action} langsung oleh Super Admin.");
+    }
+
+    /**
+     * Get list of companies (for Super Admin selector).
+     */
+    public function getCompanies(Request $request)
+    {
+        $user = $request->user();
+        if ($user->role_id === 1 || $user->canAccessAllCompanies()) {
+            $companies = Company::select('id', 'name')->orderBy('name')->get();
+        } else {
+            $companies = Company::where('id', $user->company_id)->select('id', 'name')->get();
+        }
+
+        return $this->successResponse($companies, 'Companies retrieved successfully.');
     }
 
     /**
@@ -129,7 +707,7 @@ class ApprovalWorkflowController extends Controller
      */
     public function getUsers(Request $request)
     {
-        $companyId = $request->user()->company_id;
+        $companyId = $this->resolveCompanyId($request);
 
         $users = User::where('company_id', $companyId)
             ->select('id', 'name', 'email', 'role_id')

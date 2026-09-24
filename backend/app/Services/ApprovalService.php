@@ -19,16 +19,143 @@ class ApprovalService
         'reimbursement' => 'Reimbursement',
         'fund_request' => 'Pengajuan Dana',
         'attendance_correction' => 'Koreksi Absen',
+        'shift_swap' => 'Tukar Shift',
+        'task' => 'Pemberian & Verifikasi Tugas',
+        'vehicle_log' => 'Peminjaman Kendaraan',
+        'performance_review' => 'Evaluasi Kinerja',
+        'profile_request' => 'Pembaruan Profil',
     ];
 
     /**
-     * Get the active workflow for a specific module and company.
+     * Catalog of actual HRMS system features that can have approval workflows.
      */
-    public static function getWorkflow(string $moduleKey, int $companyId): ?ApprovalWorkflow
+    public const SYSTEM_MODULES = [
+        'leave' => [
+            'name' => 'Cuti Karyawan',
+            'category' => 'Kehadiran & Waktu',
+            'icon' => 'Calendar',
+            'description' => 'Pengajuan cuti tahunan, melahirkan, atau cuti khusus.',
+            'default_layers' => 2,
+        ],
+        'permit' => [
+            'name' => 'Perizinan',
+            'category' => 'Kehadiran & Waktu',
+            'icon' => 'ClipboardList',
+            'description' => 'Izin sakit, izin terlambat, pulang cepat, atau dinas luar.',
+            'default_layers' => 1,
+        ],
+        'overtime' => [
+            'name' => 'Lembur (Overtime)',
+            'category' => 'Kehadiran & Waktu',
+            'icon' => 'Clock',
+            'description' => 'Surat perintah dan pengajuan jam kerja lembur.',
+            'default_layers' => 1,
+        ],
+        'reimbursement' => [
+            'name' => 'Klaim Biaya (Reimbursement)',
+            'category' => 'Keuangan',
+            'icon' => 'CreditCard',
+            'description' => 'Klaim biaya operasional, medis, atau perjalanan dinas.',
+            'default_layers' => 2,
+        ],
+        'fund_request' => [
+            'name' => 'Pengajuan Dana (Fund Request)',
+            'category' => 'Keuangan',
+            'icon' => 'Wallet',
+            'description' => 'Permintaan kas bon operasional atau dana kerja proyek.',
+            'default_layers' => 2,
+        ],
+        'attendance_correction' => [
+            'name' => 'Koreksi Absensi',
+            'category' => 'Kehadiran & Waktu',
+            'icon' => 'CheckSquare',
+            'description' => 'Perbaikan data jam kehadiran yang terlewat atau keliru.',
+            'default_layers' => 1,
+        ],
+        'shift_swap' => [
+            'name' => 'Tukar Shift',
+            'category' => 'Operasional',
+            'icon' => 'Repeat',
+            'description' => 'Pertukaran jadwal shift kerja dengan persetujuan atasan.',
+            'default_layers' => 2,
+        ],
+        'task' => [
+            'name' => 'Pemberian & Verifikasi Tugas',
+            'category' => 'Tugas & Proyek',
+            'icon' => 'CheckCircle2',
+            'description' => 'Validasi penugasan baru dan verifikasi bukti penyelesaian tugas karyawan.',
+            'default_layers' => 1,
+        ],
+        'vehicle_log' => [
+            'name' => 'Peminjaman Kendaraan Dinas',
+            'category' => 'Operasional',
+            'icon' => 'Car',
+            'description' => 'Persetujuan penggunaan armada kendaraan dinas operasional.',
+            'default_layers' => 1,
+        ],
+        'performance_review' => [
+            'name' => 'Evaluasi Kinerja (KPI Review)',
+            'category' => 'SDM & Karir',
+            'icon' => 'Award',
+            'description' => 'Persetujuan berjenjang atas hasil penilaian performa kerja.',
+            'default_layers' => 2,
+        ],
+        'profile_request' => [
+            'name' => 'Pembaruan Data Profil',
+            'category' => 'Administrasi',
+            'icon' => 'UserCheck',
+            'description' => 'Validasi perubahan data rekening, keluarga, atau kontak pribadi.',
+            'default_layers' => 1,
+        ],
+    ];
+
+    /**
+     * Get the active workflow for a specific module, company, and submitter.
+     * Evaluates hierarchical priority:
+     * 1. User-specific workflow (scope_type = 'user', scope_id = submitter.id)
+     * 2. Role/Division-specific workflow (scope_type = 'role', scope_id = submitter.role_id)
+     * 3. Company default workflow (scope_type = 'company' or null)
+     */
+    public static function getWorkflow(string $moduleKey, int $companyId, ?User $submitter = null): ?ApprovalWorkflow
     {
-        return ApprovalWorkflow::with('steps.role')
+        if ($submitter) {
+            // 1. Check user-specific workflow
+            $userWorkflow = ApprovalWorkflow::with(['steps.role', 'steps.approverUser'])
+                ->where('company_id', $companyId)
+                ->where('module_key', $moduleKey)
+                ->where('scope_type', 'user')
+                ->where('scope_id', $submitter->id)
+                ->where('is_active', true)
+                ->first();
+
+            if ($userWorkflow) {
+                return $userWorkflow;
+            }
+
+            // 2. Check role / division specific workflow
+            if ($submitter->role_id) {
+                $roleWorkflow = ApprovalWorkflow::with(['steps.role', 'steps.approverUser'])
+                    ->where('company_id', $companyId)
+                    ->where('module_key', $moduleKey)
+                    ->where('scope_type', 'role')
+                    ->where('scope_id', $submitter->role_id)
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($roleWorkflow) {
+                    return $roleWorkflow;
+                }
+            }
+        }
+
+        // 3. Fallback to company-wide default workflow
+        return ApprovalWorkflow::with(['steps.role', 'steps.approverUser'])
             ->where('company_id', $companyId)
             ->where('module_key', $moduleKey)
+            ->where(function ($q) {
+                $q->where('scope_type', 'company')
+                    ->orWhereNull('scope_type');
+            })
             ->where('is_active', true)
             ->first();
     }
@@ -43,7 +170,7 @@ class ApprovalService
      */
     public static function initApproval(string $moduleKey, int $companyId, User $submitter): ?array
     {
-        $workflow = self::getWorkflow($moduleKey, $companyId);
+        $workflow = self::getWorkflow($moduleKey, $companyId, $submitter);
 
         if (! $workflow) {
             return null; // No dynamic workflow → fallback to default hardcoded logic
@@ -104,7 +231,7 @@ class ApprovalService
         }
 
         // Validate that this user is authorized to act on this step
-        if (! self::canUserApproveStep($step, $approver, $submitter, $companyId)) {
+        if (! self::canUserApproveStep($step, $approver, $submitter, $companyId, $moduleKey)) {
             return ['error' => 'Anda tidak memiliki wewenang untuk menyetujui/menolak pada tahap ini.'];
         }
 
@@ -171,7 +298,7 @@ class ApprovalService
             return false;
         }
 
-        return self::canUserApproveStep($step, $approver, $submitter, $companyId);
+        return self::canUserApproveStep($step, $approver, $submitter, $companyId, $moduleKey);
     }
 
     /**
@@ -269,25 +396,78 @@ class ApprovalService
     // ─── Private Helpers ───────────────────────────────────
 
     /**
+     * Get the permission slug associated with a workflow module.
+     */
+    public static function getApprovalPermissionForModule(string $moduleKey): ?string
+    {
+        return match ($moduleKey) {
+            'overtime' => 'approve-overtimes',
+            'leave' => 'approve-leaves',
+            'permit' => 'approve-permits',
+            'reimbursement' => 'approve-reimbursements',
+            'fund_request' => 'approve-fund-requests',
+            'shift_swap' => 'approve-shift-swaps',
+            'attendance_correction' => 'approve-attendances',
+            'task' => 'manage-tasks',
+            'vehicle_log' => 'approve-vehicle-logs',
+            'performance_review' => 'manage-performance-reviews',
+            'profile_request' => 'manage-employees',
+            default => null,
+        };
+    }
+
+    /**
      * Check if a specific user can act on a specific workflow step.
      */
-    private static function canUserApproveStep(WorkflowStep $step, User $approver, User $submitter, int $companyId): bool
+    private static function canUserApproveStep(WorkflowStep $step, User $approver, User $submitter, int $companyId, ?string $moduleKey = null): bool
     {
         // Master Admin (role_id 1) bypasses all checks
         if ($approver->role_id === 1) {
             return true;
         }
 
+        // Must belong to the same company (or can access all)
+        if ($approver->company_id !== $companyId && ! (method_exists($approver, 'canAccessAllCompanies') && $approver->canAccessAllCompanies())) {
+            return false;
+        }
+
+        $moduleKey = $moduleKey ?: ($step->workflow->module_key ?? '');
+        $permission = self::getApprovalPermissionForModule($moduleKey);
+        $hasModulePermission = $permission ? $approver->hasPermission($permission) : false;
+
         switch ($step->approver_type) {
             case 'supervisor':
-                return $submitter->supervisor_id === $approver->id;
+                // Direct supervisor of the submitter, or someone granted explicit approval permission for this module
+                return $submitter->supervisor_id === $approver->id || $hasModulePermission;
 
             case 'role':
-                return $approver->role_id === $step->approver_role_id
-                    && $approver->company_id === $companyId;
+                // Exact role match
+                if ($approver->role_id === $step->approver_role_id) {
+                    return true;
+                }
+
+                // If user has the explicit module approval permission (e.g. approve-overtimes)
+                if ($hasModulePermission) {
+                    // For multi-tiered financial workflows (fund_request, reimbursement), keep strict tier isolation
+                    if (in_array($moduleKey, ['fund_request', 'reimbursement'])) {
+                        $roleName = strtolower($approver->role?->name ?? '');
+                        $stepRoleName = strtolower($step->role?->name ?? '');
+                        if (str_contains($roleName, 'admin') || str_contains($roleName, 'direktur') || str_contains($roleName, 'ceo') || str_contains($roleName, 'boc')) {
+                            return true;
+                        }
+                        return str_contains($stepRoleName, 'hr') || str_contains($stepRoleName, 'admin');
+                    }
+
+                    // For overtime, leave, permit, shift_swap, attendance_correction:
+                    // Any supervisor or manager explicitly granted approval permission can approve
+                    return true;
+                }
+
+                return false;
 
             case 'user':
-                return $approver->id === $step->approver_user_id;
+                return $approver->id === $step->approver_user_id
+                    || ($hasModulePermission && ($approver->role_id === 1 || str_contains(strtolower($approver->role?->name ?? ''), 'admin')));
 
             default:
                 return false;

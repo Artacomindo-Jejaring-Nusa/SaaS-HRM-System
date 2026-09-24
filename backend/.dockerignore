@@ -24,3 +24,4 @@ database/database.sqlite
 database/database.sqlite-journal
 vendor/
 bootstrap/cache/*.php
+public/storage

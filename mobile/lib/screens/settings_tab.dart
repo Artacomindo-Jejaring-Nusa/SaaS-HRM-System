@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_service.dart';
 import '../services/notification_service.dart';
+import 'face_registration_screen.dart';
 import '../main.dart'; // Import global notifiers
 
 class SettingsTab extends StatefulWidget {
@@ -11,7 +12,7 @@ class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key, required this.onLogout});
 
   @override
-  _SettingsTabState createState() => _SettingsTabState();
+  State<SettingsTab> createState() => _SettingsTabState();
 }
 
 class _SettingsTabState extends State<SettingsTab> {
@@ -84,28 +85,35 @@ class _SettingsTabState extends State<SettingsTab> {
                       }
 
                       setDialogState(() => isLoading = true);
+                      final messenger = ScaffoldMessenger.of(context);
                       final result = await ApiService.changePassword(
                         currentController.text,
                         newController.text,
                         confirmController.text,
                       );
-                      setDialogState(() => isLoading = false);
+                      if (ctx.mounted) {
+                        setDialogState(() => isLoading = false);
+                      }
 
                       if (result['success']) {
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        if (ctx.mounted) {
+                          Navigator.pop(ctx);
+                        }
+                        messenger.showSnackBar(
                           SnackBar(
                             content: Text(result['message']),
                             backgroundColor: Colors.green,
                           ),
                         );
                       } else {
-                        ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(
-                            content: Text(result['message']),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(
+                              content: Text(result['message']),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
                       }
                     },
               style: ElevatedButton.styleFrom(
@@ -250,6 +258,7 @@ class _SettingsTabState extends State<SettingsTab> {
         languageNotifier.value = code;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('language', code);
+        if (!mounted) return;
         Navigator.pop(context);
         setState(() {});
       },
@@ -274,6 +283,19 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
 
           _buildSection("Akun & Keamanan"),
+          _buildSettingItem(
+            Icons.face_retouching_natural,
+            "Pendaftaran Wajah (AI)",
+            "Daftarkan atau cek status verifikasi wajah",
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const FaceRegistrationScreen(),
+                ),
+              );
+            },
+          ),
           _buildSettingItem(
             Icons.lock_reset_outlined,
             "Ganti Kata Sandi",
@@ -435,7 +457,7 @@ class _SettingsTabState extends State<SettingsTab> {
       leading: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: maroon.withOpacity(0.05),
+          color: maroon.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(icon, color: maroon, size: 24),
@@ -452,7 +474,7 @@ class _SettingsTabState extends State<SettingsTab> {
           ? Switch(
               value: switchValue,
               onChanged: onSwitchChanged,
-              activeColor: maroon,
+              activeThumbColor: maroon,
             )
           : (value != null
                 ? Text(

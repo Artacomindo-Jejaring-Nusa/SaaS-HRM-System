@@ -29,6 +29,8 @@ class LeaveController extends Controller
         'Kematian Keluarga Serumah' => ['days' => 1, 'paid' => true, 'article' => self::ARTICLE_PASAL_93, 'uses_quota' => false],
         'Haid (Hari 1 & 2)' => ['days' => 2, 'paid' => true, 'article' => 'Pasal 81 UU No. 13/2003', 'uses_quota' => false],
         'Cuti Besar/Panjang' => ['days' => 0, 'paid' => false, 'article' => 'Pasal 79 UU No. 13/2003', 'uses_quota' => false],
+        'Cuti Alasan Penting' => ['days' => 0, 'paid' => true, 'article' => self::ARTICLE_PASAL_93, 'uses_quota' => true],
+        'Lainnya' => ['days' => 0, 'paid' => true, 'article' => 'Kebijakan Perusahaan', 'uses_quota' => true],
     ];
 
     public function index(Request $request): \Illuminate\Http\JsonResponse
@@ -95,7 +97,12 @@ class LeaveController extends Controller
         $user = $request->user();
         $companyId = $user->company_id;
 
-        $typeMeta = self::KEMNAKER_LEAVE_TYPES[$request->type] ?? null;
+        $typeMeta = self::KEMNAKER_LEAVE_TYPES[$request->type] ?? [
+            'days' => 0,
+            'paid' => true,
+            'article' => 'Kebijakan Perusahaan',
+            'uses_quota' => false,
+        ];
         $requestedDays = Carbon::parse($request->start_date)->diffInDays(Carbon::parse($request->end_date)) + 1;
 
         $validationError = $this->validateLeaveRequest($user, $request, $typeMeta, $requestedDays);
@@ -106,7 +113,7 @@ class LeaveController extends Controller
             ], 400);
         }
 
-        $isExpandUsed = ($request->type === self::TYPE_ANNUAL_LEAVE && ($user->kemnaker_leave_balance < $requestedDays));
+        $isExpandUsed = false;
 
         // Create attributes
         $leaveAttributes = [
@@ -120,8 +127,8 @@ class LeaveController extends Controller
             'emergency_phone' => $request->emergency_phone,
             'signature' => $request->signature,
             'duration_days' => $requestedDays,
-            'is_paid' => $typeMeta['paid'],
-            'kemnaker_article' => $typeMeta['article'],
+            'is_paid' => $typeMeta['paid'] ?? true,
+            'kemnaker_article' => $typeMeta['article'] ?? 'Kebijakan Perusahaan',
         ];
 
         // ── Dynamic Workflow Check ──
@@ -253,13 +260,7 @@ class LeaveController extends Controller
         $leave->update($updateData);
 
         if ($result['is_final'] && $result['status'] === 'approved') {
-            if ($leave->type === self::TYPE_ANNUAL_LEAVE) {
-                $days = Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1;
-                $leaveUser = $leave->user;
-                $leaveUser->leave_balance = max(0, $leaveUser->leave_balance - $days);
-                $leaveUser->leave_used += $days;
-                $leaveUser->save();
-            }
+            self::processLeaveApprovalDeduction($leave);
 
             $this->notify(
                 $leave->user,
@@ -369,13 +370,7 @@ class LeaveController extends Controller
      */
     private function finalizeLeaveApproval(Leave $leave): \Illuminate\Http\JsonResponse
     {
-        if ($leave->type === self::TYPE_ANNUAL_LEAVE) {
-            $days      = Carbon::parse($leave->start_date)->diffInDays(Carbon::parse($leave->end_date)) + 1;
-            $leaveUser = $leave->user;
-            $leaveUser->leave_balance = max(0, $leaveUser->leave_balance - $days);
-            $leaveUser->leave_used += $days;
-            $leaveUser->save();
-        }
+        self::processLeaveApprovalDeduction($leave);
 
         $this->notify(
             $leave->user,
@@ -385,6 +380,22 @@ class LeaveController extends Controller
         );
 
         return $this->successResponse(null, 'Permohonan cuti disetujui.');
+    }
+
+    /**
+     * Helper to process leave approval deduction (disabled automatic decrement per requirements).
+     */
+    public static function processLeaveApprovalDeduction(Leave $leave): void
+    {
+        // Decrement otomatis jatah cuti tahunan dihilangkan
+    }
+
+    /**
+     * Helper to refund leave balance if approved leave is rejected or deleted.
+     */
+    public static function processLeaveApprovalRefund(Leave $leave): void
+    {
+        // No refund needed since automatic deduction is disabled
     }
 
     /**
@@ -487,19 +498,25 @@ class LeaveController extends Controller
     public function destroy(Request $request, $id): \Illuminate\Http\JsonResponse
     {
         $user = $request->user();
-        $leave = Leave::where(function ($q) use ($user) {
-            if ($user->role_id !== 1) {
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+
+        $leave = Leave::where(function ($q) use ($user, $isSuperAdmin) {
+            if (!$isSuperAdmin && !$user->canAccessAllCompanies()) {
                 $q->where('company_id', $user->company_id);
             }
         })->findOrFail($id);
 
-        if (! in_array($leave->status, ['pending', 'pending_supervisor', 'pending_hr']) && $user->role_id !== 1) {
+        if (! $isSuperAdmin && ! in_array($leave->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
             return $this->errorResponse('Cuti yang sudah diproses tidak bisa dihapus.', 403);
+        }
+
+        if ($leave->status === 'approved') {
+            self::processLeaveApprovalRefund($leave);
         }
 
         $leave->delete();
 
-        return $this->successResponse(null, 'Cuti berhasil dihapus.');
+        return $this->successResponse(null, 'Permohonan cuti berhasil dihapus.');
     }
 
     public function getLeaveTypes(): \Illuminate\Http\JsonResponse
@@ -512,37 +529,8 @@ class LeaveController extends Controller
 
     private function validateLeaveRequest(User $user, Request $request, ?array $typeMeta, int $requestedDays): ?string
     {
-        $error = null;
-
-        if (!$typeMeta) {
-            $error = 'Tipe cuti tidak valid menurut ketentuan ketenagakerjaan.';
-        } elseif ($typeMeta['days'] > 0 && $requestedDays > $typeMeta['days']) {
-            $error = "Durasi cuti {$request->type} melebihi batas maksimal UU Ketenagakerjaan ({$typeMeta['days']} hari).";
-        } elseif ($request->type === self::TYPE_ANNUAL_LEAVE) {
-            $error = $this->validateAnnualLeaveBalance($user, $requestedDays);
-        }
-
-        return $error;
-    }
-
-    private function validateAnnualLeaveBalance(User $user, int $requestedDays): ?string
-    {
-        if (!$user->is_eligible_for_leave) {
-            return 'Anda belum berhak mengambil Cuti Tahunan karena masa kerja kurang dari 1 tahun.';
-        }
-
-        $pendingDays = Leave::where('user_id', $user->id)
-            ->where('type', self::TYPE_ANNUAL_LEAVE)
-            ->whereIn('status', ['pending', 'pending_supervisor', 'pending_hr'])
-            ->get()
-            ->sum(fn ($l) => Carbon::parse($l->start_date)->diffInDays(Carbon::parse($l->end_date)) + 1);
-
-        $requiredBalance = $requestedDays + $pendingDays;
-        if ($user->kemnaker_leave_balance < $requiredBalance) {
-            $shortfall = $requiredBalance - $user->kemnaker_leave_balance;
-            if (!($shortfall == 1 && $user->canUseExpandMendadak())) {
-                return 'Sisa cuti tahunan Anda tidak mencukupi (termasuk cuti yang masih pending/menunggu).';
-            }
+        if ($typeMeta && isset($typeMeta['days']) && $typeMeta['days'] > 0 && $requestedDays > $typeMeta['days']) {
+            return "Durasi cuti {$request->type} melebihi batas maksimal UU Ketenagakerjaan ({$typeMeta['days']} hari).";
         }
 
         return null;

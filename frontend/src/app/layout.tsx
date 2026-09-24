@@ -1,12 +1,6 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
+import "./dashboard/dashboard.css";
 
 export const metadata: Metadata = {
   title: "On Time HRMS (OT)",
@@ -22,7 +16,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${inter.className}`}>
+      <body className="font-sans antialiased">
         {children}
         <Toaster position="top-center" expand={true} richColors />
       </body>

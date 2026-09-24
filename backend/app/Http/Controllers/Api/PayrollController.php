@@ -11,6 +11,7 @@ use App\Models\PayrollBatch;
 use App\Models\PayrollSetting;
 use App\Models\Salary;
 use App\Models\User;
+use App\Services\DynamicPayrollEngine;
 use App\Services\PayrollService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -22,10 +23,12 @@ use Maatwebsite\Excel\Facades\Excel;
 class PayrollController extends Controller
 {
     protected $payrollService;
+    protected $dynamicEngine;
 
-    public function __construct(PayrollService $payrollService)
+    public function __construct(PayrollService $payrollService, DynamicPayrollEngine $dynamicEngine)
     {
         $this->payrollService = $payrollService;
+        $this->dynamicEngine = $dynamicEngine;
     }
 
     // ─────────────────────────────────────────────
@@ -36,8 +39,22 @@ class PayrollController extends Controller
     {
         $settings = PayrollSetting::firstOrCreate(
             ['company_id' => $request->user()->company_id],
-            ['cutoff_day' => 25]
+            [
+                'cutoff_day' => 25,
+                'late_deduction_enabled' => true,
+                'late_deduction_base' => 'daily_salary',
+                'late_grace_period_minutes' => 0,
+                'late_deduction_tiers' => PayrollSetting::defaultLateTiers(),
+                'absence_deduction_enabled' => true,
+                'absence_deduction_base' => 'daily_salary',
+                'absence_deduction_pct' => 100.00,
+                'absence_forfeit_allowance' => true,
+            ]
         );
+
+        if (empty($settings->late_deduction_tiers)) {
+            $settings->late_deduction_tiers = PayrollSetting::defaultLateTiers();
+        }
 
         return response()->json(['data' => $settings]);
     }
@@ -100,7 +117,7 @@ class PayrollController extends Controller
             $startDate = $endDate->copy()->subMonth()->addDay()->startOfDay();
         }
 
-        // Load employees with attendance & overtime data
+        // Load employees with attendance, overtime, permits & schedules data
         $users = User::where('company_id', $companyId)
             ->with(['role', 'attendances' => function ($q) use ($startDate, $endDate) {
                 $q->whereBetween('check_in', [$startDate, $endDate]);
@@ -114,6 +131,10 @@ class PayrollController extends Controller
                         $query->whereBetween('start_date', [$startDate->toDateString(), $endDate->toDateString()])
                             ->orWhereBetween('end_date', [$startDate->toDateString(), $endDate->toDateString()]);
                     });
+            }])
+            ->with(['schedules' => function ($q) use ($startDate, $endDate) {
+                $q->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()])
+                    ->with('shift');
             }])
             ->get();
 
@@ -145,7 +166,7 @@ class PayrollController extends Controller
             $processedCount = 0;
 
             foreach ($users as $user) {
-                $this->processEmployeePayroll($user, $companyId, $batch, $monthName, $year, $holidays, $settings, $totalWorkingDays);
+                $this->processEmployeePayroll($user, $companyId, $batch, $monthName, $year, $holidays, $settings, $totalWorkingDays, $startDate, $endDate, $monthNum);
                 $processedCount++;
             }
 
@@ -157,7 +178,7 @@ class PayrollController extends Controller
             return response()->json([
                 'message' => "Berhasil memproses $processedCount karyawan.",
                 'batch_id' => $batch->id,
-                'data' => $batch->fresh()->load('salaries.user'),
+                'data' => $batch->fresh()->load(['salaries.user', 'salaries.detailsRecords']),
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -167,35 +188,6 @@ class PayrollController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
-    }
-
-    // ─────────────────────────────────────────────
-    //  UPDATE INDIVIDUAL SALARY (HR edits)
-    // ─────────────────────────────────────────────
-
-    private function getAttendanceMetrics($attendances)
-    {
-        $totalLateDeduction = 0;
-        $totalActualWorkHours = 0;
-
-        foreach ($attendances as $att) {
-            if ($att->check_in && $att->check_out) {
-                $totalActualWorkHours += Carbon::parse($att->check_in)->diffInHours(Carbon::parse($att->check_out));
-            }
-            if ($att->check_in) {
-                $checkInTime = Carbon::parse($att->check_in);
-                $lateThreshold = Carbon::parse($att->check_in)->setTime(9, 0, 0);
-                if ($checkInTime->gt($lateThreshold)) {
-                    $totalLateDeduction += (($checkInTime->diffInMinutes($lateThreshold) / 60) * 50000);
-                }
-            }
-        }
-
-        return [
-            'actual_work_hours' => $totalActualWorkHours,
-            'late_deduction' => $totalLateDeduction,
-            'attended_days' => $attendances->filter(fn($a) => $a->check_in)->count()
-        ];
     }
 
     private function getOvertimeMetrics($overtimes, $holidays, $regularRate, $holidayRate)
@@ -213,14 +205,37 @@ class PayrollController extends Controller
         return ['hours' => $totalOvertimeHours, 'amount' => $overtimeAmount];
     }
 
-    private function processEmployeePayroll($user, $companyId, $batch, $monthName, $year, $holidays, $settings, $totalWorkingDays)
+    private function processEmployeePayroll($user, $companyId, $batch, $monthName, $year, $holidays, $settings, $totalWorkingDays, $startDate, $endDate, $monthNum)
     {
         $basicSalary = (float) ($user->basic_salary ?? 0);
-        
-        $attMetrics = $this->getAttendanceMetrics($user->attendances);
-        $totalActualWorkHours = $attMetrics['actual_work_hours'];
-        $totalLateDeduction = $attMetrics['late_deduction'];
-        $attendedDays = $attMetrics['attended_days'];
+        $totalFixedAllowance = (float) ($user->fixed_allowance ?? 0);
+
+        // Map user schedules by date
+        $schedulesMap = [];
+        if ($user->schedules) {
+            foreach ($user->schedules as $sched) {
+                $schedulesMap[$sched->date] = $sched;
+            }
+        }
+
+        $attendedDays = $user->attendances->filter(fn($a) => $a->check_in)->count();
+        $totalActualWorkHours = 0;
+        foreach ($user->attendances as $att) {
+            if ($att->check_in && $att->check_out) {
+                $totalActualWorkHours += Carbon::parse($att->check_in)->diffInHours(Carbon::parse($att->check_out));
+            }
+        }
+
+        // Calculate flexible late deduction using PayrollService
+        $lateResult = $this->payrollService->calculateLateDeduction(
+            $user->attendances,
+            $schedulesMap,
+            $basicSalary,
+            $totalWorkingDays,
+            $totalFixedAllowance,
+            $settings
+        );
+        $totalLateDeduction = $lateResult['amount'];
 
         $paidLeaveDays = 0;
         foreach ($user->permits as $permit) {
@@ -230,7 +245,15 @@ class PayrollController extends Controller
         }
 
         $absentDays = max(0, $totalWorkingDays - ($attendedDays + $paidLeaveDays));
-        $totalAbsenceDeduction = $absentDays * ($totalWorkingDays > 0 ? ($basicSalary / $totalWorkingDays) : 0);
+
+        // Calculate flexible absence deduction using PayrollService
+        $absenceResult = $this->payrollService->calculateAbsenceDeduction(
+            $absentDays,
+            $totalWorkingDays,
+            $basicSalary,
+            $settings
+        );
+        $totalAbsenceDeduction = $absenceResult['amount'];
 
         $regularRate = $settings->overtime_rate_per_hour ?? 30000;
         $holidayRate = $settings->overtime_rate_holiday_per_hour ?? 50000;
@@ -252,7 +275,6 @@ class PayrollController extends Controller
         $salary->working_days = $attendedDays;
         $salary->total_working_days = $totalWorkingDays;
         $salary->earning_bpjs_kes_premium = $bpjs['kesehatan']['company'] ?? 0;
-        $totalFixedAllowance = (float) ($user->fixed_allowance ?? 0);
         $salary->earning_attendance_allowance = $attendedDays * ($totalWorkingDays > 0 ? ($totalFixedAllowance / $totalWorkingDays) : 0);
         $salary->earning_overtime = $overtimeAmount;
         $salary->deduction_bpjs_jht = $bpjs['jht']['employee'] ?? 0;
@@ -270,7 +292,6 @@ class PayrollController extends Controller
         
         // If Gross Up, we need to add the tax allowance as an earning so it offsets the tax deduction!
         if (strtoupper($taxMethod) === 'GROSS_UP' && $taxResult['tax'] > 0) {
-            // Put tax allowance into earining_others or we can just add it to a separate premium
             $salary->earning_others = ($salary->earning_others ?? 0) + $taxResult['tax'];
             $salary->earning_others_note = trim(($salary->earning_others_note ?? '') . ' Tunjangan Pajak (Gross-Up)');
         }
@@ -292,9 +313,41 @@ class PayrollController extends Controller
             'overtime' => $overtimeAmount,
             'total_work_hours' => $totalActualWorkHours,
             'total_overtime_hours' => $totalOvertimeHours,
+            'discipline' => [
+                'late' => $lateResult,
+                'absence' => $absenceResult,
+            ],
             'breakdown' => ['gross' => $salary->total_earnings, 'net' => $salary->net_salary],
         ]);
         $salary->save();
+
+        // Generate immutable snapshot in payslip_details
+        $context = [
+            'basic_salary' => $basicSalary,
+            'gross_salary' => $salary->total_earnings,
+            'attended_days' => $attendedDays,
+            'total_working_days' => $totalWorkingDays,
+            'absent_days' => $absentDays,
+            'overtime_hours' => $totalOvertimeHours,
+            'late_minutes' => $lateResult['total_late_minutes'] ?? 0,
+            'tenure_years' => $user->join_date ? Carbon::parse($user->join_date)->diffInYears($startDate) : 0,
+        ];
+
+        $dynamicResults = $this->dynamicEngine->generateSnapshotDetails(
+            $salary,
+            $user,
+            $context,
+            $startDate,
+            $endDate,
+            $monthNum,
+            (int) $year
+        );
+
+        if ($dynamicResults['dynamic_earnings'] > 0) {
+            $salary->earning_others = ($salary->earning_others ?? 0) + $dynamicResults['dynamic_earnings'];
+            $salary->calculateTotals();
+            $salary->save();
+        }
     }
 
     public function updateSalary(Request $request, $id)
@@ -311,7 +364,7 @@ class PayrollController extends Controller
             'earning_communication_allowance', 'earning_shift_premium',
             'earning_shift_meal', 'earning_overtime', 'earning_operational',
             'earning_diligence_bonus', 'earning_backpay', 'earning_others',
-            'earning_others_note', 'deduction_absence', 'cost_center',
+            'earning_others_note', 'deduction_absence', 'deduction_late', 'cost_center',
             'bank_name', 'bank_account_no', 'bank_account_name',
         ];
 
@@ -357,7 +410,7 @@ class PayrollController extends Controller
     public function getBatchDetail(Request $request, $id)
     {
         $batch = PayrollBatch::where('company_id', $request->user()->company_id)
-            ->with(['salaries.user', 'creator', 'approver'])
+            ->with(['salaries.user', 'salaries.detailsRecords', 'creator', 'approver'])
             ->findOrFail($id);
 
         return response()->json(['data' => $batch]);
@@ -558,7 +611,7 @@ class PayrollController extends Controller
 
     public function downloadSlip(Request $request, $id)
     {
-        $salary = Salary::with(['user', 'user.company', 'user.role', 'batch.creator'])->findOrFail($id);
+        $salary = Salary::with(['user', 'user.company', 'user.role', 'batch.creator', 'detailsRecords'])->findOrFail($id);
 
         $user = $request->user();
 
@@ -589,7 +642,7 @@ class PayrollController extends Controller
      */
     public function previewSlip(Request $request, $id)
     {
-        $salary = Salary::with(['user', 'user.company', 'user.role', 'batch.creator'])->findOrFail($id);
+        $salary = Salary::with(['user', 'user.company', 'user.role', 'batch.creator', 'detailsRecords'])->findOrFail($id);
 
         $user = $request->user();
 

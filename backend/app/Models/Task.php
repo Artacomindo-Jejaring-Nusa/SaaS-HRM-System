@@ -16,6 +16,8 @@ class Task extends Model
         'description',
         'deadline',
         'status',
+        'current_approval_step',
+        'approved_by',
         'priority',
     ];
 
@@ -29,6 +31,11 @@ class Task extends Model
     public function assigner()
     {
         return $this->belongsTo(User::class, 'assigned_by');
+    }
+
+    public function approver()
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     public function activities()

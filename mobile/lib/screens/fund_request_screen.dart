@@ -337,6 +337,8 @@ class _FundRequestScreenState extends State<FundRequestScreen> {
 
   Widget _buildRequestCard(dynamic request) {
     final status = request['status'].toString();
+    final step = request['current_approval_step'];
+    final stepInfo = request['current_step_info'];
     Color statusColor = Colors.orange;
     String statusText = status.toUpperCase();
 
@@ -346,11 +348,12 @@ class _FundRequestScreenState extends State<FundRequestScreen> {
     } else if (status == 'rejected') {
       statusColor = Colors.red;
       statusText = "DITOLAK";
-    } else if (status == 'approved_by_supervisor') {
+    } else if (status == 'approved_by_supervisor' || (step != null && (int.tryParse(step.toString()) ?? 1) > 1)) {
       statusColor = Colors.blue;
-      statusText = "ACC SPV";
+      final stepNum = step != null ? (int.tryParse(step.toString()) ?? 1) : 2;
+      statusText = stepInfo != null ? "ACC SPV (TAHAP ${stepInfo['step_number']}/${stepInfo['total_steps']})" : "ACC SPV (TAHAP $stepNum)";
     } else {
-      statusText = "PENDING";
+      statusText = "MENUNGGU SPV";
     }
 
     return Container(

@@ -398,50 +398,70 @@
 
         {{-- ═══ TWO-COLUMN SALARY LAYOUT ═══ --}}
         @php
-            // Build earnings list
             $earningItems = [];
-            $earningItems[] = ['label' => 'Gaji Pokok', 'value' => $salary->basic_salary];
-            $earningItems[] = ['label' => 'Tunjangan Jabatan', 'value' => $salary->earning_position_allowance ?? 0];
-            if ($salary->earning_attendance_allowance > 0) {
-                $earningItems[] = ['label' => 'Tunjangan Kehadiran', 'value' => $salary->earning_attendance_allowance];
-            }
-            $earningItems[] = ['label' => 'Tunjangan Pulsa', 'value' => $salary->earning_communication_allowance ?? 0];
-            if ($salary->earning_shift_premium > 0) {
-                $earningItems[] = ['label' => 'Premi Shift', 'value' => $salary->earning_shift_premium];
-            }
-            if ($salary->earning_shift_meal > 0) {
-                $earningItems[] = ['label' => 'UM Shift Malam', 'value' => $salary->earning_shift_meal];
-            }
-            if ($salary->earning_overtime > 0) {
-                $earningItems[] = ['label' => 'Lembur', 'value' => $salary->earning_overtime];
-            }
-            if ($salary->earning_operational > 0) {
-                $earningItems[] = ['label' => 'Operasional', 'value' => $salary->earning_operational];
-            }
-            if ($salary->earning_diligence_bonus > 0) {
-                $earningItems[] = ['label' => 'Kerajinan', 'value' => $salary->earning_diligence_bonus];
-            }
-            if ($salary->earning_backpay > 0) {
-                $earningItems[] = ['label' => 'Rapel', 'value' => $salary->earning_backpay];
-            }
-            if ($salary->earning_bpjs_kes_premium > 0) {
-                $earningItems[] = ['label' => 'Premi BPJS Kesehatan', 'value' => $salary->earning_bpjs_kes_premium];
-            }
-            $earningItems[] = ['label' => $salary->earning_others_note ?? 'Tunjangan Lain-lain', 'value' => $salary->earning_others ?? 0];
-
-            // Build deductions list
             $deductionItems = [];
-            if ($salary->deduction_bpjs_jht > 0) {
-                $deductionItems[] = ['label' => 'BPJS JHT (2%)', 'value' => $salary->deduction_bpjs_jht];
-            }
-            if ($salary->deduction_bpjs_jp > 0) {
-                $deductionItems[] = ['label' => 'BPJS JP (1%)', 'value' => $salary->deduction_bpjs_jp];
-            }
-            if ($salary->deduction_absence > 0) {
-                $deductionItems[] = ['label' => 'Potongan Absensi', 'value' => $salary->deduction_absence];
-            }
-            if ($salary->deduction_tax > 0) {
-                $deductionItems[] = ['label' => 'PPh 21 (Dibayarkan Perusahaan)', 'value' => $salary->deduction_tax];
+
+            if ($salary->relationLoaded('detailsRecords') && $salary->detailsRecords->isNotEmpty()) {
+                foreach ($salary->detailsRecords->where('type', 'earning') as $det) {
+                    $lbl = $det->component_name . ($det->note ? ' (' . $det->note . ')' : '');
+                    $earningItems[] = ['label' => $lbl, 'value' => (float) $det->amount];
+                }
+                foreach ($salary->detailsRecords->where('type', 'deduction') as $det) {
+                    $lbl = $det->component_name . ($det->note ? ' (' . $det->note . ')' : '');
+                    $deductionItems[] = ['label' => $lbl, 'value' => (float) $det->amount];
+                }
+            } else {
+                // Fallback for legacy salaries generated before dynamic engine
+                $earningItems[] = ['label' => 'Gaji Pokok', 'value' => $salary->basic_salary];
+                if (($salary->earning_position_allowance ?? 0) > 0) {
+                    $earningItems[] = ['label' => 'Tunjangan Jabatan', 'value' => $salary->earning_position_allowance];
+                }
+                if ($salary->earning_attendance_allowance > 0) {
+                    $earningItems[] = ['label' => 'Tunjangan Kehadiran', 'value' => $salary->earning_attendance_allowance];
+                }
+                if (($salary->earning_communication_allowance ?? 0) > 0) {
+                    $earningItems[] = ['label' => 'Tunjangan Pulsa', 'value' => $salary->earning_communication_allowance];
+                }
+                if ($salary->earning_shift_premium > 0) {
+                    $earningItems[] = ['label' => 'Premi Shift', 'value' => $salary->earning_shift_premium];
+                }
+                if ($salary->earning_shift_meal > 0) {
+                    $earningItems[] = ['label' => 'UM Shift Malam', 'value' => $salary->earning_shift_meal];
+                }
+                if ($salary->earning_overtime > 0) {
+                    $earningItems[] = ['label' => 'Lembur', 'value' => $salary->earning_overtime];
+                }
+                if ($salary->earning_operational > 0) {
+                    $earningItems[] = ['label' => 'Operasional', 'value' => $salary->earning_operational];
+                }
+                if ($salary->earning_diligence_bonus > 0) {
+                    $earningItems[] = ['label' => 'Kerajinan', 'value' => $salary->earning_diligence_bonus];
+                }
+                if ($salary->earning_backpay > 0) {
+                    $earningItems[] = ['label' => 'Rapel', 'value' => $salary->earning_backpay];
+                }
+                if ($salary->earning_bpjs_kes_premium > 0) {
+                    $earningItems[] = ['label' => 'Premi BPJS Kesehatan', 'value' => $salary->earning_bpjs_kes_premium];
+                }
+                if (($salary->earning_others ?? 0) > 0) {
+                    $earningItems[] = ['label' => $salary->earning_others_note ?? 'Tunjangan Lain-lain', 'value' => $salary->earning_others];
+                }
+
+                if ($salary->deduction_bpjs_jht > 0) {
+                    $deductionItems[] = ['label' => 'BPJS JHT (2%)', 'value' => $salary->deduction_bpjs_jht];
+                }
+                if ($salary->deduction_bpjs_jp > 0) {
+                    $deductionItems[] = ['label' => 'BPJS JP (1%)', 'value' => $salary->deduction_bpjs_jp];
+                }
+                if ($salary->deduction_absence > 0) {
+                    $deductionItems[] = ['label' => 'Potongan Absensi', 'value' => $salary->deduction_absence];
+                }
+                if ($salary->deduction_late > 0) {
+                    $deductionItems[] = ['label' => 'Potongan Terlambat', 'value' => $salary->deduction_late];
+                }
+                if ($salary->deduction_tax > 0) {
+                    $deductionItems[] = ['label' => 'PPh 21 (Dibayarkan Perusahaan)', 'value' => $salary->deduction_tax];
+                }
             }
         @endphp
 
@@ -473,19 +493,13 @@
                         <td class="section-header">Komponen Potongan</td>
                         <td class="section-header-right">Jumlah</td>
                     </tr>
-                    @if(count($deductionItems) > 0 || $salary->deduction_late > 0)
+                    @if(count($deductionItems) > 0)
                         @foreach($deductionItems as $item)
                         <tr>
                             <td class="item-label">{{ $item['label'] }}</td>
                             <td class="item-amount">Rp {{ number_format($item['value'], 0, ',', '.') }}</td>
                         </tr>
                         @endforeach
-                        @if($salary->deduction_late > 0)
-                        <tr>
-                            <td class="item-label">Potongan Terlambat</td>
-                            <td class="item-amount">Rp {{ number_format($salary->deduction_late, 0, ',', '.') }}</td>
-                        </tr>
-                        @endif
                     @else
                         <tr>
                             <td class="item-label" style="color:#999; font-style:italic;">Tidak ada potongan</td>

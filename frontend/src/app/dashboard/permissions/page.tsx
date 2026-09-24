@@ -26,11 +26,37 @@ export default function PermissionsPage() {
     fetchPermissions();
   }, []);
 
+  const SUPERADMIN_ONLY_SLUGS = [
+    'create-employees',
+    'edit-employees',
+    'delete-employees',
+    'manage-company',
+    'manage-roles',
+    'manage-wfh',
+    'manage-offices',
+    'view-directory',
+    'manage-shifts',
+    'manage-schedules',
+    'manage-holidays',
+    'manage-announcements',
+    'manage-approvals',
+    'manage-documents',
+    'manage-kpis',
+  ];
+
   const fetchPermissions = async () => {
     try {
       setLoading(true);
       const response = await axiosInstance.get("/permissions");
-      setPermissionsGrouped(response.data.data);
+      const raw = response.data.data || {};
+      const cleanGrouped: Record<string, Permission[]> = {};
+      Object.entries(raw).forEach(([group, perms]: [string, any]) => {
+        const filtered = perms.filter((p: Permission) => !SUPERADMIN_ONLY_SLUGS.includes(p.slug));
+        if (filtered.length > 0) {
+          cleanGrouped[group] = filtered;
+        }
+      });
+      setPermissionsGrouped(cleanGrouped);
     } catch (e) {
       console.error("Gagal mengambil data hak akses", e);
     } finally {

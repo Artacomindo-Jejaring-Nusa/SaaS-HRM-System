@@ -105,9 +105,41 @@ interface DashboardData {
   }>;
 }
 
+const defaultDashboardData: DashboardData = {
+  summary: {
+    total_employees: 0,
+    present_today: 0,
+    late_today: 0,
+    on_leave_today: 0,
+    absent_today: 0,
+  },
+  pending_approvals: {
+    leaves: 0,
+    overtimes: 0,
+    reimbursements: 0,
+  },
+  attendance_trends: [],
+  upcoming_holidays: [],
+  recent_announcements: [],
+  upcoming_birthdays: [],
+  recent_activities: [],
+  role_distribution: [],
+  today_attendance: [],
+  attendance_stats: {
+    percentage: 0,
+    late_count: 0,
+    total_hours: 0,
+    work_days: 0,
+  },
+  calendar_events: [],
+  monthly_breakdown: [],
+  overtime_summary: [],
+  leave_distribution: [],
+};
+
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, hasPermission, loading: authLoading } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewEmployeeId, setViewEmployeeId] = useState<string | null>(null);
@@ -118,19 +150,31 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function fetchData() {
+      if (authLoading) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        const dashRes = await axiosInstance.get("/dashboard/summary");
-        setData(dashRes.data.data);
+        setLoading(true);
+        const dashRes = await axiosInstance.get("/dashboard/summary", { timeout: 10000 });
+        if (dashRes.data?.data) {
+          setData(dashRes.data.data);
+        } else {
+          setData((prev) => prev || defaultDashboardData);
+        }
       } catch (e) {
-        console.error("Gagal mendapatkan data", e);
+        console.error("Gagal mendapatkan data dashboard", e);
+        setData((prev) => prev || defaultDashboardData);
       } finally {
         setLoading(false);
       }
     }
     fetchData();
-  }, []);
+  }, [user, authLoading]);
 
-  if (loading || authLoading) {
+  if (authLoading || (loading && !data)) {
     return <DashboardSkeleton />;
   }
 
@@ -467,27 +511,29 @@ export default function DashboardPage() {
 
       </div>
 
-      {/* REAL-TIME ACTIVITY SECTION */}
-      <div className="grid grid-cols-1 mb-6">
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm overflow-hidden">
-           <div className="flex items-center justify-between mb-6">
-             <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
-               <div className="w-1.5 h-4 bg-[#8B0000] rounded-full"></div>
-               Real-time Live Location
-             </h3>
-             <button 
-              onClick={() => router.push('/dashboard/attendance/map')} 
-              className="text-[10px] font-black text-[#8B0000] hover:underline uppercase tracking-widest"
-             >
-               View Full Map
-             </button>
-           </div>
-           {/* Add 'isolate z-0' here so Leaflet's high z-index panes don't overlap the fixed page header */}
-           <div className="h-[400px] w-full rounded-xl overflow-hidden border border-gray-50 relative isolate z-0">
-              <AttendanceMap />
-           </div>
+      {/* REAL-TIME ACTIVITY SECTION (Super Admin Only) */}
+      {hasPermission('view-attendance-map') && (
+        <div className="grid grid-cols-1 mb-6">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm overflow-hidden">
+             <div className="flex items-center justify-between mb-6">
+               <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                 <div className="w-1.5 h-4 bg-[#8B0000] rounded-full"></div>
+                 Real-time Live Location
+               </h3>
+               <button 
+                onClick={() => router.push('/dashboard/attendance/map')} 
+                className="text-[10px] font-black text-[#8B0000] hover:underline uppercase tracking-widest"
+               >
+                 View Full Map
+               </button>
+             </div>
+             {/* Add 'isolate z-0' here so Leaflet's high z-index panes don't overlap the fixed page header */}
+             <div className="h-[400px] w-full rounded-xl overflow-hidden border border-gray-50 relative isolate z-0">
+                <AttendanceMap />
+             </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ANALYTICS CHARTS ROW */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">

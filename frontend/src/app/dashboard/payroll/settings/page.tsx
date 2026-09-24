@@ -6,9 +6,18 @@ import {
   Save, ShieldCheck, Percent, Calendar, 
   Info, Loader2, AlertTriangle, CheckCircle2,
   Settings as SettingIcon, Coins, Landmark,
-  Wallet, TrendingUp, HelpCircle
+  Wallet, TrendingUp, HelpCircle, Plus, Trash2,
+  Clock, UserX, Calculator, ArrowRight, Sliders
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { toast } from "sonner";
+
+interface LateTier {
+  min_minutes: number;
+  max_minutes: number;
+  penalty_type: 'percentage' | 'fixed';
+  penalty_value: number;
+}
 
 export default function PayrollSettingsPage() {
   const { t } = useLanguage();
@@ -24,8 +33,30 @@ export default function PayrollSettingsPage() {
     bpjs_jp_emp_pct: 1,
     bpjs_jkm_pct: 0.3,
     bpjs_jkk_pct: 0.24,
-    tax_method: 'TER (PP 58/2023)'
+    tax_method: 'TER',
+    overtime_rate_per_hour: 30000,
+    overtime_rate_holiday_per_hour: 50000,
+    // Disciplinary & Late settings
+    late_deduction_enabled: true,
+    late_deduction_base: 'daily_salary',
+    late_grace_period_minutes: 0,
+    late_deduction_tiers: [
+      { min_minutes: 1, max_minutes: 15, penalty_type: 'percentage', penalty_value: 0.5 },
+      { min_minutes: 16, max_minutes: 30, penalty_type: 'percentage', penalty_value: 1.0 },
+      { min_minutes: 31, max_minutes: 60, penalty_type: 'percentage', penalty_value: 2.5 },
+      { min_minutes: 61, max_minutes: 9999, penalty_type: 'percentage', penalty_value: 5.0 },
+    ],
+    absence_deduction_enabled: true,
+    absence_deduction_base: 'daily_salary',
+    absence_deduction_pct: 100,
+    absence_forfeit_allowance: true,
   });
+
+  // Simulation state
+  const [simSalary, setSimSalary] = useState(6000000);
+  const [simWorkDays, setSimWorkDays] = useState(22);
+  const [simLateMin, setSimLateMin] = useState(25);
+  const [simAbsentDays, setSimAbsentDays] = useState(1);
 
   useEffect(() => {
     fetchSettings();
@@ -35,13 +66,58 @@ export default function PayrollSettingsPage() {
     try {
       const res = await axiosInstance.get('/payroll/settings');
       if (res.data.data) {
-        setSettings(res.data.data);
+        const d = res.data.data;
+        setSettings({
+          ...d,
+          late_deduction_enabled: d.late_deduction_enabled ?? true,
+          late_deduction_base: d.late_deduction_base ?? 'daily_salary',
+          late_grace_period_minutes: d.late_grace_period_minutes ?? 0,
+          late_deduction_tiers: Array.isArray(d.late_deduction_tiers) && d.late_deduction_tiers.length > 0 
+            ? d.late_deduction_tiers 
+            : [
+                { min_minutes: 1, max_minutes: 15, penalty_type: 'percentage', penalty_value: 0.5 },
+                { min_minutes: 16, max_minutes: 30, penalty_type: 'percentage', penalty_value: 1.0 },
+                { min_minutes: 31, max_minutes: 60, penalty_type: 'percentage', penalty_value: 2.5 },
+                { min_minutes: 61, max_minutes: 9999, penalty_type: 'percentage', penalty_value: 5.0 },
+              ],
+          absence_deduction_enabled: d.absence_deduction_enabled ?? true,
+          absence_deduction_base: d.absence_deduction_base ?? 'daily_salary',
+          absence_deduction_pct: d.absence_deduction_pct ?? 100,
+          absence_forfeit_allowance: d.absence_forfeit_allowance ?? true,
+        });
       }
     } catch (e) {
       console.error(e);
+      toast.error("Gagal memuat pengaturan payroll");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAddTier = () => {
+    const currentTiers: LateTier[] = [...(settings.late_deduction_tiers || [])];
+    const lastTier = currentTiers[currentTiers.length - 1];
+    const newMin = lastTier ? Number(lastTier.max_minutes) + 1 : 1;
+    const newMax = newMin + 30;
+
+    setSettings({
+      ...settings,
+      late_deduction_tiers: [
+        ...currentTiers,
+        { min_minutes: newMin, max_minutes: newMax, penalty_type: 'percentage', penalty_value: 1.0 }
+      ]
+    });
+  };
+
+  const handleRemoveTier = (index: number) => {
+    const updated = settings.late_deduction_tiers.filter((_: any, i: number) => i !== index);
+    setSettings({ ...settings, late_deduction_tiers: updated });
+  };
+
+  const handleTierChange = (index: number, field: keyof LateTier, value: any) => {
+    const updated = [...settings.late_deduction_tiers];
+    updated[index] = { ...updated[index], [field]: value };
+    setSettings({ ...settings, late_deduction_tiers: updated });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -49,13 +125,42 @@ export default function PayrollSettingsPage() {
     setSaving(true);
     try {
       await axiosInstance.post('/payroll/settings', settings);
-      alert("Settings updated successfully!");
+      toast.success("Konfigurasi payroll dan pemotongan disiplin berhasil disimpan!");
     } catch (e) {
-      alert("Failed to update settings");
+      toast.error("Gagal menyimpan konfigurasi");
     } finally {
       setSaving(false);
     }
   };
+
+  // Simulation calculation
+  const simDailySalary = simWorkDays > 0 ? (simSalary / simWorkDays) : 0;
+  let simLatePenalty = 0;
+  let simMatchedTier: LateTier | null = null;
+  if (settings.late_deduction_enabled && simLateMin > (settings.late_grace_period_minutes || 0)) {
+    const tiers: LateTier[] = settings.late_deduction_tiers || [];
+    for (const tier of tiers) {
+      if (simLateMin >= tier.min_minutes && simLateMin <= tier.max_minutes) {
+        simMatchedTier = tier;
+        break;
+      }
+    }
+    if (!simMatchedTier && tiers.length > 0) {
+      simMatchedTier = tiers[tiers.length - 1];
+    }
+    if (simMatchedTier) {
+      if (simMatchedTier.penalty_type === 'percentage') {
+        const base = settings.late_deduction_base === 'basic_salary' ? simSalary : simDailySalary;
+        simLatePenalty = Math.round(base * (simMatchedTier.penalty_value / 100));
+      } else {
+        simLatePenalty = simMatchedTier.penalty_value;
+      }
+    }
+  }
+
+  const simAbsencePenalty = settings.absence_deduction_enabled 
+    ? Math.round(simAbsentDays * (simDailySalary * ((settings.absence_deduction_pct || 100) / 100))) 
+    : 0;
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[600px]">
@@ -64,262 +169,551 @@ export default function PayrollSettingsPage() {
   );
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-700 pb-20">
-      {/* Premium Header Section */}
+    <div className="w-full max-w-[1600px] mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-700 pb-24">
+      {/* Header Section */}
       <div className="relative overflow-hidden bg-white border border-gray-100 rounded-[2.5rem] p-10 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-2">
-            <span className="px-4 py-1.5 bg-[#8B0000]/10 text-[#8B0000] text-[10px] font-black uppercase tracking-widest rounded-full">Finance Module</span>
-            <span className="px-4 py-1.5 bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-widest rounded-full">System v2.4</span>
+            <span className="px-4 py-1.5 bg-[#8B0000]/10 text-[#8B0000] text-[10px] font-black uppercase tracking-widest rounded-full">Payroll & Discipline Policy</span>
+            <span className="px-4 py-1.5 bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-widest rounded-full">Super Admin Config</span>
           </div>
           <h1 className="text-4xl font-black text-gray-900 mb-2 tracking-tight">Configuration <span className="text-[#8B0000]">Payroll</span></h1>
-          <p className="text-gray-500 font-medium max-w-lg">Kelola kebijakan pengupahan, potongan BPJS, dan sistem perpajakan TER terbaru dengan presisi tinggi.</p>
+          <p className="text-gray-500 font-medium max-w-2xl">
+            Kelola kebijakan pengupahan, potongan disiplin (keterlambatan & alfa berbasis skala persentase/nominal), tarif BPJS, dan sistem pajak TER secara fleksibel.
+          </p>
         </div>
         
         <div className="relative z-10 flex gap-3">
           <button 
-                type="submit"
-                form="settings-form"
-                disabled={saving}
-                className="px-10 h-16 bg-[#8B0000] text-white rounded-3xl font-black flex items-center gap-4 hover:bg-[#7b0000] transition-all shadow-2xl shadow-red-200 active:scale-95 disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-                Simpan Konfigurasi
+            type="submit"
+            form="settings-form"
+            disabled={saving}
+            className="px-10 h-16 bg-[#8B0000] text-white rounded-3xl font-black flex items-center gap-4 hover:bg-[#7b0000] transition-all shadow-2xl shadow-red-200 active:scale-95 disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+            Simpan Konfigurasi
           </button>
         </div>
 
-        {/* Decorative background element */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-[#8B0000]/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
       </div>
 
-      <form id="settings-form" onSubmit={handleSubmit} className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+      <form id="settings-form" onSubmit={handleSubmit} className="space-y-8">
         
-        {/* Left Side: Policy & General */}
-        <div className="xl:col-span-5 space-y-8">
-          <div className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm space-y-8 relative overflow-hidden">
+        {/* SECTION 1: PEMOTONGAN DISIPLIN (KETERLAMBATAN & ALFA) */}
+        <div className="bg-white rounded-[2.5rem] border border-gray-100 p-8 md:p-10 shadow-sm space-y-8 relative overflow-hidden">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-6">
             <div className="flex items-center gap-4">
-               <div className="w-14 h-14 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center shadow-sm">
-                  <SettingIcon size={28} />
-               </div>
-               <div>
-                  <h3 className="text-xl font-black text-gray-900">Kebijakan Umum</h3>
-                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Global Pay Policy</p>
-               </div>
+              <div className="w-14 h-14 bg-red-50 text-[#8B0000] rounded-2xl flex items-center justify-center shadow-sm">
+                <Clock size={28} />
+              </div>
+              <div>
+                <h3 className="text-2xl font-black text-gray-900">Kebijakan Pemotongan Disiplin</h3>
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Late & Absence Deduction Matrix</p>
+              </div>
             </div>
+            <div className="flex items-center gap-4 bg-gray-50 p-2 rounded-2xl border border-gray-100">
+              <span className="text-xs font-bold text-gray-600 pl-3">Otomasi Potongan:</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={settings.late_deduction_enabled} 
+                  onChange={(e) => setSettings({ ...settings, late_deduction_enabled: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#8B0000]"></div>
+              </label>
+            </div>
+          </div>
 
-            <div className="space-y-6">
-              <div className="space-y-2 group">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
-                  Tanggal Cut-off Operasional
-                  <HelpCircle size={12} className="text-blue-300 group-hover:text-blue-500 transition-colors" />
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            {/* Left Controls: Late Basis & Grace Period */}
+            <div className="lg:col-span-4 space-y-6">
+              <div className="space-y-2">
+                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                  Basis Perhitungan Keterlambatan
+                  <HelpCircle size={12} className="text-gray-400" />
                 </label>
-                <div className="relative">
-                  <Calendar className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-[#8B0000] transition-colors" size={20} />
-                  <input 
-                    type="number"
-                    min="1" max="31"
-                    className="w-full h-16 bg-gray-50 border-2 border-transparent rounded-[1.25rem] pl-14 pr-6 font-black text-lg text-gray-700 focus:bg-white focus:border-[#8B0000]/10 focus:ring-4 focus:ring-[#8B0000]/5 transition-all outline-none"
-                    value={settings.cutoff_day}
-                    onChange={(e) => setSettings({...settings, cutoff_day: e.target.value})}
-                  />
-                </div>
-                <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50">
-                   <p className="text-[11px] text-blue-700 font-bold leading-relaxed">
-                      Sistem akan menghitung data kehadiran dan lembur hingga tanggal {settings.cutoff_day} setiap bulannya. Data setelah tanggal ini akan masuk ke penggajian bulan berikutnya.
-                   </p>
-                </div>
+                <select 
+                  className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-4 font-bold text-sm text-gray-800 focus:bg-white focus:border-[#8B0000]/10 focus:ring-4 focus:ring-[#8B0000]/5 transition-all outline-none"
+                  value={settings.late_deduction_base}
+                  onChange={(e) => setSettings({ ...settings, late_deduction_base: e.target.value })}
+                >
+                  <option value="daily_salary">Persentase dari Gaji Harian (Direkomendasikan)</option>
+                  <option value="basic_salary">Persentase dari Gaji Pokok Bulanan</option>
+                  <option value="attendance_allowance">Persentase dari Tunjangan Kehadiran Harian</option>
+                  <option value="fixed_amount">Nominal Tetap (Rp)</option>
+                </select>
+                <p className="text-[11px] text-gray-400 italic px-1">
+                  *Gaji harian dihitung otomatis: <code>Gaji Pokok / Total Hari Kerja Efektif</code>.
+                </p>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">Metode Pajak Penghasilan</label>
-                <div className="relative group">
-                  <Landmark className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-[#8B0000] transition-colors" size={20} />
-                  <select 
-                    className="w-full h-16 bg-gray-50 border-2 border-transparent rounded-[1.25rem] pl-14 pr-6 font-black text-gray-700 focus:bg-white focus:border-[#8B0000]/10 focus:ring-4 focus:ring-[#8B0000]/5 transition-all outline-none appearance-none"
-                    value={settings.tax_method}
-                    onChange={(e) => setSettings({...settings, tax_method: e.target.value})}
-                  >
-                    <option value="TER (PP 58/2023)">Tarif Efektif Rata-rata (PP 58/2023)</option>
-                    <option value="PPh 21 Pasal 17">Manual Pasal 17 (Legacy)</option>
-                  </select>
+                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                  Grace Period / Toleransi Awal (Menit)
+                </label>
+                <div className="relative">
+                  <Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
+                  <input 
+                    type="number"
+                    min="0"
+                    max="60"
+                    placeholder="0"
+                    className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl pl-12 pr-4 font-black text-gray-800 focus:bg-white focus:border-[#8B0000]/10 focus:ring-4 focus:ring-[#8B0000]/5 transition-all outline-none"
+                    value={settings.late_grace_period_minutes}
+                    onChange={(e) => setSettings({ ...settings, late_grace_period_minutes: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+                <p className="text-[11px] text-gray-400 px-1">
+                  Karyawan yang telat $\le$ {settings.late_grace_period_minutes || 0} menit tidak dikenakan denda.
+                </p>
+              </div>
+
+              {/* Absence / Alfa Configuration */}
+              <div className="p-6 bg-red-50/40 rounded-3xl border border-red-100/60 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[#8B0000]">
+                    <UserX size={20} />
+                    <span className="font-black text-sm">Potongan Alfa / Mangkir</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={settings.absence_deduction_enabled} 
+                      onChange={(e) => setSettings({ ...settings, absence_deduction_enabled: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#8B0000]"></div>
+                  </label>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                    Persentase Denda per Hari Alfa (%)
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="200"
+                      className="w-full h-12 bg-white border border-red-200 rounded-xl px-4 font-black text-gray-800 outline-none focus:ring-2 focus:ring-[#8B0000]/20"
+                      value={settings.absence_deduction_pct}
+                      onChange={(e) => setSettings({ ...settings, absence_deduction_pct: parseFloat(e.target.value) || 0 })}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-gray-400">% Gaji Harian</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    Default 100% = Memotong 1 hari gaji penuh per hari ketidakhadiran tanpa izin.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Dynamic Tier Builder */}
+            <div className="lg:col-span-8 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-black text-gray-900 text-lg">Skala Tingkatan Keterlambatan (Tiers)</h4>
+                  <p className="text-xs text-gray-400 font-medium">Tentukan rentang menit dan besaran pengurang gaji secara berjenjang.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddTier}
+                  className="px-4 py-2.5 bg-red-50 text-[#8B0000] hover:bg-[#8B0000] hover:text-white rounded-2xl font-black text-xs flex items-center gap-2 transition-all active:scale-95 shadow-sm"
+                >
+                  <Plus size={16} />
+                  Tambah Tingkatan
+                </button>
+              </div>
+
+              <div className="overflow-x-auto border border-gray-100 rounded-3xl bg-gray-50/50 p-3">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-200/60">
+                      <th className="py-3 px-3">Tingkat</th>
+                      <th className="py-3 px-3">Dari (Menit)</th>
+                      <th className="py-3 px-3">Sampai (Menit)</th>
+                      <th className="py-3 px-3">Tipe Denda</th>
+                      <th className="py-3 px-3">Besaran</th>
+                      <th className="py-3 px-3 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200/40">
+                    {(settings.late_deduction_tiers || []).map((tier: LateTier, idx: number) => (
+                      <tr key={idx} className="group hover:bg-white/80 transition-colors">
+                        <td className="py-3 px-3">
+                          <span className="w-7 h-7 rounded-xl bg-gray-200/70 text-gray-700 font-black text-xs flex items-center justify-center">
+                            #{idx + 1}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <input 
+                            type="number"
+                            min="1"
+                            className="w-24 h-11 bg-white border border-gray-200 rounded-xl px-3 font-bold text-sm text-gray-800 outline-none focus:border-[#8B0000]"
+                            value={tier.min_minutes}
+                            onChange={(e) => handleTierChange(idx, 'min_minutes', parseInt(e.target.value) || 0)}
+                          />
+                        </td>
+                        <td className="py-3 px-3">
+                          <input 
+                            type="number"
+                            min="1"
+                            className="w-24 h-11 bg-white border border-gray-200 rounded-xl px-3 font-bold text-sm text-gray-800 outline-none focus:border-[#8B0000]"
+                            value={tier.max_minutes}
+                            onChange={(e) => handleTierChange(idx, 'max_minutes', parseInt(e.target.value) || 0)}
+                          />
+                        </td>
+                        <td className="py-3 px-3">
+                          <select
+                            className="h-11 bg-white border border-gray-200 rounded-xl px-3 font-bold text-xs text-gray-800 outline-none focus:border-[#8B0000]"
+                            value={tier.penalty_type}
+                            onChange={(e) => handleTierChange(idx, 'penalty_type', e.target.value)}
+                          >
+                            <option value="percentage">Persentase (%)</option>
+                            <option value="fixed">Nominal (Rp)</option>
+                          </select>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="relative">
+                            <input 
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              className="w-28 h-11 bg-white border border-gray-200 rounded-xl px-3 font-black text-sm text-gray-800 outline-none focus:border-[#8B0000]"
+                              value={tier.penalty_value}
+                              onChange={(e) => handleTierChange(idx, 'penalty_value', parseFloat(e.target.value) || 0)}
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">
+                              {tier.penalty_type === 'percentage' ? '%' : 'Rp'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTier(idx)}
+                            disabled={(settings.late_deduction_tiers || []).length <= 1}
+                            className="w-9 h-9 rounded-xl text-red-400 hover:text-red-700 hover:bg-red-50 flex items-center justify-center transition-all disabled:opacity-20"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Live Interactive Simulator */}
+              <div className="bg-gradient-to-br from-gray-900 to-gray-800 text-white p-6 rounded-3xl shadow-lg space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-red-300">
+                    <Calculator size={18} />
+                    <span className="text-xs font-black uppercase tracking-widest">Simulasi Live Kalkulasi Pemotongan</span>
+                  </div>
+                  <span className="text-[10px] bg-white/10 px-3 py-1 rounded-full text-gray-300">
+                    Shift-Aware & Auto-Deduction Engine
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                  <div>
+                    <label className="text-gray-400 block mb-1">Gaji Pokok Karyawan</label>
+                    <input 
+                      type="number"
+                      step="500000"
+                      className="w-full bg-white/10 border border-white/20 rounded-xl p-2 text-white font-bold"
+                      value={simSalary}
+                      onChange={(e) => setSimSalary(parseFloat(e.target.value) || 0)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 block mb-1">Hari Kerja Efektif</label>
+                    <input 
+                      type="number"
+                      className="w-full bg-white/10 border border-white/20 rounded-xl p-2 text-white font-bold"
+                      value={simWorkDays}
+                      onChange={(e) => setSimWorkDays(parseInt(e.target.value) || 1)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 block mb-1">Menit Terlambat</label>
+                    <input 
+                      type="number"
+                      className="w-full bg-white/10 border border-white/20 rounded-xl p-2 text-white font-bold"
+                      value={simLateMin}
+                      onChange={(e) => setSimLateMin(parseInt(e.target.value) || 0)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 block mb-1">Hari Alfa (Mangkir)</label>
+                    <input 
+                      type="number"
+                      className="w-full bg-white/10 border border-white/20 rounded-xl p-2 text-white font-bold"
+                      value={simAbsentDays}
+                      onChange={(e) => setSimAbsentDays(parseInt(e.target.value) || 0)}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-400 text-xs">Gaji Harian:</span>{' '}
+                    <span className="font-bold">Rp {Math.round(simDailySalary).toLocaleString('id-ID')}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 text-xs">Denda Telat ({simLateMin} mnt):</span>{' '}
+                    <span className="font-black text-amber-400">Rp {simLatePenalty.toLocaleString('id-ID')}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 text-xs">Denda Alfa ({simAbsentDays} hari):</span>{' '}
+                    <span className="font-black text-rose-400">Rp {simAbsencePenalty.toLocaleString('id-ID')}</span>
+                  </div>
+                  <div className="bg-red-500/20 px-4 py-2 rounded-xl border border-red-500/30">
+                    <span className="text-gray-300 text-xs font-bold">Total Potongan Disiplin: </span>
+                    <span className="font-black text-red-300">Rp {(simLatePenalty + simAbsencePenalty).toLocaleString('id-ID')}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 2: KEBIJAKAN UMUM & BPJS */}
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+          
+          {/* Left Side: General Policy & Overtime Rates */}
+          <div className="xl:col-span-5 space-y-8">
+            <div className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm space-y-8 relative overflow-hidden">
+              <div className="flex items-center gap-4">
+                 <div className="w-14 h-14 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center shadow-sm">
+                    <SettingIcon size={28} />
+                 </div>
+                 <div>
+                    <h3 className="text-xl font-black text-gray-900">Kebijakan Umum & Lembur</h3>
+                    <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Global Pay & Overtime</p>
+                 </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-2 group">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
+                    Tanggal Cut-off Operasional
+                    <HelpCircle size={12} className="text-blue-300 group-hover:text-blue-500 transition-colors" />
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-[#8B0000] transition-colors" size={20} />
+                    <input 
+                      type="number"
+                      min="1" max="31"
+                      className="w-full h-16 bg-gray-50 border-2 border-transparent rounded-[1.25rem] pl-14 pr-6 font-black text-lg text-gray-700 focus:bg-white focus:border-[#8B0000]/10 focus:ring-4 focus:ring-[#8B0000]/5 transition-all outline-none"
+                      value={settings.cutoff_day}
+                      onChange={(e) => setSettings({...settings, cutoff_day: e.target.value})}
+                    />
+                  </div>
+                  <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50">
+                     <p className="text-[11px] text-blue-700 font-bold leading-relaxed">
+                        Data absensi, lembur, dan potongan dihitung hingga tanggal {settings.cutoff_day} setiap bulannya.
+                     </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">Metode Pajak Penghasilan</label>
+                  <div className="relative group">
+                    <Landmark className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-[#8B0000] transition-colors" size={20} />
+                    <select 
+                      className="w-full h-16 bg-gray-50 border-2 border-transparent rounded-[1.25rem] pl-14 pr-6 font-black text-gray-700 focus:bg-white focus:border-[#8B0000]/10 focus:ring-4 focus:ring-[#8B0000]/5 transition-all outline-none appearance-none"
+                      value={settings.tax_method}
+                      onChange={(e) => setSettings({...settings, tax_method: e.target.value})}
+                    >
+                      <option value="TER">Tarif Efektif Rata-rata (TER PP 58/2023)</option>
+                      <option value="GROSS">Tarif Progresif Pasal 17 (Gross)</option>
+                      <option value="GROSS_UP">Gross-Up (Pajak Ditanggung Perusahaan)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Lembur Hari Kerja (Rp/Jam)</label>
+                    <input 
+                      type="number"
+                      step="5000"
+                      className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-4 font-black text-gray-700 focus:bg-white focus:border-[#8B0000]/10 outline-none"
+                      value={settings.overtime_rate_per_hour}
+                      onChange={(e) => setSettings({...settings, overtime_rate_per_hour: parseFloat(e.target.value) || 0})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Lembur Libur (Rp/Jam)</label>
+                    <input 
+                      type="number"
+                      step="5000"
+                      className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-4 font-black text-gray-700 focus:bg-white focus:border-[#8B0000]/10 outline-none"
+                      value={settings.overtime_rate_holiday_per_hour}
+                      onChange={(e) => setSettings({...settings, overtime_rate_holiday_per_hour: parseFloat(e.target.value) || 0})}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-[#8B0000] to-[#5a0000] rounded-[2.5rem] p-10 text-white shadow-2xl shadow-red-200 relative overflow-hidden group">
-             <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 transition-transform group-hover:scale-110 duration-700" />
-             <div className="relative z-10 flex flex-col h-full justify-between gap-10">
-                <div className="space-y-4">
-                  <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-md">
-                     <TrendingUp size={32} />
-                  </div>
-                  <h3 className="text-2xl font-black leading-tight italic">Optimasi Cashflow & Efisiensi Pajak</h3>
-                  <p className="text-white/70 text-sm font-medium leading-relaxed">
-                    Sistem "On Time HRMS" memastikan setiap rupiah yang dikeluarkan perusahaan terhitung secara regulatif.
-                  </p>
-                </div>
-                <div className="flex items-center gap-4">
-                   <div className="flex -space-x-3">
-                      {[1,2,3].map(i => (
-                        <div key={i} className="w-10 h-10 rounded-full border-2 border-[#8B0000] bg-gray-200 shadow-lg shrink-0" />
-                      ))}
-                      <div className="w-10 h-10 rounded-full border-2 border-[#8B0000] bg-white/20 flex items-center justify-center text-[10px] font-black backdrop-blur-md">+12</div>
-                   </div>
-                   <span className="text-xs font-bold text-white/50">Trusted by Finance Teams</span>
-                </div>
-             </div>
-          </div>
-        </div>
+          {/* Right Side: BPJS Matrix */}
+          <div className="xl:col-span-7 space-y-8">
+            <div className="bg-white rounded-[2.5rem] border border-gray-100 p-10 shadow-sm space-y-10 relative overflow-hidden">
+              <div className="flex items-center justify-between border-b border-gray-50 pb-8">
+                 <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center shadow-sm">
+                      <ShieldCheck size={28} />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-gray-900">Health & Pension Matrix</h3>
+                      <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Global BPJS Config</p>
+                    </div>
+                 </div>
+                 <div className="hidden sm:flex flex-col items-end">
+                    <span className="text-xs font-black text-gray-300 uppercase italic">Safe Protocol</span>
+                    <div className="flex gap-1 mt-1">
+                       {[1,2,3,4,5].map(i => <div key={i} className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />)}
+                    </div>
+                 </div>
+              </div>
 
-        {/* Right Side: BPJS Matrix */}
-        <div className="xl:col-span-7 space-y-8">
-          <div className="bg-white rounded-[2.5rem] border border-gray-100 p-10 shadow-sm space-y-10 relative overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-50 pb-8">
-               <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center shadow-sm">
-                    <ShieldCheck size={28} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-gray-900">Health & Pension Matrix</h3>
-                    <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Global BPJS Config</p>
-                  </div>
-               </div>
-               <div className="hidden sm:flex flex-col items-end">
-                  <span className="text-xs font-black text-gray-300 uppercase italic">Safe Protocol</span>
-                  <div className="flex gap-1 mt-1">
-                     {[1,2,3,4,5].map(i => <div key={i} className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />)}
-                  </div>
-               </div>
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                 
+                 {/* Health Matrix */}
+                 <div className="space-y-4 p-5 bg-blue-50/30 rounded-3xl border border-blue-100/50">
+                    <div className="flex items-center gap-2">
+                       <div className="w-8 h-8 bg-blue-50 text-blue-500 rounded-lg flex items-center justify-center">
+                          <Coins size={16} />
+                       </div>
+                       <span className="text-[11px] font-black text-gray-900 uppercase italic">BPJS Kesehatan</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                       <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Coy (%)</label>
+                          <input 
+                             type="number" step="0.1"
+                             className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
+                             value={settings.bpjs_kesehatan_coy_pct}
+                             onChange={(e) => setSettings({...settings, bpjs_kesehatan_coy_pct: e.target.value})}
+                          />
+                       </div>
+                       <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Emp (%)</label>
+                          <input 
+                             type="number" step="0.1"
+                             className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
+                             value={settings.bpjs_kesehatan_emp_pct}
+                             onChange={(e) => setSettings({...settings, bpjs_kesehatan_emp_pct: e.target.value})}
+                          />
+                       </div>
+                    </div>
+                 </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-               
-               {/* Health Matrix */}
-               <div className="space-y-6">
-                  <div className="flex items-center gap-2">
-                     <div className="w-8 h-8 bg-blue-50 text-blue-500 rounded-lg flex items-center justify-center">
-                        <Coins size={16} />
-                     </div>
-                     <span className="text-[11px] font-black text-gray-900 uppercase italic">BPJS Kesehatan</span>
-                  </div>
-                  <div className="grid gap-4">
-                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Pikulan Coy (%)</label>
-                        <input 
-                           type="number" step="0.1"
-                           className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-5 font-black text-gray-700 focus:bg-white focus:border-blue-500/10 focus:ring-4 focus:ring-blue-500/5 transition-all outline-none"
-                           value={settings.bpjs_kesehatan_coy_pct}
-                           onChange={(e) => setSettings({...settings, bpjs_kesehatan_coy_pct: e.target.value})}
-                        />
-                     </div>
-                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Potong Emp (%)</label>
-                        <input 
-                           type="number" step="0.1"
-                           className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-5 font-black text-gray-700 focus:bg-white focus:border-[#8B0000]/10 focus:ring-4 focus:ring-[#8B0000]/5 transition-all outline-none"
-                           value={settings.bpjs_kesehatan_emp_pct}
-                           onChange={(e) => setSettings({...settings, bpjs_kesehatan_emp_pct: e.target.value})}
-                        />
-                     </div>
-                  </div>
-               </div>
+                 {/* Pension Matrix (JHT) */}
+                 <div className="space-y-4 p-5 bg-orange-50/30 rounded-3xl border border-orange-100/50">
+                    <div className="flex items-center gap-2">
+                       <div className="w-8 h-8 bg-orange-50 text-orange-500 rounded-lg flex items-center justify-center">
+                          <Landmark size={16} />
+                       </div>
+                       <span className="text-[11px] font-black text-gray-900 uppercase italic">BPJS JHT</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                       <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Coy (%)</label>
+                          <input 
+                             type="number" step="0.1"
+                             className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
+                             value={settings.bpjs_jht_coy_pct}
+                             onChange={(e) => setSettings({...settings, bpjs_jht_coy_pct: e.target.value})}
+                          />
+                       </div>
+                       <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Emp (%)</label>
+                          <input 
+                             type="number" step="0.1"
+                             className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
+                             value={settings.bpjs_jht_emp_pct}
+                             onChange={(e) => setSettings({...settings, bpjs_jht_emp_pct: e.target.value})}
+                          />
+                       </div>
+                    </div>
+                 </div>
 
-               {/* Pension Matrix (JHT) */}
-               <div className="space-y-6">
-                  <div className="flex items-center gap-2">
-                     <div className="w-8 h-8 bg-orange-50 text-orange-500 rounded-lg flex items-center justify-center">
-                        <Landmark size={16} />
-                     </div>
-                     <span className="text-[11px] font-black text-gray-900 uppercase italic">BPJS Ketenagakerjaan (JHT)</span>
-                  </div>
-                  <div className="grid gap-4">
-                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Pikulan Coy (%)</label>
-                        <input 
-                           type="number" step="0.1"
-                           className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-5 font-black text-gray-700 focus:bg-white focus:border-orange-500/10 focus:ring-4 focus:ring-orange-500/5 transition-all outline-none"
-                           value={settings.bpjs_jht_coy_pct}
-                           onChange={(e) => setSettings({...settings, bpjs_jht_coy_pct: e.target.value})}
-                        />
-                     </div>
-                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Potong Emp (%)</label>
-                        <input 
-                           type="number" step="0.1"
-                           className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-5 font-black text-gray-700 focus:bg-white focus:border-[#8B0000]/10 focus:ring-4 focus:ring-[#8B0000]/5 transition-all outline-none"
-                           value={settings.bpjs_jht_emp_pct}
-                           onChange={(e) => setSettings({...settings, bpjs_jht_emp_pct: e.target.value})}
-                        />
-                     </div>
-                  </div>
-               </div>
+                 {/* JP Matrix */}
+                 <div className="space-y-4 p-5 bg-purple-50/30 rounded-3xl border border-purple-100/50">
+                    <div className="flex items-center gap-2">
+                       <div className="w-8 h-8 bg-purple-50 text-purple-500 rounded-lg flex items-center justify-center">
+                          <Wallet size={16} />
+                       </div>
+                       <span className="text-[11px] font-black text-gray-900 uppercase italic">Jaminan Pensiun (JP)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                       <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Coy (%)</label>
+                          <input 
+                             type="number" step="0.1"
+                             className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
+                             value={settings.bpjs_jp_coy_pct}
+                             onChange={(e) => setSettings({...settings, bpjs_jp_coy_pct: e.target.value})}
+                          />
+                       </div>
+                       <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Emp (%)</label>
+                          <input 
+                             type="number" step="0.1"
+                             className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
+                             value={settings.bpjs_jp_emp_pct}
+                             onChange={(e) => setSettings({...settings, bpjs_jp_emp_pct: e.target.value})}
+                          />
+                       </div>
+                    </div>
+                 </div>
 
-               {/* JP Matrix */}
-               <div className="space-y-6">
-                  <div className="flex items-center gap-2">
-                     <div className="w-8 h-8 bg-purple-50 text-purple-500 rounded-lg flex items-center justify-center">
-                        <Wallet size={16} />
-                     </div>
-                     <span className="text-[11px] font-black text-gray-900 uppercase italic">Jaminan Pensiun (JP)</span>
-                  </div>
-                  <div className="grid gap-4">
-                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Pikulan Coy (%)</label>
-                        <input 
-                           type="number" step="0.1"
-                           className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-5 font-black text-gray-700 focus:bg-white focus:border-purple-500/10 focus:ring-4 focus:ring-purple-500/5 transition-all outline-none"
-                           value={settings.bpjs_jp_coy_pct}
-                           onChange={(e) => setSettings({...settings, bpjs_jp_coy_pct: e.target.value})}
-                        />
-                     </div>
-                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Potong Emp (%)</label>
-                        <input 
-                           type="number" step="0.1"
-                           className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-5 font-black text-gray-700 focus:bg-white focus:border-[#8B0000]/10 focus:ring-4 focus:ring-[#8B0000]/5 transition-all outline-none"
-                           value={settings.bpjs_jp_emp_pct}
-                           onChange={(e) => setSettings({...settings, bpjs_jp_emp_pct: e.target.value})}
-                        />
-                     </div>
-                  </div>
-               </div>
+                 {/* JKM JKK Matrix */}
+                 <div className="space-y-4 p-5 bg-emerald-50/30 rounded-3xl border border-emerald-100/50">
+                    <div className="flex items-center gap-2">
+                       <div className="w-8 h-8 bg-emerald-50 text-emerald-500 rounded-lg flex items-center justify-center">
+                          <ShieldCheck size={16} />
+                       </div>
+                       <span className="text-[11px] font-black text-gray-900 uppercase italic">JKM & JKK (Company Only)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                       <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">JKM (%)</label>
+                          <input 
+                             type="number" step="0.01"
+                             className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
+                             value={settings.bpjs_jkm_pct}
+                             onChange={(e) => setSettings({...settings, bpjs_jkm_pct: e.target.value})}
+                          />
+                       </div>
+                       <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">JKK (%)</label>
+                          <input 
+                             type="number" step="0.01"
+                             className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
+                             value={settings.bpjs_jkk_pct}
+                             onChange={(e) => setSettings({...settings, bpjs_jkk_pct: e.target.value})}
+                          />
+                       </div>
+                    </div>
+                 </div>
 
-               {/* JKM JKK Matrix */}
-               <div className="space-y-6">
-                  <div className="flex items-center gap-2">
-                     <div className="w-8 h-8 bg-red-50 text-red-500 rounded-lg flex items-center justify-center">
-                        <AlertTriangle size={16} />
-                     </div>
-                     <span className="text-[11px] font-black text-gray-900 uppercase italic">KM & KK (Company Only)</span>
-                  </div>
-                  <div className="grid gap-4">
-                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">JKM (%)</label>
-                        <input 
-                           type="number" step="0.01"
-                           className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-5 font-black text-gray-700 focus:bg-white focus:border-red-500/10 focus:ring-4 focus:ring-red-500/5 transition-all outline-none"
-                           value={settings.bpjs_jkm_pct}
-                           onChange={(e) => setSettings({...settings, bpjs_jkm_pct: e.target.value})}
-                        />
-                     </div>
-                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">JKK (%)</label>
-                        <input 
-                           type="number" step="0.01"
-                           className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-5 font-black text-gray-700 focus:bg-white focus:border-red-500/10 focus:ring-4 focus:ring-red-500/5 transition-all outline-none"
-                           value={settings.bpjs_jkk_pct}
-                           onChange={(e) => setSettings({...settings, bpjs_jkk_pct: e.target.value})}
-                        />
-                     </div>
-                  </div>
-               </div>
-
+              </div>
             </div>
           </div>
+
         </div>
 
       </form>
     </div>
   );
 }
+

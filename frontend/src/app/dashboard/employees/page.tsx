@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
-import { Plus, Search, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, ArrowRightLeft, UserX, ShieldAlert, CreditCard, Mail, MapPin, Phone, Building2, BadgeCheck, Clock, Eye, Key } from "lucide-react";
+import { Plus, Search, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, ArrowRightLeft, UserX, ShieldAlert, CreditCard, Mail, MapPin, Phone, Building2, BadgeCheck, Clock, Eye, Key, Briefcase, ChevronDown, UserCog, Pencil } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
 import { PermissionGuard } from "@/components/PermissionGuard";
@@ -13,6 +13,14 @@ import { useSearchParams } from "next/navigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ErrorModal } from "@/components/ErrorModal";
 import { useRef } from "react";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { SearchableSupervisorSelect } from "@/components/SearchableSupervisorSelect";
 
 interface Role {
   id: number;
@@ -50,6 +58,10 @@ interface Employee {
   office_id?: number;
   office?: { id: number; name: string };
   cost_center?: string;
+  bank_name?: string;
+  bank_account_no?: string;
+  bank_account_name?: string;
+  can_access_manager_portal?: boolean | null;
 }
 
 interface EmployeeFormData {
@@ -79,6 +91,10 @@ interface EmployeeFormData {
   emergency_contact_phone?: string;
   office_id?: number | null;
   cost_center?: string;
+  bank_name?: string;
+  bank_account_no?: string;
+  bank_account_name?: string;
+  can_access_manager_portal?: boolean | null;
 }
 
 interface PaginationData {
@@ -90,6 +106,7 @@ interface PaginationData {
 
 function EmployeesContent() {
   const { hasPermission, permissions, user: currentUser } = useAuth();
+  const isSuperAdmin = currentUser?.role_id === 1 || currentUser?.role?.name === 'Super Admin';
   const isHRorAdmin = hasPermission('manage-employees') || 
                       currentUser?.role?.name?.toLowerCase().includes('admin') || 
                       currentUser?.role?.name?.toLowerCase().includes('hr');
@@ -102,6 +119,7 @@ function EmployeesContent() {
   const [pagination, setPagination] = useState<PaginationData | null>(null);
   const [searchQuery, setSearchQuery] = useState(urlSearch || "");
   const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "");
+  const [selectedRole, setSelectedRole] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [activeFilter, setActiveFilter] = useState<'all' | 'unverified' | 'team'>('all');
@@ -123,9 +141,7 @@ function EmployeesContent() {
   // Delete state
   const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [actionMenuId, setActionMenuId] = useState<number | null>(null);
-  const actionMenuRef = useRef<HTMLDivElement>(null);
-  const [potentialSupervisors, setPotentialSupervisors] = useState<{id: number, name: string}[]>([]);
+  const [potentialSupervisors, setPotentialSupervisors] = useState<{id: number, name: string, role?: {id: number, name: string}}[]>([]);
   const [availableOffices, setAvailableOffices] = useState<{id: number, name: string}[]>([]);
 
   const [viewModalOpen, setViewModalOpen] = useState(false);
@@ -155,17 +171,6 @@ function EmployeesContent() {
       setIsSubmitting(false);
     }
   };
-
-  // Close action menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
-        setActionMenuId(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   // Handle Debouncing Search
   useEffect(() => {
@@ -197,12 +202,10 @@ function EmployeesContent() {
     if (hasPermission('view-employees')) {
       fetchEmployees(page);
     }
-    if (hasPermission('manage-roles')) {
-      fetchRoles();
-    }
+    fetchRoles();
     fetchOffices();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, page, urlSearch, urlId, permissions, activeFilter, perPage]);
+  }, [debouncedSearch, selectedRole, page, urlSearch, urlId, permissions, activeFilter, perPage]);
 
   const downloadTemplate = () => {
     // Definisi data contoh dengan label kolom yang ramah user
@@ -378,7 +381,6 @@ function EmployeesContent() {
   };
 
   const fetchRoles = async () => {
-    if (!hasPermission('manage-roles')) return;
     try {
       const response = await axiosInstance.get("/roles");
       setAvailableRoles(response.data.data);
@@ -422,6 +424,10 @@ function EmployeesContent() {
         filter: isUnverified ? 'unverified' : 'all',
         is_team: isTeam ? 'true' : 'false'
       });
+
+      if (selectedRole && selectedRole !== 'all') {
+        params.append('role_id', selectedRole);
+      }
 
       if (urlId) params.append('id', urlId);
 
@@ -468,7 +474,11 @@ function EmployeesContent() {
       work_location: 'Kantor Pusat',
       attendance_type: 'office_hour',
       office_id: null,
-      cost_center: ""
+      cost_center: "",
+      bank_name: "",
+      bank_account_no: "",
+      bank_account_name: "",
+      can_access_manager_portal: null,
     });
     fetchPotentialSupervisors();
     setIsModalOpen(true);
@@ -501,6 +511,10 @@ function EmployeesContent() {
       emergency_contact_phone: emp.emergency_contact_phone || "",
       office_id: emp.office_id || null,
       cost_center: emp.cost_center || "",
+      bank_name: emp.bank_name || "",
+      bank_account_no: emp.bank_account_no || "",
+      bank_account_name: emp.bank_account_name || "",
+      can_access_manager_portal: emp.can_access_manager_portal ?? null,
     });
     fetchPotentialSupervisors(emp.id);
     setPhotoPreview(emp.profile_photo_url || null);
@@ -523,6 +537,8 @@ function EmployeesContent() {
         if (val !== undefined) {
           if (key === 'photo') {
             if (val instanceof File) data.append('photo', val);
+          } else if (key === 'can_access_manager_portal') {
+            data.append(key, val === null ? "" : val ? "1" : "0");
           } else {
             // Kirim string kosong untuk nilai null agar Laravel bisa menghapus nilai di DB (nullable)
             data.append(key, val === null ? "" : val.toString());
@@ -582,7 +598,6 @@ function EmployeesContent() {
         toast.error(errorResponse.response?.data?.message || "Gagal mengirim ulang verifikasi.");
       } finally {
         setIsSubmitting(false);
-        setActionMenuId(null);
       }
     };
 
@@ -665,11 +680,10 @@ function EmployeesContent() {
         }
       }
     });
-    setActionMenuId(null);
   };
 
   const handleResetPassword = async (id: number, name: string) => {
-    toast(`Apakah Anda yakin ingin meriset password untuk ${name}?`, {
+    toast(`Apakah Anda yakin ingin mereset password untuk ${name}?`, {
       description: "Password akan diubah kembali menjadi default 'password'.",
       action: {
         label: "Reset",
@@ -688,7 +702,6 @@ function EmployeesContent() {
         }
       }
     });
-    setActionMenuId(null);
   };
 
 
@@ -716,14 +729,14 @@ function EmployeesContent() {
               <p className="dash-page-desc font-medium">Manajemen profil, penugasan, dan status verifikasi seluruh anggota tim.</p>
            </div>
         </div>
-        <div className="dash-page-actions flex gap-2">
+        <div className="dash-page-actions flex flex-wrap gap-2">
           <PermissionGuard slug="create-employees">
             <button 
               onClick={downloadTemplate}
               className="dash-btn dash-btn-outline border-gray-200 hover:border-gray-300 text-gray-600 font-bold"
             >
               <FileDown size={14} className="mr-1" />
-              Template
+              Template Karyawan
             </button>
             <button 
               onClick={downloadPayrollTemplate}
@@ -739,12 +752,12 @@ function EmployeesContent() {
             </label>
             <label className="dash-btn dash-btn-outline border-blue-200 hover:border-blue-300 text-blue-600 font-bold cursor-pointer">
               <CreditCard size={14} className="mr-1" />
-              Bulk Rekening/Gaji
+              Import Rekening/Gaji
               <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={handlePayrollImport} />
             </label>
             <button 
               onClick={handleOpenAddModal}
-              className="dash-btn dash-btn-primary shadow-lg shadow-gray-200 bg-[#f97316] hover:bg-[#ea580c] border-none font-black text-white!"
+              className="dash-btn dash-btn-primary shadow-lg shadow-orange-500/20 bg-[#f97316] hover:bg-[#ea580c] border-none font-black text-white"
             >
               <Plus size={16} />
               Tambah Karyawan
@@ -755,9 +768,9 @@ function EmployeesContent() {
 
       {/* Verification Notice Banner */}
       {unverifiedCount > 0 && isHRorAdmin && (
-         <div className="mb-6 bg-blue-50 border border-blue-100 p-4 rounded-2xl flex items-center justify-between animate-in slide-in-from-top-4 duration-500">
+         <div className="mb-6 bg-blue-50 border border-blue-100 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in slide-in-from-top-4 duration-500">
             <div className="flex items-center gap-3">
-               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
+               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 shrink-0">
                   <UserIcon size={16} />
                </div>
                <p className="text-sm text-blue-900 font-bold">
@@ -766,7 +779,7 @@ function EmployeesContent() {
             </div>
             <button 
               onClick={() => handleResendVerification()}
-              className="text-xs font-black text-blue-700 hover:text-blue-800 tracking-tight flex items-center gap-1 uppercase"
+              className="text-xs font-black text-blue-700 hover:text-blue-800 tracking-tight flex items-center gap-1 uppercase shrink-0"
             >
                Kirim Ulang Semua Undangan <Plus size={14} className="rotate-45" />
             </button>
@@ -796,12 +809,36 @@ function EmployeesContent() {
            </button>
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-fit">
-          <div className="relative flex-1 md:w-72 group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-orange-500 transition-colors" size={16} />
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          {/* Filter Posisi / Peran (Disembunyikan untuk Super Admin) */}
+          {!isSuperAdmin && (
+            <div className="relative group w-full sm:w-56">
+              <Briefcase className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-orange-500 pointer-events-none transition-colors" size={15} />
+              <select
+                value={selectedRole}
+                onChange={(e) => {
+                  setSelectedRole(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full h-11 pl-10 pr-9 text-xs font-bold bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-orange-200 focus:ring-4 focus:ring-orange-50/50 transition-all shadow-sm appearance-none cursor-pointer text-gray-700 hover:border-gray-300"
+              >
+                <option value="all">Semua Posisi / Peran</option>
+                {availableRoles.map((role) => (
+                  <option key={role.id} value={role.id.toString()}>
+                    {role.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+            </div>
+          )}
+
+          {/* Search Input (Dibuat lebih besar) */}
+          <div className={`relative flex-1 w-full ${isSuperAdmin ? 'sm:w-80 md:w-[420px]' : 'sm:w-72'} group`}>
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-orange-500 transition-colors" size={16} />
             <input
               type="text"
-              placeholder="Cari Nama/NIK/Kode..."
+              placeholder="Cari Nama / Posisi / NIK / Email..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full h-11 pl-10 pr-4 text-xs font-bold bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-orange-200 focus:ring-4 focus:ring-orange-50/50 transition-all shadow-sm"
@@ -815,7 +852,7 @@ function EmployeesContent() {
                  className="flex items-center gap-2 px-6 py-2 bg-blue-50 text-blue-600 rounded-full text-xs font-black hover:bg-blue-100 transition-all border border-blue-100 shadow-sm"
                >
                  <Mail size={14} className={isSubmitting ? "animate-spin" : ""} />
-                 Kirim Verif ({selectedIds.length})
+                 Kirim Verifikasi ({selectedIds.length})
                </button>
 
                <button 
@@ -823,7 +860,7 @@ function EmployeesContent() {
                  className="flex items-center gap-2 px-6 py-2 bg-red-50 text-red-600 rounded-full text-xs font-black hover:bg-red-100 transition-all border border-red-100 shadow-sm"
                >
                  <Trash2 size={14} />
-                 Hapus Sele ({selectedIds.length})
+                 Hapus Karyawan ({selectedIds.length})
                </button>
             </div>
           )}
@@ -832,15 +869,15 @@ function EmployeesContent() {
 
       {/* Modern Premium Table */}
       <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 overflow-hidden relative">
-        <div className="overflow-x-auto custom-scrollbar scroll-smooth">
+        <div className="overflow-x-auto custom-scrollbar scroll-smooth min-h-[360px]">
           {loading ? (
              <div className="p-12"><TableSkeleton rows={8} cols={8} /></div>
           ) : (
-            <table className="w-full text-left border-collapse min-w-[1200px]">
+            <table className="w-full text-left border-collapse min-w-[960px]">
               <thead>
-                <tr className="bg-gray-50/50 border-b border-gray-50">
+                <tr className="bg-gray-50 border-b border-gray-100">
                   {isHRorAdmin && (
-                    <th className="px-6 py-5 w-10 sticky left-0 bg-gray-50/50 z-20">
+                    <th className="px-3 py-3 w-10 sticky left-0 bg-gray-50 z-20 text-center">
                       <input 
                         type="checkbox" 
                         onChange={handleSelectAll}
@@ -849,23 +886,39 @@ function EmployeesContent() {
                       />
                     </th>
                   )}
-                  <th className={`px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest sticky bg-gray-50/50 z-20 min-w-[250px] ${isHRorAdmin ? "left-10" : "left-0"}`}>Karyawan</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest min-w-[200px]">Detail Kontak</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest min-w-[180px]">Posisi / Peran</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center min-w-[150px]">Bergabung</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center min-w-[140px]">Status</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center min-w-[160px]">Lokasi</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center min-w-[180px]">Email Verification</th>
+                  <th className={`px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky bg-gray-50 z-20 min-w-[200px] whitespace-nowrap ${isHRorAdmin ? "left-10" : "left-0"}`}>
+                    Karyawan
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest min-w-[170px] whitespace-nowrap">
+                    Detail Kontak
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest min-w-[150px] whitespace-nowrap">
+                    Posisi / Peran
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[110px] whitespace-nowrap">
+                    Bergabung
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[100px] whitespace-nowrap">
+                    Status
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap">
+                    Lokasi
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap">
+                    Email Verification
+                  </th>
                   {isHRorAdmin && (
-                    <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right sticky right-0 bg-gray-50/50 z-20 w-16">Opsi</th>
+                    <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right sticky right-0 bg-gray-50 z-20 w-14 min-w-[60px] whitespace-nowrap">
+                      Opsi
+                    </th>
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-100">
                 {filteredEmployees.map((emp) => (
-                  <tr key={emp.id} className="group hover:bg-orange-50/10 transition-all">
+                  <tr key={emp.id} className="group hover:bg-orange-50/20 transition-all">
                     {isHRorAdmin && (
-                      <td className="px-6 py-4 sticky left-0 bg-white group-hover:bg-orange-50/10 z-10">
+                      <td className="px-3 py-3 w-10 sticky left-0 bg-white group-hover:bg-orange-50/20 z-10 text-center">
                         <input 
                           type="checkbox" 
                           checked={selectedIds.includes(emp.id)}
@@ -874,25 +927,25 @@ function EmployeesContent() {
                         />
                       </td>
                     )}
-                    <td className={`px-6 py-4 sticky bg-white group-hover:bg-orange-50/10 z-10 ${isHRorAdmin ? "left-10" : "left-0"}`}>
-                       <div className="flex items-center gap-4">
+                    <td className={`px-3.5 py-3 sticky bg-white group-hover:bg-orange-50/20 z-10 min-w-[200px] ${isHRorAdmin ? "left-10" : "left-0"}`}>
+                       <div className="flex items-center gap-3">
                           <div className="relative">
-                             <Avatar className="size-11 border-2 border-white shadow-md transition-transform group-hover:scale-110">
+                             <Avatar className="size-9 border-2 border-white shadow-md transition-transform group-hover:scale-105">
                                 <AvatarImage src={emp.profile_photo_url} alt={emp.name} />
                                 <AvatarFallback className="bg-orange-100 text-orange-600 font-black text-xs">
                                    {emp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                                 </AvatarFallback>
                              </Avatar>
-                             <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm ${emp.email_verified_at ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                             <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white shadow-sm ${emp.email_verified_at ? 'bg-emerald-500' : 'bg-amber-400'}`} />
                           </div>
                           <div className="flex flex-col min-w-0">
-                             <span className="font-black text-gray-900 text-sm tracking-tight truncate">{emp.name}</span>
-                             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">EMP-{emp.id.toString().padStart(4, '0')}</span>
+                             <span className="font-black text-gray-900 text-xs tracking-tight truncate">{emp.name}</span>
+                             <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">EMP-{emp.id.toString().padStart(4, '0')}</span>
                           </div>
                        </div>
                     </td>
-                    <td className="px-6 py-4">
-                       <div className="flex flex-col gap-1">
+                    <td className="px-3.5 py-3 whitespace-nowrap">
+                       <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1.5 text-xs text-gray-600">
                              <Mail size={12} className="text-gray-400" />
                              {emp.email}
@@ -905,8 +958,8 @@ function EmployeesContent() {
                           )}
                        </div>
                     </td>
-                    <td className="px-6 py-4">
-                       <div className="flex flex-col gap-1">
+                    <td className="px-3.5 py-3">
+                       <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1.5 bg-gray-100 px-2 py-0.5 rounded-lg w-fit border border-gray-200">
                              <Building2 size={10} className="text-gray-400" />
                              <span className="text-[10px] font-black text-gray-700 uppercase">{emp.role?.name || "Member"}</span>
@@ -923,157 +976,149 @@ function EmployeesContent() {
                           )}
                        </div>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                       <div className="flex flex-col items-center gap-1">
+                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
+                       <div className="flex flex-col items-center gap-0.5">
                           <span className="text-xs font-black text-gray-700">{formatDate(emp.join_date)}</span>
                           <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1">
-                             <Clock size={8} /> {emp.join_date ? Math.floor((new Date().getTime() - new Date(emp.join_date).getTime()) / (1000 * 60 * 60 * 24 * 365)) : 0} Tahun
+                             <Clock size={8} /> {emp.join_date ? Math.floor((new Date().getTime() - new Date(emp.join_date).getTime()) / (1000 * 60 * 60 * 24 * 365)) : 0} Thn
                           </span>
                        </div>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                       <span className={`text-[10px] font-black px-3 py-1 rounded-full border border-gray-100 ${emp.employment_status === 'Permanent' ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-50 text-gray-500'}`}>
+                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
+                       <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border border-gray-100 ${emp.employment_status === 'Permanent' ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-50 text-gray-500'}`}>
                           {emp.employment_status || 'Permanent'}
                        </span>
                     </td>
-                    <td className="px-6 py-4 text-center text-xs font-bold text-gray-500">
+                    <td className="px-3.5 py-3 text-center text-xs font-bold text-gray-500 whitespace-nowrap">
                        <div className="flex items-center justify-center gap-1">
                           <MapPin size={12} className="text-red-400" />
                           {emp.office?.name || emp.work_location || 'Kantor Pusat'}
                        </div>
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
                        {emp.email_verified_at ? (
-                          <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-xl text-[10px] font-black border border-emerald-100 uppercase tracking-tighter">
-                             <BadgeCheck size={14} className="text-emerald-500" />
+                          <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-emerald-100 uppercase tracking-tighter">
+                             <BadgeCheck size={13} className="text-emerald-500" />
                              Verified
                           </div>
                        ) : (
-                          <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-600 px-3 py-1.5 rounded-xl text-[10px] font-black border border-amber-100 uppercase tracking-tighter shadow-sm">
+                          <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-amber-100 uppercase tracking-tighter shadow-sm">
                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                              Pending
                           </div>
                        )}
                     </td>
                     {isHRorAdmin && (
-                      <td className="px-6 py-4 text-right sticky right-0 bg-white group-hover:bg-orange-50/10 z-10">
-                        <div className="relative">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActionMenuId(actionMenuId === emp.id ? null : emp.id);
-                              }}
-                              className="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors"
+                      <td className="px-3.5 py-3 text-right sticky right-0 bg-white group-hover:bg-orange-50/20 z-10 w-14 min-w-[60px]">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors cursor-pointer outline-none ml-auto">
+                            <MoreVertical size={16} />
+                          </DropdownMenuTrigger>
+                          
+                          <DropdownMenuContent 
+                            side="left" 
+                            align="start" 
+                            sideOffset={8}
+                            className="w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 space-y-1 z-50 text-left"
+                          >
+                            <DropdownMenuItem 
+                              onClick={() => { setViewedEmployee(emp); setViewModalOpen(true); }}
+                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
                             >
-                              <MoreVertical size={20} />
-                            </button>
+                                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-blue-100 group-hover/item:text-blue-600 transition-colors">
+                                  <Eye size={18} />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-black text-gray-900 group-hover/item:text-blue-600 transition-colors">Lihat Profil</p>
+                                  <p className="text-[10px] text-gray-400 font-medium">Lihat detail lengkap karyawan</p>
+                                </div>
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem 
+                              onClick={() => handleOpenEditModal(emp)}
+                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                            >
+                                <div className="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-100 group-hover/item:text-orange-700 transition-colors">
+                                  <UserCog size={18} />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-black text-gray-900 group-hover/item:text-orange-600 transition-colors">Edit Profil Karyawan</p>
+                                  <p className="text-[10px] text-gray-400 font-medium">Ubah profil lengkap, jabatan, & akses</p>
+                                </div>
+                            </DropdownMenuItem>
                             
-                            {actionMenuId === emp.id && (
-                              <div 
-                                ref={actionMenuRef}
-                                className="absolute right-full top-0 mr-2 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden animate-in fade-in slide-in-from-right-4 duration-200"
+                            <DropdownMenuItem 
+                              onClick={() => handleConfirmDelete(emp.id)}
+                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-red-50/50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                            >
+                                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-red-100 group-hover/item:text-red-600 transition-colors">
+                                  <UserX size={18} />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-black text-gray-900 group-hover/item:text-red-600 transition-colors">Penghentian</p>
+                                  <p className="text-[10px] text-gray-400 font-medium">Proses pengunduran diri</p>
+                                </div>
+                            </DropdownMenuItem>
+
+                            {!emp.email_verified_at && (
+                              <DropdownMenuItem 
+                                onClick={() => handleResendVerification(emp.id)}
+                                className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
                               >
-                                  <div className="p-2 space-y-1">
-                                    <button 
-                                      onClick={() => { setViewedEmployee(emp); setViewModalOpen(true); setActionMenuId(null); }}
-                                      className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors group/item"
-                                    >
-                                        <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-blue-100 group-hover/item:text-blue-600 transition-colors">
-                                          <Eye size={18} />
-                                        </div>
-                                        <div>
-                                          <p className="text-sm font-black text-gray-900 group-hover/item:text-blue-600 transition-colors">Lihat Profil</p>
-                                          <p className="text-[10px] text-gray-400 font-medium">Lihat detail lengkap karyawan</p>
-                                        </div>
-                                    </button>
-
-                                    <button 
-                                      onClick={() => { handleOpenEditModal(emp); setActionMenuId(null); }}
-                                      className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors group/item"
-                                    >
-                                        <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
-                                          <ArrowRightLeft size={18} />
-                                        </div>
-                                        <div>
-                                          <p className="text-sm font-black text-gray-900">Edit Data Karyawan</p>
-                                          <p className="text-[10px] text-gray-400 font-medium">Ubah data karyawan / Promosi Jabatan</p>
-                                        </div>
-                                    </button>
-                                    
-                                    <button 
-                                      onClick={() => { handleConfirmDelete(emp.id); setActionMenuId(null); }}
-                                      className="w-full flex items-center gap-3 p-3 text-left hover:bg-red-50/50 rounded-xl transition-colors group/item"
-                                    >
-                                        <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-red-100 group-hover/item:text-red-600 transition-colors">
-                                          <UserX size={18} />
-                                        </div>
-                                        <div>
-                                          <p className="text-sm font-black text-gray-900 group-hover/item:text-red-600 transition-colors">Penghentian</p>
-                                          <p className="text-[10px] text-gray-400 font-medium">Proses pengunduran diri</p>
-                                        </div>
-                                    </button>
-
-                                    {!emp.email_verified_at && (
-                                      <button 
-                                        onClick={() => handleResendVerification(emp.id)}
-                                        className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors group/item"
-                                      >
-                                          <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
-                                            <Mail size={18} />
-                                          </div>
-                                          <div>
-                                            <p className="text-sm font-black text-gray-900">Kirim Undangan</p>
-                                            <p className="text-[10px] text-gray-400 font-medium">Kirim ulang link verifikasi</p>
-                                          </div>
-                                      </button>
-                                    )}
-
-                                    <div className="h-px bg-gray-50 mx-3 my-2" />
-
-                                    <button 
-                                      onClick={() => { setDisciplinedEmployee(emp); setDisciplineModalOpen(true); setActionMenuId(null); }}
-                                      className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors group/item"
-                                    >
-                                        <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
-                                          <ShieldAlert size={18} />
-                                        </div>
-                                        <div>
-                                          <p className="text-sm font-black text-gray-900">Tindakan Disiplin</p>
-                                          <p className="text-[10px] text-gray-400 font-medium">Catat pelanggaran atau SP</p>
-                                        </div>
-                                    </button>
-
-                                    <button 
-                                      onClick={() => handleResetPassword(emp.id, emp.name)}
-                                      className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors group/item"
-                                    >
-                                        <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
-                                          <Key size={18} />
-                                        </div>
-                                        <div>
-                                          <p className="text-sm font-black text-orange-600">Reset Password</p>
-                                          <p className="text-[10px] text-gray-400 font-medium">Ubah sandi menjadi &apos;password&apos;</p>
-                                        </div>
-                                    </button>
-
-                                    {emp.device_id && (
-                                      <button 
-                                        onClick={() => handleResetDevice(emp.id)}
-                                        className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors group/item"
-                                      >
-                                          <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
-                                            <Camera size={18} />
-                                          </div>
-                                          <div>
-                                            <p className="text-sm font-black text-orange-600">Reset Device ID</p>
-                                            <p className="text-[10px] text-gray-400 font-medium">Izinkan login di HP baru</p>
-                                          </div>
-                                      </button>
-                                    )}
+                                  <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
+                                    <Mail size={18} />
                                   </div>
-                              </div>
+                                  <div>
+                                    <p className="text-sm font-black text-gray-900">Kirim Undangan</p>
+                                    <p className="text-[10px] text-gray-400 font-medium">Kirim ulang link verifikasi</p>
+                                  </div>
+                              </DropdownMenuItem>
                             )}
-                        </div>
+
+                            <DropdownMenuSeparator className="my-1 border-gray-100" />
+
+                            <DropdownMenuItem 
+                              onClick={() => { setDisciplinedEmployee(emp); setDisciplineModalOpen(true); }}
+                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                            >
+                                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
+                                  <ShieldAlert size={18} />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-black text-gray-900">Tindakan Disiplin</p>
+                                  <p className="text-[10px] text-gray-400 font-medium">Catat pelanggaran atau SP</p>
+                                </div>
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem 
+                              onClick={() => handleResetPassword(emp.id, emp.name)}
+                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                            >
+                                <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
+                                  <Key size={18} />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-black text-orange-600">Reset Password</p>
+                                  <p className="text-[10px] text-gray-400 font-medium">Ubah sandi menjadi &apos;password&apos;</p>
+                                </div>
+                            </DropdownMenuItem>
+
+                            {emp.device_id && (
+                              <DropdownMenuItem 
+                                onClick={() => handleResetDevice(emp.id)}
+                                className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                              >
+                                  <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
+                                    <Camera size={18} />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-black text-orange-600">Reset Device ID</p>
+                                    <p className="text-[10px] text-gray-400 font-medium">Izinkan login di HP baru</p>
+                                  </div>
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     )}
                   </tr>
@@ -1098,13 +1143,23 @@ function EmployeesContent() {
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center p-5 border-b border-gray-100">
-              <h3 className="font-semibold text-lg text-gray-900">
-                {modalMode === "add" ? "Tambah Data Karyawan" : "Edit Data Karyawan"}
-              </h3>
+            <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-gray-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+                  <UserCog size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-gray-900 leading-tight">
+                    {modalMode === "add" ? "Tambah Karyawan Baru" : `Edit Profil & Data Karyawan`}
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    {modalMode === "add" ? "Lengkapi data karyawan untuk mengirim undangan akun." : `Perbarui data profil dan kepegawaian untuk ${formData.name || ''}`}
+                  </p>
+                </div>
+              </div>
               <button 
                 onClick={handleCloseModal}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full"
               >
                 <X size={20} />
               </button>
@@ -1129,7 +1184,7 @@ function EmployeesContent() {
                   </div>
                   <div className="text-center">
                     <span className="text-xs font-semibold text-gray-600">Foto Profil</span>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Format JPG/PNG, Max 2MB</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Klik pada avatar untuk ganti foto (JPG/PNG, Max 2MB)</p>
                   </div>
                 </div>
 
@@ -1183,7 +1238,7 @@ function EmployeesContent() {
                           ))}
                         </select>
                       </div>
-                      {modalMode === "add" && (
+                      {modalMode === "add" ? (
                         <div className="space-y-1.5">
                           <label className="text-sm font-medium text-gray-700">Password Sementara*</label>
                           <input 
@@ -1192,6 +1247,17 @@ function EmployeesContent() {
                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
                             value={formData.password || ""}
                             placeholder="Min 6 karakter"
+                            onChange={(e) => setFormData({...formData, password: e.target.value})}
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium text-gray-700">Ubah Kata Sandi (Opsional)</label>
+                          <input 
+                            type="password" 
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                            value={formData.password || ""}
+                            placeholder="Kosongkan jika tidak ingin mengubah password"
                             onChange={(e) => setFormData({...formData, password: e.target.value})}
                           />
                         </div>
@@ -1382,23 +1448,54 @@ function EmployeesContent() {
                           <option value="AJNusa">AJNusa</option>
                         </select>
                       </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-gray-700">Sisa Jatah Cuti (Hari)</label>
+                        <input 
+                          type="number" 
+                          min="0"
+                          max="365"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                          value={formData.leave_balance ?? 12}
+                          onChange={(e) => setFormData({...formData, leave_balance: parseInt(e.target.value) || 0})}
+                        />
+                      </div>
                       <div className="space-y-1.5">
                         <label className="text-sm font-medium text-gray-700">Atasan Langsung</label>
-                        <select 
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                          value={formData.supervisor_id || ""}
-                          onChange={(e) => setFormData({...formData, supervisor_id: e.target.value ? parseInt(e.target.value) : null})}
-                        >
-                          <option value="">Tanpa Atasan</option>
-                          {potentialSupervisors.map(emp => (
-                            <option key={emp.id} value={emp.id}>{emp.name}</option>
-                          ))}
-                        </select>
+                        <SearchableSupervisorSelect
+                          value={formData.supervisor_id}
+                          onChange={(id) => setFormData({...formData, supervisor_id: id})}
+                          supervisors={potentialSupervisors}
+                        />
+                        <p className="text-[11px] text-gray-500 italic mt-0.5">* Ketik untuk mencari jabatan/nama</p>
                       </div>
-                      <div className="space-y-1.5 border-l border-gray-200 pl-4">
+
+                      <div className="space-y-1.5 md:col-span-2 bg-gray-50/80 p-3.5 rounded-xl border border-gray-200">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <label className="text-sm font-semibold text-gray-800">Akses Portal Manager</label>
+                            <p className="text-xs text-gray-500">Izin akun ini untuk melihat Tab & Fitur Manager (Approval Cuti, Lembur, Klaim, Izin, Fleet Log, dll.)</p>
+                          </div>
+                          <select
+                            className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e] bg-white font-medium cursor-pointer"
+                            value={formData.can_access_manager_portal === true ? "enabled" : formData.can_access_manager_portal === false ? "disabled" : "default"}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFormData({
+                                ...formData,
+                                can_access_manager_portal: val === "enabled" ? true : val === "disabled" ? false : null,
+                              });
+                            }}
+                          >
+                            <option value="default">Ikuti Hak Akses Role (Default)</option>
+                            <option value="enabled">Diaktifkan (Enabled)</option>
+                            <option value="disabled">Dinonaktifkan (Disabled)</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200/60">
+                      <div className="space-y-1.5">
                         <label className="text-sm font-medium text-gray-700">Nama Kontak Darurat</label>
                         <input 
                           type="text" 
@@ -1415,6 +1512,43 @@ function EmployeesContent() {
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-200"
                           value={formData.emergency_contact_phone || ""}
                           onChange={(e) => setFormData({...formData, emergency_contact_phone: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Data Rekening & Payroll */}
+                  <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                    <h4 className="font-bold border-b border-gray-200 pb-2 mb-4 text-emerald-600 text-sm uppercase tracking-wider">Informasi Rekening & Payroll</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-gray-700">Nama Bank</label>
+                        <input 
+                          type="text" 
+                          placeholder="Contoh: BCA, Mandiri, BRI, BNI"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          value={formData.bank_name || ""}
+                          onChange={(e) => setFormData({...formData, bank_name: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-gray-700">Nomor Rekening</label>
+                        <input 
+                          type="text" 
+                          placeholder="Contoh: 1234567890"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          value={formData.bank_account_no || ""}
+                          onChange={(e) => setFormData({...formData, bank_account_no: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-gray-700">Atas Nama Rekening</label>
+                        <input 
+                          type="text" 
+                          placeholder="Nama pemilik rekening..."
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          value={formData.bank_account_name || ""}
+                          onChange={(e) => setFormData({...formData, bank_account_name: e.target.value})}
                         />
                       </div>
                     </div>
@@ -1447,10 +1581,10 @@ function EmployeesContent() {
       {/* View Data Modal */}
       {viewModalOpen && viewedEmployee && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-gray-50/50">
               <div className="flex items-center gap-3">
-                 <Avatar className="size-10 border shadow-sm">
+                 <Avatar className="size-11 border-2 border-white shadow-md">
                    <AvatarImage src={viewedEmployee.profile_photo_url} alt={viewedEmployee.name} />
                    <AvatarFallback className="bg-blue-100 text-blue-600 font-bold">{viewedEmployee.name.substring(0,2).toUpperCase()}</AvatarFallback>
                  </Avatar>
@@ -1459,12 +1593,27 @@ function EmployeesContent() {
                    <span className="text-xs font-semibold uppercase tracking-widest text-[#1a1a2e]">EMP-{viewedEmployee.id.toString().padStart(4, '0')}</span>
                  </div>
               </div>
-              <button 
-                onClick={() => setViewModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors p-2 bg-white rounded-full border border-gray-200"
-              >
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                {isHRorAdmin && (
+                  <button
+                    onClick={() => {
+                      const empToEdit = viewedEmployee;
+                      setViewModalOpen(false);
+                      handleOpenEditModal(empToEdit);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#8B0000] text-white rounded-xl text-xs font-bold hover:bg-[#700000] transition-all shadow-md shadow-red-900/10"
+                  >
+                    <UserCog size={14} />
+                    <span>Edit Profil Karyawan</span>
+                  </button>
+                )}
+                <button 
+                  onClick={() => setViewModalOpen(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
             
             <div className="p-6 space-y-8 max-h-[75vh] overflow-y-auto bg-white">
@@ -1511,14 +1660,41 @@ function EmployeesContent() {
                     </div>
                  </div>
               </section>
+
+              <section>
+                 <h4 className="font-bold border-b pb-2 mb-4 text-emerald-600 text-sm uppercase tracking-wider">Rekening & Payroll</h4>
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div><p className="text-xs text-gray-400">Nama Bank</p><p className="text-sm font-semibold">{viewedEmployee.bank_name || '-'}</p></div>
+                    <div><p className="text-xs text-gray-400">Nomor Rekening</p><p className="text-sm font-semibold">{viewedEmployee.bank_account_no || '-'}</p></div>
+                    <div><p className="text-xs text-gray-400">Atas Nama Rekening</p><p className="text-sm font-semibold">{viewedEmployee.bank_account_name || '-'}</p></div>
+                 </div>
+              </section>
             </div>
-            <div className="p-5 border-t border-gray-100 flex justify-end bg-gray-50/50">
-              <button 
-                onClick={() => setViewModalOpen(false)} 
-                className="px-6 py-2 bg-gray-900 text-white rounded-md font-semibold hover:bg-gray-800 transition-colors"
-               >
-                 Tutup
-               </button>
+            <div className="p-5 border-t border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <div className="text-xs text-gray-400">
+                ID Karyawan: <span className="font-bold text-gray-700">EMP-{viewedEmployee.id.toString().padStart(4, '0')}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => setViewModalOpen(false)} 
+                  className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold text-xs hover:bg-gray-200 transition-colors"
+                >
+                  Tutup
+                </button>
+                {isHRorAdmin && (
+                  <button 
+                    onClick={() => {
+                      const empToEdit = viewedEmployee;
+                      setViewModalOpen(false);
+                      handleOpenEditModal(empToEdit);
+                    }}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#8B0000] text-white rounded-xl font-bold text-xs hover:bg-[#700000] transition-all shadow-lg shadow-red-900/20"
+                  >
+                    <UserCog size={14} />
+                    Edit Profil Karyawan
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

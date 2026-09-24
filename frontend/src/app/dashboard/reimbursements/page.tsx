@@ -4,13 +4,32 @@ import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
 import { 
   Plus, Search, X, Eye, ReceiptCent, Upload, AlertCircle, 
-  ArrowLeft, Printer, Trash2, Send, FileDown 
+  ArrowLeft, Printer, Trash2, Send, FileDown,
+  GitMerge, CheckCircle2, Clock, Check, XCircle, ChevronRight, UserCheck
 } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import { useAuth } from "@/contexts/AuthContext";
 import { TableSkeleton } from "@/components/Skeleton";
 import { toast } from "sonner";
 import SignaturePad from "@/components/SignaturePad";
+
+interface WorkflowStep {
+  id: number;
+  step_number: number;
+  approver_type: 'role' | 'user' | 'supervisor';
+  approver_role_id?: number;
+  approver_user_id?: number;
+  sla_hours?: number;
+  role?: { id: number; name: string };
+  approverUser?: { id: number; name: string };
+}
+
+interface WorkflowData {
+  id: number;
+  module_key: string;
+  is_active: boolean;
+  steps: WorkflowStep[];
+}
 
 interface ReimbursementItem {
   id?: number;
@@ -38,6 +57,7 @@ interface ReimbursementRecord {
   amount?: number;
   description?: string;
   attachment?: string | string[];
+  current_approval_step?: number | null;
   user?: {
     id?: number;
     name: string;
@@ -74,6 +94,212 @@ const getStatusBadge = (status: string) => {
     case 'rejected': return <span className="dash-badge dash-badge-danger font-semibold">Ditolak</span>;
     default: return <span className="dash-badge dash-badge-neutral font-semibold">{status}</span>;
   }
+};
+
+const renderApprovalProgressBar = (item: ReimbursementRecord, workflow: WorkflowData | null) => {
+  const isApproved = item.status === 'approved';
+  const isRejected = item.status === 'rejected';
+  
+  if (isApproved) {
+    return (
+      <div className="flex flex-col gap-1 min-w-[140px]">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <CheckCircle2 size={13} className="text-emerald-600" />
+          Disetujui Sepenuhnya
+        </span>
+        <div className="w-full bg-emerald-100 rounded-full h-1.5 overflow-hidden">
+          <div className="bg-emerald-500 h-1.5 rounded-full w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isRejected) {
+    return (
+      <div className="flex flex-col gap-1 min-w-[140px]">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+          <XCircle size={13} className="text-rose-600" />
+          Ditolak
+        </span>
+        <div className="w-full bg-rose-100 rounded-full h-1.5 overflow-hidden">
+          <div className="bg-rose-500 h-1.5 rounded-full w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  // Pending status
+  const steps = workflow?.steps && workflow.steps.length > 0 ? workflow.steps : null;
+  const currentStep = item.current_approval_step || 1;
+
+  if (steps && steps.length > 0) {
+    const totalSteps = steps.length;
+    const currentStepObj = steps.find(s => s.step_number === currentStep);
+    let approverLabel = "Atasan / Reviewer";
+    if (currentStepObj) {
+      if (currentStepObj.approver_type === 'supervisor') approverLabel = "Supervisor";
+      else if (currentStepObj.approver_type === 'role') approverLabel = currentStepObj.role?.name || "Role Approver";
+      else if (currentStepObj.approver_type === 'user') approverLabel = currentStepObj.approverUser?.name || "Approver";
+    }
+
+    const percent = Math.min(90, Math.round(((currentStep - 0.5) / totalSteps) * 100));
+
+    return (
+      <div className="flex flex-col gap-1 min-w-[170px]">
+        <div className="flex items-center justify-between text-[11px] font-semibold text-amber-900">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+            <Clock size={11} className="text-amber-600" />
+            Tahap {currentStep}/{totalSteps}
+          </span>
+          <span className="text-[10px] text-amber-700 truncate max-w-[90px] font-medium" title={approverLabel}>
+            {approverLabel}
+          </span>
+        </div>
+        <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden border border-gray-200/60">
+          <div 
+            className="bg-gradient-to-r from-amber-400 to-amber-500 h-1.5 rounded-full transition-all duration-300"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Default fallback if no dynamic workflow
+  return (
+    <div className="flex flex-col gap-1 min-w-[140px]">
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+        <Clock size={12} className="text-amber-600" />
+        Menunggu Review HRD
+      </span>
+      <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+        <div className="bg-amber-400 h-1.5 rounded-full w-1/2" />
+      </div>
+    </div>
+  );
+};
+
+const renderWorkflowTimeline = (item: ReimbursementRecord, workflow: WorkflowData | null) => {
+  const isApproved = item.status === 'approved';
+  const isRejected = item.status === 'rejected';
+  const currentStep = item.current_approval_step || 1;
+  const steps = workflow?.steps && workflow.steps.length > 0 
+    ? workflow.steps 
+    : [
+        { id: 1, step_number: 1, approver_type: 'role' as const, role: { id: 2, name: 'Manager / HRD' } }
+      ];
+
+  return (
+    <div className="bg-gradient-to-r from-blue-50/60 via-indigo-50/40 to-slate-50/60 rounded-xl border border-blue-150 p-5 mb-6 no-print shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-4 border-b border-blue-100">
+        <div>
+          <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
+            <GitMerge className="text-blue-600" size={18} />
+            Alur & Progress Persetujuan (Workflow Timeline)
+          </h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Menampilkan urutan dan status verifikasi klaim biaya secara transparan.
+          </p>
+        </div>
+        <div>
+          {renderApprovalProgressBar(item, workflow)}
+        </div>
+      </div>
+
+      <div className="relative">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {/* Step 1: Submission */}
+          <div className="flex items-start gap-3 p-3 bg-white/90 rounded-lg border border-gray-200 shadow-2xs">
+            <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-md shadow-emerald-500/20 shrink-0 mt-0.5">
+              <Check size={16} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-gray-900 truncate">1. Diajukan Pemohon</div>
+              <div className="text-[11px] text-gray-600 font-medium truncate">
+                {item.employee_name || item.user?.name || "Karyawan"}
+              </div>
+              <div className="text-[10px] text-gray-400">
+                {new Date(item.created_at).toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' })}
+              </div>
+            </div>
+          </div>
+
+          {/* Workflow Steps */}
+          {steps.map((st, idx) => {
+            let label = "Approver";
+            if (st.approver_type === 'supervisor') label = "Atasan (Supervisor)";
+            else if (st.approver_type === 'role') label = st.role?.name || "Role Approver";
+            else if (st.approver_type === 'user') label = st.approverUser?.name || "Approver Khusus";
+
+            const stepNum = st.step_number;
+            let stepState: "passed" | "current" | "upcoming" = "upcoming";
+            if (isApproved) {
+              stepState = "passed";
+            } else if (isRejected) {
+              stepState = (stepNum === currentStep) ? "current" : (stepNum < currentStep ? "passed" : "upcoming");
+            } else {
+              if (stepNum < currentStep) stepState = "passed";
+              else if (stepNum === currentStep) stepState = "current";
+              else stepState = "upcoming";
+            }
+
+            return (
+              <div key={st.id || idx} className="flex items-start gap-3 p-3 bg-white/90 rounded-lg border border-gray-200 shadow-2xs">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all shadow-sm shrink-0 mt-0.5 ${
+                  stepState === 'passed' 
+                    ? 'bg-emerald-600 text-white shadow-emerald-500/20' 
+                    : stepState === 'current' 
+                      ? (isRejected ? 'bg-rose-600 text-white' : 'bg-amber-500 text-white ring-4 ring-amber-100 animate-pulse') 
+                      : 'bg-gray-100 text-gray-400 border border-gray-200'
+                }`}>
+                  {stepState === 'passed' ? <Check size={16} /> : (isRejected && stepState === 'current' ? <XCircle size={16} /> : (idx + 2))}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-gray-900 truncate">
+                    {idx + 2}. Tahap {st.step_number}: {label}
+                  </div>
+                  <div className={`text-[11px] font-semibold truncate ${
+                    stepState === 'passed' ? 'text-emerald-600' : (stepState === 'current' ? (isRejected ? 'text-rose-600' : 'text-amber-600') : 'text-gray-400')
+                  }`}>
+                    {stepState === 'passed' ? 'Disetujui' : (stepState === 'current' ? (isRejected ? 'Ditolak' : 'Menunggu Persetujuan') : 'Menunggu Giliran')}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Final Step */}
+          <div className="flex items-start gap-3 p-3 bg-white/90 rounded-lg border border-gray-200 shadow-2xs">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-sm shrink-0 mt-0.5 ${
+              isApproved 
+                ? 'bg-emerald-600 text-white shadow-emerald-500/20' 
+                : isRejected 
+                  ? 'bg-rose-600 text-white' 
+                  : 'bg-gray-100 text-gray-400 border border-gray-200'
+            }`}>
+              {isApproved ? <Check size={16} /> : isRejected ? <XCircle size={16} /> : (steps.length + 2)}
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-gray-900 truncate">
+                {steps.length + 2}. Status Akhir
+              </div>
+              <div className={`text-[11px] font-bold truncate ${
+                isApproved ? 'text-emerald-600' : isRejected ? 'text-rose-600' : 'text-gray-400'
+              }`}>
+                {isApproved ? 'Selesai (Disetujui)' : isRejected ? 'Ditolak' : 'Dalam Proses'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {item.remark && (
+          <div className="mt-4 p-3 bg-amber-50/70 border border-amber-200 rounded-lg text-xs text-amber-900">
+            <span className="font-bold">Catatan / Keterangan Persetujuan:</span> {item.remark}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 };
 
 const formatCurrency = (amount: number | string) => {
@@ -423,6 +649,7 @@ export default function ReimbursementsPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [workflow, setWorkflow] = useState<WorkflowData | null>(null);
 
   // form state
   const [formData, setFormData] = useState<ReimbursementFormData>({
@@ -449,7 +676,18 @@ export default function ReimbursementsPage() {
         console.error("Gagal mendapatkan data karyawan", err);
       }
     };
+    const fetchWorkflow = async () => {
+      try {
+        const res = await axiosInstance.get('/approval-workflows/reimbursement');
+        if (res.data?.success && res.data?.data) {
+          setWorkflow(res.data.data);
+        }
+      } catch (err) {
+        console.error("Gagal memuat workflow klaim biaya", err);
+      }
+    };
     fetchEmployees();
+    fetchWorkflow();
   }, []);
 
   useEffect(() => {
@@ -859,7 +1097,7 @@ export default function ReimbursementsPage() {
 
           <div className="dash-table-container">
             {loading ? (
-              <div className="p-6"><TableSkeleton rows={6} cols={7} /></div>
+              <div className="p-6"><TableSkeleton rows={6} cols={8} /></div>
             ) : reimbursements.length === 0 ? (
               <div className="p-8 text-center text-gray-500 text-sm">
                 Tidak ada pengajuan klaim/reimbursement.
@@ -875,6 +1113,7 @@ export default function ReimbursementsPage() {
                       <th>Total Nominal</th>
                       <th>Divisi</th>
                       <th>Status</th>
+                      <th>Progress Alur Persetujuan</th>
                       <th className="text-right">Aksi</th>
                     </tr>
                   </thead>
@@ -902,11 +1141,12 @@ export default function ReimbursementsPage() {
                           </span>
                         </td>
                         <td>{getStatusBadge(item.status)}</td>
+                        <td>{renderApprovalProgressBar(item, workflow)}</td>
                         <td className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             <button 
                               className="dash-action-btn view" 
-                              title="Lihat Detail"
+                              title="Lihat Detail & Progress"
                               onClick={() => handleViewDetail(item)}
                             >
                               <Eye size={16} />
@@ -1413,6 +1653,9 @@ export default function ReimbursementsPage() {
               </button>
             </div>
           </div>
+
+          {/* Workflow Progress Timeline Stepper */}
+          {renderWorkflowTimeline(selectedItem, workflow)}
 
           {/* Printable Sheet Layout — Matches AJNusa Excel Template */}
           <PrintableSheet selectedItem={selectedItem} />

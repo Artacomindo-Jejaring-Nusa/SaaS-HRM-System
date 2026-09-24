@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import axiosInstance from "@/lib/axios";
-import { Save, Building2, MapPin, Mail, Phone, Loader2, Camera, Target } from "lucide-react";
+import { Save, Building2, MapPin, Mail, Phone, Loader2, Camera, Target, Clock, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { CompanySkeleton } from "@/components/Skeleton";
@@ -64,6 +64,9 @@ export default function CompanySettingsPage() {
       formData.append("latitude", company.latitude || "");
       formData.append("longitude", company.longitude || "");
       formData.append("radius_meters", String(company.radius_meters || "50"));
+      formData.append("work_start_time", company.work_start_time || "08:30:00");
+      formData.append("work_end_time", company.work_end_time || "17:30:00");
+      formData.append("late_tolerance_minutes", String(company.late_tolerance_minutes ?? "0"));
       formData.append("watzap_api_key", company.watzap_api_key || "");
       formData.append("watzap_number_key", company.watzap_number_key || "");
       formData.append("watzap_base_url", company.watzap_base_url || "https://api.watzap.id/v1/");
@@ -230,6 +233,82 @@ export default function CompanySettingsPage() {
                   />
                 </div>
                 <p className="text-xs text-gray-500 font-medium">Batas jangkauan kelonggaran absensi dari titik area. Disarankan minimal 50 meter untuk offset GPS ponsel karyawan.</p>
+              </div>
+            </form>
+          </div>
+
+          {/* Jam Kerja Standar & Aturan Keterlambatan (Office Hours) */}
+          <div className="dash-table-container p-6">
+            <div className="flex items-center justify-between border-b border-[#ebedf0] pb-3 mb-5">
+              <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                <Clock className="text-[#8B0000]" size={18} />
+                Jam Kerja Standar & Aturan Keterlambatan
+              </h2>
+              <span className="text-[10px] font-black uppercase tracking-wider bg-red-50 text-[#8B0000] px-2.5 py-1 rounded-full">
+                Khusus Super Admin
+              </span>
+            </div>
+
+            <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3.5 mb-5 flex items-start gap-3">
+              <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-800 leading-relaxed font-medium">
+                Konfigurasi ini berlaku untuk semua karyawan bertipe <strong>Reguler (Non-Shift)</strong>. Karyawan yang absen masuk melebihi batas <strong>(Jam Masuk + Toleransi Menit)</strong> akan otomatis tercatat berstatus <strong>Terlambat (Late)</strong>, memicu notifikasi peringatan ke atasan, dan masuk ke perhitungan denda Payroll.
+              </p>
+            </div>
+
+            <form className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-gray-700">Jam Masuk Standar (WIB)</label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <input
+                      type="time"
+                      disabled={!canEdit}
+                      value={company?.work_start_time ? company.work_start_time.substring(0, 5) : "08:30"}
+                      onChange={(e) => setCompany({...company, work_start_time: e.target.value ? `${e.target.value}:00` : "08:30:00"})}
+                      className={`w-full h-10 pl-9 pr-4 text-sm font-bold ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors`}
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-400 italic">Jam resmi karyawan mulai masuk kantor.</p>
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-gray-700">Jam Pulang Standar (WIB)</label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <input
+                      type="time"
+                      disabled={!canEdit}
+                      value={company?.work_end_time ? company.work_end_time.substring(0, 5) : "17:30"}
+                      onChange={(e) => setCompany({...company, work_end_time: e.target.value ? `${e.target.value}:00` : "17:30:00"})}
+                      className={`w-full h-10 pl-9 pr-4 text-sm font-bold ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors`}
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-400 italic">Jam resmi kepulangan kantor.</p>
+                </div>
+              </div>
+
+              <div className="grid gap-2 pt-2">
+                <label className="text-sm font-medium text-gray-700">Toleransi Keterlambatan (Menit)</label>
+                <div className="relative">
+                  <Target className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8B0000]" size={16} />
+                  <input
+                    type="number"
+                    min="0"
+                    max="180"
+                    disabled={!canEdit}
+                    value={company?.late_tolerance_minutes ?? "0"}
+                    onChange={(e) => setCompany({...company, late_tolerance_minutes: parseInt(e.target.value) || 0})}
+                    placeholder="0"
+                    className={`w-full h-10 pl-9 pr-4 text-sm font-bold ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'} border border-gray-200 rounded-md focus:outline-none focus:border-[#8B0000]/30 transition-colors border-l-4 border-l-[#8B0000]`}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 font-medium">
+                  {(company?.late_tolerance_minutes || 0) > 0
+                    ? `Karyawan yang absen hingga pukul ${company?.work_start_time?.substring(0, 5) || "08:30"} (+${company.late_tolerance_minutes} mnt) masih berstatus Hadir Tepat Waktu.`
+                    : "Tanpa toleransi (absen setelah jam masuk langsung tercatat Terlambat)."}
+                </p>
               </div>
             </form>
           </div>

@@ -24,45 +24,100 @@ class User extends Authenticatable
 
     protected $fillable = [
         'name', 'email', 'password', 'company_id', 'office_id', 'role_id', 'supervisor_id', 'device_id',
+        'can_access_manager_portal',
         'profile_photo_path', 'face_embedding',
+        'face_status', 'face_registered_photo_path', 'face_rejection_reason',
+        'face_registered_at', 'face_approved_at', 'face_approved_by',
         'nik', 'ktp_no', 'phone', 'emergency_contact_name', 'emergency_contact_phone', 'address',
         'place_of_birth', 'date_of_birth', 'gender', 'marital_status', 'religion', 'blood_type',
         'join_date', 'fcm_token', 'leave_balance', 'is_wfh',
         'wfh_start_date', 'wfh_end_date', 'employment_status', 'work_location', 'email_verified_at',
-        'attendance_type',
+        'attendance_type', 'is_tracking_enabled',
         'ptkp_status', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no',
         'bank_name', 'bank_account_no', 'bank_account_name', 'cost_center', 'basic_salary',
         'fixed_allowance', 'working_days_per_week', 'payroll_type',
         'leave_period_start', 'leave_accrued', 'leave_used', 'leave_expand_used', 'leave_expand_last_month',
     ];
 
+    protected $casts = [
+        'face_embedding' => 'array',
+        'face_registered_at' => 'datetime',
+        'face_approved_at' => 'datetime',
+    ];
+
     protected $hidden = [
         'password',
         'remember_token',
+        'face_embedding', // Vektor biometrik 128-d tidak boleh terexpose di API response
     ];
 
-    protected $appends = ['profile_photo_url', 'is_manager', 'kemnaker_leave_balance', 'is_eligible_for_leave'];
+    protected $appends = ['profile_photo_url', 'face_registered_photo_url', 'is_face_approved', 'is_manager', 'can_access_manager_portal', 'permission_slugs', 'kemnaker_leave_balance', 'is_eligible_for_leave'];
+
+    public function getFaceRegisteredPhotoUrlAttribute()
+    {
+        return $this->face_registered_photo_path ? asset('storage/'.$this->face_registered_photo_path) : null;
+    }
+
+    public function getIsFaceApprovedAttribute(): bool
+    {
+        return $this->face_status === 'approved' && !empty($this->face_embedding);
+    }
 
     public function getProfilePhotoUrlAttribute()
     {
         return $this->profile_photo_path ? asset('storage/'.$this->profile_photo_path) : null;
     }
 
+    public function getCanAccessManagerPortalAttribute(): bool
+    {
+        if ($this->role_id === 1) {
+            return true;
+        }
+
+        if (array_key_exists('can_access_manager_portal', $this->attributes) && $this->attributes['can_access_manager_portal'] !== null) {
+            return (bool) $this->attributes['can_access_manager_portal'];
+        }
+
+        $roleName = strtolower($this->role?->name ?? '');
+        return $this->hasPermission('view-manager-portal')
+            || $this->hasPermission('approve-leaves')
+            || $this->hasPermission('approve-permits')
+            || $this->hasPermission('approve-overtimes')
+            || $this->hasPermission('approve-reimbursements')
+            || $this->hasPermission('approve-fund-requests')
+            || $this->hasPermission('approve-vehicle-logs')
+            || $this->hasPermission('approve-shift-swaps')
+            || $this->hasPermission('approve-project-costs')
+            || str_contains($roleName, 'manager')
+            || str_contains($roleName, 'supervisor')
+            || str_contains($roleName, 'admin')
+            || str_contains($roleName, 'hrd')
+            || str_contains($roleName, 'hr')
+            || str_contains($roleName, 'direktur')
+            || str_contains($roleName, 'director')
+            || str_contains($roleName, 'coo')
+            || str_contains($roleName, 'ceo')
+            || str_contains($roleName, 'boc')
+            || str_contains($roleName, 'management');
+    }
+
     public function getIsManagerAttribute()
     {
-        $this->loadMissing('role');
-        if (! $this->role) {
-            return false;
+        return $this->can_access_manager_portal;
+    }
+
+    public function getPermissionSlugsAttribute(): array
+    {
+        if ($this->role_id === 1) {
+            return Permission::pluck('slug')->toArray();
         }
-        $roleName = $this->role->name;
 
-        // Broad list of roles that count as management/HR for data visibility
-        $managerRoles = [
-            'Manager', 'Supervisor', 'HRD', 'HRD Manager', 'Management',
-            'Direktur', 'Direktur Utama', 'CEO', 'Super Admin', 'Admin',
-        ];
+        $this->loadMissing('role.permissions');
+        if (! $this->role || ! $this->role->relationLoaded('permissions')) {
+            return [];
+        }
 
-        return in_array($roleName, $managerRoles) || str_contains(strtolower($roleName), 'manager');
+        return $this->role->permissions->pluck('slug')->toArray();
     }
 
     protected function casts(): array
@@ -71,6 +126,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_wfh' => 'boolean',
+            'is_tracking_enabled' => 'boolean',
+            'can_access_manager_portal' => 'boolean',
             'wfh_start_date' => 'date',
             'wfh_end_date' => 'date',
             'date_of_birth' => 'date',
@@ -120,24 +177,19 @@ class User extends Authenticatable
 
     public function hasPermission($slug)
     {
-        if (! $this->relationLoaded('role')) {
-            // If role is not loaded and we are in strict mode, this might still fail
-            // if we access $this->role. But PermissionMiddleware now handles this.
-            // For other cases, we can try to use role_id if it's the master admin.
-            if ($this->role_id === 1) {
-                return true;
-            }
-
-            return false;
+        // Master Admin (Role ID 1) bypass all
+        if ($this->role_id === 1) {
+            return true;
         }
+
+        $this->loadMissing('role.permissions');
 
         if (! $this->role) {
             return false;
         }
 
-        // Master Admin (Role ID 1) bypass all
-        if ($this->role_id === 1) {
-            return true;
+        if ($this->role->relationLoaded('permissions')) {
+            return $this->role->permissions->contains('slug', $slug);
         }
 
         return $this->role->permissions()->where('slug', $slug)->exists();
@@ -185,5 +237,10 @@ class User extends Authenticatable
     public function permits()
     {
         return $this->hasMany(Permit::class);
+    }
+
+    public function faceApprover()
+    {
+        return $this->belongsTo(User::class, 'face_approved_by');
     }
 }

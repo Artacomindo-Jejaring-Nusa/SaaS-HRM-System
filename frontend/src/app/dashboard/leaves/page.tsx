@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
 import { downloadFile, sanitizeFileName } from "@/lib/downloadHelper";
 import { toast } from "sonner";
-import { Plus, Search, X, Eye, Plane, Printer, Check, ArrowLeft, FileDown } from "lucide-react";
+import { Plus, Search, X, Eye, Plane, Printer, Check, ArrowLeft, FileDown, Trash2 } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import SignaturePad from "@/components/SignaturePad";
 import { useAuth } from "@/contexts/AuthContext";
@@ -241,31 +241,20 @@ const Part1EmployeeSection = ({ isFormMode, user, formData, setFormData, selecte
           <span className="mr-2 text-gray-400">:</span>
           <div className="flex items-center gap-4 flex-wrap flex-1 pl-1">
             {isFormMode ? (
-              <select
-                value={typeVal || "Cuti Tahunan"}
+              <input
+                type="text"
+                value={typeVal || ""}
                 onChange={(e) => {
                   if (setFormData && formData) {
                     setFormData({ ...formData, type: e.target.value });
                   }
                 }}
-                className="border-0 border-b border-dotted border-gray-500 bg-transparent px-1 py-0.5 text-xs text-gray-800 focus:outline-none font-bold focus:ring-0 focus:border-blue-500"
-              >
-                <option value="Cuti Tahunan">Cuti Tahunan (Pasal 79 - 12 Hari)</option>
-                <option value="Cuti Sakit">Cuti Sakit (Pasal 93 - Sesuai Surat Dokter)</option>
-                <option value="Cuti Melahirkan">Cuti Melahirkan (Pasal 82 - 90 Hari)</option>
-                <option value="Cuti Keguguran">Cuti Keguguran (Pasal 82 - 45 Hari)</option>
-                <option value="Cuti Menikah">Cuti Menikah (Pasal 93 - 3 Hari)</option>
-                <option value="Menikahkan Anak">Menikahkan Anak (Pasal 93 - 2 Hari)</option>
-                <option value="Khitanan/Baptis Anak">Khitanan/Baptis Anak (Pasal 93 - 2 Hari)</option>
-                <option value="Istri Melahirkan/Keguguran">Istri Melahirkan/Keguguran (Pasal 93 - 2 Hari)</option>
-                <option value="Kematian Keluarga Inti">Kematian Keluarga Inti (Pasal 93 - 2 Hari)</option>
-                <option value="Kematian Keluarga Serumah">Kematian Keluarga Serumah (Pasal 93 - 1 Hari)</option>
-                <option value="Haid (Hari 1 & 2)">Haid (Hari 1 & 2) (Pasal 81 - 2 Hari)</option>
-                <option value="Cuti Besar/Panjang">Cuti Besar/Panjang (Pasal 79 - Sesuai Kebijakan)</option>
-              </select>
+                placeholder="Tulis purpose / jenis cuti..."
+                className="w-full border-0 border-b border-dotted border-gray-500 bg-transparent px-1 py-0.5 text-xs text-gray-800 focus:outline-none font-bold focus:ring-0 focus:border-blue-500"
+              />
             ) : (
               <span className="border-b border-dotted border-gray-500 border-dotted-print px-1 py-0.5 text-gray-800 font-bold uppercase tracking-wide">
-                [X] {typeVal || "Cuti Tahunan"}
+                {typeVal || "Cuti Tahunan"}
               </span>
             )}
           </div>
@@ -759,9 +748,23 @@ export default function LeavesPage() {
     }
   };
 
+  const isSuperAdmin = user?.role_id === 1 || user?.role?.name === 'Super Admin';
+
   const handleViewDetail = (item: LeaveRecord) => {
     setSelectedItem(item);
     setViewMode("detail");
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus permohonan cuti ini?")) return;
+    try {
+      await axiosInstance.delete(`/leave/${id}`);
+      toast.success("Permohonan cuti berhasil dihapus.");
+      fetchLeaves(page);
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error(err.response?.data?.message || "Gagal menghapus permohonan cuti.");
+    }
   };
 
   const handlePrint = (e: React.MouseEvent) => {
@@ -1008,6 +1011,15 @@ export default function LeavesPage() {
                             >
                               <Eye size={16} />
                             </button>
+                            {(isSuperAdmin || hasPermission('delete-leaves')) && (
+                              <button 
+                                className="dash-action-btn delete text-red-600 hover:bg-red-50" 
+                                title="Hapus Pengajuan Cuti"
+                                onClick={() => handleDelete(leave.id)}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1109,6 +1121,17 @@ export default function LeavesPage() {
               >
                 <FileDown size={15} /> Unduh Excel
               </button>
+              {(isSuperAdmin || hasPermission('delete-leaves')) && (
+                <button 
+                  onClick={() => {
+                    handleDelete(selectedItem.id);
+                    setViewMode("list");
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-red-700 bg-red-50 hover:bg-red-100 rounded border border-red-200 transition-colors"
+                >
+                  <Trash2 size={15} /> Hapus Cuti
+                </button>
+              )}
             </div>
           </div>
 

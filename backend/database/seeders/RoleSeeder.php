@@ -19,6 +19,12 @@ class RoleSeeder extends Seeder
             'Manager',
             'Direktur',
             'Supervisor',
+            'Supervisor Finance',
+            'Supervisor IT',
+            'Supervisor Admin',
+            'Supervisor Sales',
+            'Supervisor NOC',
+            'Supervisor Operational',
             'Super Admin',
         ];
 

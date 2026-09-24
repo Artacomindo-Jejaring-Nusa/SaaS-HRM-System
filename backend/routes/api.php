@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Mobile\MobileAttendanceController;
 use App\Http\Controllers\Api\Mobile\MobileDashboardController;
 use App\Http\Controllers\Api\Mobile\MobileTaskController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\PayrollComponentController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\ProfileRequestController;
 use App\Http\Controllers\Api\RoleController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\CompanyDocumentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExportController;
+use App\Http\Controllers\FaceRecognitionController;
 use App\Http\Controllers\FundRequestController;
 use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\LeaveController;
@@ -68,7 +70,7 @@ Route::get('/health', function () {
 });
 
 // Auth
-Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
+Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware('throttle:login');
 Route::post('/login-google', [AuthController::class, 'loginWithGoogle'])->middleware('throttle:login');
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:password_reset');
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:password_reset');
@@ -101,10 +103,23 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::post('/attendance/check-in', [MobileAttendanceController::class, 'checkIn'])->middleware('throttle:attendance');
         Route::post('/attendance/check-out', [MobileAttendanceController::class, 'checkOut'])->middleware('throttle:attendance');
 
+        // Face Recognition (AI)
+        Route::post('/face/register', [FaceRecognitionController::class, 'registerMobile'])->middleware('throttle:10,1');
+        Route::get('/face/status', [FaceRecognitionController::class, 'getStatus']);
+        Route::post('/face/reset', [FaceRecognitionController::class, 'resetMyFace']);
+
         // Tasks
         Route::get('/tasks', [MobileTaskController::class, 'index']);
         Route::get('/tasks/{id}', [MobileTaskController::class, 'show']);
     });
+
+    // --- FACE RECOGNITION (ADMIN APPROVAL & DIRECT ENROLLMENT) ---
+    Route::get('/face-registrations', [FaceRecognitionController::class, 'getAdminRequests']);
+    Route::post('/face-registrations/{id}/approve', [FaceRecognitionController::class, 'approve']);
+    Route::post('/face-registrations/{id}/reject', [FaceRecognitionController::class, 'reject']);
+    Route::post('/face-registrations/{id}/reset', [FaceRecognitionController::class, 'resetFace']);
+    Route::post('/employees/{id}/face-register', [FaceRecognitionController::class, 'adminRegisterDirect']);
+    Route::post('/employees/{id}/face-reset', [FaceRecognitionController::class, 'resetFace']);
 
     // Company Settings
     Route::get('/company', [CompanyController::class, 'show']);
@@ -152,8 +167,9 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
 
     Route::middleware('permission:view-attendances')->group(function () {
         Route::get('/attendance/history', [AttendanceController::class, 'history']);
-        Route::get('/attendance/heatmap', [AttendanceController::class, 'heatmap']);
     });
+
+    Route::middleware('permission:view-attendance-map')->get('/attendance/heatmap', [AttendanceController::class, 'heatmap']);
 
     Route::middleware('permission:view-reports')->group(function () {
         Route::get('/attendance/suspicious', [AttendanceController::class, 'suspiciousRecords']);
@@ -179,9 +195,17 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
 
     // Custom Approval Workflows
     Route::get('/approval-workflows', [ApprovalWorkflowController::class, 'index']);
+    Route::get('/approval-workflows/companies', [ApprovalWorkflowController::class, 'getCompanies']);
     Route::get('/approval-workflows/modules', [ApprovalWorkflowController::class, 'getModuleKeys']);
     Route::get('/approval-workflows/roles', [ApprovalWorkflowController::class, 'getRoles']);
     Route::get('/approval-workflows/users', [ApprovalWorkflowController::class, 'getUsers']);
+    Route::post('/approval-workflows/custom-module', [ApprovalWorkflowController::class, 'createCustomModule']);
+    Route::post('/approval-workflows/duplicate', [ApprovalWorkflowController::class, 'duplicateWorkflow']);
+    Route::patch('/approval-workflows/{id}/toggle-active', [ApprovalWorkflowController::class, 'toggleActive']);
+    Route::patch('/approval-workflows/module/{moduleKey}/toggle-active', [ApprovalWorkflowController::class, 'toggleModuleActive']);
+    Route::delete('/approval-workflows/variants/{id}', [ApprovalWorkflowController::class, 'destroyVariant']);
+    Route::post('/approval-workflows/override', [ApprovalWorkflowController::class, 'godModeOverride']);
+    Route::delete('/approval-workflows/{moduleKey}', [ApprovalWorkflowController::class, 'destroyCustomModule']);
     Route::get('/approval-workflows/{moduleKey}', [ApprovalWorkflowController::class, 'show']);
     Route::post('/approval-workflows', [ApprovalWorkflowController::class, 'store']);
 
@@ -335,6 +359,15 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::group(['prefix' => 'payroll'], function () {
         // Restricted to Payroll Managers (HRD, CEO, Super Admin)
         Route::middleware('permission:manage-payroll')->group(function () {
+            // Dynamic Components Engine & Triggers (Multi-Tenant)
+            Route::get('/components', [PayrollComponentController::class, 'index']);
+            Route::post('/components', [PayrollComponentController::class, 'store']);
+            Route::get('/components/{id}', [PayrollComponentController::class, 'show']);
+            Route::put('/components/{id}', [PayrollComponentController::class, 'update']);
+            Route::delete('/components/{id}', [PayrollComponentController::class, 'destroy']);
+            Route::post('/salaries/{salaryId}/adhoc-item', [PayrollComponentController::class, 'addAdhocItem']);
+            Route::delete('/salaries/{salaryId}/adhoc-item/{detailId}', [PayrollComponentController::class, 'removeAdhocItem']);
+
             // Settings
             Route::get('/settings', [PayrollController::class, 'getSettings']);
             Route::post('/settings', [PayrollController::class, 'updateSettings']);
@@ -376,6 +409,8 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::get('/tasks/{id}', [TaskController::class, 'show']);
     Route::post('/tasks', [TaskController::class, 'store']);
     Route::post('/tasks/{id}/status', [TaskController::class, 'updateStatus']);
+    Route::post('/tasks/{id}/approve', [TaskController::class, 'approve']);
+    Route::post('/tasks/{id}/reject', [TaskController::class, 'reject']);
     Route::delete('/tasks/{id}', [TaskController::class, 'destroy']);
 
     // Task Activities & Evidence
@@ -392,6 +427,9 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::get('/kpi-reviews/{id}', [PerformanceReviewController::class, 'show']);
     });
     Route::middleware('permission:manage-kpis')->group(function () {
+        Route::post('/kpi-reviews/batch', [PerformanceReviewController::class, 'batchStore']);
+        Route::post('/kpi-reviews/batch-publish', [PerformanceReviewController::class, 'batchPublish']);
+        Route::post('/kpi-reviews/{id}/publish', [PerformanceReviewController::class, 'publish']);
         Route::post('/kpi-reviews', [PerformanceReviewController::class, 'store']);
         Route::put('/kpi-reviews/{id}', [PerformanceReviewController::class, 'update']);
         Route::delete('/kpi-reviews/{id}', [PerformanceReviewController::class, 'destroy']);
@@ -416,9 +454,9 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::delete('/api-tokens/{id}', [ApiTokenController::class, 'destroy']);
 
     // Employee Directory & Org Chart
-    // Employee Directory & Org Chart
     Route::middleware('permission:view-directory')->get('/directory', [EmployeeController::class, 'directory']);
-    Route::middleware('permission:view-organization')->get('/organization-chart', [OrganizationController::class, 'getChart']);
+    Route::get('/organization-chart', [OrganizationController::class, 'getChart']);
+    Route::middleware('permission:edit-employees')->put('/organization-chart/update-node', [OrganizationController::class, 'updateNode']);
 
     // MassLeave
     Route::middleware('permission:approve-leaves')->group(function () {
@@ -483,7 +521,9 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::get('/vehicle-logs/{id}', [VehicleLogController::class, 'show']);
     });
     Route::middleware('permission:apply-vehicle-logs')->group(function () {
+        Route::post('/vehicle-logs/request', [VehicleLogController::class, 'storeRequest']);
         Route::post('/vehicle-logs/departure', [VehicleLogController::class, 'storeDeparture']);
+        Route::post('/vehicle-logs/{id}/departure', [VehicleLogController::class, 'storeDeparture']);
         Route::post('/vehicle-logs/{id}/return', [VehicleLogController::class, 'storeReturn']);
     });
     Route::middleware('permission:approve-vehicle-logs')->group(function () {
@@ -494,8 +534,15 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
 
     // Employee Tracking (Live Location)
     Route::post('/tracking/update', [TrackingController::class, 'store']);
-    Route::get('/tracking/live', [TrackingController::class, 'live']);
-    Route::get('/tracking/history/{userId}', [TrackingController::class, 'history']);
+    Route::get('/tracking/my-status', [TrackingController::class, 'myStatus']);
+    Route::middleware('permission:view-live-tracking')->group(function () {
+        Route::get('/tracking/live', [TrackingController::class, 'live']);
+        Route::get('/tracking/history/{userId}', [TrackingController::class, 'history']);
+        Route::get('/tracking/settings', [TrackingController::class, 'getSettings']);
+        Route::put('/tracking/settings/user/{id}', [TrackingController::class, 'toggleUser']);
+        Route::put('/tracking/settings/role/{id}', [TrackingController::class, 'toggleRole']);
+        Route::post('/tracking/settings/bulk', [TrackingController::class, 'bulkUpdate']);
+    });
 });
 
 // Exports (Authenticated via query token or header inside controller)
