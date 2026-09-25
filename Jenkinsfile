@@ -103,12 +103,25 @@ pipeline {
                         sh "cp docker-compose.staging.yml ${TARGET_DIR}/docker-compose.staging.yml"
                         sh "mkdir -p ${TARGET_DIR}/docker/nginx"
                         sh "cp docker/nginx/proxy-staging.conf ${TARGET_DIR}/docker/nginx/proxy-staging.conf"
-                        sh "cp .env.staging ${TARGET_DIR}/.env.staging"
                         
                         withCredentials([usernamePassword(credentialsId: "${GHCR_AUTH_ID}", usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
                             sh """
                                 cd ${TARGET_DIR}
                                 echo "\${GH_TOKEN}" | docker login ${REGISTRY} -u \${GH_USER} --password-stdin
+                                
+                                # Jika .env.staging belum ada, buat dari .env.prod yang sudah aktif
+                                if [ ! -f .env.staging ]; then
+                                    if [ -f .env.prod ]; then
+                                        echo "Membuat .env.staging aman dari .env.prod yang sudah ada..."
+                                        cp .env.prod .env.staging
+                                        sed -i 's/^DB_DATABASE=.*/DB_DATABASE=hrm_saas_staging/' .env.staging
+                                        sed -i 's/^APP_ENV=.*/APP_ENV=staging/' .env.staging
+                                        sed -i 's|^APP_URL=.*|APP_URL=http://${TARGET_VM_IP}:8088|' .env.staging
+                                        sed -i 's|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=http://${TARGET_VM_IP}:8088/api|' .env.staging
+                                    elif [ -f .env.staging.example ]; then
+                                        cp .env.staging.example .env.staging
+                                    fi
+                                fi
                                 
                                 # Buat database staging jika belum ada
                                 docker exec -i hrms-mysql-master mysql -uroot -pOnTimeNarwastugo2026 -e "CREATE DATABASE IF NOT EXISTS hrm_saas_staging;" || true
@@ -131,13 +144,27 @@ pipeline {
                             sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no docker-compose.staging.yml ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/docker-compose.staging.yml"
                             sh "ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no ${TARGET_VM_USER}@${TARGET_VM_IP} 'mkdir -p ${TARGET_DIR}/docker/nginx'"
                             sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no docker/nginx/proxy-staging.conf ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/docker/nginx/proxy-staging.conf"
-                            sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no .env.staging ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/.env.staging"
                             
                             withCredentials([usernamePassword(credentialsId: "${GHCR_AUTH_ID}", usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
                                 sh """
                                     ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no ${TARGET_VM_USER}@${TARGET_VM_IP} '
                                         cd ${TARGET_DIR}
                                         echo "\${GH_TOKEN}" | docker login ${REGISTRY} -u \${GH_USER} --password-stdin
+                                        
+                                        # Jika .env.staging belum ada, buat dari .env.prod yang sudah aktif
+                                        if [ ! -f .env.staging ]; then
+                                            if [ -f .env.prod ]; then
+                                                echo "Membuat .env.staging aman dari .env.prod yang sudah ada..."
+                                                cp .env.prod .env.staging
+                                                sed -i "s/^DB_DATABASE=.*/DB_DATABASE=hrm_saas_staging/" .env.staging
+                                                sed -i "s/^APP_ENV=.*/APP_ENV=staging/" .env.staging
+                                                sed -i "s|^APP_URL=.*|APP_URL=http://${TARGET_VM_IP}:8088|" .env.staging
+                                                sed -i "s|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=http://${TARGET_VM_IP}:8088/api|" .env.staging
+                                            elif [ -f .env.staging.example ]; then
+                                                cp .env.staging.example .env.staging
+                                            fi
+                                        fi
+                                        
                                         docker exec -i hrms-mysql-master mysql -uroot -pOnTimeNarwastugo2026 -e "CREATE DATABASE IF NOT EXISTS hrm_saas_staging;" || true
                                         docker compose -f docker-compose.staging.yml pull
                                         docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --remove-orphans
