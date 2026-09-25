@@ -54,6 +54,34 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
+interface OrganizationErrorFallbackProps {
+  readonly error: any;
+  readonly resetErrorBoundary: () => void;
+  readonly onRetry: () => void;
+}
+
+function OrganizationErrorFallback({ error, resetErrorBoundary, onRetry }: OrganizationErrorFallbackProps) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center bg-red-50 border border-red-200 rounded-3xl p-12 text-center my-8 shadow-sm h-[550px]">
+      <AlertCircle size={36} className="text-red-500 mb-4" />
+      <h3 className="text-lg font-bold text-red-900 mb-2">Terjadi Kesalahan (Crash)</h3>
+      <p className="text-xs text-red-700 max-w-lg mb-4 whitespace-pre-wrap break-all">
+        {error?.message || String(error)}
+      </p>
+      <button
+        type="button"
+        onClick={() => {
+          resetErrorBoundary();
+          onRetry();
+        }}
+        className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-red-700 transition-colors"
+      >
+        Coba Lagi
+      </button>
+    </div>
+  );
+}
+
 import {
   ReactFlow,
   Controls,
@@ -244,10 +272,9 @@ function OrgChartNode({ data }: Readonly<NodeProps<Node<OrgNodeData>>>) {
   const isHighlighted = data.isHighlighted;
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      className={`group relative cursor-pointer transition-all duration-300 ${
+    <button
+      type="button"
+      className={`group relative cursor-pointer text-left transition-all duration-300 ${
         isHighlighted
           ? "ring-4 ring-[#8B0000] ring-offset-2 scale-105 rounded-2xl shadow-2xl"
           : ""
@@ -335,7 +362,7 @@ function OrgChartNode({ data }: Readonly<NodeProps<Node<OrgNodeData>>>) {
         position={Position.Bottom}
         className="!w-2.5 !h-2.5 !bg-gray-300 !border-none !-bottom-1 group-hover:!bg-[#8B0000] transition-colors"
       />
-    </div>
+    </button>
   );
 }
 
@@ -716,22 +743,11 @@ export default function OrganizationChartPage() {
       {!isLoading && flatData.length > 0 && (
         <ErrorBoundary
           fallbackRender={({ error, resetErrorBoundary }) => (
-            <div className="flex-1 flex flex-col items-center justify-center bg-red-50 border border-red-200 rounded-3xl p-12 text-center my-8 shadow-sm h-[550px]">
-              <AlertCircle size={36} className="text-red-500 mb-4" />
-              <h3 className="text-lg font-bold text-red-900 mb-2">Terjadi Kesalahan (Crash)</h3>
-              <p className="text-xs text-red-700 max-w-lg mb-4 whitespace-pre-wrap break-all">
-                {error?.message || String(error)}
-              </p>
-              <button
-                onClick={() => {
-                  resetErrorBoundary();
-                  fetchData();
-                }}
-                className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-red-700 transition-colors"
-              >
-                Coba Lagi
-              </button>
-            </div>
+            <OrganizationErrorFallback
+              error={error}
+              resetErrorBoundary={resetErrorBoundary}
+              onRetry={fetchData}
+            />
           )}
         >
           <div

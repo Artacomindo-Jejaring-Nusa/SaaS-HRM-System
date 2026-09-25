@@ -418,6 +418,17 @@ class ApprovalService
         };
     }
 
+    private static function canApproveFinancialRoleStep(WorkflowStep $step, User $approver): bool
+    {
+        $roleName = strtolower($approver->role?->name ?? '');
+        $stepRoleName = strtolower($step->role?->name ?? '');
+        $isExecutiveOrAdmin = str_contains($roleName, 'admin') || str_contains($roleName, 'direktur') || str_contains($roleName, 'ceo') || str_contains($roleName, 'boc');
+        if ($isExecutiveOrAdmin) {
+            return true;
+        }
+        return str_contains($stepRoleName, 'hr') || str_contains($stepRoleName, 'admin');
+    }
+
     private static function canApproveRoleStep(WorkflowStep $step, User $approver, string $moduleKey, bool $hasModulePermission): bool
     {
         if ($approver->role_id === $step->approver_role_id) {
@@ -429,13 +440,7 @@ class ApprovalService
         }
 
         if (in_array($moduleKey, ['fund_request', 'reimbursement'])) {
-            $roleName = strtolower($approver->role?->name ?? '');
-            $stepRoleName = strtolower($step->role?->name ?? '');
-            $isExecutiveOrAdmin = str_contains($roleName, 'admin') || str_contains($roleName, 'direktur') || str_contains($roleName, 'ceo') || str_contains($roleName, 'boc');
-            if ($isExecutiveOrAdmin) {
-                return true;
-            }
-            return str_contains($stepRoleName, 'hr') || str_contains($stepRoleName, 'admin');
+            return self::canApproveFinancialRoleStep($step, $approver);
         }
 
         return true;

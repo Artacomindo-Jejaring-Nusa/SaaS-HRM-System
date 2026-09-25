@@ -36,6 +36,17 @@ function getInputBaseClass(canEdit: boolean, isBold = false): string {
   return `w-full h-10 pl-9 pr-4 text-sm${fontClass} ${bgClass} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors`;
 }
 
+function getTextAreaBaseClass(canEdit: boolean): string {
+  const bgClass = canEdit ? "bg-gray-50" : "bg-gray-100 cursor-not-allowed";
+  return `w-full pt-2.5 pb-2 pl-9 pr-4 text-sm ${bgClass} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors resize-none`;
+}
+
+function getWatzapInputClass(canEdit: boolean, isMono = false, isMuted = false): string {
+  const bgClass = canEdit ? "bg-white shadow-sm" : "bg-gray-100";
+  const extra = isMono ? " font-mono" : (isMuted ? " text-gray-500" : "");
+  return `w-full h-11 px-4 text-sm ${bgClass} border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all${extra}`;
+}
+
 export default function CompanySettingsPage() {
   const { hasPermission } = useAuth();
   const { t } = useLanguage();
@@ -143,7 +154,7 @@ export default function CompanySettingsPage() {
                     disabled={!canEdit}
                     value={company?.name || ""}
                     onChange={(e) => setCompany({...company, name: e.target.value})}
-                    className={`w-full h-10 pl-9 pr-4 text-sm ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors`}
+                    className={getInputBaseClass(canEdit)}
                   />
                 </div>
               </div>
@@ -157,7 +168,7 @@ export default function CompanySettingsPage() {
                     disabled={!canEdit}
                     value={company?.email || ""}
                     onChange={(e) => setCompany({...company, email: e.target.value})}
-                    className={`w-full h-10 pl-9 pr-4 text-sm ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors`}
+                    className={getInputBaseClass(canEdit)}
                   />
                 </div>
               </div>
@@ -171,7 +182,7 @@ export default function CompanySettingsPage() {
                     disabled={!canEdit}
                     value={company?.phone || ""}
                     onChange={(e) => setCompany({...company, phone: e.target.value})}
-                    className={`w-full h-10 pl-9 pr-4 text-sm ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors`}
+                    className={getInputBaseClass(canEdit)}
                   />
                 </div>
               </div>
@@ -185,7 +196,7 @@ export default function CompanySettingsPage() {
                     disabled={!canEdit}
                     value={company?.address || ""}
                     onChange={(e) => setCompany({...company, address: e.target.value})}
-                    className={`w-full pt-2.5 pb-2 pl-9 pr-4 text-sm ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors resize-none`}
+                    className={getTextAreaBaseClass(canEdit)}
                   ></textarea>
                 </div>
               </div>
@@ -209,7 +220,7 @@ export default function CompanySettingsPage() {
                       value={company?.latitude || ""}
                       placeholder="-6.200000"
                       onChange={(e) => setCompany({...company, latitude: e.target.value})}
-                      className={`w-full h-10 pl-9 pr-4 text-sm ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors`}
+                      className={getInputBaseClass(canEdit)}
                     />
                   </div>
                 </div>
@@ -224,7 +235,7 @@ export default function CompanySettingsPage() {
                       value={company?.longitude || ""}
                       placeholder="106.816666"
                       onChange={(e) => setCompany({...company, longitude: e.target.value})}
-                      className={`w-full h-10 pl-9 pr-4 text-sm ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors`}
+                      className={getInputBaseClass(canEdit)}
                     />
                   </div>
                 </div>
@@ -240,7 +251,7 @@ export default function CompanySettingsPage() {
                     value={company?.radius_meters || "50"}
                     min="1"
                     onChange={(e) => setCompany({...company, radius_meters: e.target.value})}
-                    className={`w-full h-10 pl-9 pr-4 text-sm ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors font-bold text-gray-900 border-l-4 border-l-red-500`}
+                    className={`${getInputBaseClass(canEdit, true)} text-gray-900 border-l-4 border-l-red-500`}
                   />
                 </div>
                 <p className="text-xs text-gray-500 font-medium">Batas jangkauan kelonggaran absensi dari titik area. Disarankan minimal 50 meter untuk offset GPS ponsel karyawan.</p>
@@ -315,7 +326,7 @@ export default function CompanySettingsPage() {
                     value={company?.late_tolerance_minutes ?? "0"}
                     onChange={(e) => setCompany({...company, late_tolerance_minutes: Number.parseInt(e.target.value, 10) || 0})}
                     placeholder="0"
-                    className={`w-full h-10 pl-9 pr-4 text-sm font-bold ${canEdit ? 'bg-gray-50' : 'bg-gray-100 cursor-not-allowed'} border border-gray-200 rounded-md focus:outline-none focus:border-[#8B0000]/30 transition-colors border-l-4 border-l-[#8B0000]`}
+                    className={`${getInputBaseClass(canEdit, true)} focus:border-[#8B0000]/30 border-l-4 border-l-[#8B0000]`}
                   />
                 </div>
                 <p className="text-xs text-gray-500 font-medium">
@@ -347,7 +358,7 @@ export default function CompanySettingsPage() {
                   placeholder="Masukkan API Key dari WatZap"
                   value={company?.watzap_api_key || ""}
                   onChange={(e) => setCompany({...company, watzap_api_key: e.target.value})}
-                  className={`w-full h-11 px-4 text-sm ${canEdit ? 'bg-white shadow-sm' : 'bg-gray-100'} border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all`}
+                  className={getWatzapInputClass(canEdit)}
                 />
               </div>
 
@@ -360,7 +371,7 @@ export default function CompanySettingsPage() {
                   placeholder="Masukkan Number/Phone Key WhatsApp"
                   value={company?.watzap_number_key || ""}
                   onChange={(e) => setCompany({...company, watzap_number_key: e.target.value})}
-                  className={`w-full h-11 px-4 text-sm ${canEdit ? 'bg-white shadow-sm' : 'bg-gray-100'} border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-mono`}
+                  className={getWatzapInputClass(canEdit, true)}
                 />
               </div>
 
@@ -372,7 +383,7 @@ export default function CompanySettingsPage() {
                   disabled={!canEdit}
                   value={company?.watzap_base_url || "https://api.watzap.id/v1/"}
                   onChange={(e) => setCompany({...company, watzap_base_url: e.target.value})}
-                  className={`w-full h-11 px-4 text-sm ${canEdit ? 'bg-white shadow-sm' : 'bg-gray-100'} border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all text-gray-500`}
+                  className={getWatzapInputClass(canEdit, false, true)}
                 />
                 <p className="text-[11px] text-gray-400">Default: https://api.watzap.id/v1/</p>
               </div>

@@ -271,7 +271,7 @@ const calculateNextDuplicateName = (
     const escapedBase = rawBase.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
     const regex = new RegExp(String.raw`^${escapedBase}-(\d+)$`, "i");
     variants.forEach((v) => {
-      const match = v.name.match(regex);
+      const match = regex.exec(v.name);
       if (match) {
         const n = Number.parseInt(match[1], 10);
         if (n > maxNum) maxNum = n;
@@ -337,6 +337,197 @@ const renderScopeVariantBadge = (scopeType?: string) => {
     </span>
   );
 };
+
+function defaultFlowData(selected: string, activeModule?: WorkflowModule | null): FlowData {
+  if (selected === "leave") {
+    return {
+      nodes: [
+        { id: "submit", x: 40, y: 100, label: "Pengajuan (Pemohon)", sub: "Mengajukan Cuti", type: "trigger", icon: "📝" },
+        { id: "spv", x: 290, y: 100, label: "Pemeriksaan (Step 1)", sub: "Atasan Langsung (SPV)", type: "supervisor", icon: "👔" },
+        { id: "hr", x: 540, y: 100, label: "Persetujuan (Step 2)", sub: "Role: HRD / Admin", type: "hrd", icon: "🏢" },
+        { id: "ok", x: 790, y: 100, label: "Pengajuan Disetujui", sub: "Cuti Terkonfirmasi", type: "approved", icon: "✅" },
+        { id: "no1", x: 290, y: 270, label: "Ditolak (Tahap 1)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
+        { id: "no2", x: 540, y: 270, label: "Ditolak (Tahap 2)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
+      ],
+      edges: [
+        { id: "e1", from: "submit", to: "spv", color: "#3b82f6", animated: true },
+        { id: "e2", from: "spv", to: "hr", label: "Approve", color: "#10b981", animated: true },
+        { id: "e3", from: "spv", to: "no1", label: "Reject", color: "#ef4444" },
+        { id: "e4", from: "hr", to: "ok", label: "Approve", color: "#10b981", animated: true },
+        { id: "e5", from: "hr", to: "no2", label: "Reject", color: "#ef4444" },
+      ],
+    };
+  }
+
+  if (selected === "task") {
+    return {
+      nodes: [
+        { id: "submit", x: 40, y: 100, label: "Pemberi Tugas", sub: "Delegasi Tugas Karyawan", type: "trigger", icon: "📋" },
+        { id: "spv", x: 290, y: 100, label: "Pemeriksaan (Step 1)", sub: "Atasan / Koordinator", type: "supervisor", icon: "👔" },
+        { id: "ok", x: 540, y: 100, label: "Tugas Aktif Berjalan", sub: "Dikerjakan Karyawan", type: "approved", icon: "✅" },
+        { id: "no", x: 290, y: 270, label: "Ditolak (Tahap 1)", sub: "Tugas Dibatalkan", type: "rejected", icon: "❌" },
+      ],
+      edges: [
+        { id: "e1", from: "submit", to: "spv", color: "#3b82f6", animated: true },
+        { id: "e2", from: "spv", to: "ok", label: "Approve", color: "#10b981", animated: true },
+        { id: "e3", from: "spv", to: "no", label: "Reject", color: "#ef4444" },
+      ],
+    };
+  }
+
+  if (selected === "fund_request") {
+    return {
+      nodes: [
+        { id: "submit", x: 40, y: 100, label: "Pengajuan (Pemohon)", sub: "Pengajuan Dana", type: "trigger", icon: "💰" },
+        { id: "spv", x: 290, y: 100, label: "Pemeriksaan (Step 1)", sub: "Atasan Langsung (SPV)", type: "supervisor", icon: "👔" },
+        { id: "hr", x: 540, y: 100, label: "Persetujuan (Step 2)", sub: "Role: Keuangan / HRD", type: "hrd", icon: "🏢" },
+        { id: "ok", x: 790, y: 100, label: "Pengajuan Disetujui", sub: "Dana Dicairkan", type: "approved", icon: "✅" },
+        { id: "no1", x: 290, y: 270, label: "Ditolak (Tahap 1)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
+        { id: "no2", x: 540, y: 270, label: "Ditolak (Tahap 2)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
+      ],
+      edges: [
+        { id: "e1", from: "submit", to: "spv", color: "#3b82f6", animated: true },
+        { id: "e2", from: "spv", to: "hr", label: "Approve", color: "#10b981", animated: true },
+        { id: "e3", from: "spv", to: "no1", label: "Reject", color: "#ef4444" },
+        { id: "e4", from: "hr", to: "ok", label: "Approve", color: "#10b981", animated: true },
+        { id: "e5", from: "hr", to: "no2", label: "Reject", color: "#ef4444" },
+      ],
+    };
+  }
+
+  if (selected === "shift_swap") {
+    return {
+      nodes: [
+        { id: "submit", x: 40, y: 100, label: "Pengajuan (Pemohon)", sub: "Request Tukar Shift", type: "trigger", icon: "🔄" },
+        { id: "peer", x: 290, y: 100, label: "Konfirmasi (Step 1)", sub: "Rekan Pengganti", type: "peer", icon: "🤝" },
+        { id: "mgr", x: 540, y: 100, label: "Persetujuan (Step 2)", sub: "Atasan / Manager", type: "supervisor", icon: "👔" },
+        { id: "ok", x: 790, y: 100, label: "Pengajuan Disetujui", sub: "Jadwal Diperbarui", type: "approved", icon: "✅" },
+        { id: "no1", x: 290, y: 270, label: "Ditolak (Rekan)", sub: "Swap Batal", type: "rejected", icon: "❌" },
+        { id: "no2", x: 540, y: 270, label: "Ditolak (Manager)", sub: "Swap Batal", type: "rejected", icon: "❌" },
+      ],
+      edges: [
+        { id: "e1", from: "submit", to: "peer", color: "#3b82f6", animated: true },
+        { id: "e2", from: "peer", to: "mgr", label: "Accept", color: "#f59e0b", animated: true },
+        { id: "e3", from: "peer", to: "no1", label: "Reject", color: "#ef4444" },
+        { id: "e4", from: "mgr", to: "ok", label: "Approve", color: "#10b981", animated: true },
+        { id: "e5", from: "mgr", to: "no2", label: "Reject", color: "#ef4444" },
+      ],
+    };
+  }
+
+  const defaultTitle = activeModule?.label || "Pengajuan";
+  return {
+    nodes: [
+      { id: "submit", x: 40, y: 100, label: "Pengajuan (Pemohon)", sub: `Formulir ${defaultTitle}`, type: "trigger", icon: "📝" },
+      { id: "hr", x: 290, y: 100, label: "Pemeriksaan (Step 1)", sub: "Atasan Langsung / HRD", type: "supervisor", icon: "🏢" },
+      { id: "ok", x: 540, y: 100, label: "Pengajuan Disetujui", sub: "Proses Selesai", type: "approved", icon: "✅" },
+      { id: "no", x: 290, y: 270, label: "Ditolak (Tahap 1)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
+    ],
+    edges: [
+      { id: "e1", from: "submit", to: "hr", color: "#3b82f6", animated: true },
+      { id: "e2", from: "hr", to: "ok", label: "Approve", color: "#10b981", animated: true },
+      { id: "e3", from: "hr", to: "no", label: "Reject", color: "#ef4444" },
+    ],
+  };
+}
+
+function getDynamicFlowData(
+  customActive: boolean,
+  steps: BackendStep[],
+  selected: string,
+  activeModule: WorkflowModule | null | undefined,
+  roles: AppRole[],
+  users: AppUser[]
+): FlowData {
+  if (!customActive || steps.length === 0) {
+    return defaultFlowData(selected, activeModule);
+  }
+
+  const nodes: FlowNode[] = [];
+  const edges: FlowEdge[] = [];
+  const GAP_X = 250;
+
+  const triggerLabel = activeModule?.label || "Pengajuan";
+  nodes.push({
+    id: "submit",
+    x: 40,
+    y: 100,
+    label: "Pengajuan (Pemohon)",
+    sub: `Mulai ${triggerLabel}`,
+    type: "trigger",
+    icon: "📝",
+  });
+
+  steps.forEach((step, idx) => {
+    const stepId = `step_${step.step_number}`;
+    const x = 40 + (idx + 1) * GAP_X;
+    const meta = getStepNodeMeta(step, idx, steps.length, roles, users);
+
+    nodes.push({
+      id: stepId,
+      x,
+      y: 100,
+      label: meta.stageTitle,
+      sub: meta.subText,
+      type: meta.type,
+      icon: meta.icon,
+    });
+
+    const rejectId = `reject_${step.step_number}`;
+    const rejectLabel = getRejectNodeLabel(idx, steps.length);
+
+    nodes.push({
+      id: rejectId,
+      x,
+      y: 270,
+      label: rejectLabel,
+      sub: "Alasan Penolakan",
+      type: "rejected",
+      icon: "❌",
+    });
+
+    const prevId = idx === 0 ? "submit" : `step_${steps[idx - 1].step_number}`;
+    edges.push({
+      id: `e-approve-${idx}`,
+      from: prevId,
+      to: stepId,
+      label: idx === 0 ? undefined : "Approve",
+      color: idx === 0 ? "#3b82f6" : "#10b981",
+      animated: true,
+    });
+
+    edges.push({
+      id: `e-reject-${idx}`,
+      from: stepId,
+      to: rejectId,
+      label: "Reject",
+      color: "#ef4444",
+    });
+  });
+
+  const lastStepId = `step_${steps[steps.length - 1].step_number}`;
+  const finalX = 40 + (steps.length + 1) * GAP_X;
+  nodes.push({
+    id: "ok",
+    x: finalX,
+    y: 100,
+    label: "Pengajuan Disetujui",
+    sub: "Proses Selesai",
+    type: "approved",
+    icon: "✅",
+  });
+
+  edges.push({
+    id: "e-final-approve",
+    from: lastStepId,
+    to: "ok",
+    label: "Approve",
+    color: "#10b981",
+    animated: true,
+  });
+
+  return { nodes, edges };
+}
 
 export default function ApprovalWorkflowPage() {
   const { user } = useAuth();
@@ -477,193 +668,7 @@ export default function ApprovalWorkflowPage() {
   // Current active module details
   const activeModule = moduleList.find((m) => m.key === selected);
 
-  // Fallback default workflows
-  const defaultFlowData = (): FlowData => {
-    if (selected === "leave") {
-      return {
-        nodes: [
-          { id: "submit", x: 40, y: 100, label: "Pengajuan (Pemohon)", sub: "Mengajukan Cuti", type: "trigger", icon: "📝" },
-          { id: "spv", x: 290, y: 100, label: "Pemeriksaan (Step 1)", sub: "Atasan Langsung (SPV)", type: "supervisor", icon: "👔" },
-          { id: "hr", x: 540, y: 100, label: "Persetujuan (Step 2)", sub: "Role: HRD / Admin", type: "hrd", icon: "🏢" },
-          { id: "ok", x: 790, y: 100, label: "Pengajuan Disetujui", sub: "Cuti Terkonfirmasi", type: "approved", icon: "✅" },
-          { id: "no1", x: 290, y: 270, label: "Ditolak (Tahap 1)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
-          { id: "no2", x: 540, y: 270, label: "Ditolak (Tahap 2)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
-        ],
-        edges: [
-          { id: "e1", from: "submit", to: "spv", color: "#3b82f6", animated: true },
-          { id: "e2", from: "spv", to: "hr", label: "Approve", color: "#10b981", animated: true },
-          { id: "e3", from: "spv", to: "no1", label: "Reject", color: "#ef4444" },
-          { id: "e4", from: "hr", to: "ok", label: "Approve", color: "#10b981", animated: true },
-          { id: "e5", from: "hr", to: "no2", label: "Reject", color: "#ef4444" },
-        ],
-      };
-    }
-
-    if (selected === "task") {
-      return {
-        nodes: [
-          { id: "submit", x: 40, y: 100, label: "Pemberi Tugas", sub: "Delegasi Tugas Karyawan", type: "trigger", icon: "📋" },
-          { id: "spv", x: 290, y: 100, label: "Pemeriksaan (Step 1)", sub: "Atasan / Koordinator", type: "supervisor", icon: "👔" },
-          { id: "ok", x: 540, y: 100, label: "Tugas Aktif Berjalan", sub: "Dikerjakan Karyawan", type: "approved", icon: "✅" },
-          { id: "no", x: 290, y: 270, label: "Ditolak (Tahap 1)", sub: "Tugas Dibatalkan", type: "rejected", icon: "❌" },
-        ],
-        edges: [
-          { id: "e1", from: "submit", to: "spv", color: "#3b82f6", animated: true },
-          { id: "e2", from: "spv", to: "ok", label: "Approve", color: "#10b981", animated: true },
-          { id: "e3", from: "spv", to: "no", label: "Reject", color: "#ef4444" },
-        ],
-      };
-    }
-
-    if (selected === "fund_request") {
-      return {
-        nodes: [
-          { id: "submit", x: 40, y: 100, label: "Pengajuan (Pemohon)", sub: "Pengajuan Dana", type: "trigger", icon: "💰" },
-          { id: "spv", x: 290, y: 100, label: "Pemeriksaan (Step 1)", sub: "Atasan Langsung (SPV)", type: "supervisor", icon: "👔" },
-          { id: "hr", x: 540, y: 100, label: "Persetujuan (Step 2)", sub: "Role: Keuangan / HRD", type: "hrd", icon: "🏢" },
-          { id: "ok", x: 790, y: 100, label: "Pengajuan Disetujui", sub: "Dana Dicairkan", type: "approved", icon: "✅" },
-          { id: "no1", x: 290, y: 270, label: "Ditolak (Tahap 1)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
-          { id: "no2", x: 540, y: 270, label: "Ditolak (Tahap 2)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
-        ],
-        edges: [
-          { id: "e1", from: "submit", to: "spv", color: "#3b82f6", animated: true },
-          { id: "e2", from: "spv", to: "hr", label: "Approve", color: "#10b981", animated: true },
-          { id: "e3", from: "spv", to: "no1", label: "Reject", color: "#ef4444" },
-          { id: "e4", from: "hr", to: "ok", label: "Approve", color: "#10b981", animated: true },
-          { id: "e5", from: "hr", to: "no2", label: "Reject", color: "#ef4444" },
-        ],
-      };
-    }
-
-    if (selected === "shift_swap") {
-      return {
-        nodes: [
-          { id: "submit", x: 40, y: 100, label: "Pengajuan (Pemohon)", sub: "Request Tukar Shift", type: "trigger", icon: "🔄" },
-          { id: "peer", x: 290, y: 100, label: "Konfirmasi (Step 1)", sub: "Rekan Pengganti", type: "peer", icon: "🤝" },
-          { id: "mgr", x: 540, y: 100, label: "Persetujuan (Step 2)", sub: "Atasan / Manager", type: "supervisor", icon: "👔" },
-          { id: "ok", x: 790, y: 100, label: "Pengajuan Disetujui", sub: "Jadwal Diperbarui", type: "approved", icon: "✅" },
-          { id: "no1", x: 290, y: 270, label: "Ditolak (Rekan)", sub: "Swap Batal", type: "rejected", icon: "❌" },
-          { id: "no2", x: 540, y: 270, label: "Ditolak (Manager)", sub: "Swap Batal", type: "rejected", icon: "❌" },
-        ],
-        edges: [
-          { id: "e1", from: "submit", to: "peer", color: "#3b82f6", animated: true },
-          { id: "e2", from: "peer", to: "mgr", label: "Accept", color: "#f59e0b", animated: true },
-          { id: "e3", from: "peer", to: "no1", label: "Reject", color: "#ef4444" },
-          { id: "e4", from: "mgr", to: "ok", label: "Approve", color: "#10b981", animated: true },
-          { id: "e5", from: "mgr", to: "no2", label: "Reject", color: "#ef4444" },
-        ],
-      };
-    }
-
-    const defaultTitle = activeModule?.label || "Pengajuan";
-    return {
-      nodes: [
-        { id: "submit", x: 40, y: 100, label: "Pengajuan (Pemohon)", sub: `Formulir ${defaultTitle}`, type: "trigger", icon: "📝" },
-        { id: "hr", x: 290, y: 100, label: "Pemeriksaan (Step 1)", sub: "Atasan Langsung / HRD", type: "supervisor", icon: "🏢" },
-        { id: "ok", x: 540, y: 100, label: "Pengajuan Disetujui", sub: "Proses Selesai", type: "approved", icon: "✅" },
-        { id: "no", x: 290, y: 270, label: "Ditolak (Tahap 1)", sub: "Alasan Penolakan", type: "rejected", icon: "❌" },
-      ],
-      edges: [
-        { id: "e1", from: "submit", to: "hr", color: "#3b82f6", animated: true },
-        { id: "e2", from: "hr", to: "ok", label: "Approve", color: "#10b981", animated: true },
-        { id: "e3", from: "hr", to: "no", label: "Reject", color: "#ef4444" },
-      ],
-    };
-  };
-
-  // Generate FlowData based on Dynamic Custom steps
-  const getDynamicFlowData = (): FlowData => {
-    if (!customActive || steps.length === 0) {
-      return defaultFlowData();
-    }
-
-    const nodes: FlowNode[] = [];
-    const edges: FlowEdge[] = [];
-    const GAP_X = 250;
-
-    const triggerLabel = activeModule?.label || "Pengajuan";
-    nodes.push({
-      id: "submit",
-      x: 40,
-      y: 100,
-      label: "Pengajuan (Pemohon)",
-      sub: `Mulai ${triggerLabel}`,
-      type: "trigger",
-      icon: "📝",
-    });
-
-    steps.forEach((step, idx) => {
-      const stepId = `step_${step.step_number}`;
-      const x = 40 + (idx + 1) * GAP_X;
-      const meta = getStepNodeMeta(step, idx, steps.length, roles, users);
-
-      nodes.push({
-        id: stepId,
-        x,
-        y: 100,
-        label: meta.stageTitle,
-        sub: meta.subText,
-        type: meta.type,
-        icon: meta.icon,
-      });
-
-      const rejectId = `reject_${step.step_number}`;
-      const rejectLabel = getRejectNodeLabel(idx, steps.length);
-
-      nodes.push({
-        id: rejectId,
-        x,
-        y: 270,
-        label: rejectLabel,
-        sub: "Alasan Penolakan",
-        type: "rejected",
-        icon: "❌",
-      });
-
-      const prevId = idx === 0 ? "submit" : `step_${steps[idx - 1].step_number}`;
-      edges.push({
-        id: `e-approve-${idx}`,
-        from: prevId,
-        to: stepId,
-        label: idx === 0 ? undefined : "Approve",
-        color: idx === 0 ? "#3b82f6" : "#10b981",
-        animated: true,
-      });
-
-      edges.push({
-        id: `e-reject-${idx}`,
-        from: stepId,
-        to: rejectId,
-        label: "Reject",
-        color: "#ef4444",
-      });
-    });
-
-    const lastStepId = `step_${steps[steps.length - 1].step_number}`;
-    const finalX = 40 + (steps.length + 1) * GAP_X;
-    nodes.push({
-      id: "ok",
-      x: finalX,
-      y: 100,
-      label: "Pengajuan Disetujui",
-      sub: "Proses Selesai",
-      type: "approved",
-      icon: "✅",
-    });
-
-    edges.push({
-      id: "e-final-approve",
-      from: lastStepId,
-      to: "ok",
-      label: "Approve",
-      color: "#10b981",
-      animated: true,
-    });
-
-    return { nodes, edges };
-  };
-
-  const flow = getDynamicFlowData();
+const flow = getDynamicFlowData(customActive, steps, selected, activeModule, roles, users);
   const nodeMap = Object.fromEntries(flow.nodes.map((n) => [n.id, n]));
   const maxX = Math.max(...flow.nodes.map((n) => n.x + NODE_W)) + 60;
   const maxY = Math.max(...flow.nodes.map((n) => n.y + NODE_H)) + 60;
@@ -806,10 +811,11 @@ export default function ApprovalWorkflowPage() {
       toast.error("Alur belum terkonfigurasi untuk diduplikasi. Silakan kustomisasi terlebih dahulu.");
       return;
     }
-    const rawBase = (activeWorkflow?.name || activeModule?.label || "Alur")
-      .replace(/\s*\(Khusus\)$/i, "")
-      .replace(/-\d+$/, "")
-      .trim();
+    let rawBase = (activeWorkflow?.name || activeModule?.label || "Alur").trim();
+    if (rawBase.toLowerCase().endsWith("(khusus)")) {
+      rawBase = rawBase.slice(0, -8).trim();
+    }
+    rawBase = rawBase.replace(/-\d+$/, "").trim();
 
     setDuplicateName(calculateNextDuplicateName(rawBase, activeModule?.variants));
     setDuplicateScopeType("role");

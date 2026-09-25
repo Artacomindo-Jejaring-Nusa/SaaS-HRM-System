@@ -45,6 +45,24 @@ const DEFAULT_SETTINGS = {
   absence_forfeit_allowance: true,
 };
 
+function findMatchingLateTier(tiers: LateTier[], lateMinutes: number): LateTier | null {
+  for (const tier of tiers) {
+    if (lateMinutes >= tier.min_minutes && lateMinutes <= tier.max_minutes) {
+      return tier;
+    }
+  }
+  return tiers.length > 0 ? (tiers.at(-1) || null) : null;
+}
+
+function calculateLatePenalty(tier: LateTier | null, settings: any, salary: number, dailySalary: number): number {
+  if (!tier) return 0;
+  if (tier.penalty_type === 'percentage') {
+    const base = settings.late_deduction_base === 'basic_salary' ? salary : dailySalary;
+    return Math.round(base * (tier.penalty_value / 100));
+  }
+  return tier.penalty_value;
+}
+
 function calculateSimulation(
   settings: any,
   simSalary: number,
@@ -54,26 +72,9 @@ function calculateSimulation(
 ) {
   const simDailySalary = simWorkDays > 0 ? (simSalary / simWorkDays) : 0;
   let simLatePenalty = 0;
-  let simMatchedTier: LateTier | null = null;
   if (settings.late_deduction_enabled && simLateMin > (settings.late_grace_period_minutes || 0)) {
-    const tiers: LateTier[] = settings.late_deduction_tiers || [];
-    for (const tier of tiers) {
-      if (simLateMin >= tier.min_minutes && simLateMin <= tier.max_minutes) {
-        simMatchedTier = tier;
-        break;
-      }
-    }
-    if (!simMatchedTier && tiers.length > 0) {
-      simMatchedTier = tiers.at(-1) || null;
-    }
-    if (simMatchedTier) {
-      if (simMatchedTier.penalty_type === 'percentage') {
-        const base = settings.late_deduction_base === 'basic_salary' ? simSalary : simDailySalary;
-        simLatePenalty = Math.round(base * (simMatchedTier.penalty_value / 100));
-      } else {
-        simLatePenalty = simMatchedTier.penalty_value;
-      }
-    }
+    const matchedTier = findMatchingLateTier(settings.late_deduction_tiers || [], simLateMin);
+    simLatePenalty = calculateLatePenalty(matchedTier, settings, simSalary, simDailySalary);
   }
 
   const simAbsencePenalty = settings.absence_deduction_enabled 

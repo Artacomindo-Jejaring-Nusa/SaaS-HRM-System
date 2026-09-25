@@ -136,11 +136,11 @@ function getStatusBadge(status: string) {
 }
 
 interface BatchTableContentProps {
-  detailLoading: boolean;
-  filteredBatches: PayrollBatch[];
-  onOpenGenerate: () => void;
-  onViewBatchDetails: (batchId: number) => void;
-  onExportBatchRekap: (batchId: number, month: string, year: number) => void;
+  readonly detailLoading: boolean;
+  readonly filteredBatches: PayrollBatch[];
+  readonly onOpenGenerate: () => void;
+  readonly onViewBatchDetails: (batchId: number) => void;
+  readonly onExportBatchRekap: (batchId: number, month: string, year: number) => void;
 }
 
 function BatchTableContent({
@@ -149,7 +149,7 @@ function BatchTableContent({
   onOpenGenerate,
   onViewBatchDetails,
   onExportBatchRekap,
-}: BatchTableContentProps) {
+}: Readonly<BatchTableContentProps>) {
   if (detailLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3">
@@ -236,6 +236,30 @@ function BatchTableContent({
       </table>
     </div>
   );
+}
+
+const ACTION_LABELS: Record<'submit' | 'approve' | 'reject' | 'paid', string> = {
+  submit: 'Submit ke CEO / Approver',
+  approve: 'Setujui Payroll',
+  reject: 'Tolak (Revisi)',
+  paid: 'Tandai Sudah Dibayar'
+};
+
+function filterPayrollBatches(
+  batches: PayrollBatch[],
+  statusTab: 'all' | 'pending' | 'completed',
+  yearFilter: number | string
+): PayrollBatch[] {
+  return batches.filter(b => {
+    const matchYear = yearFilter === "all" || b.period_year === Number(yearFilter);
+    let matchStatus = true;
+    if (statusTab === 'pending') {
+      matchStatus = b.status === 'draft' || b.status === 'pending_approval' || b.status === 'rejected';
+    } else if (statusTab === 'completed') {
+      matchStatus = b.status === 'approved' || b.status === 'paid';
+    }
+    return matchYear && matchStatus;
+  });
 }
 
 export default function PayrollManagementPage() {
@@ -326,14 +350,8 @@ export default function PayrollManagementPage() {
   // Status Change Workflow (Submit, Approve, Reject, Paid)
   const handleStatusChange = async (action: 'submit' | 'approve' | 'reject' | 'paid', note?: string) => {
     if (!selectedBatch) return;
-    const actionLabels: Record<string, string> = {
-      submit: 'Submit ke CEO / Approver',
-      approve: 'Setujui Payroll',
-      reject: 'Tolak (Revisi)',
-      paid: 'Tandai Sudah Dibayar'
-    };
 
-    toast(`Apakah Anda yakin ingin melakukan "${actionLabels[action]}"?`, {
+    toast(`Apakah Anda yakin ingin melakukan "${ACTION_LABELS[action]}"?`, {
       action: {
         label: "Lanjutkan",
         onClick: async () => {
@@ -554,16 +572,7 @@ export default function PayrollManagementPage() {
 
   // Filter batches by status tab and year
   const filteredBatches = useMemo(() => {
-    return batches.filter(b => {
-      const matchYear = yearFilter === "all" || b.period_year === Number(yearFilter);
-      let matchStatus = true;
-      if (statusTab === 'pending') {
-        matchStatus = b.status === 'draft' || b.status === 'pending_approval' || b.status === 'rejected';
-      } else if (statusTab === 'completed') {
-        matchStatus = b.status === 'approved' || b.status === 'paid';
-      }
-      return matchYear && matchStatus;
-    });
+    return filterPayrollBatches(batches, statusTab, yearFilter);
   }, [batches, statusTab, yearFilter]);
 
   // Filter salaries inside selected batch

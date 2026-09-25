@@ -124,7 +124,7 @@ function buildEmployeeFormData(formData: EmployeeFormData, isEdit: boolean): For
     }
 
     // Kirim string kosong untuk nilai null agar Laravel bisa menghapus nilai di DB (nullable)
-    data.append(key, val === null ? "" : val.toString());
+    data.append(key, (val === null || val === undefined) ? "" : String(val));
   });
 
   if (isEdit) {
@@ -144,6 +144,86 @@ function parsePortalAccessValue(val: string): boolean | null {
   if (val === "enabled") return true;
   if (val === "disabled") return false;
   return null;
+}
+
+function downloadEmployeeImportTemplate(availableRoles: Role[]) {
+  const templateData: Record<string, string | number | null | undefined>[] = [
+    { 
+      "nama (WAJIB)": "Andi Saputra", 
+      "email (WAJIB)": "andi@example.com", 
+      "nik (OPSIONAL)": "123456789", 
+      "password (WAJIB)": ["pass", "word123"].join(""), 
+      "role_id (WAJIB)": 3, 
+      "tanggal_gabung (OPSIONAL)": "2024-01-01",
+      "nomor_telepon (OPSIONAL)": "08123456789",
+      "alamat (OPSIONAL)": "Jl. Merdeka No. 1",
+      "nomor_ktp (OPSIONAL)": "3171234567890001",
+      "tempat_lahir (OPSIONAL)": "Jakarta",
+      "tanggal_lahir (YYYY-MM-DD)": "1995-05-15",
+      "jenis_kelamin (Laki-laki/Perempuan)": "Laki-laki",
+      "agama (Islam/Kristen/Katolik/Hindu/Buddha/Konghucu)": "Islam",
+      "status_nikah (Single/Menikah/Janda/Duda)": "Single",
+      "gol_darah (A/B/AB/O)": "O",
+      "status_karyawan (Permanent/Contract)": "Permanent",
+      "lokasi_kerja (OPSIONAL)": "Kantor Pusat",
+      "id_atasan (LIHAT DAFTAR)": null,
+      "nama_kontak_darurat": "Budi (Ayah)",
+      "nomor_kontak_darurat": "081222333444"
+    }
+  ];
+
+  templateData.push({});
+  templateData.push({ "nama (WAJIB)": ">>> PANDUAN PENGISIAN <<<" });
+  templateData.push({ "nama (WAJIB)": "1. Kolom bertanda (WAJIB) tidak boleh kosong." });
+  templateData.push({ "nama (WAJIB)": "2. Untuk Kolom ROLE_ID, gunakan angka dari daftar di bawah ini:" });
+  
+  availableRoles.forEach(role => {
+    templateData.push({ 
+      "nama (WAJIB)": `   - Angka ${role.id} untuk jabatan: ${role.name.toUpperCase()}`
+    });
+  });
+
+  templateData.push({ "nama (WAJIB)": "3. Untuk Kolom ID_ATASAN, masukkan ID Karyawan yang menjadi bosnya (cek di tabel karyawan)." });
+  templateData.push({ "nama (WAJIB)": "4. Format Tanggal gunakan: YYYY-MM-DD (Contoh: 2024-12-30)." });
+  templateData.push({ "nama (WAJIB)": "5. Hapus baris CONTOH (Andi Saputra) sebelum upload jika tidak diperlukan." });
+  
+  const worksheet = XLSX.utils.json_to_sheet(templateData);
+  worksheet['!cols'] = [
+    { wch: 40 }, { wch: 25 }, { wch: 15 }, { wch: 15 },
+    { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 30 },
+    { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 15 },
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Template Karyawan");
+  XLSX.writeFile(workbook, "Template_Import_Karyawan_Narwastu.xlsx");
+}
+
+function downloadPayrollAccountTemplate() {
+  const templateData = [
+    {
+      "Email (WAJIB)": "karyawan@example.com",
+      "NIK (OPSIONAL)": "12345678",
+      "Bank": "BCA",
+      "Nomor Rekening": "1234567890",
+      "Nama Rekening": "Ahmad Rizki",
+      "Cost Center": "PT. Artacomindo Jejaring Nusa",
+      "Gaji Pokok (OPSIONAL)": 0,
+    },
+    {},
+    { "Email (WAJIB)": ">>> PANDUAN PENGISIAN DATA REKENING <<<" },
+    { "Email (WAJIB)": "1. Email atau NIK digunakan sebagai kunci untuk mencari data karyawan." },
+    { "Email (WAJIB)": "2. Data Bank & Rekening yang diisi di sini akan otomatis muncul setiap kali Generate Payroll." },
+    { "Email (WAJIB)": "3. Cost Center bisa diisi 'PT. Artacomindo Jejaring Nusa', 'Artacomindotama', 'Narwasthu' atau sesuai unit kerja." },
+    { "Email (WAJIB)": "4. Jika data sudah ada di sistem, maka akan diperbarui (Update) dengan data baru dari Excel ini." }
+  ];
+
+  const worksheet = XLSX.utils.json_to_sheet(templateData);
+  worksheet['!cols'] = [{wch: 30}, {wch: 15}, {wch: 15}, {wch: 20}, {wch: 25}, {wch: 30}, {wch: 20}];
+  
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Data Rekening Payroll");
+  XLSX.writeFile(workbook, "Template_Data_Rekening_Karyawan.xlsx");
 }
 
 function EmployeesContent() {
@@ -249,105 +329,8 @@ function EmployeesContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, selectedRole, page, urlSearch, urlId, permissions, activeFilter, perPage]);
 
-  const downloadTemplate = () => {
-    // Definisi data contoh dengan label kolom yang ramah user
-    const templateData: Record<string, string | number | null | undefined>[] = [
-      { 
-        "nama (WAJIB)": "Andi Saputra", 
-        "email (WAJIB)": "andi@example.com", 
-        "nik (OPSIONAL)": "123456789", 
-        "password (WAJIB)": ["pass", "word123"].join(""), 
-        "role_id (WAJIB)": 3, 
-        "tanggal_gabung (OPSIONAL)": "2024-01-01",
-        "nomor_telepon (OPSIONAL)": "08123456789",
-        "alamat (OPSIONAL)": "Jl. Merdeka No. 1",
-        "nomor_ktp (OPSIONAL)": "3171234567890001",
-        "tempat_lahir (OPSIONAL)": "Jakarta",
-        "tanggal_lahir (YYYY-MM-DD)": "1995-05-15",
-        "jenis_kelamin (Laki-laki/Perempuan)": "Laki-laki",
-        "agama (Islam/Kristen/Katolik/Hindu/Buddha/Konghucu)": "Islam",
-        "status_nikah (Single/Menikah/Janda/Duda)": "Single",
-        "gol_darah (A/B/AB/O)": "O",
-        "status_karyawan (Permanent/Contract)": "Permanent",
-        "lokasi_kerja (OPSIONAL)": "Kantor Pusat",
-        "id_atasan (LIHAT DAFTAR)": null,
-        "nama_kontak_darurat": "Budi (Ayah)",
-        "nomor_kontak_darurat": "081222333444"
-      }
-    ];
-
-    // Baris kosong untuk pemisah
-    templateData.push({});
-    
-    // Bagian Instruksi
-    templateData.push({ "nama (WAJIB)": ">>> PANDUAN PENGISIAN <<<" });
-    templateData.push({ "nama (WAJIB)": "1. Kolom bertanda (WAJIB) tidak boleh kosong." });
-    templateData.push({ "nama (WAJIB)": "2. Untuk Kolom ROLE_ID, gunakan angka dari daftar di bawah ini:" });
-    
-    availableRoles.forEach(role => {
-      templateData.push({ 
-        "nama (WAJIB)": `   - Angka ${role.id} untuk jabatan: ${role.name.toUpperCase()}`
-      });
-    });
-
-    templateData.push({ "nama (WAJIB)": "3. Untuk Kolom ID_ATASAN, masukkan ID Karyawan yang menjadi bosnya (cek di tabel karyawan)." });
-    templateData.push({ "nama (WAJIB)": "4. Format Tanggal gunakan: YYYY-MM-DD (Contoh: 2024-12-30)." });
-    templateData.push({ "nama (WAJIB)": "5. Hapus baris CONTOH (Andi Saputra) sebelum upload jika tidak diperlukan." });
-    
-    // Buat worksheet dari data JSON
-    // Karena ToModel WithHeadingRow di backend menggunakan slug, pastikan key-nya konsisten
-    // Maatwebsite Excel WithHeadingRow akan mengubah "nama (WAJIB)" menjadi "nama"
-    
-    const worksheet = XLSX.utils.json_to_sheet(templateData);
-
-    // Atur Lebar Kolom
-    worksheet['!cols'] = [
-      { wch: 40 }, // Nama
-      { wch: 25 }, // Email
-      { wch: 15 }, // NIK
-      { wch: 15 }, // Password
-      { wch: 12 }, // Role ID
-      { wch: 20 }, // Tanggal Gabung
-      { wch: 18 }, // No Telp
-      { wch: 30 }, // Alamat
-      { wch: 20 }, // KTP
-      { wch: 20 }, // Gender
-      { wch: 20 }, // Status
-      { wch: 20 }, // Lokasi
-      { wch: 15 }, // ID Atasan
-    ];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Template Karyawan");
-    XLSX.writeFile(workbook, "Template_Import_Karyawan_Narwastu.xlsx");
-  };
-
-  const downloadPayrollTemplate = () => {
-    const templateData = [
-      {
-        "Email (WAJIB)": "karyawan@example.com",
-        "NIK (OPSIONAL)": "12345678",
-        "Bank": "BCA",
-        "Nomor Rekening": "1234567890",
-        "Nama Rekening": "Ahmad Rizki",
-        "Cost Center": "PT. Artacomindo Jejaring Nusa",
-        "Gaji Pokok (OPSIONAL)": 0,
-      },
-      {},
-      { "Email (WAJIB)": ">>> PANDUAN PENGISIAN DATA REKENING <<<" },
-      { "Email (WAJIB)": "1. Email atau NIK digunakan sebagai kunci untuk mencari data karyawan." },
-      { "Email (WAJIB)": "2. Data Bank & Rekening yang diisi di sini akan otomatis muncul setiap kali Generate Payroll." },
-      { "Email (WAJIB)": "3. Cost Center bisa diisi 'PT. Artacomindo Jejaring Nusa', 'Artacomindotama', 'Narwasthu' atau sesuai unit kerja." },
-      { "Email (WAJIB)": "4. Jika data sudah ada di sistem, maka akan diperbarui (Update) dengan data baru dari Excel ini." }
-    ];
-
-    const worksheet = XLSX.utils.json_to_sheet(templateData);
-    worksheet['!cols'] = [{wch: 30}, {wch: 15}, {wch: 15}, {wch: 20}, {wch: 25}, {wch: 30}, {wch: 20}];
-    
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Data Rekening Payroll");
-    XLSX.writeFile(workbook, "Template_Data_Rekening_Karyawan.xlsx");
-  };
+  const handleDownloadTemplate = () => downloadEmployeeImportTemplate(availableRoles);
+  const handleDownloadPayrollTemplate = () => downloadPayrollAccountTemplate();
 
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -576,16 +559,16 @@ function EmployeesContent() {
       const isEdit = modalMode !== "add";
       const data = buildEmployeeFormData(formData, isEdit);
 
-      if (!isEdit) {
-        await axiosInstance.post("/employees", data, {
-          headers: { "Content-Type": "multipart/form-data" }
-        });
-        toast.success("Karyawan baru berhasil ditambahkan! Undangan email sedang dikirim.");
-      } else {
+      if (isEdit) {
         await axiosInstance.post(`/employees/${formData.id}`, data, {
           headers: { "Content-Type": "multipart/form-data" }
         });
         toast.success("Berhasil memperbarui data karyawan!");
+      } else {
+        await axiosInstance.post("/employees", data, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+        toast.success("Karyawan baru berhasil ditambahkan! Undangan email sedang dikirim.");
       }
       handleCloseModal();
       fetchEmployees(pagination?.current_page || 1);
@@ -761,14 +744,14 @@ function EmployeesContent() {
         <div className="dash-page-actions flex flex-wrap gap-2">
           <PermissionGuard slug="create-employees">
             <button 
-              onClick={downloadTemplate}
+              onClick={handleDownloadTemplate}
               className="dash-btn dash-btn-outline border-gray-200 hover:border-gray-300 text-gray-600 font-bold"
             >
               <FileDown size={14} className="mr-1" />
               Template Karyawan
             </button>
             <button 
-              onClick={downloadPayrollTemplate}
+              onClick={handleDownloadPayrollTemplate}
               className="dash-btn dash-btn-outline border-blue-200 hover:border-blue-300 text-blue-600 font-bold"
             >
               <FileDown size={14} className="mr-1" />

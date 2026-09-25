@@ -179,11 +179,13 @@ const renderApprovalProgressBar = (item: ReimbursementRecord, workflow: Workflow
   );
 };
 
+type TimelineStepState = "passed" | "current" | "upcoming";
+
 function determineStepState(
   stepNum: number,
   currentStep: number,
   isApproved: boolean
-): "passed" | "current" | "upcoming" {
+): TimelineStepState {
   if (isApproved || stepNum < currentStep) {
     return "passed";
   }
@@ -193,7 +195,7 @@ function determineStepState(
   return "upcoming";
 }
 
-function getTimelineStepBadgeClass(stepState: "passed" | "current" | "upcoming", isRejected: boolean): string {
+function getTimelineStepBadgeClass(stepState: TimelineStepState, isRejected: boolean): string {
   if (stepState === 'passed') {
     return 'bg-emerald-600 text-white shadow-emerald-500/20';
   }

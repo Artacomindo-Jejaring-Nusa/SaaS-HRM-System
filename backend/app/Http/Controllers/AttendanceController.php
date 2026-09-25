@@ -393,7 +393,7 @@ class AttendanceController extends Controller
         return null;
     }
 
-    private function verifyFaceAttendance($user, $request, string $type): ?array
+    private function checkFacePrerequisites($user, $request): ?array
     {
         if ($user->face_status !== 'approved' || empty($user->face_embedding)) {
             $msg = match ($user->face_status) {
@@ -410,6 +410,17 @@ class AttendanceController extends Controller
             return ['message' => 'Foto selfie absensi wajib disertakan untuk verifikasi wajah.', 'code' => 422];
         }
 
+        return null;
+    }
+
+    private function verifyFaceAttendance($user, $request, string $type): ?array
+    {
+        $prereqError = $this->checkFacePrerequisites($user, $request);
+        if ($prereqError !== null) {
+            return $prereqError;
+        }
+
+        $imageInput = $request->hasFile('image') ? $request->file('image') : ($request->image ?? $request->image_base64);
         $faceService = app(\App\Services\FaceRecognitionService::class);
         $verifyResult = $faceService->verifyFace($user->face_embedding, $imageInput);
 

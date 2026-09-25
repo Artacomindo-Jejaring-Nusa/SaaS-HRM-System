@@ -259,26 +259,8 @@ class ManagerController extends Controller
         ]);
     }
 
-    private function handleDynamicApproval($item, Request $request, $user)
+    private function prepareDynamicUpdateData($item, Request $request, $user, array $result): array
     {
-        $action = $request->status === 'approved' ? 'approve' : 'reject';
-        $result = \App\Services\ApprovalService::processApproval(
-            $request->type,
-            $item->company_id ?? $user->company_id,
-            $user,
-            $item->user,
-            $item->current_approval_step,
-            $action
-        );
-
-        if ($result && isset($result['error'])) {
-            return response()->json(['status' => 'error', 'message' => $result['error']], 403);
-        }
-
-        if (!$result) {
-            return response()->json(['status' => 'error', 'message' => 'Gagal memproses alur persetujuan.'], 400);
-        }
-
         $updateData = [
             'status' => $result['status'],
             'current_approval_step' => $result['current_approval_step'],
@@ -299,15 +281,11 @@ class ManagerController extends Controller
             $updateData['remark'] = $request->remark;
         }
 
-        $item->update($updateData);
+        return $updateData;
+    }
 
-        if ($request->type === 'leave' && $result['is_final'] && $result['status'] === 'approved') {
-            LeaveController::processLeaveApprovalDeduction();
-        }
-
-        $typeText = $this->getTypeText($request->type);
-        $routePath = $this->getRoutePath($request->type);
-
+    private function sendDynamicApprovalNotifications($item, Request $request, $user, array $result, string $typeText, string $routePath): string
+    {
         if ($result['is_final']) {
             $statusText = strtoupper($result['status'] === 'approved' ? 'DISETUJUI' : 'DITOLAK');
             if ($item->user) {
@@ -319,30 +297,62 @@ class ManagerController extends Controller
                     $routePath
                 );
             }
-            $msg = "Pengajuan {$typeText} berhasil di-{$request->status} secara final.";
-        } else {
-            if (isset($result['approvers'])) {
-                foreach ($result['approvers'] as $nextApprover) {
-                    $this->notify(
-                        $nextApprover,
-                        "PENGAJUAN BUTUH PERSETUJUAN",
-                        "Pengajuan {$typeText} dari {$item->user?->name} telah disetujui pada tahap sebelumnya dan kini membutuhkan persetujuan Anda ({$result['step_label']}).",
-                        'warning',
-                        $routePath
-                    );
-                }
-            }
-            if ($item->user) {
+            return "Pengajuan {$typeText} berhasil di-{$request->status} secara final.";
+        }
+
+        if (isset($result['approvers'])) {
+            foreach ($result['approvers'] as $nextApprover) {
                 $this->notify(
-                    $item->user,
-                    "PROGRESS PENGAJUAN {$typeText}",
-                    "Pengajuan {$typeText} Anda telah disetujui oleh {$user->name} dan berlanjut ke tahap berikutnya.",
-                    'info',
+                    $nextApprover,
+                    "PENGAJUAN BUTUH PERSETUJUAN",
+                    "Pengajuan {$typeText} dari {$item->user?->name} telah disetujui pada tahap sebelumnya dan kini membutuhkan persetujuan Anda ({$result['step_label']}).",
+                    'warning',
                     $routePath
                 );
             }
-            $msg = "Persetujuan tahap {$item->current_approval_step} berhasil. Menunggu tahap berikutnya.";
         }
+        if ($item->user) {
+            $this->notify(
+                $item->user,
+                "PROGRESS PENGAJUAN {$typeText}",
+                "Pengajuan {$typeText} Anda telah disetujui oleh {$user->name} dan berlanjut ke tahap berikutnya.",
+                'info',
+                $routePath
+            );
+        }
+        return "Persetujuan tahap {$item->current_approval_step} berhasil. Menunggu tahap berikutnya.";
+    }
+
+    private function handleDynamicApproval($item, Request $request, $user)
+    {
+        $action = $request->status === 'approved' ? 'approve' : 'reject';
+        $result = \App\Services\ApprovalService::processApproval(
+            $request->type,
+            $item->company_id ?? $user->company_id,
+            $user,
+            $item->user,
+            $item->current_approval_step,
+            $action
+        );
+
+        if ($result && isset($result['error'])) {
+            return response()->json(['status' => 'error', 'message' => $result['error']], 403);
+        }
+
+        if (!$result) {
+            return response()->json(['status' => 'error', 'message' => 'Gagal memproses alur persetujuan.'], 400);
+        }
+
+        $updateData = $this->prepareDynamicUpdateData($item, $request, $user, $result);
+        $item->update($updateData);
+
+        if ($request->type === 'leave' && $result['is_final'] && $result['status'] === 'approved') {
+            LeaveController::processLeaveApprovalDeduction();
+        }
+
+        $typeText = $this->getTypeText($request->type);
+        $routePath = $this->getRoutePath($request->type);
+        $msg = $this->sendDynamicApprovalNotifications($item, $request, $user, $result, $typeText, $routePath);
 
         return response()->json([
             'status' => 'success',
@@ -398,13 +408,29 @@ class ManagerController extends Controller
         return 'rejected';
     }
 
+    private function resolveVehicleLogTargetStatus(string $itemStatus, string $requestStatus): string
+    {
+        $isApproved = $requestStatus === 'approved';
+        if ($itemStatus === 'pending') {
+            return $isApproved ? 'approved' : 'rejected';
+        }
+        return $isApproved ? 'validated' : 'rejected';
+    }
+
+    private function handleLegacyLeaveAdjustment(string $targetStatus, ?string $previousStatus): void
+    {
+        if ($targetStatus === 'approved' && $previousStatus !== 'approved') {
+            LeaveController::processLeaveApprovalDeduction();
+        } elseif ($targetStatus === 'rejected' && $previousStatus === 'approved') {
+            LeaveController::processLeaveApprovalRefund();
+        }
+    }
+
     private function handleLegacyApproval($item, Request $request, $user, bool $isGlobalAdmin, bool $isCompanyAdmin)
     {
         $targetStatus = $request->status;
         if ($request->type === 'vehicle_log') {
-            $targetStatus = $item->status === 'pending'
-                ? ($request->status === 'approved' ? 'approved' : 'rejected')
-                : ($request->status === 'approved' ? 'validated' : 'rejected');
+            $targetStatus = $this->resolveVehicleLogTargetStatus($item->status ?? '', $request->status);
         }
 
         $previousStatus = $item->status;
@@ -420,11 +446,7 @@ class ManagerController extends Controller
         }
 
         if ($request->type === 'leave') {
-            if ($targetStatus === 'approved' && $previousStatus !== 'approved') {
-                LeaveController::processLeaveApprovalDeduction();
-            } elseif ($targetStatus === 'rejected' && $previousStatus === 'approved') {
-                LeaveController::processLeaveApprovalRefund();
-            }
+            $this->handleLegacyLeaveAdjustment($targetStatus, $previousStatus);
         }
 
         $statusText = strtoupper($request->status === 'approved' ? 'DISETUJUI' : 'DITOLAK');
@@ -500,11 +522,11 @@ class ManagerController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Pengajuan tidak ditemukan atau Anda tidak memiliki hak akses.'], 404);
         }
 
-        if (!empty($item->current_approval_step)) {
-            return $this->handleDynamicApproval($item, $request, $user);
-        }
+        $response = !empty($item->current_approval_step)
+            ? $this->handleDynamicApproval($item, $request, $user)
+            : $this->handleLegacyApproval($item, $request, $user, $isGlobalAdmin, $isCompanyAdmin);
 
-        return $this->handleLegacyApproval($item, $request, $user, $isGlobalAdmin, $isCompanyAdmin);
+        return $response;
     }
 
     /**

@@ -63,14 +63,30 @@ function getStatusBadge(status: string) {
   }
 }
 
-interface PermitTableRowProps {
-  permit: PermitRecord;
-  hasApprovePermission: boolean;
-  onViewDetail: (item: PermitRecord) => void;
-  onActionClick: (item: PermitRecord, action: 'approve' | 'reject') => void;
+function buildPermitActionPayload(
+  action: 'approve' | 'reject',
+  remarkInput: string,
+  overrideCategory: string,
+  overrideDoctorNote: boolean
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    remark: remarkInput,
+  };
+  if (action === 'approve') {
+    payload.category = overrideCategory;
+    payload.has_doctor_note = overrideDoctorNote;
+  }
+  return payload;
 }
 
-function PermitTableRow({ permit, hasApprovePermission, onViewDetail, onActionClick }: PermitTableRowProps) {
+interface PermitTableRowProps {
+  readonly permit: PermitRecord;
+  readonly hasApprovePermission: boolean;
+  readonly onViewDetail: (item: PermitRecord) => void;
+  readonly onActionClick: (item: PermitRecord, action: 'approve' | 'reject') => void;
+}
+
+function PermitTableRow({ permit, hasApprovePermission, onViewDetail, onActionClick }: Readonly<PermitTableRowProps>) {
   return (
     <tr>
       <td>
@@ -238,13 +254,7 @@ export default function PermitsPage() {
 
     setIsSubmitting(true);
     try {
-      const payload: Record<string, unknown> = {
-        remark: remarkInput,
-      };
-      if (action === 'approve') {
-        payload.category = overrideCategory;
-        payload.has_doctor_note = overrideDoctorNote;
-      }
+      const payload = buildPermitActionPayload(action, remarkInput, overrideCategory, overrideDoctorNote);
       await axiosInstance.post(`/permits/${item.id}/${action}`, payload);
       toast.success(`Pengajuan Izin berhasil di-${action === 'approve' ? 'setujui' : 'tolak'}!`);
       setActionModal({ isOpen: false, action: null, item: null });

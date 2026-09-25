@@ -31,7 +31,7 @@ class DynamicPayrollEngine
             }
 
             // Check triggers
-            if ($this->evaluateTriggers($comp, $user, $startDate, $endDate, $month, $year)) {
+            if ($this->evaluateTriggers($comp, $user, $startDate, $endDate, $year)) {
                 $applicable[] = [
                     'component' => $comp,
                     'assignment' => $assignment,
@@ -57,7 +57,7 @@ class DynamicPayrollEngine
     /**
      * Evaluate triggers for the component in the current payroll period.
      */
-    public function evaluateTriggers(PayrollComponent $comp, User $user, Carbon $startDate, Carbon $endDate, int $month, int $year): bool
+    public function evaluateTriggers(PayrollComponent $comp, User $user, Carbon $startDate, Carbon $endDate, int $year): bool
     {
         // If no triggers configured, default to recurring monthly
         if ($comp->triggers->isEmpty()) {
@@ -146,7 +146,7 @@ class DynamicPayrollEngine
                 return $reqYears === 0 || $yearsCompleted >= $reqYears;
             }
         } catch (\Throwable) {
-            return false;
+            // fall through
         }
 
         return false;
@@ -273,92 +273,7 @@ class DynamicPayrollEngine
      */
     private function evaluateArithmeticExpression(string $expr): float
     {
-        preg_match_all('/(?:\d+(?:\.\d+)?|[+\-*\/()])/s', $expr, $matches);
-        $tokens = $matches[0] ?? [];
-        $pos = 0;
-
-        $peek = function () use (&$tokens, &$pos) {
-            return $tokens[$pos] ?? null;
-        };
-
-        $consume = function () use (&$tokens, &$pos) {
-            return $tokens[$pos++] ?? null;
-        };
-
-        $parseFactor = function () use (&$parseExpression, &$parseFactor, &$peek, &$consume): float {
-            $token = $peek();
-            if ($token === '+') {
-                $consume();
-                return $parseFactor();
-            }
-            if ($token === '-') {
-                $consume();
-                return -$parseFactor();
-            }
-            if ($token === '(') {
-                $consume();
-                $value = $parseExpression();
-                if ($peek() === ')') {
-                    $consume();
-                } else {
-                    throw new \InvalidArgumentException('Tanda kurung tidak seimbang');
-                }
-                return $value;
-            }
-            if ($token !== null && is_numeric($token)) {
-                $consume();
-                return (float) $token;
-            }
-            throw new \InvalidArgumentException("Token tidak valid: {$token}");
-        };
-
-        $parseTerm = function () use (&$parseFactor, &$peek, &$consume): float {
-            $value = $parseFactor();
-            while (true) {
-                $op = $peek();
-                if ($op === '*' || $op === '/') {
-                    $consume();
-                    $right = $parseFactor();
-                    if ($op === '/') {
-                        if ($right == 0.0) {
-                            throw new \DivisionByZeroError('Pembagian dengan nol dalam rumus');
-                        }
-                        $value = $value / $right;
-                    } else {
-                        $value = $value * $right;
-                    }
-                } else {
-                    break;
-                }
-            }
-            return $value;
-        };
-
-        $parseExpression = function () use (&$parseTerm, &$peek, &$consume): float {
-            $value = $parseTerm();
-            while (true) {
-                $op = $peek();
-                if ($op === '+' || $op === '-') {
-                    $consume();
-                    $right = $parseTerm();
-                    $value = ($op === '+') ? ($value + $right) : ($value - $right);
-                } else {
-                    break;
-                }
-            }
-            return $value;
-        };
-
-        if (empty($tokens)) {
-            return 0.0;
-        }
-
-        $result = $parseExpression();
-        if ($pos < count($tokens)) {
-            throw new \InvalidArgumentException('Karakter tidak valid di akhir ekspresi');
-        }
-
-        return $result;
+        return ExpressionEvaluator::evaluate($expr);
     }
 
     private function buildStatutoryEarningsSnapshot(Salary $salary, array $context): array
