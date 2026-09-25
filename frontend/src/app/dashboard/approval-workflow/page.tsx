@@ -268,13 +268,15 @@ const calculateNextDuplicateName = (
 ): string => {
   let maxNum = 1;
   if (variants) {
-    const escapedBase = rawBase.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-    const regex = new RegExp(String.raw`^${escapedBase}-(\d+)$`, "i");
+    const prefix = `${rawBase.toLowerCase()}-`;
     variants.forEach((v) => {
-      const match = regex.exec(v.name);
-      if (match) {
-        const n = Number.parseInt(match[1], 10);
-        if (n > maxNum) maxNum = n;
+      const name = v.name.toLowerCase();
+      if (name.startsWith(prefix)) {
+        const suffix = name.slice(prefix.length);
+        if (/^\d+$/.test(suffix)) {
+          const n = Number.parseInt(suffix, 10);
+          if (n > maxNum) maxNum = n;
+        }
       }
     });
   }
@@ -815,7 +817,13 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
     if (rawBase.toLowerCase().endsWith("(khusus)")) {
       rawBase = rawBase.slice(0, -8).trim();
     }
-    rawBase = rawBase.replace(/-\d+$/, "").trim();
+    const lastDash = rawBase.lastIndexOf("-");
+    if (lastDash !== -1) {
+      const suffix = rawBase.slice(lastDash + 1);
+      if (suffix.length > 0 && /^\d+$/.test(suffix)) {
+        rawBase = rawBase.slice(0, lastDash).trim();
+      }
+    }
 
     setDuplicateName(calculateNextDuplicateName(rawBase, activeModule?.variants));
     setDuplicateScopeType("role");
