@@ -23,7 +23,7 @@ export function SearchableSupervisorSelect({
   supervisors,
   placeholder = "Tanpa Atasan",
   disabled = false,
-}: SearchableSupervisorSelectProps) {
+}: Readonly<SearchableSupervisorSelectProps>) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -132,9 +132,10 @@ export function SearchableSupervisorSelect({
         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto py-1 text-sm">
           {/* Option: Tanpa Atasan */}
           {(!searchLower || "tanpa atasan".includes(searchLower)) && (
-            <div
+            <button
+              type="button"
               onClick={() => handleSelect(null)}
-              className={`px-3 py-2 cursor-pointer transition-colors flex items-center justify-between ${
+              className={`w-full text-left px-3 py-2 cursor-pointer transition-colors flex items-center justify-between ${
                 value === null || value === undefined
                   ? "bg-gray-100 font-semibold text-gray-900"
                   : "text-gray-700 hover:bg-gray-50"
@@ -144,7 +145,7 @@ export function SearchableSupervisorSelect({
               {(value === null || value === undefined) && (
                 <Check className="w-4 h-4 text-gray-600" />
               )}
-            </div>
+            </button>
           )}
 
           {/* Supervisor List */}
@@ -153,10 +154,11 @@ export function SearchableSupervisorSelect({
             const isSelected = value === emp.id;
 
             return (
-              <div
+              <button
+                type="button"
                 key={emp.id}
                 onClick={() => handleSelect(emp.id)}
-                className={`px-3 py-2 cursor-pointer transition-colors flex items-center justify-between ${
+                className={`w-full text-left px-3 py-2 cursor-pointer transition-colors flex items-center justify-between ${
                   isSelected
                     ? "bg-red-50 font-medium text-[#8B0000]"
                     : "text-gray-700 hover:bg-gray-50"
@@ -164,7 +166,7 @@ export function SearchableSupervisorSelect({
               >
                 <span>{label}</span>
                 {isSelected && <Check className="w-4 h-4 text-[#8B0000]" />}
-              </div>
+              </button>
             );
           })}
 

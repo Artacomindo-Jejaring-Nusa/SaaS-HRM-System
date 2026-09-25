@@ -20,6 +20,24 @@ interface Role {
   permissions?: Permission[];
 }
 
+const SUPERADMIN_ONLY_SLUGS = new Set([
+  'create-employees',
+  'edit-employees',
+  'delete-employees',
+  'manage-company',
+  'manage-roles',
+  'manage-wfh',
+  'manage-offices',
+  'view-directory',
+  'manage-shifts',
+  'manage-schedules',
+  'manage-holidays',
+  'manage-announcements',
+  'manage-approvals',
+  'manage-documents',
+  'manage-kpis',
+]);
+
 export default function RolesPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [allPermissions, setAllPermissions] = useState<Record<string, Permission[]>>({});
@@ -53,24 +71,6 @@ export default function RolesPage() {
     }
   };
 
-  const SUPERADMIN_ONLY_SLUGS = [
-    'create-employees',
-    'edit-employees',
-    'delete-employees',
-    'manage-company',
-    'manage-roles',
-    'manage-wfh',
-    'manage-offices',
-    'view-directory',
-    'manage-shifts',
-    'manage-schedules',
-    'manage-holidays',
-    'manage-announcements',
-    'manage-approvals',
-    'manage-documents',
-    'manage-kpis',
-  ];
-
   const fetchPermissions = async () => {
     try {
       const res = await axiosInstance.get("/permissions");
@@ -78,7 +78,7 @@ export default function RolesPage() {
       const grouped: Record<string, Permission[]> = Array.isArray(rawData) ? {} : (rawData?.data || rawData || {});
       const cleanGrouped: Record<string, Permission[]> = {};
       Object.entries(grouped).forEach(([group, perms]) => {
-        const filtered = perms.filter(p => !SUPERADMIN_ONLY_SLUGS.includes(p.slug));
+        const filtered = perms.filter(p => !SUPERADMIN_ONLY_SLUGS.has(p.slug));
         if (filtered.length > 0) {
           cleanGrouped[group] = filtered;
         }
@@ -109,7 +109,7 @@ export default function RolesPage() {
       setSelectedRole(detailedRole);
       setRolePermissions(
         detailedRole.permissions
-          ?.filter((p: any) => !SUPERADMIN_ONLY_SLUGS.includes(p.slug))
+          ?.filter((p: any) => !SUPERADMIN_ONLY_SLUGS.has(p.slug))
           .map((p: any) => p.id) || []
       );
       setPermissionModalOpen(true);

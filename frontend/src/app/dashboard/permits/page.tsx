@@ -49,6 +49,101 @@ const SUB_TYPES: Record<string, string[]> = {
   L: ['Duka Cita', 'Menikah', 'Lainnya'],
 };
 
+function getActionModalButtonText(isSubmitting: boolean, action: 'approve' | 'reject' | null): string {
+  if (isSubmitting) return "Memproses...";
+  return action === 'approve' ? "Ya, Setujui" : "Ya, Tolak";
+}
+
+function getStatusBadge(status: string) {
+  switch (status) {
+    case 'pending': return <span className="dash-badge dash-badge-warning">Menunggu</span>;
+    case 'approved': return <span className="dash-badge dash-badge-success">Disetujui</span>;
+    case 'rejected': return <span className="dash-badge dash-badge-danger">Ditolak</span>;
+    default: return <span className="dash-badge dash-badge-neutral">{status}</span>;
+  }
+}
+
+interface PermitTableRowProps {
+  permit: PermitRecord;
+  hasApprovePermission: boolean;
+  onViewDetail: (item: PermitRecord) => void;
+  onActionClick: (item: PermitRecord, action: 'approve' | 'reject') => void;
+}
+
+function PermitTableRow({ permit, hasApprovePermission, onViewDetail, onActionClick }: PermitTableRowProps) {
+  return (
+    <tr>
+      <td>
+        <span className="font-semibold text-gray-900">{permit.user?.name || "Karyawan"}</span>
+      </td>
+      <td>
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-bold rounded border ${CATEGORY_COLORS[permit.category || 'I']}`}>
+          {permit.category === 'A' && <AlertTriangle size={12} />}
+          [{permit.category || 'I'}] {CATEGORY_LABELS[permit.category || 'I']}
+        </span>
+        {permit.category === 'S' && (
+          <span className={`block text-[10px] mt-0.5 ${permit.has_doctor_note ? 'text-green-600' : 'text-orange-500'}`}>
+            {permit.has_doctor_note ? '✓ Dengan Surat Dokter' : '✗ Tanpa Surat Dokter'}
+          </span>
+        )}
+      </td>
+      <td>
+        <span className="text-sm font-medium text-gray-700 capitalize flex items-center gap-1.5">
+          <ClipboardList size={14} className="text-gray-400" />
+          {permit.type || "-"}
+        </span>
+      </td>
+      <td>
+        <div className="flex flex-col">
+          <span className="text-sm font-medium text-gray-900">{permit.start_date}</span>
+          <span className="text-xs text-gray-500">s/d {permit.end_date}</span>
+        </div>
+      </td>
+      <td>
+        {permit.is_deducted ? (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded bg-red-50 text-red-600 border border-red-200">
+            <Ban size={12} /> Potong
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded bg-green-50 text-green-600 border border-green-200">
+            <Check size={12} /> Tidak
+          </span>
+        )}
+      </td>
+      <td>{getStatusBadge(permit.status || '')}</td>
+      <td className="text-right">
+        <div className="flex items-center justify-end gap-1">
+          <button 
+            className="dash-action-btn view" 
+            title="Lihat Detail"
+            onClick={() => onViewDetail(permit)}
+          >
+            <Eye size={16} />
+          </button>
+          {hasApprovePermission && permit.status === 'pending' && (
+            <>
+              <button
+                className="dash-action-btn text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 border border-emerald-200"
+                title="Setujui Izin"
+                onClick={() => onActionClick(permit, 'approve')}
+              >
+                <Check size={16} />
+              </button>
+              <button
+                className="dash-action-btn text-rose-600 hover:bg-rose-50 hover:text-rose-700 border border-rose-200"
+                title="Tolak Izin"
+                onClick={() => onActionClick(permit, 'reject')}
+              >
+                <X size={16} />
+              </button>
+            </>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export default function PermitsPage() {
   const { hasPermission } = useAuth();
   const [permits, setpermits] = useState<PermitRecord[]>([]);
@@ -191,15 +286,6 @@ export default function PermitsPage() {
     downloadFile(`/export/permit/${recordId}/excel`, `Izin_${sanitizeFileName(userName)}.xlsx`, 'excel');
 
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending': return <span className="dash-badge dash-badge-warning">Menunggu</span>;
-      case 'approved': return <span className="dash-badge dash-badge-success">Disetujui</span>;
-      case 'rejected': return <span className="dash-badge dash-badge-danger">Ditolak</span>;
-      default: return <span className="dash-badge dash-badge-neutral">{status}</span>;
-    }
-  };
-
   const renderTableContent = () => {
     if (loading) {
       return <div className="p-6"><TableSkeleton rows={6} cols={6} /></div>;
@@ -227,75 +313,13 @@ export default function PermitsPage() {
           </thead>
           <tbody>
             {permits.map((permit) => (
-              <tr key={permit.id}>
-                <td>
-                  <span className="font-semibold text-gray-900">{permit.user?.name || "Karyawan"}</span>
-                </td>
-                <td>
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-bold rounded border ${CATEGORY_COLORS[permit.category || 'I']}`}>
-                    {permit.category === 'A' && <AlertTriangle size={12} />}
-                    [{permit.category || 'I'}] {CATEGORY_LABELS[permit.category || 'I']}
-                  </span>
-                  {permit.category === 'S' && (
-                    <span className={`block text-[10px] mt-0.5 ${permit.has_doctor_note ? 'text-green-600' : 'text-orange-500'}`}>
-                      {permit.has_doctor_note ? '✓ Dengan Surat Dokter' : '✗ Tanpa Surat Dokter'}
-                    </span>
-                  )}
-                </td>
-                <td>
-                  <span className="text-sm font-medium text-gray-700 capitalize flex items-center gap-1.5">
-                    <ClipboardList size={14} className="text-gray-400" />
-                    {permit.type || "-"}
-                  </span>
-                </td>
-                <td>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-gray-900">{permit.start_date}</span>
-                    <span className="text-xs text-gray-500">s/d {permit.end_date}</span>
-                  </div>
-                </td>
-                <td>
-                  {permit.is_deducted ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded bg-red-50 text-red-600 border border-red-200">
-                      <Ban size={12} /> Potong
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded bg-green-50 text-green-600 border border-green-200">
-                      <Check size={12} /> Tidak
-                    </span>
-                  )}
-                </td>
-                <td>{getStatusBadge(permit.status || '')}</td>
-                <td className="text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <button 
-                      className="dash-action-btn view" 
-                      title="Lihat Detail"
-                      onClick={() => handleViewDetail(permit)}
-                    >
-                      <Eye size={16} />
-                    </button>
-                    {hasPermission('approve-permits') && permit.status === 'pending' && (
-                      <>
-                        <button
-                          className="dash-action-btn text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 border border-emerald-200"
-                          title="Setujui Izin"
-                          onClick={() => handleActionClick(permit, 'approve')}
-                        >
-                          <Check size={16} />
-                        </button>
-                        <button
-                          className="dash-action-btn text-rose-600 hover:bg-rose-50 hover:text-rose-700 border border-rose-200"
-                          title="Tolak Izin"
-                          onClick={() => handleActionClick(permit, 'reject')}
-                        >
-                          <X size={16} />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
+              <PermitTableRow
+                key={permit.id}
+                permit={permit}
+                hasApprovePermission={hasPermission('approve-permits')}
+                onViewDetail={handleViewDetail}
+                onActionClick={handleActionClick}
+              />
             ))}
           </tbody>
         </table>
@@ -660,10 +684,11 @@ export default function PermitsPage() {
               {actionModal.action === 'approve' && (
                 <div className="space-y-3 pt-1">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    <label htmlFor="override-category-select" className="block text-xs font-semibold text-gray-700 mb-1">
                       Kategori Izin Akhir (Override)
                     </label>
                     <select
+                      id="override-category-select"
                       value={overrideCategory}
                       onChange={(e) => setOverrideCategory(e.target.value)}
                       className="w-full text-sm border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-blue-500"
@@ -721,7 +746,7 @@ export default function PermitsPage() {
                       : 'bg-rose-600 hover:bg-rose-700'
                   }`}
                 >
-                  {isSubmitting ? "Memproses..." : actionModal.action === 'approve' ? "Ya, Setujui" : "Ya, Tolak"}
+                  {getActionModalButtonText(isSubmitting, actionModal.action)}
                 </button>
               </div>
             </div>

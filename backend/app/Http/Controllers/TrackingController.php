@@ -11,6 +11,14 @@ use Illuminate\Support\Facades\Log;
 
 class TrackingController extends Controller
 {
+    private const ROLE_SUPER_ADMIN = 'super admin';
+    private const MSG_ACCESS_DENIED = 'Akses ditolak.';
+
+    private function isSuperAdmin($user): bool
+    {
+        return $user->role_id === 1 || ($user->role && strtolower($user->role->name) === self::ROLE_SUPER_ADMIN);
+    }
+
     /**
      * Store new tracking location from Mobile App
      */
@@ -58,25 +66,8 @@ class TrackingController extends Controller
         ]);
     }
 
-    /**
-     * Get live tracking for Dashboard
-     * Returns the latest location per user for today with filter support
-     */
-    public function live(Request $request)
+    private function buildLiveTrackQuery(Request $request, $user, Carbon $today)
     {
-        $user = $request->user();
-
-        // Security check: Only Super Admin can access live tracking
-        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
-        if (! $isSuperAdmin && ! $user->hasPermission('view-live-tracking')) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Akses ditolak. Fitur Live Tracking hanya untuk Super Admin.',
-            ], 403);
-        }
-
-        $today = Carbon::today();
-        
         $query = EmployeeTrack::with([
             'user:id,name,nik,profile_photo_path,company_id,role_id,phone,email',
             'user.role:id,name',
@@ -90,7 +81,6 @@ class TrackingController extends Controller
                   ->groupBy('user_id');
         });
 
-        // Company filter
         if ($user->company_id && !$user->canAccessAllCompanies()) {
             $query->whereHas('user', function ($q) use ($user) {
                 $q->where('company_id', $user->company_id);
@@ -101,14 +91,12 @@ class TrackingController extends Controller
             });
         }
 
-        // Role / Position filter
         if ($request->filled('role_id') && $request->role_id !== 'all') {
             $query->whereHas('user', function ($q) use ($request) {
                 $q->where('role_id', $request->role_id);
             });
         }
 
-        // Text Search filter (Name / NIK)
         if ($request->filled('search')) {
             $search = $request->search;
             $query->whereHas('user', function ($q) use ($search) {
@@ -117,9 +105,11 @@ class TrackingController extends Controller
             });
         }
 
-        $tracks = $query->get();
+        return $query;
+    }
 
-        // Also include users who checked in today in attendances if not already in employee_tracks
+    private function mergeTodayAttendances($tracks, Request $request, $user, Carbon $today)
+    {
         $trackedUserIds = $tracks->pluck('user_id')->toArray();
         $attendancesToday = \App\Models\Attendance::with([
             'user:id,name,nik,profile_photo_path,company_id,role_id,phone,email',
@@ -159,37 +149,37 @@ class TrackingController extends Controller
                 'battery_level' => 100,
                 'recorded_at' => $att->check_out ?? $att->check_in,
             ]);
-            $fakeTrack->id = $att->id * -1; // Temporary negative ID
+            $fakeTrack->id = $att->id * -1;
             $fakeTrack->setRelation('user', $att->user);
             $tracks->push($fakeTrack);
         }
+    }
 
-        $now = now();
+    private function transformLiveTracks($tracks, Carbon $now): array
+    {
         $activeCount = 0;
         $idleCount = 0;
         $offlineCount = 0;
         $lowBatteryCount = 0;
 
-        // Transform and add realtime metrics
         $transformedTracks = $tracks->map(function ($track) use ($now, &$activeCount, &$idleCount, &$offlineCount, &$lowBatteryCount) {
             if ($track->user) {
-                $track->user->profile_photo_url = $track->user->profile_photo_url;
+                $track->user->append('profile_photo_url');
             }
 
             $recordedAt = Carbon::parse($track->recorded_at);
             $diffMinutes = (int) round($recordedAt->diffInMinutes($now));
 
-            // Determine status
             if ($diffMinutes <= 5) {
-                $status = 'active'; // Online & Aktif
+                $status = 'active';
                 $statusLabel = 'Aktif (Online)';
                 $activeCount++;
             } elseif ($diffMinutes <= 30) {
-                $status = 'idle'; // Diam
+                $status = 'idle';
                 $statusLabel = 'Diam (Idle)';
                 $idleCount++;
             } else {
-                $status = 'offline'; // Tidak aktif
+                $status = 'offline';
                 $statusLabel = 'Offline';
                 $offlineCount++;
             }
@@ -198,66 +188,87 @@ class TrackingController extends Controller
                 $lowBatteryCount++;
             }
 
-            $track->status = $status;
-            $track->status_label = $statusLabel;
-            $track->minutes_ago = $diffMinutes;
-            $track->formatted_time = $recordedAt->format('H:i');
-
-            return $track;
+            return [
+                'id' => $track->id,
+                'user_id' => $track->user_id,
+                'user' => $track->user,
+                'latitude' => (float)$track->latitude,
+                'longitude' => (float)$track->longitude,
+                'accuracy' => $track->accuracy,
+                'battery_level' => $track->battery_level,
+                'recorded_at' => $track->recorded_at,
+                'last_seen_minutes' => $diffMinutes,
+                'status' => $status,
+                'status_label' => $statusLabel,
+            ];
         });
 
-        // Filter by status if specified
-        if ($request->filled('status') && in_array($request->status, ['active', 'idle', 'offline'])) {
-            $transformedTracks = $transformedTracks->where('status', $request->status)->values();
-        }
-
-        return response()->json([
-            'status' => 'success',
-            'data' => $transformedTracks,
+        return [
+            'tracks' => $transformedTracks,
             'summary' => [
                 'total_tracked' => $tracks->count(),
-                'active_count' => $activeCount,
-                'idle_count' => $idleCount,
-                'offline_count' => $offlineCount,
-                'low_battery_count' => $lowBatteryCount,
+                'active' => $activeCount,
+                'idle' => $idleCount,
+                'offline' => $offlineCount,
+                'low_battery' => $lowBatteryCount,
             ]
-        ]);
+        ];
     }
 
     /**
-     * Get track history for a specific user today
+     * Get live tracking for Dashboard
+     * Returns the latest location per user for today with filter support
      */
-    public function history(Request $request, $userId)
+    public function live(Request $request)
     {
         $user = $request->user();
 
-        // Security check: Only Super Admin can access live tracking history
-        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
-        if (! $isSuperAdmin && ! $user->hasPermission('view-live-tracking')) {
+        if (!$this->isSuperAdmin($user) && !$user->hasPermission('view-live-tracking')) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Akses ditolak. Fitur Live Tracking hanya untuk Super Admin.',
             ], 403);
         }
 
-        if ($user->company_id && !$user->canAccessAllCompanies()) {
-            $targetUser = User::find($userId);
-            if (!$targetUser || $targetUser->company_id !== $user->company_id) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Unauthorized'
-                ], 403);
-            }
+        $today = Carbon::today();
+        $tracks = $this->buildLiveTrackQuery($request, $user, $today)->get();
+        $this->mergeTodayAttendances($tracks, $request, $user, $today);
+
+        $result = $this->transformLiveTracks($tracks, now());
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $result['tracks'],
+            'summary' => $result['summary'],
+        ]);
+    }
+
+    /**
+     * Get route history for a specific user and date
+     */
+    public function history(Request $request, $userId)
+    {
+        $user = $request->user();
+
+        if (!$this->isSuperAdmin($user) && !$user->hasPermission('view-live-tracking') && $user->id != $userId) {
+            return response()->json([
+                'status' => 'error',
+                'message' => self::MSG_ACCESS_DENIED,
+            ], 403);
         }
 
-        $date = $request->get('date', Carbon::today()->toDateString());
+        $request->validate([
+            'date' => 'nullable|date',
+        ]);
+
+        $date = $request->date ? Carbon::parse($request->date) : Carbon::today();
 
         $tracks = EmployeeTrack::where('user_id', $userId)
             ->whereDate('recorded_at', $date)
             ->orderBy('recorded_at', 'asc')
             ->get();
 
-        // Calculate total distance traveled (Haversine formula in KM)
+        // Calculate total distance traveled (Haversine formula)
         $totalDistanceKm = 0;
         for ($i = 0; $i < count($tracks) - 1; $i++) {
             $lat1 = deg2rad((float)$tracks[$i]->latitude);
@@ -279,7 +290,7 @@ class TrackingController extends Controller
 
         $firstPoint = $tracks->first();
         $lastPoint = $tracks->last();
-        $durationMinutes = ($firstPoint && $lastPoint) 
+        $durationMinutes = ($firstPoint && $lastPoint)
             ? Carbon::parse($firstPoint->recorded_at)->diffInMinutes(Carbon::parse($lastPoint->recorded_at))
             : 0;
 
@@ -308,28 +319,15 @@ class TrackingController extends Controller
         ]);
     }
 
-    /**
-     * Get Tracking Configuration Settings (Divisions and Employees) for Super Admin
-     */
-    public function getSettings(Request $request)
+    private function getRoleSettings($user)
     {
-        $user = $request->user();
-        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
-        if (! $isSuperAdmin && ! $user->hasPermission('view-live-tracking')) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Akses ditolak. Fitur ini hanya untuk Super Admin.',
-            ], 403);
-        }
-
-        // Get roles/divisions with stats
         $rolesQuery = \App\Models\Role::withCount(['users' => function ($q) use ($user) {
             if ($user->company_id && !$user->canAccessAllCompanies()) {
                 $q->where('company_id', $user->company_id);
             }
         }]);
 
-        $roles = $rolesQuery->get()->map(function ($role) use ($user) {
+        return $rolesQuery->get()->map(function ($role) use ($user) {
             $userQuery = User::where('role_id', $role->id);
             if ($user->company_id && !$user->canAccessAllCompanies()) {
                 $userQuery->where('company_id', $user->company_id);
@@ -346,8 +344,10 @@ class TrackingController extends Controller
                 'disabled_users' => $totalCount - $enabledCount,
             ];
         });
+    }
 
-        // Get individual users
+    private function getUserSettings(Request $request, $user)
+    {
         $usersQuery = User::with(['role:id,name', 'company:id,name', 'office:id,name'])
             ->select('id', 'name', 'nik', 'email', 'phone', 'profile_photo_path', 'company_id', 'role_id', 'office_id', 'is_tracking_enabled');
 
@@ -372,10 +372,27 @@ class TrackingController extends Controller
             });
         }
 
-        $users = $usersQuery->orderBy('name')->get()->map(function ($u) {
+        return $usersQuery->orderBy('name')->get()->map(function ($u) {
             $u->is_tracking_enabled = (bool)($u->is_tracking_enabled ?? true);
             return $u;
         });
+    }
+
+    /**
+     * Get Tracking Configuration Settings (Divisions and Employees) for Super Admin
+     */
+    public function getSettings(Request $request)
+    {
+        $user = $request->user();
+        if (!$this->isSuperAdmin($user) && !$user->hasPermission('view-live-tracking')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Akses ditolak. Fitur ini hanya untuk Super Admin.',
+            ], 403);
+        }
+
+        $roles = $this->getRoleSettings($user);
+        $users = $this->getUserSettings($request, $user);
 
         $totalUsers = User::when($user->company_id && !$user->canAccessAllCompanies(), fn($q) => $q->where('company_id', $user->company_id))->count();
         $totalEnabled = User::when($user->company_id && !$user->canAccessAllCompanies(), fn($q) => $q->where('company_id', $user->company_id))->where('is_tracking_enabled', true)->count();
@@ -400,18 +417,17 @@ class TrackingController extends Controller
     public function toggleUser(Request $request, $userId)
     {
         $user = $request->user();
-        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
-        if (! $isSuperAdmin && ! $user->hasPermission('view-live-tracking')) {
+        if (!$this->isSuperAdmin($user) && !$user->hasPermission('view-live-tracking')) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Akses ditolak.',
+                'message' => self::MSG_ACCESS_DENIED,
             ], 403);
         }
 
         $targetUser = User::when($user->company_id && !$user->canAccessAllCompanies(), fn($q) => $q->where('company_id', $user->company_id))->findOrFail($userId);
 
-        $newStatus = $request->has('is_tracking_enabled') 
-            ? (bool)$request->is_tracking_enabled 
+        $newStatus = $request->has('is_tracking_enabled')
+            ? (bool)$request->is_tracking_enabled
             : !($targetUser->is_tracking_enabled ?? true);
 
         $targetUser->update(['is_tracking_enabled' => $newStatus]);
@@ -439,18 +455,17 @@ class TrackingController extends Controller
     public function toggleRole(Request $request, $roleId)
     {
         $user = $request->user();
-        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
-        if (! $isSuperAdmin && ! $user->hasPermission('view-live-tracking')) {
+        if (!$this->isSuperAdmin($user) && !$user->hasPermission('view-live-tracking')) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Akses ditolak.',
+                'message' => self::MSG_ACCESS_DENIED,
             ], 403);
         }
 
         $role = \App\Models\Role::findOrFail($roleId);
 
-        $newStatus = $request->has('is_tracking_enabled') 
-            ? (bool)$request->is_tracking_enabled 
+        $newStatus = $request->has('is_tracking_enabled')
+            ? (bool)$request->is_tracking_enabled
             : !($role->is_tracking_enabled ?? true);
 
         $role->update(['is_tracking_enabled' => $newStatus]);
@@ -486,11 +501,10 @@ class TrackingController extends Controller
     public function bulkUpdate(Request $request)
     {
         $user = $request->user();
-        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
-        if (! $isSuperAdmin && ! $user->hasPermission('view-live-tracking')) {
+        if (!$this->isSuperAdmin($user) && !$user->hasPermission('view-live-tracking')) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Akses ditolak.',
+                'message' => self::MSG_ACCESS_DENIED,
             ], 403);
         }
 

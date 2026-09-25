@@ -15,17 +15,12 @@ trait HandlesAttendanceProcessing
 {
     private function determineCheckInStatus(User $user, ?Schedule $schedule, Carbon $now): string
     {
-        $company = $user->company;
-        $lateToleranceMinutes = (int) ($company?->late_tolerance_minutes ?? 0);
+        $lateToleranceMinutes = (int) ($user->company?->late_tolerance_minutes ?? 0);
         $dateKey = $now->toDateString();
 
         if ($schedule && $schedule->shift) {
-            $shift = $schedule->shift;
-            $shiftStart = Carbon::parse($dateKey.' '.$shift->start_time)->addMinutes($lateToleranceMinutes);
-            if ($now->gt($shiftStart)) {
-                return 'late';
-            }
-            return 'present';
+            $shiftStart = Carbon::parse($dateKey.' '.$schedule->shift->start_time)->addMinutes($lateToleranceMinutes);
+            return $now->gt($shiftStart) ? 'late' : 'present';
         }
 
         if ($user->attendance_type === 'shift') {
@@ -33,14 +28,10 @@ trait HandlesAttendanceProcessing
         }
 
         // For regular office_hour employees:
-        $workStartTime = $user->office?->work_start_time ?? $company?->work_start_time ?? '08:30:00';
+        $workStartTime = $user->office?->work_start_time ?? $user->company?->work_start_time ?? '08:30:00';
         $workStartThreshold = Carbon::parse($dateKey.' '.$workStartTime)->addMinutes($lateToleranceMinutes);
 
-        if ($now->gt($workStartThreshold)) {
-            return 'late';
-        }
-
-        return 'present';
+        return $now->gt($workStartThreshold) ? 'late' : 'present';
     }
 
     private function sendCheckInNotifications(User $user, string $status, Carbon $now): void

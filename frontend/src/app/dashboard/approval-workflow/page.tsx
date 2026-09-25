@@ -18,14 +18,11 @@ import {
   Crown,
   X,
   Layers,
-  AlertCircle,
-  FolderPlus,
   CheckCircle2,
   Copy,
   Users,
   UserCheck,
   Globe,
-  User,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -97,31 +94,26 @@ interface FlowData {
   edges: FlowEdge[];
 }
 
-const getStepNodeMeta = (
+const getStageTitle = (idx: number, totalSteps: number): string => {
+  if (totalSteps === 1) {
+    return "Persetujuan (Step 1)";
+  }
+  if (idx === 0) {
+    return "Pemeriksaan (Step 1)";
+  }
+  if (idx === totalSteps - 1) {
+    return `Persetujuan (Step ${idx + 1})`;
+  }
+  return `Mengetahui (Step ${idx + 1})`;
+};
+
+const getApproverMeta = (
   step: BackendStep,
-  idx: number,
-  totalSteps: number,
   roles: Array<{ id: number; name: string }>,
   users: Array<{ id: number; name: string; role?: { name: string } }> = []
 ) => {
-  let stageTitle = "";
-  if (totalSteps === 1) {
-    stageTitle = "Persetujuan (Step 1)";
-  } else if (totalSteps === 2) {
-    stageTitle = idx === 0 ? "Pemeriksaan (Step 1)" : "Persetujuan (Step 2)";
-  } else if (totalSteps === 3) {
-    if (idx === 0) stageTitle = "Pemeriksaan (Step 1)";
-    else if (idx === 1) stageTitle = "Mengetahui (Step 2)";
-    else stageTitle = "Persetujuan (Step 3)";
-  } else {
-    if (idx === 0) stageTitle = "Pemeriksaan (Step 1)";
-    else if (idx === totalSteps - 1) stageTitle = `Persetujuan (Step ${idx + 1})`;
-    else stageTitle = `Mengetahui (Step ${idx + 1})`;
-  }
-
   if (step.approver_type === "supervisor") {
     return {
-      stageTitle,
       subText: "Atasan Langsung (SPV)",
       icon: "👔",
       type: "supervisor",
@@ -130,9 +122,7 @@ const getStepNodeMeta = (
   if (step.approver_type === "role") {
     const matchingRole = roles.find((r) => r.id === step.approver_role_id);
     const roleName = matchingRole ? matchingRole.name : (step.role?.name || `Role ${step.approver_role_id}`);
-
     return {
-      stageTitle,
       subText: `Role: ${roleName}`,
       icon: "🏢",
       type: "hrd",
@@ -141,19 +131,29 @@ const getStepNodeMeta = (
   if (step.approver_type === "user") {
     const matchingUser = users.find((u) => u.id === step.approver_user_id);
     const userName = matchingUser ? matchingUser.name : (step.approver_user?.name || `User ID ${step.approver_user_id}`);
-
     return {
-      stageTitle,
       subText: `User: ${userName}`,
       icon: "👤",
       type: "peer",
     };
   }
   return {
-    stageTitle,
     subText: "Penyetuju",
     icon: "👤",
     type: "peer",
+  };
+};
+
+const getStepNodeMeta = (
+  step: BackendStep,
+  idx: number,
+  totalSteps: number,
+  roles: Array<{ id: number; name: string }>,
+  users: Array<{ id: number; name: string; role?: { name: string } }> = []
+) => {
+  return {
+    stageTitle: getStageTitle(idx, totalSteps),
+    ...getApproverMeta(step, roles, users),
   };
 };
 
@@ -247,11 +247,101 @@ function buildEdgePath(from: FlowNode, to: FlowNode): { path: string; mx: number
   };
 }
 
+const validateCustomSteps = (steps: BackendStep[]): string | null => {
+  if (steps.length === 0) {
+    return "Alur kustom minimal harus memiliki 1 step persetujuan.";
+  }
+  for (const s of steps) {
+    if (s.approver_type === "role" && !s.approver_role_id) {
+      return `Step ${s.step_number}: Silakan pilih role jabatan penyetuju.`;
+    }
+    if (s.approver_type === "user" && !s.approver_user_id) {
+      return `Step ${s.step_number}: Silakan pilih user/pejabat penyetuju.`;
+    }
+  }
+  return null;
+};
+
+const calculateNextDuplicateName = (
+  rawBase: string,
+  variants?: WorkflowVariant[]
+): string => {
+  let maxNum = 1;
+  if (variants) {
+    const escapedBase = rawBase.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+    const regex = new RegExp(String.raw`^${escapedBase}-(\d+)$`, "i");
+    variants.forEach((v) => {
+      const match = v.name.match(regex);
+      if (match) {
+        const n = Number.parseInt(match[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    });
+  }
+  return `${rawBase}-${maxNum + 1}`;
+};
+
+const getVariantBadgeColor = (isActive: boolean, isSelected: boolean): string => {
+  if (isActive) {
+    return isSelected ? "bg-emerald-300 ring-1 ring-white" : "bg-emerald-500";
+  }
+  return isSelected ? "bg-gray-300 ring-1 ring-white" : "bg-gray-400";
+};
+
+const renderScopeIcon = (scopeType: string) => {
+  if (scopeType === "company") return <Globe size={13} />;
+  if (scopeType === "role") return <Users size={13} />;
+  return <UserCheck size={13} />;
+};
+
+const renderScopeBadge = (scopeType?: string, userName?: string, roleName?: string) => {
+  if (scopeType === "user") {
+    return (
+      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+        <UserCheck size={12} /> Khusus Karyawan: {userName || "User"}
+      </span>
+    );
+  }
+  if (scopeType === "role") {
+    return (
+      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+        <Users size={12} /> Khusus Divisi/Jabatan: {roleName || "Role"}
+      </span>
+    );
+  }
+  return (
+    <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200 flex items-center gap-1">
+      <Globe size={12} /> Standar Perusahaan (Default)
+    </span>
+  );
+};
+
+const renderScopeVariantBadge = (scopeType?: string) => {
+  if (scopeType === "user") {
+    return (
+      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 border border-purple-200">
+        Khusus Karyawan
+      </span>
+    );
+  }
+  if (scopeType === "role") {
+    return (
+      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 border border-blue-200">
+        Khusus Divisi/Jabatan
+      </span>
+    );
+  }
+  return (
+    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-gray-200 text-gray-700">
+      Default Perusahaan
+    </span>
+  );
+};
+
 export default function ApprovalWorkflowPage() {
   const { user } = useAuth();
   const [selected, setSelected] = useState<string>("leave");
   const [moduleList, setModuleList] = useState<WorkflowModule[]>([]);
-  const [systemCatalog, setSystemCatalog] = useState<SystemCatalogItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>("Semua");
   const [customActive, setCustomActive] = useState<boolean>(false);
   const [steps, setSteps] = useState<BackendStep[]>([]);
@@ -342,9 +432,7 @@ export default function ApprovalWorkflowPage() {
       .then((res) => {
         if (res.data.status === "success" && res.data.data) {
           const list = res.data.data.modules || [];
-          const catalog = res.data.data.system_catalog || [];
           setModuleList(list);
-          setSystemCatalog(catalog);
 
           // If current selected is invalid, select first available
           if (!list.some((m: WorkflowModule) => m.key === selected) && list.length > 0) {
@@ -629,19 +717,10 @@ export default function ApprovalWorkflowPage() {
   // Save the customized workflow
   const handleSaveWorkflow = async () => {
     if (customActive) {
-      if (steps.length === 0) {
-        toast.error("Alur kustom minimal harus memiliki 1 step persetujuan.");
+      const errorMsg = validateCustomSteps(steps);
+      if (errorMsg) {
+        toast.error(errorMsg);
         return;
-      }
-      for (const s of steps) {
-        if (s.approver_type === "role" && !s.approver_role_id) {
-          toast.error(`Step ${s.step_number}: Silakan pilih role jabatan penyetuju.`);
-          return;
-        }
-        if (s.approver_type === "user" && !s.approver_user_id) {
-          toast.error(`Step ${s.step_number}: Silakan pilih user/pejabat penyetuju.`);
-          return;
-        }
       }
     }
 
@@ -687,7 +766,7 @@ export default function ApprovalWorkflowPage() {
 
   // Handle Enable/Disable Workflow (main module or specific variant)
   const handleToggleActive = async (workflowId?: number | null, moduleKey?: string) => {
-    const targetId = workflowId !== undefined ? workflowId : activeWorkflow?.id;
+    const targetId = workflowId === undefined ? activeWorkflow?.id : workflowId;
     const targetModule = moduleKey || selected;
 
     setLoading(true);
@@ -709,7 +788,7 @@ export default function ApprovalWorkflowPage() {
           setActiveWorkflow({ ...activeWorkflow, is_active: newStatus });
           setCustomActive(newStatus);
         }
-        await fetchModuleKeys();
+        fetchModuleKeys();
       } else {
         toast.error(res.data.message || "Gagal mengubah status alur persetujuan.");
       }
@@ -723,28 +802,16 @@ export default function ApprovalWorkflowPage() {
 
   // Open Duplicate Modal with automatic numeric tag (e.g. Perizinan-2)
   const handleOpenDuplicateModal = () => {
-    if (!activeWorkflow && (!activeModule || !activeModule.is_configured)) {
+    if (!activeWorkflow && !activeModule?.is_configured) {
       toast.error("Alur belum terkonfigurasi untuk diduplikasi. Silakan kustomisasi terlebih dahulu.");
       return;
     }
     const rawBase = (activeWorkflow?.name || activeModule?.label || "Alur")
-      .replace(/(\s*\(\s*Khusus\s*\)|-\d+)$/i, "")
+      .replace(/\s*\(Khusus\)$/i, "")
+      .replace(/-\d+$/, "")
       .trim();
 
-    // Check all existing variants in activeModule to find the next tag number
-    let maxNum = 1;
-    if (activeModule?.variants) {
-      activeModule.variants.forEach((v) => {
-        const regex = new RegExp(`^${rawBase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-(\\d+)$`, "i");
-        const match = v.name.match(regex);
-        if (match) {
-          const n = parseInt(match[1], 10);
-          if (n > maxNum) maxNum = n;
-        }
-      });
-    }
-    const nextTag = maxNum + 1;
-    setDuplicateName(`${rawBase}-${nextTag}`);
+    setDuplicateName(calculateNextDuplicateName(rawBase, activeModule?.variants));
     setDuplicateScopeType("role");
     setDuplicateScopeId(roles.length > 0 ? roles[0].id : null);
     setIsDuplicateModalOpen(true);
@@ -783,7 +850,7 @@ export default function ApprovalWorkflowPage() {
         toast.success("Alur persetujuan berhasil diduplikasi!");
         setIsDuplicateModalOpen(false);
         const newWf = res.data.data;
-        await fetchModuleKeys();
+        fetchModuleKeys();
         setSelectedWorkflowId(newWf.id);
         setIsEditing(true);
       } else {
@@ -799,7 +866,7 @@ export default function ApprovalWorkflowPage() {
 
   // Handle Delete Scoped Variant
   const handleDeleteVariant = async (variantId: number, variantName: string) => {
-    const confirmDelete = window.confirm(
+    const confirmDelete = globalThis.confirm(
       `Apakah Anda yakin ingin menghapus varian alur '${variantName}'? Tindakan ini tidak dapat dibatalkan.`
     );
     if (!confirmDelete) return;
@@ -813,7 +880,7 @@ export default function ApprovalWorkflowPage() {
         toast.success(`Varian alur '${variantName}' berhasil dihapus.`);
         setSelectedWorkflowId(null);
         setActiveWorkflow(null);
-        await fetchModuleKeys();
+        fetchModuleKeys();
       } else {
         toast.error(res.data.message || "Gagal menghapus varian alur.");
       }
@@ -828,7 +895,7 @@ export default function ApprovalWorkflowPage() {
   // Handle Delete Custom Workflow
   const handleDeleteWorkflow = async () => {
     if (!activeModule) return;
-    const confirmDelete = window.confirm(
+    const confirmDelete = globalThis.confirm(
       `Apakah Anda yakin ingin menghapus alur '${activeModule.label}'? Tindakan ini tidak dapat dibatalkan.`
     );
     if (!confirmDelete) return;
@@ -1021,24 +1088,10 @@ export default function ApprovalWorkflowPage() {
                     className="px-3 py-1.5 text-xs flex items-center gap-1.5 focus:outline-none"
                   >
                     <span
-                      className={`h-2 w-2 rounded-full shrink-0 ${
-                        v.is_active
-                          ? isSelectedVariant
-                            ? "bg-emerald-300 ring-1 ring-white"
-                            : "bg-emerald-500"
-                          : isSelectedVariant
-                          ? "bg-gray-300 ring-1 ring-white"
-                          : "bg-gray-400"
-                      }`}
+                      className={`h-2 w-2 rounded-full shrink-0 ${getVariantBadgeColor(v.is_active, isSelectedVariant)}`}
                       title={v.is_active ? "Alur Aktif" : "Alur Dinonaktifkan"}
                     />
-                    {v.scope_type === "company" ? (
-                      <Globe size={13} />
-                    ) : v.scope_type === "role" ? (
-                      <Users size={13} />
-                    ) : (
-                      <UserCheck size={13} />
-                    )}
+                    {renderScopeIcon(v.scope_type)}
                     <span>{v.name}</span>
                     <span
                       className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
@@ -1170,29 +1223,17 @@ export default function ApprovalWorkflowPage() {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {activeWorkflow?.scope_type === "user" ? (
-                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
-                    <UserCheck size={12} /> Khusus Karyawan: {activeWorkflow.scope_user?.name || "User"}
-                  </span>
-                ) : activeWorkflow?.scope_type === "role" ? (
-                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
-                    <Users size={12} /> Khusus Divisi/Jabatan: {activeWorkflow.scope_role?.name || "Role"}
-                  </span>
-                ) : (
-                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200 flex items-center gap-1">
-                    <Globe size={12} /> Standar Perusahaan (Default)
-                  </span>
-                )}
+                {renderScopeBadge(activeWorkflow?.scope_type, activeWorkflow?.scope_user?.name, activeWorkflow?.scope_role?.name)}
 
                 {(activeWorkflow?.is_active ?? customActive) ? (
                   <span className="text-[10px] font-bold px-2.5 py-1 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-300 flex items-center gap-1">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Alur Aktif
+                    <span>Alur Aktif</span>
                   </span>
                 ) : (
                   <span className="text-[10px] font-bold px-2.5 py-1 rounded-full border bg-red-50 text-red-700 border-red-200 flex items-center gap-1">
                     <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-                    Alur Non-Aktif (Dilewati)
+                    <span>Alur Non-Aktif (Dilewati)</span>
                   </span>
                 )}
               </div>
@@ -1447,24 +1488,13 @@ export default function ApprovalWorkflowPage() {
                     {/* Workflow Variant Name & Scope Badge */}
                     <div className="space-y-2 p-3 bg-gray-50/90 rounded-xl border border-gray-200/70">
                       <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider">
+                        <label htmlFor="workflow-variant-name-input" className="text-[10px] font-black text-gray-500 uppercase tracking-wider">
                           Nama Alur / Varian
                         </label>
-                        {activeWorkflow?.scope_type === "user" ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 border border-purple-200">
-                            Khusus Karyawan
-                          </span>
-                        ) : activeWorkflow?.scope_type === "role" ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 border border-blue-200">
-                            Khusus Divisi/Jabatan
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-gray-200 text-gray-700">
-                            Default Perusahaan
-                          </span>
-                        )}
+                        {renderScopeVariantBadge(activeWorkflow?.scope_type)}
                       </div>
                       <input
+                        id="workflow-variant-name-input"
                         type="text"
                         value={activeWorkflow?.name || ""}
                         onChange={(e) => {
@@ -1505,7 +1535,7 @@ export default function ApprovalWorkflowPage() {
                       <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
                         {steps.map((step, index) => (
                           <div
-                            key={index}
+                            key={`workflow-step-${step.step_number}`}
                             className="p-3 border border-gray-100 bg-white shadow-sm rounded-xl space-y-2 relative"
                           >
                             <div className="flex items-center justify-between">
@@ -1536,8 +1566,9 @@ export default function ApprovalWorkflowPage() {
 
                             {/* Approver Type */}
                             <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-gray-500">Tipe Penyetuju</label>
+                              <label htmlFor={`step-approver-type-${step.step_number}`} className="text-[10px] font-bold text-gray-500">Tipe Penyetuju</label>
                               <select
+                                id={`step-approver-type-${step.step_number}`}
                                 value={step.approver_type}
                                 onChange={(e) => {
                                   const newType = e.target.value as "supervisor" | "role" | "user";
@@ -1560,11 +1591,12 @@ export default function ApprovalWorkflowPage() {
                             {/* Specific Role Dropdown */}
                             {step.approver_type === "role" && (
                               <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-500">Pilih Role</label>
+                                <label htmlFor={`step-role-${step.step_number}`} className="text-[10px] font-bold text-gray-500">Pilih Role</label>
                                 <select
+                                  id={`step-role-${step.step_number}`}
                                   value={step.approver_role_id || ""}
                                   onChange={(e) =>
-                                    handleStepChange(index, "approver_role_id", parseInt(e.target.value))
+                                    handleStepChange(index, "approver_role_id", Number.parseInt(e.target.value, 10))
                                   }
                                   className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
                                 >
@@ -1580,11 +1612,12 @@ export default function ApprovalWorkflowPage() {
                             {/* Specific User Dropdown */}
                             {step.approver_type === "user" && (
                               <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-500">Pilih User / Pejabat</label>
+                                <label htmlFor={`step-user-${step.step_number}`} className="text-[10px] font-bold text-gray-500">Pilih User / Pejabat</label>
                                 <select
+                                  id={`step-user-${step.step_number}`}
                                   value={step.approver_user_id || ""}
                                   onChange={(e) =>
-                                    handleStepChange(index, "approver_user_id", parseInt(e.target.value))
+                                    handleStepChange(index, "approver_user_id", Number.parseInt(e.target.value, 10))
                                   }
                                   className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
                                 >
@@ -1603,14 +1636,15 @@ export default function ApprovalWorkflowPage() {
 
                             {/* SLA hours */}
                             <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-gray-500">
+                              <label htmlFor={`step-sla-${step.step_number}`} className="text-[10px] font-bold text-gray-500">
                                 Batas SLA Persetujuan (Jam)
                               </label>
                               <input
+                                id={`step-sla-${step.step_number}`}
                                 type="number"
                                 value={step.sla_hours}
                                 onChange={(e) =>
-                                  handleStepChange(index, "sla_hours", parseInt(e.target.value) || 24)
+                                  handleStepChange(index, "sla_hours", Number.parseInt(e.target.value, 10) || 24)
                                 }
                                 className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
                                 min={1}
@@ -1791,10 +1825,11 @@ export default function ApprovalWorkflowPage() {
             <div className="space-y-4">
               {/* Variant Name */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-700">
+                <label htmlFor="duplicate-variant-name-input" className="text-xs font-bold text-gray-700">
                   Nama Varian Alur Baru
                 </label>
                 <input
+                  id="duplicate-variant-name-input"
                   type="text"
                   value={duplicateName}
                   onChange={(e) => setDuplicateName(e.target.value)}
@@ -1805,9 +1840,9 @@ export default function ApprovalWorkflowPage() {
 
               {/* Scope Type Selector */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-700">
+                <span className="text-xs font-bold text-gray-700 block">
                   Target Lingkup Khusus (Scope):
-                </label>
+                </span>
                 <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
@@ -1856,10 +1891,11 @@ export default function ApprovalWorkflowPage() {
               {/* Target Entity Selector */}
               {duplicateScopeType === "role" ? (
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-700">
+                  <label htmlFor="duplicate-scope-role-select" className="text-xs font-bold text-gray-700">
                     Pilih Divisi / Jabatan Target:
                   </label>
                   <select
+                    id="duplicate-scope-role-select"
                     value={duplicateScopeId || ""}
                     onChange={(e) => setDuplicateScopeId(Number(e.target.value))}
                     className="w-full text-xs font-semibold bg-gray-50 border border-gray-200 rounded-xl p-3 focus:outline-none focus:border-[#8B0000]"
@@ -1873,10 +1909,11 @@ export default function ApprovalWorkflowPage() {
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-700">
+                  <label htmlFor="duplicate-scope-user-select" className="text-xs font-bold text-gray-700">
                     Pilih Karyawan Target:
                   </label>
                   <select
+                    id="duplicate-scope-user-select"
                     value={duplicateScopeId || ""}
                     onChange={(e) => setDuplicateScopeId(Number(e.target.value))}
                     className="w-full text-xs font-semibold bg-gray-50 border border-gray-200 rounded-xl p-3 focus:outline-none focus:border-[#8B0000]"

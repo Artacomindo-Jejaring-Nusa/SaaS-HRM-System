@@ -5,7 +5,7 @@ import axiosInstance from "@/lib/axios";
 import { 
   Plus, Search, X, Eye, ReceiptCent, Upload, AlertCircle, 
   ArrowLeft, Printer, Trash2, Send, FileDown,
-  GitMerge, CheckCircle2, Clock, Check, XCircle, ChevronRight, UserCheck
+  GitMerge, CheckCircle2, Clock, Check, XCircle
 } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import { useAuth } from "@/contexts/AuthContext";
@@ -179,6 +179,79 @@ const renderApprovalProgressBar = (item: ReimbursementRecord, workflow: Workflow
   );
 };
 
+function determineStepState(
+  stepNum: number,
+  currentStep: number,
+  isApproved: boolean
+): "passed" | "current" | "upcoming" {
+  if (isApproved || stepNum < currentStep) {
+    return "passed";
+  }
+  if (stepNum === currentStep) {
+    return "current";
+  }
+  return "upcoming";
+}
+
+function getTimelineStepBadgeClass(stepState: "passed" | "current" | "upcoming", isRejected: boolean): string {
+  if (stepState === 'passed') {
+    return 'bg-emerald-600 text-white shadow-emerald-500/20';
+  }
+  if (stepState === 'current') {
+    return isRejected ? 'bg-rose-600 text-white' : 'bg-amber-500 text-white ring-4 ring-amber-100 animate-pulse';
+  }
+  return 'bg-gray-100 text-gray-400 border border-gray-200';
+}
+
+function getTimelineStepTextClass(stepState: "passed" | "current" | "upcoming", isRejected: boolean): string {
+  if (stepState === 'passed') return 'text-emerald-600';
+  if (stepState === 'current') return isRejected ? 'text-rose-600' : 'text-amber-600';
+  return 'text-gray-400';
+}
+
+function getTimelineStepStatusText(stepState: "passed" | "current" | "upcoming", isRejected: boolean): string {
+  if (stepState === 'passed') return 'Disetujui';
+  if (stepState === 'current') return isRejected ? 'Ditolak' : 'Menunggu Persetujuan';
+  return 'Menunggu Giliran';
+}
+
+function getTimelineStepIcon(stepState: "passed" | "current" | "upcoming", isRejected: boolean, stepIndex: number) {
+  if (stepState === 'passed') return <Check size={16} />;
+  if (isRejected && stepState === 'current') return <XCircle size={16} />;
+  return stepIndex;
+}
+
+function getApproverStepLabel(st: WorkflowStep): string {
+  if (st.approver_type === 'supervisor') return "Atasan (Supervisor)";
+  if (st.approver_type === 'role') return st.role?.name || "Role Approver";
+  if (st.approver_type === 'user') return st.approverUser?.name || "Approver Khusus";
+  return "Approver";
+}
+
+function getFinalStepBadgeClass(isApproved: boolean, isRejected: boolean): string {
+  if (isApproved) return 'bg-emerald-600 text-white shadow-emerald-500/20';
+  if (isRejected) return 'bg-rose-600 text-white';
+  return 'bg-gray-100 text-gray-400 border border-gray-200';
+}
+
+function getFinalStepTextClass(isApproved: boolean, isRejected: boolean): string {
+  if (isApproved) return 'text-emerald-600';
+  if (isRejected) return 'text-rose-600';
+  return 'text-gray-400';
+}
+
+function getFinalStepStatusText(isApproved: boolean, isRejected: boolean): string {
+  if (isApproved) return 'Selesai (Disetujui)';
+  if (isRejected) return 'Ditolak';
+  return 'Dalam Proses';
+}
+
+function getFinalStepIcon(isApproved: boolean, isRejected: boolean, fallbackStepNumber: number) {
+  if (isApproved) return <Check size={16} />;
+  if (isRejected) return <XCircle size={16} />;
+  return fallbackStepNumber;
+}
+
 const renderWorkflowTimeline = (item: ReimbursementRecord, workflow: WorkflowData | null) => {
   const isApproved = item.status === 'approved';
   const isRejected = item.status === 'rejected';
@@ -226,42 +299,20 @@ const renderWorkflowTimeline = (item: ReimbursementRecord, workflow: WorkflowDat
 
           {/* Workflow Steps */}
           {steps.map((st, idx) => {
-            let label = "Approver";
-            if (st.approver_type === 'supervisor') label = "Atasan (Supervisor)";
-            else if (st.approver_type === 'role') label = st.role?.name || "Role Approver";
-            else if (st.approver_type === 'user') label = st.approverUser?.name || "Approver Khusus";
-
-            const stepNum = st.step_number;
-            let stepState: "passed" | "current" | "upcoming" = "upcoming";
-            if (isApproved) {
-              stepState = "passed";
-            } else if (isRejected) {
-              stepState = (stepNum === currentStep) ? "current" : (stepNum < currentStep ? "passed" : "upcoming");
-            } else {
-              if (stepNum < currentStep) stepState = "passed";
-              else if (stepNum === currentStep) stepState = "current";
-              else stepState = "upcoming";
-            }
+            const label = getApproverStepLabel(st);
+            const stepState = determineStepState(st.step_number, currentStep, isApproved);
 
             return (
               <div key={st.id || idx} className="flex items-start gap-3 p-3 bg-white/90 rounded-lg border border-gray-200 shadow-2xs">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all shadow-sm shrink-0 mt-0.5 ${
-                  stepState === 'passed' 
-                    ? 'bg-emerald-600 text-white shadow-emerald-500/20' 
-                    : stepState === 'current' 
-                      ? (isRejected ? 'bg-rose-600 text-white' : 'bg-amber-500 text-white ring-4 ring-amber-100 animate-pulse') 
-                      : 'bg-gray-100 text-gray-400 border border-gray-200'
-                }`}>
-                  {stepState === 'passed' ? <Check size={16} /> : (isRejected && stepState === 'current' ? <XCircle size={16} /> : (idx + 2))}
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all shadow-sm shrink-0 mt-0.5 ${getTimelineStepBadgeClass(stepState, isRejected)}`}>
+                  {getTimelineStepIcon(stepState, isRejected, idx + 2)}
                 </div>
                 <div className="min-w-0">
                   <div className="text-xs font-bold text-gray-900 truncate">
                     {idx + 2}. Tahap {st.step_number}: {label}
                   </div>
-                  <div className={`text-[11px] font-semibold truncate ${
-                    stepState === 'passed' ? 'text-emerald-600' : (stepState === 'current' ? (isRejected ? 'text-rose-600' : 'text-amber-600') : 'text-gray-400')
-                  }`}>
-                    {stepState === 'passed' ? 'Disetujui' : (stepState === 'current' ? (isRejected ? 'Ditolak' : 'Menunggu Persetujuan') : 'Menunggu Giliran')}
+                  <div className={`text-[11px] font-semibold truncate ${getTimelineStepTextClass(stepState, isRejected)}`}>
+                    {getTimelineStepStatusText(stepState, isRejected)}
                   </div>
                 </div>
               </div>
@@ -270,23 +321,15 @@ const renderWorkflowTimeline = (item: ReimbursementRecord, workflow: WorkflowDat
 
           {/* Final Step */}
           <div className="flex items-start gap-3 p-3 bg-white/90 rounded-lg border border-gray-200 shadow-2xs">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-sm shrink-0 mt-0.5 ${
-              isApproved 
-                ? 'bg-emerald-600 text-white shadow-emerald-500/20' 
-                : isRejected 
-                  ? 'bg-rose-600 text-white' 
-                  : 'bg-gray-100 text-gray-400 border border-gray-200'
-            }`}>
-              {isApproved ? <Check size={16} /> : isRejected ? <XCircle size={16} /> : (steps.length + 2)}
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-sm shrink-0 mt-0.5 ${getFinalStepBadgeClass(isApproved, isRejected)}`}>
+              {getFinalStepIcon(isApproved, isRejected, steps.length + 2)}
             </div>
             <div className="min-w-0">
               <div className="text-xs font-bold text-gray-900 truncate">
                 {steps.length + 2}. Status Akhir
               </div>
-              <div className={`text-[11px] font-bold truncate ${
-                isApproved ? 'text-emerald-600' : isRejected ? 'text-rose-600' : 'text-gray-400'
-              }`}>
-                {isApproved ? 'Selesai (Disetujui)' : isRejected ? 'Ditolak' : 'Dalam Proses'}
+              <div className={`text-[11px] font-bold truncate ${getFinalStepTextClass(isApproved, isRejected)}`}>
+                {getFinalStepStatusText(isApproved, isRejected)}
               </div>
             </div>
           </div>

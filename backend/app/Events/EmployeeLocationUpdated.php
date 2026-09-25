@@ -28,7 +28,7 @@ class EmployeeLocationUpdated implements ShouldBroadcastNow
         ]);
 
         if ($this->track->user) {
-            $this->track->user->profile_photo_url = $this->track->user->profile_photo_url;
+            $this->track->user->append('profile_photo_url');
         }
     }
 

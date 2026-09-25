@@ -19,6 +19,17 @@ class ManagerController extends Controller
 {
     use Notifiable;
 
+    private const ROUTE_FUND_REQUESTS = '/dashboard/fund-requests';
+
+    private const PERM_MAP = [
+        'leave' => 'approve-leaves',
+        'overtime' => 'approve-overtimes',
+        'reimbursement' => 'approve-reimbursements',
+        'permit' => 'approve-permits',
+        'vehicle_log' => 'approve-vehicle-logs',
+        'fund_request' => 'approve-fund-requests',
+    ];
+
     /**
      * Check if user is an executive, HR, or admin
      */
@@ -26,8 +37,8 @@ class ManagerController extends Controller
     {
         $roleName = strtolower($user->role?->name ?? '');
         return $user->role_id === 1
-            || $user->is_manager 
-            || $user->hasPermission('approve-leaves') 
+            || $user->is_manager
+            || $user->hasPermission('approve-leaves')
             || $user->hasPermission('approve-permits')
             || $user->hasPermission('approve-overtimes')
             || $user->hasPermission('approve-reimbursements')
@@ -36,9 +47,9 @@ class ManagerController extends Controller
             || $user->hasPermission('approve-shift-swaps')
             || $user->hasPermission('approve-project-costs')
             || $user->hasPermission('view-manager-portal')
-            || str_contains($roleName, 'admin') 
-            || str_contains($roleName, 'hrd') 
-            || str_contains($roleName, 'hr') 
+            || str_contains($roleName, 'admin')
+            || str_contains($roleName, 'hrd')
+            || str_contains($roleName, 'hr')
             || str_contains($roleName, 'direktur')
             || str_contains($roleName, 'director')
             || str_contains($roleName, 'coo')
@@ -51,24 +62,40 @@ class ManagerController extends Controller
             || str_contains($roleName, 'lead');
     }
 
-    /**
-     * Get summary count for pending requests
-     */
-    public function getPendingCount()
+    private function getTypeText(string $type): string
     {
-        $user = Auth::user();
-        $isGlobalAdmin = $user->role_id === 1;
-        $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
+        return match ($type) {
+            'leave' => 'Cuti',
+            'overtime' => 'Lembur',
+            'reimbursement' => 'Reimbursement',
+            'permit' => 'Izin',
+            'fund_request' => 'Pengajuan Dana',
+            'vehicle_log' => 'Peminjaman Kendaraan',
+            default => ucfirst($type),
+        };
+    }
 
-        $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
+    private function getRoutePath(string $type): string
+    {
+        return match ($type) {
+            'leave' => '/dashboard/leaves',
+            'overtime' => '/dashboard/overtimes',
+            'reimbursement' => '/dashboard/reimbursements',
+            'permit' => '/dashboard/permits',
+            'fund_request' => self::ROUTE_FUND_REQUESTS,
+            'vehicle_log' => '/dashboard/fleet-logs',
+            default => '/dashboard',
+        };
+    }
 
-        $buildScope = function ($modelClass, $type, $pendingStatus = 'pending') use ($user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) {
-            $query = is_array($pendingStatus)
-                ? $modelClass::whereIn('status', $pendingStatus)
-                : $modelClass::where('status', $pendingStatus);
-            if ($isGlobalAdmin) {
-                // Global Admin sees all
-            } elseif ($isCompanyAdmin) {
+    private function countScopedPending($modelClass, string $type, string|array $pendingStatus, $user, bool $isGlobalAdmin, bool $isCompanyAdmin, $subordinateIds): int
+    {
+        $query = is_array($pendingStatus)
+            ? $modelClass::whereIn('status', $pendingStatus)
+            : $modelClass::where('status', $pendingStatus);
+
+        if (!$isGlobalAdmin) {
+            if ($isCompanyAdmin) {
                 $query->where(function ($q) use ($user, $subordinateIds) {
                     $q->where('company_id', $user->company_id);
                     if ($subordinateIds->isNotEmpty()) {
@@ -78,45 +105,52 @@ class ManagerController extends Controller
             } else {
                 $query->whereIn('user_id', $subordinateIds);
             }
+        }
 
-            if (! $isGlobalAdmin && $type !== 'vehicle_log') {
-                $items = $query->with('user')->get();
-                return $items->filter(function ($item) use ($type, $user) {
-                    if (!empty($item->current_approval_step) && $item->user) {
-                        return \App\Services\ApprovalService::canApprove(
-                            $type,
-                            $item->company_id ?? $user->company_id,
-                            $user,
-                            $item->user,
-                            $item->current_approval_step
-                        );
-                    }
-                    return true;
-                })->count();
-            }
+        if (!$isGlobalAdmin && $type !== 'vehicle_log') {
+            $items = $query->with('user')->get();
+            return $items->filter(function ($item) use ($type, $user) {
+                if (!empty($item->current_approval_step) && $item->user) {
+                    return \App\Services\ApprovalService::canApprove(
+                        $type,
+                        $item->company_id ?? $user->company_id,
+                        $user,
+                        $item->user,
+                        $item->current_approval_step
+                    );
+                }
+                return true;
+            })->count();
+        }
 
-            return $query->count();
-        };
+        return $query->count();
+    }
+
+    /**
+     * Get summary count for pending requests
+     */
+    public function getPendingCount()
+    {
+        $user = Auth::user();
+        $isGlobalAdmin = $user->role_id === 1;
+        $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
+        $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
 
         $canApprove = function ($t) use ($user, $isGlobalAdmin) {
-            if ($isGlobalAdmin) return true;
-            $map = [
-                'leave' => 'approve-leaves',
-                'overtime' => 'approve-overtimes',
-                'reimbursement' => 'approve-reimbursements',
-                'permit' => 'approve-permits',
-                'vehicle_log' => 'approve-vehicle-logs',
-                'fund_request' => 'approve-fund-requests',
-            ];
-            return isset($map[$t]) && $user->hasPermission($map[$t]);
+            if ($isGlobalAdmin) {
+                return true;
+            }
+            return isset(self::PERM_MAP[$t]) && $user->hasPermission(self::PERM_MAP[$t]);
         };
 
-        $leaveCount = $canApprove('leave') ? $buildScope(Leave::class, 'leave', 'pending') : 0;
-        $overtimeCount = $canApprove('overtime') ? $buildScope(Overtime::class, 'overtime', 'pending') : 0;
-        $reimbursementCount = $canApprove('reimbursement') ? $buildScope(Reimbursement::class, 'reimbursement', 'pending') : 0;
-        $permitCount = $canApprove('permit') ? $buildScope(Permit::class, 'permit', 'pending') : 0;
-        $vehicleCount = $canApprove('vehicle_log') ? $buildScope(VehicleLog::class, 'vehicle_log', ['pending', 'completed']) : 0;
-        $fundRequestCount = $canApprove('fund_request') ? $buildScope(FundRequest::class, 'fund_request', ($isGlobalAdmin || $isCompanyAdmin) ? ['pending', 'approved_by_supervisor'] : 'pending') : 0;
+        $fundRequestStatus = ($isGlobalAdmin || $isCompanyAdmin) ? ['pending', 'approved_by_supervisor'] : 'pending';
+
+        $leaveCount = $canApprove('leave') ? $this->countScopedPending(Leave::class, 'leave', 'pending', $user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) : 0;
+        $overtimeCount = $canApprove('overtime') ? $this->countScopedPending(Overtime::class, 'overtime', 'pending', $user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) : 0;
+        $reimbursementCount = $canApprove('reimbursement') ? $this->countScopedPending(Reimbursement::class, 'reimbursement', 'pending', $user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) : 0;
+        $permitCount = $canApprove('permit') ? $this->countScopedPending(Permit::class, 'permit', 'pending', $user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) : 0;
+        $vehicleCount = $canApprove('vehicle_log') ? $this->countScopedPending(VehicleLog::class, 'vehicle_log', ['pending', 'completed'], $user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) : 0;
+        $fundRequestCount = $canApprove('fund_request') ? $this->countScopedPending(FundRequest::class, 'fund_request', $fundRequestStatus, $user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) : 0;
 
         return response()->json([
             'status' => 'success',
@@ -132,36 +166,9 @@ class ManagerController extends Controller
         ]);
     }
 
-    /**
-     * Get list of pending requests by type
-     */
-    public function getPendingRequests(Request $request)
+    private function resolvePendingBaseQuery(string $type, bool $isGlobalAdmin, bool $isCompanyAdmin)
     {
-        $user = Auth::user();
-        $isGlobalAdmin = $user->role_id === 1;
-        $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
-
-        $type = $request->type; // leave, overtime, reimbursement, permit, vehicle_log, fund_request
-
-        $permMap = [
-            'leave' => 'approve-leaves',
-            'overtime' => 'approve-overtimes',
-            'reimbursement' => 'approve-reimbursements',
-            'permit' => 'approve-permits',
-            'vehicle_log' => 'approve-vehicle-logs',
-            'fund_request' => 'approve-fund-requests',
-        ];
-
-        if (! $isGlobalAdmin && isset($permMap[$type]) && ! $user->hasPermission($permMap[$type])) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Anda tidak memiliki hak akses persetujuan untuk kategori ini.'
-            ], 403);
-        }
-
-        $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
-
-        $query = match ($type) {
+        return match ($type) {
             'leave' => Leave::with(['user.role', 'user.office'])->where('status', 'pending'),
             'overtime' => Overtime::with(['user.role', 'user.office'])->where('status', 'pending'),
             'reimbursement' => Reimbursement::with(['user.role', 'user.office'])->where('status', 'pending'),
@@ -176,43 +183,66 @@ class ManagerController extends Controller
             }),
             default => null
         };
+    }
 
-        if (! $query) {
+    private function filterPendingItems($items, string $type, $user)
+    {
+        return $items->filter(function ($item) use ($type, $user) {
+            if (!empty($item->current_approval_step) && $item->user) {
+                return \App\Services\ApprovalService::canApprove(
+                    $type,
+                    $item->company_id ?? $user->company_id,
+                    $user,
+                    $item->user,
+                    $item->current_approval_step
+                );
+            }
+            return true;
+        })->values();
+    }
+
+    /**
+     * Get list of pending requests by type
+     */
+    public function getPendingRequests(Request $request)
+    {
+        $user = Auth::user();
+        $isGlobalAdmin = $user->role_id === 1;
+        $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
+        $type = $request->type;
+
+        if (!$isGlobalAdmin && isset(self::PERM_MAP[$type]) && !$user->hasPermission(self::PERM_MAP[$type])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda tidak memiliki hak akses persetujuan untuk kategori ini.'
+            ], 403);
+        }
+
+        $query = $this->resolvePendingBaseQuery((string)$type, $isGlobalAdmin, $isCompanyAdmin);
+        if (!$query) {
             return response()->json(['status' => 'error', 'message' => 'Invalid request type'], 400);
         }
 
-        if ($isGlobalAdmin) {
-            // Global Admin sees all
-        } elseif ($isCompanyAdmin) {
-            $query->where(function ($q) use ($user, $subordinateIds) {
-                $q->where('company_id', $user->company_id);
-                if ($subordinateIds->isNotEmpty()) {
-                    $q->orWhereIn('user_id', $subordinateIds);
-                }
-            });
-        } else {
-            $query->whereIn('user_id', $subordinateIds);
+        $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
+        if (!$isGlobalAdmin) {
+            if ($isCompanyAdmin) {
+                $query->where(function ($q) use ($user, $subordinateIds) {
+                    $q->where('company_id', $user->company_id);
+                    if ($subordinateIds->isNotEmpty()) {
+                        $q->orWhereIn('user_id', $subordinateIds);
+                    }
+                });
+            } else {
+                $query->whereIn('user_id', $subordinateIds);
+            }
         }
 
         $items = $query->orderBy('created_at', 'desc')->get();
 
-        // Filter out items where user has already approved their step and cannot act on the current step
-        if (! $isGlobalAdmin && $type !== 'vehicle_log') {
-            $items = $items->filter(function ($item) use ($type, $user) {
-                if (!empty($item->current_approval_step) && $item->user) {
-                    return \App\Services\ApprovalService::canApprove(
-                        $type,
-                        $item->company_id ?? $user->company_id,
-                        $user,
-                        $item->user,
-                        $item->current_approval_step
-                    );
-                }
-                return true;
-            })->values();
+        if (!$isGlobalAdmin && $type !== 'vehicle_log') {
+            $items = $this->filterPendingItems($items, (string)$type, $user);
         }
 
-        // Attach current_step_info for each item if using dynamic workflow
         $items->each(function ($item) use ($type, $user) {
             if (!empty($item->current_approval_step)) {
                 $item->current_step_info = \App\Services\ApprovalService::getCurrentStepInfo(
@@ -226,6 +256,195 @@ class ManagerController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => $items,
+        ]);
+    }
+
+    private function handleDynamicApproval($item, Request $request, $user)
+    {
+        $action = $request->status === 'approved' ? 'approve' : 'reject';
+        $result = \App\Services\ApprovalService::processApproval(
+            $request->type,
+            $item->company_id ?? $user->company_id,
+            $user,
+            $item->user,
+            $item->current_approval_step,
+            $action
+        );
+
+        if ($result && isset($result['error'])) {
+            return response()->json(['status' => 'error', 'message' => $result['error']], 403);
+        }
+
+        if (!$result) {
+            return response()->json(['status' => 'error', 'message' => 'Gagal memproses alur persetujuan.'], 400);
+        }
+
+        $updateData = [
+            'status' => $result['status'],
+            'current_approval_step' => $result['current_approval_step'],
+        ];
+
+        if ($request->type === 'fund_request' && empty($item->supervisor_approved_at)) {
+            $updateData['supervisor_id'] = $user->id;
+            $updateData['supervisor_approved_at'] = now();
+        }
+
+        if ($result['is_final']) {
+            if ($request->type === 'fund_request') {
+                $updateData['hrd_id'] = $user->id;
+                $updateData['hrd_approved_at'] = now();
+            } else {
+                $updateData['approved_by'] = $user->id;
+            }
+            $updateData['remark'] = $request->remark;
+        }
+
+        $item->update($updateData);
+
+        if ($request->type === 'leave' && $result['is_final'] && $result['status'] === 'approved') {
+            LeaveController::processLeaveApprovalDeduction();
+        }
+
+        $typeText = $this->getTypeText($request->type);
+        $routePath = $this->getRoutePath($request->type);
+
+        if ($result['is_final']) {
+            $statusText = strtoupper($result['status'] === 'approved' ? 'DISETUJUI' : 'DITOLAK');
+            if ($item->user) {
+                $this->notify(
+                    $item->user,
+                    "PENGAJUAN {$typeText} {$statusText}",
+                    "Pengajuan {$typeText} Anda telah {$statusText}.".($request->remark ? " Catatan: {$request->remark}" : ''),
+                    $result['status'] === 'approved' ? 'success' : 'danger',
+                    $routePath
+                );
+            }
+            $msg = "Pengajuan {$typeText} berhasil di-{$request->status} secara final.";
+        } else {
+            if (isset($result['approvers'])) {
+                foreach ($result['approvers'] as $nextApprover) {
+                    $this->notify(
+                        $nextApprover,
+                        "PENGAJUAN BUTUH PERSETUJUAN",
+                        "Pengajuan {$typeText} dari {$item->user?->name} telah disetujui pada tahap sebelumnya dan kini membutuhkan persetujuan Anda ({$result['step_label']}).",
+                        'warning',
+                        $routePath
+                    );
+                }
+            }
+            if ($item->user) {
+                $this->notify(
+                    $item->user,
+                    "PROGRESS PENGAJUAN {$typeText}",
+                    "Pengajuan {$typeText} Anda telah disetujui oleh {$user->name} dan berlanjut ke tahap berikutnya.",
+                    'info',
+                    $routePath
+                );
+            }
+            $msg = "Persetujuan tahap {$item->current_approval_step} berhasil. Menunggu tahap berikutnya.";
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $msg,
+            'data' => $item,
+        ]);
+    }
+
+    private function updateLegacyFundRequest($item, Request $request, $user, bool $isCompanyAdmin, bool $isGlobalAdmin): string
+    {
+        if ($request->status === 'approved') {
+            if ($item->status === 'pending' && !$isCompanyAdmin && !$isGlobalAdmin) {
+                $item->update([
+                    'status' => 'approved_by_supervisor',
+                    'supervisor_id' => $user->id,
+                    'supervisor_approved_at' => now(),
+                    'remark' => $request->remark,
+                ]);
+
+                $hrds = User::where('company_id', $user->company_id)
+                    ->whereHas('role', function ($q) {
+                        $q->where('name', 'HRD')->orWhere('name', 'HRD Manager')->orWhere('name', 'Admin');
+                    })->get();
+
+                foreach ($hrds as $hrd) {
+                    $this->notify(
+                        $hrd,
+                        'PERSETUJUAN DANA (TAHAP HRD)',
+                        "Pengajuan dana {$item->user?->name} telah disetujui Supervisor. Menunggu persetujuan akhir Anda.",
+                        'warning',
+                        self::ROUTE_FUND_REQUESTS
+                    );
+                }
+                return 'approved_by_supervisor';
+            }
+
+            $item->update([
+                'status' => 'approved',
+                'hrd_id' => $user->id,
+                'hrd_approved_at' => now(),
+                'remark' => $request->remark,
+            ]);
+            return 'approved';
+        }
+
+        $item->update([
+            'status' => 'rejected',
+            'hrd_id' => $user->id,
+            'rejected_at' => now(),
+            'reject_reason' => $request->remark,
+            'remark' => $request->remark,
+        ]);
+        return 'rejected';
+    }
+
+    private function handleLegacyApproval($item, Request $request, $user, bool $isGlobalAdmin, bool $isCompanyAdmin)
+    {
+        $targetStatus = $request->status;
+        if ($request->type === 'vehicle_log') {
+            $targetStatus = $item->status === 'pending'
+                ? ($request->status === 'approved' ? 'approved' : 'rejected')
+                : ($request->status === 'approved' ? 'validated' : 'rejected');
+        }
+
+        $previousStatus = $item->status;
+
+        if ($request->type === 'fund_request') {
+            $targetStatus = $this->updateLegacyFundRequest($item, $request, $user, $isCompanyAdmin, $isGlobalAdmin);
+        } else {
+            $item->update([
+                'status' => $targetStatus,
+                'approved_by' => $user->id,
+                'remark' => $request->remark,
+            ]);
+        }
+
+        if ($request->type === 'leave') {
+            if ($targetStatus === 'approved' && $previousStatus !== 'approved') {
+                LeaveController::processLeaveApprovalDeduction();
+            } elseif ($targetStatus === 'rejected' && $previousStatus === 'approved') {
+                LeaveController::processLeaveApprovalRefund();
+            }
+        }
+
+        $statusText = strtoupper($request->status === 'approved' ? 'DISETUJUI' : 'DITOLAK');
+        $typeText = $this->getTypeText($request->type);
+        $routePath = $this->getRoutePath($request->type);
+
+        if ($item->user) {
+            $this->notify(
+                $item->user,
+                "PENGAJUAN {$typeText} {$statusText}",
+                "Pengajuan {$typeText} Anda telah {$statusText} oleh Manager/Admin.".($request->remark ? " Catatan: {$request->remark}" : ''),
+                $request->status === 'approved' ? 'success' : 'danger',
+                $routePath
+            );
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Pengajuan {$typeText} berhasil di-{$request->status}.",
+            'data' => $item,
         ]);
     }
 
@@ -245,16 +464,7 @@ class ManagerController extends Controller
         $isGlobalAdmin = $user->role_id === 1;
         $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
 
-        $permMap = [
-            'leave' => 'approve-leaves',
-            'overtime' => 'approve-overtimes',
-            'reimbursement' => 'approve-reimbursements',
-            'permit' => 'approve-permits',
-            'vehicle_log' => 'approve-vehicle-logs',
-            'fund_request' => 'approve-fund-requests',
-        ];
-
-        if (! $isGlobalAdmin && isset($permMap[$request->type]) && ! $user->hasPermission($permMap[$request->type])) {
+        if (!$isGlobalAdmin && isset(self::PERM_MAP[$request->type]) && !$user->hasPermission(self::PERM_MAP[$request->type])) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Anda tidak memiliki hak akses untuk menyetujui pengajuan ini.'
@@ -262,7 +472,6 @@ class ManagerController extends Controller
         }
 
         $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
-
         $model = match ($request->type) {
             'leave' => Leave::class,
             'overtime' => Overtime::class,
@@ -273,245 +482,29 @@ class ManagerController extends Controller
         };
 
         $query = $model::where('id', $request->id);
-        if ($isGlobalAdmin) {
-            // Global Admin can approve all
-        } elseif ($isCompanyAdmin) {
-            $query->where(function ($q) use ($user, $subordinateIds) {
-                $q->where('company_id', $user->company_id);
-                if ($subordinateIds->isNotEmpty()) {
-                    $q->orWhereIn('user_id', $subordinateIds);
-                }
-            });
-        } else {
-            $query->whereIn('user_id', $subordinateIds);
+        if (!$isGlobalAdmin) {
+            if ($isCompanyAdmin) {
+                $query->where(function ($q) use ($user, $subordinateIds) {
+                    $q->where('company_id', $user->company_id);
+                    if ($subordinateIds->isNotEmpty()) {
+                        $q->orWhereIn('user_id', $subordinateIds);
+                    }
+                });
+            } else {
+                $query->whereIn('user_id', $subordinateIds);
+            }
         }
 
         $item = $query->first();
-
-        if (! $item) {
+        if (!$item) {
             return response()->json(['status' => 'error', 'message' => 'Pengajuan tidak ditemukan atau Anda tidak memiliki hak akses.'], 404);
         }
 
-        // Handle dynamic multi-step approval if enabled on this item
         if (!empty($item->current_approval_step)) {
-            $action = $request->status === 'approved' ? 'approve' : 'reject';
-            $result = \App\Services\ApprovalService::processApproval(
-                $request->type,
-                $item->company_id ?? $user->company_id,
-                $user,
-                $item->user,
-                $item->current_approval_step,
-                $action
-            );
-
-            if ($result && isset($result['error'])) {
-                return response()->json(['status' => 'error', 'message' => $result['error']], 403);
-            }
-
-            if ($result) {
-                $updateData = [
-                    'status' => $result['status'],
-                    'current_approval_step' => $result['current_approval_step'],
-                ];
-
-                if ($request->type === 'fund_request') {
-                    if (empty($item->supervisor_approved_at)) {
-                        $updateData['supervisor_id'] = $user->id;
-                        $updateData['supervisor_approved_at'] = now();
-                    }
-                }
-
-                if ($result['is_final']) {
-                    if ($request->type === 'fund_request') {
-                        $updateData['hrd_id'] = $user->id;
-                        $updateData['hrd_approved_at'] = now();
-                    } else {
-                        $updateData['approved_by'] = $user->id;
-                    }
-                    $updateData['remark'] = $request->remark;
-                }
-
-                $item->update($updateData);
-
-                // If final approval on leave, adjust employee leave quota
-                if ($request->type === 'leave' && $result['is_final'] && $result['status'] === 'approved') {
-                    LeaveController::processLeaveApprovalDeduction($item);
-                }
-
-                $typeText = match ($request->type) {
-                    'leave' => 'Cuti',
-                    'overtime' => 'Lembur',
-                    'reimbursement' => 'Reimbursement',
-                    'permit' => 'Izin',
-                    'fund_request' => 'Pengajuan Dana',
-                    'vehicle_log' => 'Peminjaman Kendaraan',
-                    default => ucfirst($request->type),
-                };
-
-                $routePath = match ($request->type) {
-                    'leave' => '/dashboard/leaves',
-                    'overtime' => '/dashboard/overtimes',
-                    'reimbursement' => '/dashboard/reimbursements',
-                    'permit' => '/dashboard/permits',
-                    'fund_request' => '/dashboard/fund-requests',
-                    'vehicle_log' => '/dashboard/fleet-logs',
-                    default => '/dashboard',
-                };
-
-                if ($result['is_final']) {
-                    $statusText = strtoupper($result['status'] === 'approved' ? 'DISETUJUI' : 'DITOLAK');
-                    if ($item->user) {
-                        $this->notify(
-                            $item->user,
-                            "PENGAJUAN {$typeText} {$statusText}",
-                            "Pengajuan {$typeText} Anda telah {$statusText}.".($request->remark ? " Catatan: {$request->remark}" : ''),
-                            $result['status'] === 'approved' ? 'success' : 'danger',
-                            $routePath
-                        );
-                    }
-                    $msg = "Pengajuan {$typeText} berhasil di-{$request->status} secara final.";
-                } else {
-                    if (isset($result['approvers'])) {
-                        foreach ($result['approvers'] as $nextApprover) {
-                            $this->notify(
-                                $nextApprover,
-                                "PENGAJUAN BUTUH PERSETUJUAN",
-                                "Pengajuan {$typeText} dari {$item->user?->name} telah disetujui pada tahap sebelumnya dan kini membutuhkan persetujuan Anda ({$result['step_label']}).",
-                                'warning',
-                                $routePath
-                            );
-                        }
-                    }
-                    if ($item->user) {
-                        $this->notify(
-                            $item->user,
-                            "PROGRESS PENGAJUAN {$typeText}",
-                            "Pengajuan {$typeText} Anda telah disetujui oleh {$user->name} dan berlanjut ke tahap berikutnya.",
-                            'info',
-                            $routePath
-                        );
-                    }
-                    $msg = "Persetujuan tahap {$item->current_approval_step} berhasil. Menunggu tahap berikutnya.";
-                }
-
-                return response()->json([
-                    'status' => 'success',
-                    'message' => $msg,
-                    'data' => $item,
-                ]);
-            }
+            return $this->handleDynamicApproval($item, $request, $user);
         }
 
-        // Fallback single / two-step flow
-        $targetStatus = $request->status;
-        if ($request->type === 'vehicle_log') {
-            if ($item->status === 'pending') {
-                $targetStatus = $request->status === 'approved' ? 'approved' : 'rejected';
-            } else {
-                $targetStatus = $request->status === 'approved' ? 'validated' : 'rejected';
-            }
-        }
-
-        $previousStatus = $item->status;
-
-        if ($request->type === 'fund_request') {
-            if ($request->status === 'approved') {
-                if ($item->status === 'pending' && !$isCompanyAdmin && !$isGlobalAdmin) {
-                    $targetStatus = 'approved_by_supervisor';
-                    $item->update([
-                        'status' => 'approved_by_supervisor',
-                        'supervisor_id' => $user->id,
-                        'supervisor_approved_at' => now(),
-                        'remark' => $request->remark,
-                    ]);
-
-                    $hrds = User::where('company_id', $user->company_id)
-                        ->whereHas('role', function ($q) {
-                            $q->where('name', 'HRD')->orWhere('name', 'HRD Manager')->orWhere('name', 'Admin');
-                        })->get();
-
-                    foreach ($hrds as $hrd) {
-                        $this->notify(
-                            $hrd,
-                            'PERSETUJUAN DANA (TAHAP HRD)',
-                            "Pengajuan dana {$item->user?->name} telah disetujui Supervisor. Menunggu persetujuan akhir Anda.",
-                            'warning',
-                            '/dashboard/fund-requests'
-                        );
-                    }
-                } else {
-                    $targetStatus = 'approved';
-                    $item->update([
-                        'status' => 'approved',
-                        'hrd_id' => $user->id,
-                        'hrd_approved_at' => now(),
-                        'remark' => $request->remark,
-                    ]);
-                }
-            } else {
-                $targetStatus = 'rejected';
-                $item->update([
-                    'status' => 'rejected',
-                    'hrd_id' => $user->id,
-                    'rejected_at' => now(),
-                    'reject_reason' => $request->remark,
-                    'remark' => $request->remark,
-                ]);
-            }
-        } else {
-            $item->update([
-                'status' => $targetStatus,
-                'approved_by' => $user->id,
-                'remark' => $request->remark,
-            ]);
-        }
-
-        // If leave is approved/rejected, adjust employee's leave balance accordingly
-        if ($request->type === 'leave') {
-            if ($targetStatus === 'approved' && $previousStatus !== 'approved') {
-                LeaveController::processLeaveApprovalDeduction($item);
-            } elseif ($targetStatus === 'rejected' && $previousStatus === 'approved') {
-                LeaveController::processLeaveApprovalRefund($item);
-            }
-        }
-
-        // Notify the Employee
-        $statusText = strtoupper($request->status === 'approved' ? 'DISETUJUI' : 'DITOLAK');
-        $typeText = match ($request->type) {
-            'leave' => 'Cuti',
-            'overtime' => 'Lembur',
-            'reimbursement' => 'Reimbursement',
-            'permit' => 'Izin',
-            'vehicle_log' => 'Peminjaman Kendaraan',
-            'fund_request' => 'Pengajuan Dana',
-            default => ucfirst($request->type),
-        };
-
-        $routePath = match ($request->type) {
-            'leave' => '/dashboard/leaves',
-            'overtime' => '/dashboard/overtimes',
-            'reimbursement' => '/dashboard/reimbursements',
-            'permit' => '/dashboard/permits',
-            'vehicle_log' => '/dashboard/fleet-logs',
-            'fund_request' => '/dashboard/fund-requests',
-            default => '/dashboard',
-        };
-
-        if ($item->user) {
-            $this->notify(
-                $item->user,
-                "PENGAJUAN {$typeText} {$statusText}",
-                "Pengajuan {$typeText} Anda telah {$statusText} oleh Manager/Admin.".($request->remark ? " Catatan: {$request->remark}" : ''),
-                $request->status === 'approved' ? 'success' : 'danger',
-                $routePath
-            );
-        }
-
-        return response()->json([
-            'status' => 'success',
-            'message' => "Pengajuan {$typeText} berhasil di-{$request->status}.",
-            'data' => $item,
-        ]);
+        return $this->handleLegacyApproval($item, $request, $user, $isGlobalAdmin, $isCompanyAdmin);
     }
 
     /**

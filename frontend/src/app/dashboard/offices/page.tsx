@@ -19,6 +19,11 @@ interface Office {
   users_count?: number;
 }
 
+function formatWorkTime(timeString?: string | null): string | null {
+  if (!timeString) return null;
+  return timeString.length === 5 ? `${timeString}:00` : timeString;
+}
+
 export default function OfficesPage() {
   const { user } = useAuth();
   const [offices, setOffices] = useState<Office[]>([]);
@@ -100,11 +105,11 @@ export default function OfficesPage() {
     try {
       const payload = {
         ...formData,
-        latitude: parseFloat(formData.latitude),
-        longitude: parseFloat(formData.longitude),
-        radius: parseInt(formData.radius),
-        work_start_time: formData.work_start_time ? (formData.work_start_time.length === 5 ? `${formData.work_start_time}:00` : formData.work_start_time) : null,
-        work_end_time: formData.work_end_time ? (formData.work_end_time.length === 5 ? `${formData.work_end_time}:00` : formData.work_end_time) : null,
+        latitude: Number.parseFloat(formData.latitude),
+        longitude: Number.parseFloat(formData.longitude),
+        radius: Number.parseInt(formData.radius, 10),
+        work_start_time: formatWorkTime(formData.work_start_time),
+        work_end_time: formatWorkTime(formData.work_end_time),
       };
 
       if (editingOffice) {
@@ -356,8 +361,9 @@ export default function OfficesPage() {
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Jam Masuk</label>
+                    <label htmlFor="branch-work-start-time-input" className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Jam Masuk</label>
                     <input
+                      id="branch-work-start-time-input"
                       type="time"
                       value={formData.work_start_time}
                       onChange={(e) => setFormData(prev => ({ ...prev, work_start_time: e.target.value }))}
@@ -365,8 +371,9 @@ export default function OfficesPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Jam Pulang</label>
+                    <label htmlFor="branch-work-end-time-input" className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Jam Pulang</label>
                     <input
+                      id="branch-work-end-time-input"
                       type="time"
                       value={formData.work_end_time}
                       onChange={(e) => setFormData(prev => ({ ...prev, work_end_time: e.target.value }))}

@@ -5,12 +5,11 @@ import axiosInstance from "@/lib/axios";
 import { 
   Search, Download, Eye, FileSpreadsheet, 
   DollarSign, Loader2, X, Printer, ArrowLeft,
-  Calendar, Users, CheckCircle2, Clock, AlertTriangle,
-  ChevronRight, TrendingUp, Edit2, Trash2,
-  Sparkles, Plus, Check, Play, Filter, RefreshCw,
-  FileText, ShieldCheck, XCircle, AlertCircle
+  CheckCircle2, Clock, AlertTriangle,
+  ChevronRight, Edit2, Trash2,
+  Sparkles, Plus, Check, Play, RefreshCw,
+  AlertCircle
 } from "lucide-react";
-import { useLanguage } from "@/contexts/LanguageContext";
 import { PayrollSkeleton } from "@/components/Skeleton";
 import { toast } from "sonner";
 
@@ -85,8 +84,161 @@ interface PayrollBatch {
   approver?: { id: number; name: string };
 }
 
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
+function parseAmount(val: string | number | undefined | null): number {
+  if (val === undefined || val === null) return 0;
+  if (typeof val === "number") return val;
+  const parsed = Number.parseFloat(val);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function formatRupiah(val: string | number | undefined | null): string {
+  return Math.round(parseAmount(val)).toLocaleString('id-ID');
+}
+
+function getStatusBadge(status: string) {
+  switch (status) {
+    case 'paid':
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-black rounded-full border border-emerald-200">
+          <CheckCircle2 size={13} /> Selesai Dibayar
+        </span>
+      );
+    case 'approved':
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 text-xs font-black rounded-full border border-blue-200">
+          <CheckCircle2 size={13} /> Disetujui
+        </span>
+      );
+    case 'pending_approval':
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 text-xs font-black rounded-full border border-amber-200 animate-pulse">
+          <Clock size={13} /> Menunggu Persetujuan
+        </span>
+      );
+    case 'rejected':
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 text-xs font-black rounded-full border border-rose-200">
+          <AlertTriangle size={13} /> Perlu Revisi
+        </span>
+      );
+    default:
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 text-gray-700 text-xs font-black rounded-full border border-gray-200">
+          <Edit2 size={13} /> Draft
+        </span>
+      );
+  }
+}
+
+interface BatchTableContentProps {
+  detailLoading: boolean;
+  filteredBatches: PayrollBatch[];
+  onOpenGenerate: () => void;
+  onViewBatchDetails: (batchId: number) => void;
+  onExportBatchRekap: (batchId: number, month: string, year: number) => void;
+}
+
+function BatchTableContent({
+  detailLoading,
+  filteredBatches,
+  onOpenGenerate,
+  onViewBatchDetails,
+  onExportBatchRekap,
+}: BatchTableContentProps) {
+  if (detailLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <Loader2 className="animate-spin text-[#8B0000]" size={36} />
+        <p className="text-gray-400 font-medium text-sm">Membuka rincian periode payroll...</p>
+      </div>
+    );
+  }
+
+  if (filteredBatches.length === 0) {
+    return (
+      <div className="py-20 text-center px-4">
+        <div className="w-16 h-16 rounded-3xl bg-gray-50 text-gray-400 flex items-center justify-center mx-auto mb-3">
+          <FileSpreadsheet size={32} />
+        </div>
+        <h3 className="text-base font-bold text-gray-800">Tidak ada batch payroll ditemukan</h3>
+        <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1">
+          Mulai dengan membuat batch penggajian bulan berjalan dengan mengklik tombol di bawah.
+        </p>
+        <button
+          onClick={onOpenGenerate}
+          className="mt-5 px-5 py-2.5 bg-[#8B0000] text-white rounded-xl text-xs font-bold shadow-md hover:bg-[#700000] transition-all"
+        >
+          + Proses Payroll Baru
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left">
+        <thead className="bg-gray-50/70 border-b border-gray-100">
+          <tr>
+            <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest pl-8">Periode Payroll</th>
+            <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Karyawan</th>
+            <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Bersih (THP)</th>
+            <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
+            <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Aksi</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {filteredBatches.map((batch) => (
+            <tr key={batch.id} className="hover:bg-gray-50/60 transition-colors">
+              <td className="px-6 py-4 pl-8">
+                <span className="font-bold text-gray-900 block text-base">
+                  {batch.period_month} {batch.period_year}
+                </span>
+                <span className="text-[11px] font-semibold text-gray-400 block mt-0.5">
+                  Dibuat: {new Date(batch.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </td>
+              <td className="px-6 py-4 font-bold text-gray-700 text-sm">
+                {batch.total_employees} Orang
+              </td>
+              <td className="px-6 py-4 font-black text-[#8B0000] text-base">
+                Rp {formatRupiah(batch.total_net)}
+              </td>
+              <td className="px-6 py-4">
+                {getStatusBadge(batch.status)}
+              </td>
+              <td className="px-6 py-4 text-center">
+                <div className="flex justify-center items-center gap-2">
+                  <button
+                    onClick={() => onViewBatchDetails(batch.id)}
+                    className="flex items-center gap-1 px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl font-bold text-xs transition-all"
+                  >
+                    <Eye size={14} />
+                    <span>{['draft', 'pending_approval'].includes(batch.status) ? "Kelola & Review" : "Rincian"}</span>
+                    <ChevronRight size={12} />
+                  </button>
+                  <button
+                    onClick={() => onExportBatchRekap(batch.id, batch.period_month, batch.period_year)}
+                    className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
+                    title="Unduh Rekap Excel"
+                  >
+                    <FileSpreadsheet size={16} />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function PayrollManagementPage() {
-  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [batches, setBatches] = useState<PayrollBatch[]>([]);
   const [statusTab, setStatusTab] = useState<'all' | 'pending' | 'completed'>('all');
@@ -123,23 +275,9 @@ export default function PayrollManagementPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewSalary, setPreviewSalary] = useState<SalaryRecord | null>(null);
 
-  const months = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
+  const months = MONTHS;
   const currentYear = new Date().getFullYear();
   const availableYears = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
-
-  const parseAmount = (val: string | number | undefined | null): number => {
-    if (val === undefined || val === null) return 0;
-    if (typeof val === "number") return val;
-    const parsed = parseFloat(val);
-    return isNaN(parsed) ? 0 : parsed;
-  };
-
-  const formatRupiah = (val: string | number | undefined | null): string => {
-    return Math.round(parseAmount(val)).toLocaleString('id-ID');
-  };
 
   // Fetch all batches
   const fetchBatches = useCallback(async () => {
@@ -242,7 +380,7 @@ export default function PayrollManagementPage() {
       const res = await axiosInstance.get('/employees?per_page=1000');
       const emps = res.data.data.data || [];
       const total = res.data.data.total ?? emps.length;
-      const unsaved = emps.filter((e: any) => !e.basic_salary || parseInt(e.basic_salary) === 0).length;
+      const unsaved = emps.filter((e: any) => !e.basic_salary || Number.parseInt(e.basic_salary, 10) === 0).length;
       setGenStats({ total_employees: total, unsaved_profiles: unsaved });
     } catch (e) {
       console.error(e);
@@ -322,11 +460,12 @@ export default function PayrollManagementPage() {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Slip_Gaji_${name.replace(/\s+/g, '_')}.pdf`);
+      link.setAttribute('download', `Slip_Gaji_${name.replaceAll(/\s+/g, '_')}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
     } catch (e) {
+      console.error(e);
       toast.error("Gagal mengunduh slip PDF");
     }
   };
@@ -340,6 +479,7 @@ export default function PayrollManagementPage() {
       const res = await axiosInstance.get(`/payroll/preview-slip/${salary.id}`);
       setPreviewHtml(res.data.html);
     } catch (e) {
+      console.error(e);
       toast.error("Gagal memuat slip gaji");
     } finally {
       setPreviewLoading(false);
@@ -348,7 +488,7 @@ export default function PayrollManagementPage() {
 
   const handlePrintSlip = () => {
     const iframe = document.querySelector('iframe');
-    if (iframe && iframe.contentWindow) {
+    if (iframe?.contentWindow) {
       iframe.contentWindow.print();
     }
   };
@@ -401,7 +541,7 @@ export default function PayrollManagementPage() {
   // Remove Ad-Hoc Item in Modal
   const handleRemoveAdhocItem = async (detailId: number) => {
     if (!editingSalary) return;
-    if (!window.confirm("Hapus komponen ini dari rincian payslip?")) return;
+    if (!globalThis.confirm("Hapus komponen ini dari rincian payslip?")) return;
     try {
       const res = await axiosInstance.delete(`/payroll/salaries/${editingSalary.id}/adhoc-item/${detailId}`);
       toast.success("Komponen berhasil dihapus.");
@@ -432,46 +572,11 @@ export default function PayrollManagementPage() {
     if (!employeeSearch.trim()) return selectedBatch.salaries;
     const q = employeeSearch.toLowerCase();
     return selectedBatch.salaries.filter(s =>
-      s.user?.name.toLowerCase().includes(q) ||
-      (s.department && s.department.toLowerCase().includes(q)) ||
-      (s.bank_name && s.bank_name.toLowerCase().includes(q))
+      Boolean(s.user?.name.toLowerCase().includes(q)) ||
+      Boolean(s.department?.toLowerCase().includes(q)) ||
+      Boolean(s.bank_name?.toLowerCase().includes(q))
     );
   }, [selectedBatch, employeeSearch]);
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-black rounded-full border border-emerald-200">
-            <CheckCircle2 size={13} /> Selesai Dibayar
-          </span>
-        );
-      case 'approved':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 text-xs font-black rounded-full border border-blue-200">
-            <CheckCircle2 size={13} /> Disetujui
-          </span>
-        );
-      case 'pending_approval':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 text-xs font-black rounded-full border border-amber-200 animate-pulse">
-            <Clock size={13} /> Menunggu Persetujuan
-          </span>
-        );
-      case 'rejected':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 text-xs font-black rounded-full border border-rose-200">
-            <AlertTriangle size={13} /> Perlu Revisi
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 text-gray-700 text-xs font-black rounded-full border border-gray-200">
-            <Edit2 size={13} /> Draft
-          </span>
-        );
-    }
-  };
 
   if (loading && !selectedBatch) {
     return <PayrollSkeleton />;
@@ -573,7 +678,7 @@ export default function PayrollManagementPage() {
                 <>
                   <button
                     onClick={() => {
-                      const note = window.prompt("Alasan penolakan untuk revisi:");
+                      const note = globalThis.prompt("Alasan penolakan untuk revisi:");
                       if (note) handleStatusChange('reject', note);
                     }}
                     disabled={actionSubmitting}
@@ -799,84 +904,13 @@ export default function PayrollManagementPage() {
 
           {/* Batches Table */}
           <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
-            {detailLoading ? (
-              <div className="flex flex-col items-center justify-center py-20 gap-3">
-                <Loader2 className="animate-spin text-[#8B0000]" size={36} />
-                <p className="text-gray-400 font-medium text-sm">Membuka rincian periode payroll...</p>
-              </div>
-            ) : filteredBatches.length === 0 ? (
-              <div className="py-20 text-center px-4">
-                <div className="w-16 h-16 rounded-3xl bg-gray-50 text-gray-400 flex items-center justify-center mx-auto mb-3">
-                  <FileSpreadsheet size={32} />
-                </div>
-                <h3 className="text-base font-bold text-gray-800">Tidak ada batch payroll ditemukan</h3>
-                <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1">
-                  Mulai dengan membuat batch penggajian bulan berjalan dengan mengklik tombol di bawah.
-                </p>
-                <button
-                  onClick={handleOpenGenerate}
-                  className="mt-5 px-5 py-2.5 bg-[#8B0000] text-white rounded-xl text-xs font-bold shadow-md hover:bg-[#700000] transition-all"
-                >
-                  + Proses Payroll Baru
-                </button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="bg-gray-50/70 border-b border-gray-100">
-                    <tr>
-                      <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest pl-8">Periode Payroll</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Karyawan</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Bersih (THP)</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {filteredBatches.map((batch) => (
-                      <tr key={batch.id} className="hover:bg-gray-50/60 transition-colors">
-                        <td className="px-6 py-4 pl-8">
-                          <span className="font-bold text-gray-900 block text-base">
-                            {batch.period_month} {batch.period_year}
-                          </span>
-                          <span className="text-[11px] font-semibold text-gray-400 block mt-0.5">
-                            Dibuat: {new Date(batch.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 font-bold text-gray-700 text-sm">
-                          {batch.total_employees} Orang
-                        </td>
-                        <td className="px-6 py-4 font-black text-[#8B0000] text-base">
-                          Rp {formatRupiah(batch.total_net)}
-                        </td>
-                        <td className="px-6 py-4">
-                          {getStatusBadge(batch.status)}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex justify-center items-center gap-2">
-                            <button
-                              onClick={() => handleViewBatchDetails(batch.id)}
-                              className="flex items-center gap-1 px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl font-bold text-xs transition-all"
-                            >
-                              <Eye size={14} />
-                              <span>{['draft', 'pending_approval'].includes(batch.status) ? "Kelola & Review" : "Rincian"}</span>
-                              <ChevronRight size={12} />
-                            </button>
-                            <button
-                              onClick={() => handleExportBatchRekap(batch.id, batch.period_month, batch.period_year)}
-                              className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
-                              title="Unduh Rekap Excel"
-                            >
-                              <FileSpreadsheet size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <BatchTableContent
+              detailLoading={detailLoading}
+              filteredBatches={filteredBatches}
+              onOpenGenerate={handleOpenGenerate}
+              onViewBatchDetails={handleViewBatchDetails}
+              onExportBatchRekap={handleExportBatchRekap}
+            />
           </div>
         </div>
       )}
@@ -911,8 +945,9 @@ export default function PayrollManagementPage() {
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-black text-gray-500 uppercase">Bulan</label>
+                  <label htmlFor="gen-month-select" className="text-[11px] font-black text-gray-500 uppercase">Bulan</label>
                   <select
+                    id="gen-month-select"
                     value={genMonth}
                     onChange={(e) => setGenMonth(e.target.value)}
                     className="w-full h-11 bg-gray-50 border-none rounded-xl px-3 font-bold text-xs"
@@ -921,8 +956,9 @@ export default function PayrollManagementPage() {
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-black text-gray-500 uppercase">Tahun</label>
+                  <label htmlFor="gen-year-select" className="text-[11px] font-black text-gray-500 uppercase">Tahun</label>
                   <select
+                    id="gen-year-select"
                     value={genYear}
                     onChange={(e) => setGenYear(Number(e.target.value))}
                     className="w-full h-11 bg-gray-50 border-none rounded-xl px-3 font-bold text-xs"
@@ -1004,8 +1040,9 @@ export default function PayrollManagementPage() {
                   </h4>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-gray-600">Gaji Pokok (Rp)</label>
+                    <label htmlFor="edit-basic-salary-input" className="text-xs font-bold text-gray-600">Gaji Pokok (Rp)</label>
                     <input
+                      id="edit-basic-salary-input"
                       type="number"
                       value={editingSalary.basic_salary}
                       onChange={(e) => setEditingSalary({ ...editingSalary, basic_salary: e.target.value })}
@@ -1015,8 +1052,9 @@ export default function PayrollManagementPage() {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-gray-600">Nama Bank</label>
+                      <label htmlFor="edit-bank-name-input" className="text-xs font-bold text-gray-600">Nama Bank</label>
                       <input
+                        id="edit-bank-name-input"
                         type="text"
                         value={editingSalary.bank_name || ''}
                         onChange={(e) => setEditingSalary({ ...editingSalary, bank_name: e.target.value })}
@@ -1024,8 +1062,9 @@ export default function PayrollManagementPage() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-gray-600">No. Rekening</label>
+                      <label htmlFor="edit-bank-account-no-input" className="text-xs font-bold text-gray-600">No. Rekening</label>
                       <input
+                        id="edit-bank-account-no-input"
                         type="text"
                         value={editingSalary.bank_account_no || ''}
                         onChange={(e) => setEditingSalary({ ...editingSalary, bank_account_no: e.target.value })}
@@ -1035,8 +1074,9 @@ export default function PayrollManagementPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-gray-600">Cost Center</label>
+                    <label htmlFor="edit-cost-center-input" className="text-xs font-bold text-gray-600">Cost Center</label>
                     <input
+                      id="edit-cost-center-input"
                       type="text"
                       value={editingSalary.cost_center || ''}
                       onChange={(e) => setEditingSalary({ ...editingSalary, cost_center: e.target.value })}
@@ -1053,8 +1093,9 @@ export default function PayrollManagementPage() {
                   </h4>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-gray-600">Potongan Keterlambatan (Rp)</label>
+                    <label htmlFor="edit-deduction-late-input" className="text-xs font-bold text-gray-600">Potongan Keterlambatan (Rp)</label>
                     <input
+                      id="edit-deduction-late-input"
                       type="number"
                       value={editingSalary.deduction_late || 0}
                       onChange={(e) => setEditingSalary({ ...editingSalary, deduction_late: e.target.value })}
@@ -1063,8 +1104,9 @@ export default function PayrollManagementPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-gray-600">Potongan Absensi / Alfa (Rp)</label>
+                    <label htmlFor="edit-deduction-absence-input" className="text-xs font-bold text-gray-600">Potongan Absensi / Alfa (Rp)</label>
                     <input
+                      id="edit-deduction-absence-input"
                       type="number"
                       value={editingSalary.deduction_absence || 0}
                       onChange={(e) => setEditingSalary({ ...editingSalary, deduction_absence: e.target.value })}
@@ -1156,10 +1198,11 @@ export default function PayrollManagementPage() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
                     <div>
-                      <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Tipe</label>
+                      <label htmlFor="adhoc-type-select" className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Tipe</label>
                       <select
+                        id="adhoc-type-select"
                         value={adhocType}
-                        onChange={(e) => setAdhocType(e.target.value as any)}
+                        onChange={(e) => setAdhocType(e.target.value as "earning" | "deduction")}
                         className="w-full h-10 bg-white border border-gray-200 rounded-xl px-3 text-xs font-bold"
                       >
                         <option value="earning">Pendapatan (+)</option>
@@ -1167,8 +1210,9 @@ export default function PayrollManagementPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nama Variabel</label>
+                      <label htmlFor="adhoc-name-input" className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nama Variabel</label>
                       <input
+                        id="adhoc-name-input"
                         type="text"
                         value={adhocName}
                         onChange={(e) => setAdhocName(e.target.value)}
@@ -1177,8 +1221,9 @@ export default function PayrollManagementPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nominal (Rp)</label>
+                      <label htmlFor="adhoc-amount-input" className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nominal (Rp)</label>
                       <input
+                        id="adhoc-amount-input"
                         type="number"
                         min={0}
                         value={adhocAmount}

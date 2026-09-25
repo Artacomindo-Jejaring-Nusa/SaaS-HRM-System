@@ -3,13 +3,11 @@
 import { useState, useEffect } from "react";
 import axiosInstance from "@/lib/axios";
 import { 
-  Save, ShieldCheck, Percent, Calendar, 
-  Info, Loader2, AlertTriangle, CheckCircle2,
-  Settings as SettingIcon, Coins, Landmark,
-  Wallet, TrendingUp, HelpCircle, Plus, Trash2,
-  Clock, UserX, Calculator, ArrowRight, Sliders
+  Save, ShieldCheck, Calendar, 
+  Loader2, Settings as SettingIcon, Coins, Landmark,
+  Wallet, HelpCircle, Plus, Trash2,
+  Clock, UserX, Calculator
 } from "lucide-react";
-import { useLanguage } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
 
 interface LateTier {
@@ -19,38 +17,76 @@ interface LateTier {
   penalty_value: number;
 }
 
+const DEFAULT_SETTINGS = {
+  cutoff_day: 25,
+  bpjs_kesehatan_coy_pct: 4,
+  bpjs_kesehatan_emp_pct: 1,
+  bpjs_jht_coy_pct: 3.7,
+  bpjs_jht_emp_pct: 2,
+  bpjs_jp_coy_pct: 2,
+  bpjs_jp_emp_pct: 1,
+  bpjs_jkm_pct: 0.3,
+  bpjs_jkk_pct: 0.24,
+  tax_method: 'TER',
+  overtime_rate_per_hour: 30000,
+  overtime_rate_holiday_per_hour: 50000,
+  late_deduction_enabled: true,
+  late_deduction_base: 'daily_salary',
+  late_grace_period_minutes: 0,
+  late_deduction_tiers: [
+    { min_minutes: 1, max_minutes: 15, penalty_type: 'percentage' as const, penalty_value: 0.5 },
+    { min_minutes: 16, max_minutes: 30, penalty_type: 'percentage' as const, penalty_value: 1 },
+    { min_minutes: 31, max_minutes: 60, penalty_type: 'percentage' as const, penalty_value: 2.5 },
+    { min_minutes: 61, max_minutes: 9999, penalty_type: 'percentage' as const, penalty_value: 5 },
+  ],
+  absence_deduction_enabled: true,
+  absence_deduction_base: 'daily_salary',
+  absence_deduction_pct: 100,
+  absence_forfeit_allowance: true,
+};
+
+function calculateSimulation(
+  settings: any,
+  simSalary: number,
+  simWorkDays: number,
+  simLateMin: number,
+  simAbsentDays: number
+) {
+  const simDailySalary = simWorkDays > 0 ? (simSalary / simWorkDays) : 0;
+  let simLatePenalty = 0;
+  let simMatchedTier: LateTier | null = null;
+  if (settings.late_deduction_enabled && simLateMin > (settings.late_grace_period_minutes || 0)) {
+    const tiers: LateTier[] = settings.late_deduction_tiers || [];
+    for (const tier of tiers) {
+      if (simLateMin >= tier.min_minutes && simLateMin <= tier.max_minutes) {
+        simMatchedTier = tier;
+        break;
+      }
+    }
+    if (!simMatchedTier && tiers.length > 0) {
+      simMatchedTier = tiers.at(-1) || null;
+    }
+    if (simMatchedTier) {
+      if (simMatchedTier.penalty_type === 'percentage') {
+        const base = settings.late_deduction_base === 'basic_salary' ? simSalary : simDailySalary;
+        simLatePenalty = Math.round(base * (simMatchedTier.penalty_value / 100));
+      } else {
+        simLatePenalty = simMatchedTier.penalty_value;
+      }
+    }
+  }
+
+  const simAbsencePenalty = settings.absence_deduction_enabled 
+    ? Math.round(simAbsentDays * (simDailySalary * ((settings.absence_deduction_pct || 100) / 100))) 
+    : 0;
+
+  return { simDailySalary, simLatePenalty, simAbsencePenalty };
+}
+
 export default function PayrollSettingsPage() {
-  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [settings, setSettings] = useState<any>({
-    cutoff_day: 25,
-    bpjs_kesehatan_coy_pct: 4,
-    bpjs_kesehatan_emp_pct: 1,
-    bpjs_jht_coy_pct: 3.7,
-    bpjs_jht_emp_pct: 2,
-    bpjs_jp_coy_pct: 2,
-    bpjs_jp_emp_pct: 1,
-    bpjs_jkm_pct: 0.3,
-    bpjs_jkk_pct: 0.24,
-    tax_method: 'TER',
-    overtime_rate_per_hour: 30000,
-    overtime_rate_holiday_per_hour: 50000,
-    // Disciplinary & Late settings
-    late_deduction_enabled: true,
-    late_deduction_base: 'daily_salary',
-    late_grace_period_minutes: 0,
-    late_deduction_tiers: [
-      { min_minutes: 1, max_minutes: 15, penalty_type: 'percentage', penalty_value: 0.5 },
-      { min_minutes: 16, max_minutes: 30, penalty_type: 'percentage', penalty_value: 1.0 },
-      { min_minutes: 31, max_minutes: 60, penalty_type: 'percentage', penalty_value: 2.5 },
-      { min_minutes: 61, max_minutes: 9999, penalty_type: 'percentage', penalty_value: 5.0 },
-    ],
-    absence_deduction_enabled: true,
-    absence_deduction_base: 'daily_salary',
-    absence_deduction_pct: 100,
-    absence_forfeit_allowance: true,
-  });
+  const [settings, setSettings] = useState<any>(DEFAULT_SETTINGS);
 
   // Simulation state
   const [simSalary, setSimSalary] = useState(6000000);
@@ -76,9 +112,9 @@ export default function PayrollSettingsPage() {
             ? d.late_deduction_tiers 
             : [
                 { min_minutes: 1, max_minutes: 15, penalty_type: 'percentage', penalty_value: 0.5 },
-                { min_minutes: 16, max_minutes: 30, penalty_type: 'percentage', penalty_value: 1.0 },
+                { min_minutes: 16, max_minutes: 30, penalty_type: 'percentage', penalty_value: 1 },
                 { min_minutes: 31, max_minutes: 60, penalty_type: 'percentage', penalty_value: 2.5 },
-                { min_minutes: 61, max_minutes: 9999, penalty_type: 'percentage', penalty_value: 5.0 },
+                { min_minutes: 61, max_minutes: 9999, penalty_type: 'percentage', penalty_value: 5 },
               ],
           absence_deduction_enabled: d.absence_deduction_enabled ?? true,
           absence_deduction_base: d.absence_deduction_base ?? 'daily_salary',
@@ -96,7 +132,7 @@ export default function PayrollSettingsPage() {
 
   const handleAddTier = () => {
     const currentTiers: LateTier[] = [...(settings.late_deduction_tiers || [])];
-    const lastTier = currentTiers[currentTiers.length - 1];
+    const lastTier = currentTiers.at(-1);
     const newMin = lastTier ? Number(lastTier.max_minutes) + 1 : 1;
     const newMax = newMin + 30;
 
@@ -104,7 +140,7 @@ export default function PayrollSettingsPage() {
       ...settings,
       late_deduction_tiers: [
         ...currentTiers,
-        { min_minutes: newMin, max_minutes: newMax, penalty_type: 'percentage', penalty_value: 1.0 }
+        { min_minutes: newMin, max_minutes: newMax, penalty_type: 'percentage', penalty_value: 1 }
       ]
     });
   };
@@ -127,6 +163,7 @@ export default function PayrollSettingsPage() {
       await axiosInstance.post('/payroll/settings', settings);
       toast.success("Konfigurasi payroll dan pemotongan disiplin berhasil disimpan!");
     } catch (e) {
+      console.error(e);
       toast.error("Gagal menyimpan konfigurasi");
     } finally {
       setSaving(false);
@@ -134,33 +171,13 @@ export default function PayrollSettingsPage() {
   };
 
   // Simulation calculation
-  const simDailySalary = simWorkDays > 0 ? (simSalary / simWorkDays) : 0;
-  let simLatePenalty = 0;
-  let simMatchedTier: LateTier | null = null;
-  if (settings.late_deduction_enabled && simLateMin > (settings.late_grace_period_minutes || 0)) {
-    const tiers: LateTier[] = settings.late_deduction_tiers || [];
-    for (const tier of tiers) {
-      if (simLateMin >= tier.min_minutes && simLateMin <= tier.max_minutes) {
-        simMatchedTier = tier;
-        break;
-      }
-    }
-    if (!simMatchedTier && tiers.length > 0) {
-      simMatchedTier = tiers[tiers.length - 1];
-    }
-    if (simMatchedTier) {
-      if (simMatchedTier.penalty_type === 'percentage') {
-        const base = settings.late_deduction_base === 'basic_salary' ? simSalary : simDailySalary;
-        simLatePenalty = Math.round(base * (simMatchedTier.penalty_value / 100));
-      } else {
-        simLatePenalty = simMatchedTier.penalty_value;
-      }
-    }
-  }
-
-  const simAbsencePenalty = settings.absence_deduction_enabled 
-    ? Math.round(simAbsentDays * (simDailySalary * ((settings.absence_deduction_pct || 100) / 100))) 
-    : 0;
+  const { simDailySalary, simLatePenalty, simAbsencePenalty } = calculateSimulation(
+    settings,
+    simSalary,
+    simWorkDays,
+    simLateMin,
+    simAbsentDays
+  );
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[600px]">
@@ -214,8 +231,10 @@ export default function PayrollSettingsPage() {
             </div>
             <div className="flex items-center gap-4 bg-gray-50 p-2 rounded-2xl border border-gray-100">
               <span className="text-xs font-bold text-gray-600 pl-3">Otomasi Potongan:</span>
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label htmlFor="late-deduction-enabled-toggle" className="relative inline-flex items-center cursor-pointer">
+                <span className="sr-only">Aktifkan Otomasi Potongan Keterlambatan</span>
                 <input 
+                  id="late-deduction-enabled-toggle"
                   type="checkbox" 
                   checked={settings.late_deduction_enabled} 
                   onChange={(e) => setSettings({ ...settings, late_deduction_enabled: e.target.checked })}
@@ -230,11 +249,12 @@ export default function PayrollSettingsPage() {
             {/* Left Controls: Late Basis & Grace Period */}
             <div className="lg:col-span-4 space-y-6">
               <div className="space-y-2">
-                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                <label htmlFor="late-deduction-base-select" className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                   Basis Perhitungan Keterlambatan
                   <HelpCircle size={12} className="text-gray-400" />
                 </label>
                 <select 
+                  id="late-deduction-base-select"
                   className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-4 font-bold text-sm text-gray-800 focus:bg-white focus:border-[#8B0000]/10 focus:ring-4 focus:ring-[#8B0000]/5 transition-all outline-none"
                   value={settings.late_deduction_base}
                   onChange={(e) => setSettings({ ...settings, late_deduction_base: e.target.value })}
@@ -250,19 +270,20 @@ export default function PayrollSettingsPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                <label htmlFor="late-grace-period-input" className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">
                   Grace Period / Toleransi Awal (Menit)
                 </label>
                 <div className="relative">
                   <Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
                   <input 
+                    id="late-grace-period-input"
                     type="number"
                     min="0"
                     max="60"
                     placeholder="0"
                     className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl pl-12 pr-4 font-black text-gray-800 focus:bg-white focus:border-[#8B0000]/10 focus:ring-4 focus:ring-[#8B0000]/5 transition-all outline-none"
                     value={settings.late_grace_period_minutes}
-                    onChange={(e) => setSettings({ ...settings, late_grace_period_minutes: parseInt(e.target.value) || 0 })}
+                    onChange={(e) => setSettings({ ...settings, late_grace_period_minutes: Number.parseInt(e.target.value, 10) || 0 })}
                   />
                 </div>
                 <p className="text-[11px] text-gray-400 px-1">
@@ -277,8 +298,10 @@ export default function PayrollSettingsPage() {
                     <UserX size={20} />
                     <span className="font-black text-sm">Potongan Alfa / Mangkir</span>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
+                  <label htmlFor="absence-deduction-enabled-toggle" className="relative inline-flex items-center cursor-pointer">
+                    <span className="sr-only">Aktifkan Potongan Alfa atau Mangkir</span>
                     <input 
+                      id="absence-deduction-enabled-toggle"
                       type="checkbox" 
                       checked={settings.absence_deduction_enabled} 
                       onChange={(e) => setSettings({ ...settings, absence_deduction_enabled: e.target.checked })}
@@ -289,18 +312,19 @@ export default function PayrollSettingsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                  <label htmlFor="absence-deduction-pct-input" className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
                     Persentase Denda per Hari Alfa (%)
                   </label>
                   <div className="relative">
                     <input 
+                      id="absence-deduction-pct-input"
                       type="number"
                       step="1"
                       min="0"
                       max="200"
                       className="w-full h-12 bg-white border border-red-200 rounded-xl px-4 font-black text-gray-800 outline-none focus:ring-2 focus:ring-[#8B0000]/20"
                       value={settings.absence_deduction_pct}
-                      onChange={(e) => setSettings({ ...settings, absence_deduction_pct: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => setSettings({ ...settings, absence_deduction_pct: Number.parseFloat(e.target.value) || 0 })}
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-gray-400">% Gaji Harian</span>
                   </div>
@@ -342,7 +366,7 @@ export default function PayrollSettingsPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-200/40">
                     {(settings.late_deduction_tiers || []).map((tier: LateTier, idx: number) => (
-                      <tr key={idx} className="group hover:bg-white/80 transition-colors">
+                      <tr key={`tier-${tier.min_minutes}-${tier.max_minutes}-${tier.penalty_type}`} className="group hover:bg-white/80 transition-colors">
                         <td className="py-3 px-3">
                           <span className="w-7 h-7 rounded-xl bg-gray-200/70 text-gray-700 font-black text-xs flex items-center justify-center">
                             #{idx + 1}
@@ -350,24 +374,27 @@ export default function PayrollSettingsPage() {
                         </td>
                         <td className="py-3 px-3">
                           <input 
+                            aria-label={`Menit minimum tingkat ${idx + 1}`}
                             type="number"
                             min="1"
                             className="w-24 h-11 bg-white border border-gray-200 rounded-xl px-3 font-bold text-sm text-gray-800 outline-none focus:border-[#8B0000]"
                             value={tier.min_minutes}
-                            onChange={(e) => handleTierChange(idx, 'min_minutes', parseInt(e.target.value) || 0)}
+                            onChange={(e) => handleTierChange(idx, 'min_minutes', Number.parseInt(e.target.value, 10) || 0)}
                           />
                         </td>
                         <td className="py-3 px-3">
                           <input 
+                            aria-label={`Menit maksimum tingkat ${idx + 1}`}
                             type="number"
                             min="1"
                             className="w-24 h-11 bg-white border border-gray-200 rounded-xl px-3 font-bold text-sm text-gray-800 outline-none focus:border-[#8B0000]"
                             value={tier.max_minutes}
-                            onChange={(e) => handleTierChange(idx, 'max_minutes', parseInt(e.target.value) || 0)}
+                            onChange={(e) => handleTierChange(idx, 'max_minutes', Number.parseInt(e.target.value, 10) || 0)}
                           />
                         </td>
                         <td className="py-3 px-3">
                           <select
+                            aria-label={`Tipe denda tingkat ${idx + 1}`}
                             className="h-11 bg-white border border-gray-200 rounded-xl px-3 font-bold text-xs text-gray-800 outline-none focus:border-[#8B0000]"
                             value={tier.penalty_type}
                             onChange={(e) => handleTierChange(idx, 'penalty_type', e.target.value)}
@@ -379,12 +406,13 @@ export default function PayrollSettingsPage() {
                         <td className="py-3 px-3">
                           <div className="relative">
                             <input 
+                              aria-label={`Besaran denda tingkat ${idx + 1}`}
                               type="number"
                               step="0.1"
                               min="0"
                               className="w-28 h-11 bg-white border border-gray-200 rounded-xl px-3 font-black text-sm text-gray-800 outline-none focus:border-[#8B0000]"
                               value={tier.penalty_value}
-                              onChange={(e) => handleTierChange(idx, 'penalty_value', parseFloat(e.target.value) || 0)}
+                              onChange={(e) => handleTierChange(idx, 'penalty_value', Number.parseFloat(e.target.value) || 0)}
                             />
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">
                               {tier.penalty_type === 'percentage' ? '%' : 'Rp'}
@@ -397,6 +425,7 @@ export default function PayrollSettingsPage() {
                             onClick={() => handleRemoveTier(idx)}
                             disabled={(settings.late_deduction_tiers || []).length <= 1}
                             className="w-9 h-9 rounded-xl text-red-400 hover:text-red-700 hover:bg-red-50 flex items-center justify-center transition-all disabled:opacity-20"
+                            aria-label={`Hapus tingkat ${idx + 1}`}
                           >
                             <Trash2 size={16} />
                           </button>
@@ -421,40 +450,44 @@ export default function PayrollSettingsPage() {
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                   <div>
-                    <label className="text-gray-400 block mb-1">Gaji Pokok Karyawan</label>
+                    <label htmlFor="sim-salary-input" className="text-gray-400 block mb-1">Gaji Pokok Karyawan</label>
                     <input 
+                      id="sim-salary-input"
                       type="number"
                       step="500000"
                       className="w-full bg-white/10 border border-white/20 rounded-xl p-2 text-white font-bold"
                       value={simSalary}
-                      onChange={(e) => setSimSalary(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => setSimSalary(Number.parseFloat(e.target.value) || 0)}
                     />
                   </div>
                   <div>
-                    <label className="text-gray-400 block mb-1">Hari Kerja Efektif</label>
+                    <label htmlFor="sim-workdays-input" className="text-gray-400 block mb-1">Hari Kerja Efektif</label>
                     <input 
+                      id="sim-workdays-input"
                       type="number"
                       className="w-full bg-white/10 border border-white/20 rounded-xl p-2 text-white font-bold"
                       value={simWorkDays}
-                      onChange={(e) => setSimWorkDays(parseInt(e.target.value) || 1)}
+                      onChange={(e) => setSimWorkDays(Number.parseInt(e.target.value, 10) || 1)}
                     />
                   </div>
                   <div>
-                    <label className="text-gray-400 block mb-1">Menit Terlambat</label>
+                    <label htmlFor="sim-latemin-input" className="text-gray-400 block mb-1">Menit Terlambat</label>
                     <input 
+                      id="sim-latemin-input"
                       type="number"
                       className="w-full bg-white/10 border border-white/20 rounded-xl p-2 text-white font-bold"
                       value={simLateMin}
-                      onChange={(e) => setSimLateMin(parseInt(e.target.value) || 0)}
+                      onChange={(e) => setSimLateMin(Number.parseInt(e.target.value, 10) || 0)}
                     />
                   </div>
                   <div>
-                    <label className="text-gray-400 block mb-1">Hari Alfa (Mangkir)</label>
+                    <label htmlFor="sim-absentdays-input" className="text-gray-400 block mb-1">Hari Alfa (Mangkir)</label>
                     <input 
+                      id="sim-absentdays-input"
                       type="number"
                       className="w-full bg-white/10 border border-white/20 rounded-xl p-2 text-white font-bold"
                       value={simAbsentDays}
-                      onChange={(e) => setSimAbsentDays(parseInt(e.target.value) || 0)}
+                      onChange={(e) => setSimAbsentDays(Number.parseInt(e.target.value, 10) || 0)}
                     />
                   </div>
                 </div>
@@ -500,13 +533,14 @@ export default function PayrollSettingsPage() {
 
               <div className="space-y-6">
                 <div className="space-y-2 group">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
+                  <label htmlFor="cutoff-day-input" className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
                     Tanggal Cut-off Operasional
                     <HelpCircle size={12} className="text-blue-300 group-hover:text-blue-500 transition-colors" />
                   </label>
                   <div className="relative">
                     <Calendar className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-[#8B0000] transition-colors" size={20} />
                     <input 
+                      id="cutoff-day-input"
                       type="number"
                       min="1" max="31"
                       className="w-full h-16 bg-gray-50 border-2 border-transparent rounded-[1.25rem] pl-14 pr-6 font-black text-lg text-gray-700 focus:bg-white focus:border-[#8B0000]/10 focus:ring-4 focus:ring-[#8B0000]/5 transition-all outline-none"
@@ -522,10 +556,11 @@ export default function PayrollSettingsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">Metode Pajak Penghasilan</label>
+                  <label htmlFor="tax-method-select" className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">Metode Pajak Penghasilan</label>
                   <div className="relative group">
                     <Landmark className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-[#8B0000] transition-colors" size={20} />
                     <select 
+                      id="tax-method-select"
                       className="w-full h-16 bg-gray-50 border-2 border-transparent rounded-[1.25rem] pl-14 pr-6 font-black text-gray-700 focus:bg-white focus:border-[#8B0000]/10 focus:ring-4 focus:ring-[#8B0000]/5 transition-all outline-none appearance-none"
                       value={settings.tax_method}
                       onChange={(e) => setSettings({...settings, tax_method: e.target.value})}
@@ -539,23 +574,25 @@ export default function PayrollSettingsPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Lembur Hari Kerja (Rp/Jam)</label>
+                    <label htmlFor="overtime-rate-per-hour-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Lembur Hari Kerja (Rp/Jam)</label>
                     <input 
+                      id="overtime-rate-per-hour-input"
                       type="number"
                       step="5000"
                       className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-4 font-black text-gray-700 focus:bg-white focus:border-[#8B0000]/10 outline-none"
                       value={settings.overtime_rate_per_hour}
-                      onChange={(e) => setSettings({...settings, overtime_rate_per_hour: parseFloat(e.target.value) || 0})}
+                      onChange={(e) => setSettings({...settings, overtime_rate_per_hour: Number.parseFloat(e.target.value) || 0})}
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Lembur Libur (Rp/Jam)</label>
+                    <label htmlFor="overtime-rate-holiday-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Lembur Libur (Rp/Jam)</label>
                     <input 
+                      id="overtime-rate-holiday-input"
                       type="number"
                       step="5000"
                       className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl px-4 font-black text-gray-700 focus:bg-white focus:border-[#8B0000]/10 outline-none"
                       value={settings.overtime_rate_holiday_per_hour}
-                      onChange={(e) => setSettings({...settings, overtime_rate_holiday_per_hour: parseFloat(e.target.value) || 0})}
+                      onChange={(e) => setSettings({...settings, overtime_rate_holiday_per_hour: Number.parseFloat(e.target.value) || 0})}
                     />
                   </div>
                 </div>
@@ -596,8 +633,9 @@ export default function PayrollSettingsPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Coy (%)</label>
+                          <label htmlFor="bpjs-kesehatan-coy-pct-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Coy (%)</label>
                           <input 
+                             id="bpjs-kesehatan-coy-pct-input"
                              type="number" step="0.1"
                              className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
                              value={settings.bpjs_kesehatan_coy_pct}
@@ -605,8 +643,9 @@ export default function PayrollSettingsPage() {
                           />
                        </div>
                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Emp (%)</label>
+                          <label htmlFor="bpjs-kesehatan-emp-pct-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Emp (%)</label>
                           <input 
+                             id="bpjs-kesehatan-emp-pct-input"
                              type="number" step="0.1"
                              className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
                              value={settings.bpjs_kesehatan_emp_pct}
@@ -626,8 +665,9 @@ export default function PayrollSettingsPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Coy (%)</label>
+                          <label htmlFor="bpjs-jht-coy-pct-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Coy (%)</label>
                           <input 
+                             id="bpjs-jht-coy-pct-input"
                              type="number" step="0.1"
                              className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
                              value={settings.bpjs_jht_coy_pct}
@@ -635,8 +675,9 @@ export default function PayrollSettingsPage() {
                           />
                        </div>
                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Emp (%)</label>
+                          <label htmlFor="bpjs-jht-emp-pct-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Emp (%)</label>
                           <input 
+                             id="bpjs-jht-emp-pct-input"
                              type="number" step="0.1"
                              className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
                              value={settings.bpjs_jht_emp_pct}
@@ -656,8 +697,9 @@ export default function PayrollSettingsPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Coy (%)</label>
+                          <label htmlFor="bpjs-jp-coy-pct-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Coy (%)</label>
                           <input 
+                             id="bpjs-jp-coy-pct-input"
                              type="number" step="0.1"
                              className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
                              value={settings.bpjs_jp_coy_pct}
@@ -665,8 +707,9 @@ export default function PayrollSettingsPage() {
                           />
                        </div>
                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Emp (%)</label>
+                          <label htmlFor="bpjs-jp-emp-pct-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Porsi Emp (%)</label>
                           <input 
+                             id="bpjs-jp-emp-pct-input"
                              type="number" step="0.1"
                              className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
                              value={settings.bpjs_jp_emp_pct}
@@ -686,8 +729,9 @@ export default function PayrollSettingsPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">JKM (%)</label>
+                          <label htmlFor="bpjs-jkm-pct-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest">JKM (%)</label>
                           <input 
+                             id="bpjs-jkm-pct-input"
                              type="number" step="0.01"
                              className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
                              value={settings.bpjs_jkm_pct}
@@ -695,8 +739,9 @@ export default function PayrollSettingsPage() {
                           />
                        </div>
                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">JKK (%)</label>
+                          <label htmlFor="bpjs-jkk-pct-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest">JKK (%)</label>
                           <input 
+                             id="bpjs-jkk-pct-input"
                              type="number" step="0.01"
                              className="w-full h-12 bg-white border border-gray-200 rounded-xl px-3 font-black text-gray-700 outline-none"
                              value={settings.bpjs_jkk_pct}

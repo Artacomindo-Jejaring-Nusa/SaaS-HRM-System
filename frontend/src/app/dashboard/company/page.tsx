@@ -8,6 +8,34 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { CompanySkeleton } from "@/components/Skeleton";
 import { toast } from "sonner";
 
+function buildCompanyFormData(company: any, photoFile: File | null): FormData {
+  const formData = new FormData();
+  formData.append("name", company?.name || "");
+  formData.append("email", company?.email || "");
+  formData.append("phone", company?.phone || "");
+  formData.append("address", company?.address || "");
+  formData.append("latitude", company?.latitude || "");
+  formData.append("longitude", company?.longitude || "");
+  formData.append("radius_meters", String(company?.radius_meters || "50"));
+  formData.append("work_start_time", company?.work_start_time || "08:30:00");
+  formData.append("work_end_time", company?.work_end_time || "17:30:00");
+  formData.append("late_tolerance_minutes", String(company?.late_tolerance_minutes ?? "0"));
+  formData.append("watzap_api_key", company?.watzap_api_key || "");
+  formData.append("watzap_number_key", company?.watzap_number_key || "");
+  formData.append("watzap_base_url", company?.watzap_base_url || "https://api.watzap.id/v1/");
+  
+  if (photoFile) {
+    formData.append("logo", photoFile);
+  }
+  return formData;
+}
+
+function getInputBaseClass(canEdit: boolean, isBold = false): string {
+  const bgClass = canEdit ? "bg-gray-50" : "bg-gray-100 cursor-not-allowed";
+  const fontClass = isBold ? " font-bold" : "";
+  return `w-full h-10 pl-9 pr-4 text-sm${fontClass} ${bgClass} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors`;
+}
+
 export default function CompanySettingsPage() {
   const { hasPermission } = useAuth();
   const { t } = useLanguage();
@@ -56,24 +84,7 @@ export default function CompanySettingsPage() {
   const handleSave = async () => {
     try {
       setIsSubmitting(true);
-      const formData = new FormData();
-      formData.append("name", company.name);
-      formData.append("email", company.email);
-      formData.append("phone", company.phone || "");
-      formData.append("address", company.address || "");
-      formData.append("latitude", company.latitude || "");
-      formData.append("longitude", company.longitude || "");
-      formData.append("radius_meters", String(company.radius_meters || "50"));
-      formData.append("work_start_time", company.work_start_time || "08:30:00");
-      formData.append("work_end_time", company.work_end_time || "17:30:00");
-      formData.append("late_tolerance_minutes", String(company.late_tolerance_minutes ?? "0"));
-      formData.append("watzap_api_key", company.watzap_api_key || "");
-      formData.append("watzap_number_key", company.watzap_number_key || "");
-      formData.append("watzap_base_url", company.watzap_base_url || "https://api.watzap.id/v1/");
-      
-      if (photoFile) {
-        formData.append("logo", photoFile);
-      }
+      const formData = buildCompanyFormData(company, photoFile);
 
       await axiosInstance.post("/company/update", formData, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -259,30 +270,32 @@ export default function CompanySettingsPage() {
             <form className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium text-gray-700">Jam Masuk Standar (WIB)</label>
+                  <label htmlFor="work-start-time-input" className="text-sm font-medium text-gray-700">Jam Masuk Standar (WIB)</label>
                   <div className="relative">
                     <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                     <input
+                      id="work-start-time-input"
                       type="time"
                       disabled={!canEdit}
                       value={company?.work_start_time ? company.work_start_time.substring(0, 5) : "08:30"}
                       onChange={(e) => setCompany({...company, work_start_time: e.target.value ? `${e.target.value}:00` : "08:30:00"})}
-                      className={`w-full h-10 pl-9 pr-4 text-sm font-bold ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors`}
+                      className={getInputBaseClass(canEdit, true)}
                     />
                   </div>
                   <p className="text-[11px] text-gray-400 italic">Jam resmi karyawan mulai masuk kantor.</p>
                 </div>
 
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium text-gray-700">Jam Pulang Standar (WIB)</label>
+                  <label htmlFor="work-end-time-input" className="text-sm font-medium text-gray-700">Jam Pulang Standar (WIB)</label>
                   <div className="relative">
                     <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                     <input
+                      id="work-end-time-input"
                       type="time"
                       disabled={!canEdit}
                       value={company?.work_end_time ? company.work_end_time.substring(0, 5) : "17:30"}
                       onChange={(e) => setCompany({...company, work_end_time: e.target.value ? `${e.target.value}:00` : "17:30:00"})}
-                      className={`w-full h-10 pl-9 pr-4 text-sm font-bold ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'} border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors`}
+                      className={getInputBaseClass(canEdit, true)}
                     />
                   </div>
                   <p className="text-[11px] text-gray-400 italic">Jam resmi kepulangan kantor.</p>
@@ -290,18 +303,19 @@ export default function CompanySettingsPage() {
               </div>
 
               <div className="grid gap-2 pt-2">
-                <label className="text-sm font-medium text-gray-700">Toleransi Keterlambatan (Menit)</label>
+                <label htmlFor="late-tolerance-input" className="text-sm font-medium text-gray-700">Toleransi Keterlambatan (Menit)</label>
                 <div className="relative">
                   <Target className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8B0000]" size={16} />
                   <input
+                    id="late-tolerance-input"
                     type="number"
                     min="0"
                     max="180"
                     disabled={!canEdit}
                     value={company?.late_tolerance_minutes ?? "0"}
-                    onChange={(e) => setCompany({...company, late_tolerance_minutes: parseInt(e.target.value) || 0})}
+                    onChange={(e) => setCompany({...company, late_tolerance_minutes: Number.parseInt(e.target.value, 10) || 0})}
                     placeholder="0"
-                    className={`w-full h-10 pl-9 pr-4 text-sm font-bold ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'} border border-gray-200 rounded-md focus:outline-none focus:border-[#8B0000]/30 transition-colors border-l-4 border-l-[#8B0000]`}
+                    className={`w-full h-10 pl-9 pr-4 text-sm font-bold ${canEdit ? 'bg-gray-50' : 'bg-gray-100 cursor-not-allowed'} border border-gray-200 rounded-md focus:outline-none focus:border-[#8B0000]/30 transition-colors border-l-4 border-l-[#8B0000]`}
                   />
                 </div>
                 <p className="text-xs text-gray-500 font-medium">
@@ -325,37 +339,40 @@ export default function CompanySettingsPage() {
             
             <form className="space-y-5">
               <div className="grid gap-2">
-                <label className="text-sm font-bold text-gray-800">WatZap API Key</label>
+                <label htmlFor="watzap-api-key-input" className="text-sm font-bold text-gray-800">WatZap API Key</label>
                 <input
+                  id="watzap-api-key-input"
                   type="password"
                   disabled={!canEdit}
                   placeholder="Masukkan API Key dari WatZap"
                   value={company?.watzap_api_key || ""}
                   onChange={(e) => setCompany({...company, watzap_api_key: e.target.value})}
-                  className={`w-full h-11 px-4 text-sm ${!canEdit ? 'bg-gray-100' : 'bg-white shadow-sm'} border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all`}
+                  className={`w-full h-11 px-4 text-sm ${canEdit ? 'bg-white shadow-sm' : 'bg-gray-100'} border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all`}
                 />
               </div>
 
               <div className="grid gap-2">
-                <label className="text-sm font-bold text-gray-800">WatZap Phone Key (Number Key)</label>
+                <label htmlFor="watzap-number-key-input" className="text-sm font-bold text-gray-800">WatZap Phone Key (Number Key)</label>
                 <input
+                  id="watzap-number-key-input"
                   type="text"
                   disabled={!canEdit}
                   placeholder="Masukkan Number/Phone Key WhatsApp"
                   value={company?.watzap_number_key || ""}
                   onChange={(e) => setCompany({...company, watzap_number_key: e.target.value})}
-                  className={`w-full h-11 px-4 text-sm ${!canEdit ? 'bg-gray-100' : 'bg-white shadow-sm'} border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-mono`}
+                  className={`w-full h-11 px-4 text-sm ${canEdit ? 'bg-white shadow-sm' : 'bg-gray-100'} border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-mono`}
                 />
               </div>
 
               <div className="grid gap-2">
-                <label className="text-sm font-bold text-gray-800">API Base URL</label>
+                <label htmlFor="watzap-base-url-input" className="text-sm font-bold text-gray-800">API Base URL</label>
                 <input
+                  id="watzap-base-url-input"
                   type="url"
                   disabled={!canEdit}
                   value={company?.watzap_base_url || "https://api.watzap.id/v1/"}
                   onChange={(e) => setCompany({...company, watzap_base_url: e.target.value})}
-                  className={`w-full h-11 px-4 text-sm ${!canEdit ? 'bg-gray-100' : 'bg-white shadow-sm'} border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all text-gray-500`}
+                  className={`w-full h-11 px-4 text-sm ${canEdit ? 'bg-white shadow-sm' : 'bg-gray-100'} border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all text-gray-500`}
                 />
                 <p className="text-[11px] text-gray-400">Default: https://api.watzap.id/v1/</p>
               </div>

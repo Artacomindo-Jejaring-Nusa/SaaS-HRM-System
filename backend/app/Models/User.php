@@ -14,7 +14,7 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable, Auditable, EncryptsSensitiveFields, \App\Traits\HasKemnakerLeave;
+    use HasApiTokens, HasFactory, Notifiable, Auditable, EncryptsSensitiveFields, \App\Traits\HasKemnakerLeave, \App\Traits\HasUserRelations;
 
     protected array $encryptedFields = ['ktp_no', 'bank_account_no', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no'];
 
@@ -135,46 +135,6 @@ class User extends Authenticatable
         ];
     }
 
-    public function company()
-    {
-        return $this->belongsTo(Company::class);
-    }
-
-    public function office()
-    {
-        return $this->belongsTo(Office::class);
-    }
-
-    public function role()
-    {
-        return $this->belongsTo(Role::class);
-    }
-
-    public function supervisor()
-    {
-        return $this->belongsTo(User::class, 'supervisor_id');
-    }
-
-    public function subordinates()
-    {
-        return $this->hasMany(User::class, 'supervisor_id');
-    }
-
-    public function schedules()
-    {
-        return $this->hasMany(Schedule::class);
-    }
-
-    public function attendances()
-    {
-        return $this->hasMany(Attendance::class);
-    }
-
-    public function notifications()
-    {
-        return $this->hasMany(Notification::class);
-    }
-
     public function hasPermission($slug)
     {
         // Master Admin (Role ID 1) bypass all
@@ -217,30 +177,5 @@ class User extends Authenticatable
                 $p->where('slug', $permissionSlug);
             });
         });
-    }
-
-    public function salaries()
-    {
-        return $this->hasMany(Salary::class);
-    }
-
-    public function overtimes()
-    {
-        return $this->hasMany(Overtime::class);
-    }
-
-    public function leaves()
-    {
-        return $this->hasMany(Leave::class);
-    }
-
-    public function permits()
-    {
-        return $this->hasMany(Permit::class);
-    }
-
-    public function faceApprover()
-    {
-        return $this->belongsTo(User::class, 'face_approved_by');
     }
 }

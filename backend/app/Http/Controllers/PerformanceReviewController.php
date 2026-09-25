@@ -14,6 +14,8 @@ class PerformanceReviewController extends Controller
     private const MSG_FORBIDDEN = 'Akses ditolak.';
     private const RULE_REQ_SCORE = 'required|integer|min:0|max:100';
     private const RULE_SOME_SCORE = 'sometimes|integer|min:0|max:100';
+    private const ROUTE_PERFORMANCE = '/dashboard/performance';
+    private const NOTIF_REVIEW_PUBLISHED = 'REVIEW PERFORMA DIPUBLISH';
 
     public function index(Request $request)
     {
@@ -114,7 +116,7 @@ class PerformanceReviewController extends Controller
                 'REVIEW PERFORMA BARU',
                 "Review performa Anda untuk periode {$review->period} telah dipublish. Skor Total: {$review->score_total}",
                 'success',
-                '/dashboard/performance'
+                self::ROUTE_PERFORMANCE
             );
         }
 
@@ -184,7 +186,7 @@ class PerformanceReviewController extends Controller
                             'REVIEW PERFORMA BARU',
                             "Review performa Anda untuk periode {$period} telah dipublish. Skor Total: {$scoreTotal}",
                             'success',
-                            '/dashboard/performance'
+                            self::ROUTE_PERFORMANCE
                         );
                     }
                 }
@@ -251,16 +253,14 @@ class PerformanceReviewController extends Controller
         $wasDraft = $review->status === 'draft';
         $review->update($data);
 
-        if ($wasDraft && $review->status === 'published') {
-            if ($review->user) {
-                $this->notify(
-                    $review->user,
-                    'REVIEW PERFORMA DIPUBLISH',
-                    "Review performa Anda untuk periode {$review->period} telah tersedia. Skor Total: {$review->score_total}",
-                    'success',
-                    '/dashboard/performance'
-                );
-            }
+        if ($wasDraft && $review->status === 'published' && $review->user) {
+            $this->notify(
+                $review->user,
+                self::NOTIF_REVIEW_PUBLISHED,
+                "Review performa Anda untuk periode {$review->period} telah tersedia. Skor Total: {$review->score_total}",
+                'success',
+                self::ROUTE_PERFORMANCE
+            );
         }
 
         $this->logActivity('UPDATE_PERFORMANCE_REVIEW', "Memperbarui review performa ID: {$id}", $review);
@@ -282,16 +282,41 @@ class PerformanceReviewController extends Controller
         if ($review->user) {
             $this->notify(
                 $review->user,
-                'REVIEW PERFORMA DIPUBLISH',
+                self::NOTIF_REVIEW_PUBLISHED,
                 "Review performa Anda untuk periode {$review->period} telah diterbitkan. Skor Total: {$review->score_total}",
                 'success',
-                '/dashboard/performance'
+                self::ROUTE_PERFORMANCE
             );
         }
 
         $this->logActivity('PUBLISH_PERFORMANCE_REVIEW', "Menerbitkan review performa ID: {$id}", $review);
 
         return $this->successResponse($review, 'Review performa berhasil diterbitkan.');
+    }
+
+    private function resolveBatchPublishReviews(Request $request, $user)
+    {
+        if ($request->boolean('all_drafts')) {
+            $query = PerformanceReview::where('status', 'draft');
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            }
+            if ($request->period) {
+                $query->where('period', $request->period);
+            }
+            return $query->get();
+        }
+
+        $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'required|integer|exists:performance_reviews,id',
+        ]);
+
+        $query = PerformanceReview::whereIn('id', $request->ids);
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
+            $query->where('company_id', $user->company_id);
+        }
+        return $query->get();
     }
 
     /**
@@ -302,27 +327,7 @@ class PerformanceReviewController extends Controller
         $user = $request->user() ?: \Illuminate\Support\Facades\Auth::user();
         abort_if(! $user || (! $user->hasPermission('manage-kpis') && $user->role_id !== 1), 403, self::MSG_FORBIDDEN);
 
-        if ($request->boolean('all_drafts')) {
-            $query = PerformanceReview::where('status', 'draft');
-            if ($user->company_id && ! $user->canAccessAllCompanies()) {
-                $query->where('company_id', $user->company_id);
-            }
-            if ($request->period) {
-                $query->where('period', $request->period);
-            }
-            $reviews = $query->get();
-        } else {
-            $request->validate([
-                'ids' => 'required|array|min:1',
-                'ids.*' => 'required|integer|exists:performance_reviews,id',
-            ]);
-
-            $query = PerformanceReview::whereIn('id', $request->ids);
-            if ($user->company_id && ! $user->canAccessAllCompanies()) {
-                $query->where('company_id', $user->company_id);
-            }
-            $reviews = $query->get();
-        }
+        $reviews = $this->resolveBatchPublishReviews($request, $user);
 
         foreach ($reviews as $review) {
             if ($review->status !== 'published') {
@@ -330,10 +335,10 @@ class PerformanceReviewController extends Controller
                 if ($review->user) {
                     $this->notify(
                         $review->user,
-                        'REVIEW PERFORMA DIPUBLISH',
+                        self::NOTIF_REVIEW_PUBLISHED,
                         "Review performa Anda untuk periode {$review->period} telah diterbitkan. Skor Total: {$review->score_total}",
                         'success',
-                        '/dashboard/performance'
+                        self::ROUTE_PERFORMANCE
                     );
                 }
             }

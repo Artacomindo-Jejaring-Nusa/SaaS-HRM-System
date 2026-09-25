@@ -500,6 +500,58 @@ class PayrollService
      * @param PayrollSetting $settings
      * @return array ['amount' => float, 'late_count' => int, 'total_late_minutes' => int, 'breakdown' => array]
      */
+    private function resolveShiftStartTime($att, array $schedulesMap, string $dateKey): string
+    {
+        if (isset($schedulesMap[$dateKey]) && $schedulesMap[$dateKey]->shift && $schedulesMap[$dateKey]->shift->start_time) {
+            return $schedulesMap[$dateKey]->shift->start_time;
+        }
+
+        return $att->user?->office?->work_start_time ?? $att->user?->company?->work_start_time ?? '08:30:00';
+    }
+
+    private function matchLateTier(int $lateMinutes, array $tiers): ?array
+    {
+        foreach ($tiers as $tier) {
+            $min = (int) ($tier['min_minutes'] ?? 0);
+            $max = (int) ($tier['max_minutes'] ?? 99999);
+            if ($lateMinutes >= $min && $lateMinutes <= $max) {
+                return $tier;
+            }
+        }
+
+        return !empty($tiers) ? end($tiers) : null;
+    }
+
+    private function calculateLateEventDeduction(?array $matchedTier, string $baseType, float $basicSalary, float $dailySalary, float $dailyAllowance): float
+    {
+        $penaltyVal = (float) ($matchedTier['penalty_value'] ?? 0);
+        $penaltyType = $matchedTier['penalty_type'] ?? 'percentage';
+
+        if ($penaltyType !== 'percentage') {
+            return $penaltyVal;
+        }
+
+        $baseAmount = match ($baseType) {
+            'basic_salary' => $basicSalary,
+            'attendance_allowance' => $dailyAllowance,
+            'fixed_amount' => 0,
+            default => $dailySalary,
+        };
+
+        return round($baseAmount * ($penaltyVal / 100));
+    }
+
+    /**
+     * Calculate late arrival deduction based on company tiers.
+     *
+     * @param \Illuminate\Support\Collection $attendances
+     * @param array $schedulesMap Keyed by 'Y-m-d' date -> Schedule with Shift
+     * @param float $basicSalary
+     * @param int $totalWorkingDays
+     * @param float $totalFixedAllowance
+     * @param PayrollSetting $settings
+     * @return array ['amount' => float, 'late_count' => int, 'total_late_minutes' => int, 'breakdown' => array]
+     */
     public function calculateLateDeduction($attendances, array $schedulesMap, $basicSalary, $totalWorkingDays, $totalFixedAllowance, PayrollSetting $settings)
     {
         if (!($settings->late_deduction_enabled ?? true)) {
@@ -529,12 +581,7 @@ class PayrollService
 
             $checkIn = \Carbon\Carbon::parse($att->check_in);
             $dateKey = $checkIn->toDateString();
-
-            // Determine shift start time
-            $shiftStartTime = $user->office?->work_start_time ?? $user->company?->work_start_time ?? '08:30:00';
-            if (isset($schedulesMap[$dateKey]) && $schedulesMap[$dateKey]->shift && $schedulesMap[$dateKey]->shift->start_time) {
-                $shiftStartTime = $schedulesMap[$dateKey]->shift->start_time;
-            }
+            $shiftStartTime = $this->resolveShiftStartTime($att, $schedulesMap, $dateKey);
 
             $shiftStart = \Carbon\Carbon::parse($dateKey . ' ' . $shiftStartTime);
             $lateThreshold = $shiftStart->copy()->addMinutes($gracePeriod);
@@ -544,38 +591,8 @@ class PayrollService
                 $totalLateMinutes += $lateMinutes;
                 $lateCount++;
 
-                // Find matching tier
-                $matchedTier = null;
-                foreach ($tiers as $tier) {
-                    $min = (int) ($tier['min_minutes'] ?? 0);
-                    $max = (int) ($tier['max_minutes'] ?? 99999);
-                    if ($lateMinutes >= $min && $lateMinutes <= $max) {
-                        $matchedTier = $tier;
-                        break;
-                    }
-                }
-
-                // Fallback to highest tier if exceeding max
-                if (!$matchedTier && !empty($tiers)) {
-                    $matchedTier = end($tiers);
-                }
-
-                $penaltyVal = (float) ($matchedTier['penalty_value'] ?? 0);
-                $penaltyType = $matchedTier['penalty_type'] ?? 'percentage';
-
-                $eventDeduction = 0;
-                if ($penaltyType === 'percentage') {
-                    $baseAmount = match ($baseType) {
-                        'basic_salary' => $basicSalary,
-                        'attendance_allowance' => $dailyAllowance,
-                        'fixed_amount' => 0,
-                        default => $dailySalary, // daily_salary
-                    };
-                    $eventDeduction = round($baseAmount * ($penaltyVal / 100));
-                } else {
-                    $eventDeduction = $penaltyVal; // Fixed nominal amount
-                }
-
+                $matchedTier = $this->matchLateTier($lateMinutes, $tiers);
+                $eventDeduction = $this->calculateLateEventDeduction($matchedTier, $baseType, $basicSalary, $dailySalary, $dailyAllowance);
                 $totalLateDeduction += $eventDeduction;
 
                 $breakdown[] = [

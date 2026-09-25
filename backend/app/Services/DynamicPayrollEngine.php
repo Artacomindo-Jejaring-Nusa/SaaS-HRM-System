@@ -47,27 +47,11 @@ class DynamicPayrollEngine
      */
     private function resolveAssignment(PayrollComponent $comp, User $user): ?EmployeeComponent
     {
-        // 1. Individual assignment
         $userAssign = $comp->assignments->first(fn ($a) => $a->user_id === $user->id && $a->is_active);
-        if ($userAssign) {
-            return $userAssign;
-        }
-
-        // 2. Role assignment
-        if ($user->role_id) {
-            $roleAssign = $comp->assignments->first(fn ($a) => $a->role_id === $user->role_id && $a->is_active);
-            if ($roleAssign) {
-                return $roleAssign;
-            }
-        }
-
-        // 3. Global assignment
+        $roleAssign = $user->role_id ? $comp->assignments->first(fn ($a) => $a->role_id === $user->role_id && $a->is_active) : null;
         $globalAssign = $comp->assignments->first(fn ($a) => $a->is_global && $a->is_active);
-        if ($globalAssign) {
-            return $globalAssign;
-        }
 
-        return null;
+        return $userAssign ?? $roleAssign ?? $globalAssign;
     }
 
     /**
@@ -81,7 +65,7 @@ class DynamicPayrollEngine
         }
 
         foreach ($comp->triggers as $trigger) {
-            if ($this->evaluateSingleTrigger($trigger->trigger_type, $trigger->config ?? [], $user, $startDate, $endDate, $month, $year)) {
+            if ($this->evaluateSingleTrigger($trigger->trigger_type, $trigger->config ?? [], $user, $startDate, $endDate, $year)) {
                 return true;
             }
         }
@@ -89,7 +73,7 @@ class DynamicPayrollEngine
         return false;
     }
 
-    private function evaluateSingleTrigger(string $type, array $config, User $user, Carbon $startDate, Carbon $endDate, int $month, int $year): bool
+    private function evaluateSingleTrigger(string $type, array $config, User $user, Carbon $startDate, Carbon $endDate, int $year): bool
     {
         return match ($type) {
             'recurring_monthly' => true,
@@ -159,9 +143,7 @@ class DynamicPayrollEngine
             $anniversaryThisYear = $joinDate->copy()->year($startDate->year);
             if ($anniversaryThisYear->between($startDate, $endDate)) {
                 $yearsCompleted = $joinDate->diffInYears($anniversaryThisYear);
-                if ($reqYears === 0 || $yearsCompleted >= $reqYears) {
-                    return true;
-                }
+                return $reqYears === 0 || $yearsCompleted >= $reqYears;
             }
         } catch (\Throwable) {
             return false;
@@ -180,7 +162,6 @@ class DynamicPayrollEngine
 
         $basicSalary = (float) ($context['basic_salary'] ?? 0);
         $attendedDays = (int) ($context['attended_days'] ?? 0);
-        $totalWorkingDays = (int) ($context['total_working_days'] ?? 20);
 
         $amount = 0;
         $note = '';
@@ -266,43 +247,126 @@ class DynamicPayrollEngine
         }
 
         // Sanitization: Allow ONLY safe math characters (numbers, +, -, *, /, ., (, ), spaces)
-        if (! preg_match('/^[0-9+\-*\/().,\s]+$/', $computedExpr)) {
+        if (! preg_match('/^[\d+\-*\/().,\s]+$/', $computedExpr)) {
             return ['amount' => 0, 'note' => 'Formula mengandung karakter tidak valid'];
         }
 
         try {
-            // Safe evaluation using isolated expression
+            // Safe evaluation using isolated arithmetic parser
             $computedExpr = str_replace(',', '', $computedExpr);
-            $amount = 0;
-            // Catch division by zero safely
-            if (preg_match('/\/0(\.0+)?(?![0-9])/', $computedExpr)) {
-                return ['amount' => 0, 'note' => 'Pembagian dengan nol dalam rumus'];
-            }
-
-            @eval("\$amount = round((float)($computedExpr), 2);");
-
-            return [
-                'amount' => max(0, (float) $amount),
-                'note' => "Rumus: {$expression}",
-            ];
+            $amount = $this->evaluateArithmeticExpression($computedExpr);
+            $resultAmount = max(0, round((float) $amount, 2));
+            $note = "Rumus: {$expression}";
         } catch (\Throwable $e) {
-            return ['amount' => 0, 'note' => 'Gagal evaluasi rumus: '.$e->getMessage()];
+            $resultAmount = 0;
+            $note = 'Gagal evaluasi rumus: '.$e->getMessage();
         }
+
+        return [
+            'amount' => $resultAmount,
+            'note' => $note,
+        ];
     }
 
     /**
-     * Generate complete immutable snapshot rows into payslip_details.
+     * Safely evaluate arithmetic expression without using eval.
      */
-    public function generateSnapshotDetails(Salary $salary, User $user, array $context, Carbon $startDate, Carbon $endDate, int $month, int $year): array
+    private function evaluateArithmeticExpression(string $expr): float
     {
-        // 1. Delete previous snapshot if generating draft anew
-        PayslipDetail::where('salary_id', $salary->id)->delete();
+        preg_match_all('/(?:\d+(?:\.\d+)?|[+\-*\/()])/s', $expr, $matches);
+        $tokens = $matches[0] ?? [];
+        $pos = 0;
 
-        $snapshotDetails = [];
+        $peek = function () use (&$tokens, &$pos) {
+            return $tokens[$pos] ?? null;
+        };
 
-        // 2. Base Statutory Items Snapshot
+        $consume = function () use (&$tokens, &$pos) {
+            return $tokens[$pos++] ?? null;
+        };
+
+        $parseFactor = function () use (&$parseExpression, &$parseFactor, &$peek, &$consume): float {
+            $token = $peek();
+            if ($token === '+') {
+                $consume();
+                return $parseFactor();
+            }
+            if ($token === '-') {
+                $consume();
+                return -$parseFactor();
+            }
+            if ($token === '(') {
+                $consume();
+                $value = $parseExpression();
+                if ($peek() === ')') {
+                    $consume();
+                } else {
+                    throw new \InvalidArgumentException('Tanda kurung tidak seimbang');
+                }
+                return $value;
+            }
+            if ($token !== null && is_numeric($token)) {
+                $consume();
+                return (float) $token;
+            }
+            throw new \InvalidArgumentException("Token tidak valid: {$token}");
+        };
+
+        $parseTerm = function () use (&$parseFactor, &$peek, &$consume): float {
+            $value = $parseFactor();
+            while (true) {
+                $op = $peek();
+                if ($op === '*' || $op === '/') {
+                    $consume();
+                    $right = $parseFactor();
+                    if ($op === '/') {
+                        if ($right == 0.0) {
+                            throw new \DivisionByZeroError('Pembagian dengan nol dalam rumus');
+                        }
+                        $value = $value / $right;
+                    } else {
+                        $value = $value * $right;
+                    }
+                } else {
+                    break;
+                }
+            }
+            return $value;
+        };
+
+        $parseExpression = function () use (&$parseTerm, &$peek, &$consume): float {
+            $value = $parseTerm();
+            while (true) {
+                $op = $peek();
+                if ($op === '+' || $op === '-') {
+                    $consume();
+                    $right = $parseTerm();
+                    $value = ($op === '+') ? ($value + $right) : ($value - $right);
+                } else {
+                    break;
+                }
+            }
+            return $value;
+        };
+
+        if (empty($tokens)) {
+            return 0.0;
+        }
+
+        $result = $parseExpression();
+        if ($pos < count($tokens)) {
+            throw new \InvalidArgumentException('Karakter tidak valid di akhir ekspresi');
+        }
+
+        return $result;
+    }
+
+    private function buildStatutoryEarningsSnapshot(Salary $salary, array $context): array
+    {
+        $details = [];
+
         // Gaji Pokok
-        $snapshotDetails[] = [
+        $details[] = [
             'salary_id' => $salary->id,
             'component_id' => null,
             'component_name' => 'Gaji Pokok',
@@ -317,7 +381,7 @@ class DynamicPayrollEngine
 
         // Tunjangan Kehadiran (if any)
         if ((float) $salary->earning_attendance_allowance > 0) {
-            $snapshotDetails[] = [
+            $details[] = [
                 'salary_id' => $salary->id,
                 'component_id' => null,
                 'component_name' => 'Tunjangan Kehadiran',
@@ -333,7 +397,7 @@ class DynamicPayrollEngine
 
         // Lembur (if any)
         if ((float) $salary->earning_overtime > 0) {
-            $snapshotDetails[] = [
+            $details[] = [
                 'salary_id' => $salary->id,
                 'component_id' => null,
                 'component_name' => 'Uang Lembur (Overtime)',
@@ -349,7 +413,7 @@ class DynamicPayrollEngine
 
         // Premi BPJS Kesehatan Ditanggung Perusahaan (if any)
         if ((float) $salary->earning_bpjs_kes_premium > 0) {
-            $snapshotDetails[] = [
+            $details[] = [
                 'salary_id' => $salary->id,
                 'component_id' => null,
                 'component_name' => 'Premi BPJS Kesehatan (Perusahaan)',
@@ -363,10 +427,15 @@ class DynamicPayrollEngine
             ];
         }
 
-        // 3. Dynamic Custom Components
+        return $details;
+    }
+
+    private function buildDynamicComponentsSnapshot(Salary $salary, User $user, array $context, Carbon $startDate, Carbon $endDate, int $month, int $year): array
+    {
         $applicable = $this->getApplicableComponentsForUser($user, $startDate, $endDate, $month, $year);
         $totalDynamicEarnings = 0;
         $totalDynamicDeductions = 0;
+        $details = [];
 
         foreach ($applicable as $item) {
             $comp = $item['component'];
@@ -376,7 +445,7 @@ class DynamicPayrollEngine
             $calcAmount = (float) $calc['amount'];
 
             if ($calcAmount > 0) {
-                $snapshotDetails[] = [
+                $details[] = [
                     'salary_id' => $salary->id,
                     'component_id' => $comp->id,
                     'component_name' => $comp->name,
@@ -397,9 +466,19 @@ class DynamicPayrollEngine
             }
         }
 
-        // 4. Deductions Snapshot (BPJS, Tax, Late, Absence)
+        return [
+            'details' => $details,
+            'total_earnings' => $totalDynamicEarnings,
+            'total_deductions' => $totalDynamicDeductions,
+        ];
+    }
+
+    private function buildStatutoryDeductionsSnapshot(Salary $salary, array $context): array
+    {
+        $details = [];
+
         if ((float) $salary->deduction_bpjs_jht > 0) {
-            $snapshotDetails[] = [
+            $details[] = [
                 'salary_id' => $salary->id,
                 'component_id' => null,
                 'component_name' => 'BPJS Ketenagakerjaan (JHT)',
@@ -414,7 +493,7 @@ class DynamicPayrollEngine
         }
 
         if ((float) $salary->deduction_bpjs_jp > 0) {
-            $snapshotDetails[] = [
+            $details[] = [
                 'salary_id' => $salary->id,
                 'component_id' => null,
                 'component_name' => 'BPJS Ketenagakerjaan (JP)',
@@ -429,7 +508,7 @@ class DynamicPayrollEngine
         }
 
         if ((float) $salary->deduction_bpjs_kes > 0) {
-            $snapshotDetails[] = [
+            $details[] = [
                 'salary_id' => $salary->id,
                 'component_id' => null,
                 'component_name' => 'BPJS Kesehatan (Karyawan)',
@@ -444,7 +523,7 @@ class DynamicPayrollEngine
         }
 
         if ((float) $salary->deduction_absence > 0) {
-            $snapshotDetails[] = [
+            $details[] = [
                 'salary_id' => $salary->id,
                 'component_id' => null,
                 'component_name' => 'Potongan Absensi / Alfa',
@@ -459,7 +538,7 @@ class DynamicPayrollEngine
         }
 
         if ((float) $salary->deduction_late > 0) {
-            $snapshotDetails[] = [
+            $details[] = [
                 'salary_id' => $salary->id,
                 'component_id' => null,
                 'component_name' => 'Potongan Keterlambatan',
@@ -474,7 +553,7 @@ class DynamicPayrollEngine
         }
 
         if ((float) $salary->deduction_tax > 0) {
-            $snapshotDetails[] = [
+            $details[] = [
                 'salary_id' => $salary->id,
                 'component_id' => null,
                 'component_name' => 'PPh 21',
@@ -488,12 +567,29 @@ class DynamicPayrollEngine
             ];
         }
 
+        return $details;
+    }
+
+    /**
+     * Generate complete immutable snapshot rows into payslip_details.
+     */
+    public function generateSnapshotDetails(Salary $salary, User $user, array $context, Carbon $startDate, Carbon $endDate, int $month, int $year): array
+    {
+        // 1. Delete previous snapshot if generating draft anew
+        PayslipDetail::where('salary_id', $salary->id)->delete();
+
+        $statutoryEarnings = $this->buildStatutoryEarningsSnapshot($salary, $context);
+        $dynamicResult = $this->buildDynamicComponentsSnapshot($salary, $user, $context, $startDate, $endDate, $month, $year);
+        $statutoryDeductions = $this->buildStatutoryDeductionsSnapshot($salary, $context);
+
+        $snapshotDetails = array_merge($statutoryEarnings, $dynamicResult['details'], $statutoryDeductions);
+
         // Bulk insert the immutable snapshot details
         PayslipDetail::insert($snapshotDetails);
 
         return [
-            'dynamic_earnings' => $totalDynamicEarnings,
-            'dynamic_deductions' => $totalDynamicDeductions,
+            'dynamic_earnings' => $dynamicResult['total_earnings'],
+            'dynamic_deductions' => $dynamicResult['total_deductions'],
             'count' => count($snapshotDetails),
         ];
     }

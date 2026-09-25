@@ -26,27 +26,29 @@ class ApprovalService
         'profile_request' => 'Pembaruan Profil',
     ];
 
+    public const CAT_ATTENDANCE = 'Kehadiran & Waktu';
+
     /**
      * Catalog of actual HRMS system features that can have approval workflows.
      */
     public const SYSTEM_MODULES = [
         'leave' => [
             'name' => 'Cuti Karyawan',
-            'category' => 'Kehadiran & Waktu',
+            'category' => self::CAT_ATTENDANCE,
             'icon' => 'Calendar',
             'description' => 'Pengajuan cuti tahunan, melahirkan, atau cuti khusus.',
             'default_layers' => 2,
         ],
         'permit' => [
             'name' => 'Perizinan',
-            'category' => 'Kehadiran & Waktu',
+            'category' => self::CAT_ATTENDANCE,
             'icon' => 'ClipboardList',
             'description' => 'Izin sakit, izin terlambat, pulang cepat, atau dinas luar.',
             'default_layers' => 1,
         ],
         'overtime' => [
             'name' => 'Lembur (Overtime)',
-            'category' => 'Kehadiran & Waktu',
+            'category' => self::CAT_ATTENDANCE,
             'icon' => 'Clock',
             'description' => 'Surat perintah dan pengajuan jam kerja lembur.',
             'default_layers' => 1,
@@ -67,7 +69,7 @@ class ApprovalService
         ],
         'attendance_correction' => [
             'name' => 'Koreksi Absensi',
-            'category' => 'Kehadiran & Waktu',
+            'category' => self::CAT_ATTENDANCE,
             'icon' => 'CheckSquare',
             'description' => 'Perbaikan data jam kehadiran yang terlewat atau keliru.',
             'default_layers' => 1,
@@ -416,6 +418,35 @@ class ApprovalService
         };
     }
 
+    private static function canApproveRoleStep(WorkflowStep $step, User $approver, string $moduleKey, bool $hasModulePermission): bool
+    {
+        if ($approver->role_id === $step->approver_role_id) {
+            return true;
+        }
+
+        if (!$hasModulePermission) {
+            return false;
+        }
+
+        if (in_array($moduleKey, ['fund_request', 'reimbursement'])) {
+            $roleName = strtolower($approver->role?->name ?? '');
+            $stepRoleName = strtolower($step->role?->name ?? '');
+            $isExecutiveOrAdmin = str_contains($roleName, 'admin') || str_contains($roleName, 'direktur') || str_contains($roleName, 'ceo') || str_contains($roleName, 'boc');
+            if ($isExecutiveOrAdmin) {
+                return true;
+            }
+            return str_contains($stepRoleName, 'hr') || str_contains($stepRoleName, 'admin');
+        }
+
+        return true;
+    }
+
+    private static function canApproveUserStep(WorkflowStep $step, User $approver, bool $hasModulePermission): bool
+    {
+        return $approver->id === $step->approver_user_id
+            || ($hasModulePermission && ($approver->role_id === 1 || str_contains(strtolower($approver->role?->name ?? ''), 'admin')));
+    }
+
     /**
      * Check if a specific user can act on a specific workflow step.
      */
@@ -431,46 +462,15 @@ class ApprovalService
             return false;
         }
 
-        $moduleKey = $moduleKey ?: ($step->workflow->module_key ?? '');
-        $permission = self::getApprovalPermissionForModule($moduleKey);
+        $resolvedModuleKey = $moduleKey ?: ($step->workflow->module_key ?? '');
+        $permission = self::getApprovalPermissionForModule($resolvedModuleKey);
         $hasModulePermission = $permission ? $approver->hasPermission($permission) : false;
 
-        switch ($step->approver_type) {
-            case 'supervisor':
-                // Direct supervisor of the submitter, or someone granted explicit approval permission for this module
-                return $submitter->supervisor_id === $approver->id || $hasModulePermission;
-
-            case 'role':
-                // Exact role match
-                if ($approver->role_id === $step->approver_role_id) {
-                    return true;
-                }
-
-                // If user has the explicit module approval permission (e.g. approve-overtimes)
-                if ($hasModulePermission) {
-                    // For multi-tiered financial workflows (fund_request, reimbursement), keep strict tier isolation
-                    if (in_array($moduleKey, ['fund_request', 'reimbursement'])) {
-                        $roleName = strtolower($approver->role?->name ?? '');
-                        $stepRoleName = strtolower($step->role?->name ?? '');
-                        if (str_contains($roleName, 'admin') || str_contains($roleName, 'direktur') || str_contains($roleName, 'ceo') || str_contains($roleName, 'boc')) {
-                            return true;
-                        }
-                        return str_contains($stepRoleName, 'hr') || str_contains($stepRoleName, 'admin');
-                    }
-
-                    // For overtime, leave, permit, shift_swap, attendance_correction:
-                    // Any supervisor or manager explicitly granted approval permission can approve
-                    return true;
-                }
-
-                return false;
-
-            case 'user':
-                return $approver->id === $step->approver_user_id
-                    || ($hasModulePermission && ($approver->role_id === 1 || str_contains(strtolower($approver->role?->name ?? ''), 'admin')));
-
-            default:
-                return false;
-        }
+        return match ($step->approver_type) {
+            'supervisor' => $submitter->supervisor_id === $approver->id || $hasModulePermission,
+            'role' => self::canApproveRoleStep($step, $approver, $resolvedModuleKey, $hasModulePermission),
+            'user' => self::canApproveUserStep($step, $approver, $hasModulePermission),
+            default => false,
+        };
     }
 }

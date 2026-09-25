@@ -165,8 +165,21 @@ class PayrollController extends Controller
 
             $processedCount = 0;
 
+            $payrollContext = [
+                'company_id' => $companyId,
+                'batch' => $batch,
+                'month_name' => $monthName,
+                'year' => $year,
+                'holidays' => $holidays,
+                'settings' => $settings,
+                'total_working_days' => $totalWorkingDays,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'month_num' => $monthNum,
+            ];
+
             foreach ($users as $user) {
-                $this->processEmployeePayroll($user, $companyId, $batch, $monthName, $year, $holidays, $settings, $totalWorkingDays, $startDate, $endDate, $monthNum);
+                $this->processEmployeePayroll($user, $payrollContext);
                 $processedCount++;
             }
 
@@ -205,8 +218,19 @@ class PayrollController extends Controller
         return ['hours' => $totalOvertimeHours, 'amount' => $overtimeAmount];
     }
 
-    private function processEmployeePayroll($user, $companyId, $batch, $monthName, $year, $holidays, $settings, $totalWorkingDays, $startDate, $endDate, $monthNum)
+    private function processEmployeePayroll($user, array $ctx)
     {
+        $companyId = $ctx['company_id'];
+        $batch = $ctx['batch'];
+        $monthName = $ctx['month_name'];
+        $year = $ctx['year'];
+        $holidays = $ctx['holidays'];
+        $settings = $ctx['settings'];
+        $totalWorkingDays = $ctx['total_working_days'];
+        $startDate = $ctx['start_date'];
+        $endDate = $ctx['end_date'];
+        $monthNum = $ctx['month_num'];
+
         $basicSalary = (float) ($user->basic_salary ?? 0);
         $totalFixedAllowance = (float) ($user->fixed_allowance ?? 0);
 

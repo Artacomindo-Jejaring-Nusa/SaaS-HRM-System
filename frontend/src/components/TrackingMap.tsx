@@ -1,36 +1,24 @@
 'use client';
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 import axiosInstance from '@/lib/axios';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { 
   Battery, 
   BatteryFull, 
   BatteryLow, 
   BatteryMedium,
-  Wifi, 
-  WifiOff,
   Navigation, 
   RefreshCw, 
   Radio, 
   Search, 
-  Filter, 
-  Briefcase, 
-  Building2, 
-  User as UserIcon, 
-  Phone, 
   MessageSquare, 
   Clock, 
-  MapPin, 
-  CheckCircle2, 
-  AlertTriangle, 
   Compass, 
   X, 
   ChevronRight,
-  Route,
   Activity,
   Maximize2,
   Sliders
@@ -95,7 +83,7 @@ const formatRelativeTime = (recordedAt?: string, minutesAgo?: number | string) =
 
   if (typeof minutesAgo === 'number') {
     mins = Math.round(minutesAgo);
-  } else if (typeof minutesAgo === 'string' && !isNaN(Number(minutesAgo))) {
+  } else if (typeof minutesAgo === 'string' && !Number.isNaN(Number(minutesAgo))) {
     mins = Math.round(Number(minutesAgo));
   }
 
@@ -104,7 +92,7 @@ const formatRelativeTime = (recordedAt?: string, minutesAgo?: number | string) =
     mins = Math.round(diffMs / (1000 * 60));
   }
 
-  if (mins === undefined || isNaN(mins) || mins < 1) {
+  if (mins === undefined || Number.isNaN(mins) || mins < 1) {
     return 'Baru saja';
   }
   if (mins < 60) {
@@ -119,7 +107,13 @@ const formatRelativeTime = (recordedAt?: string, minutesAgo?: number | string) =
 };
 
 // Sub-component to handle map zooming and panning
-function MapControllerComponent({ center, zoom, bounds }: { center?: [number, number]; zoom?: number; bounds?: any }) {
+interface MapControllerProps {
+  readonly center?: [number, number];
+  readonly zoom?: number;
+  readonly bounds?: any;
+}
+
+function MapControllerComponent({ center, zoom, bounds }: MapControllerProps) {
   const [mapLib, setMapLib] = useState<any>(null);
 
   useEffect(() => {
@@ -132,7 +126,14 @@ function MapControllerComponent({ center, zoom, bounds }: { center?: [number, nu
   return <MapControllerInner useMapHook={mapLib} center={center} zoom={zoom} bounds={bounds} />;
 }
 
-function MapControllerInner({ useMapHook, center, zoom, bounds }: any) {
+interface MapControllerInnerProps {
+  readonly useMapHook: any;
+  readonly center?: [number, number];
+  readonly zoom?: number;
+  readonly bounds?: any;
+}
+
+function MapControllerInner({ useMapHook, center, zoom, bounds }: MapControllerInnerProps) {
   const map = useMapHook();
 
   useEffect(() => {
@@ -154,21 +155,121 @@ interface TrackingMapProps {
   onOpenSettings?: () => void;
 }
 
-export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
+function extractValidCoords(data: { latitude: string | number; longitude: string | number }[]): [number, number][] {
+  const coords: [number, number][] = [];
+  for (const t of data) {
+    const lat = Number.parseFloat(String(t.latitude));
+    const lng = Number.parseFloat(String(t.longitude));
+    if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
+      coords.push([lat, lng]);
+    }
+  }
+  return coords;
+}
+
+function getTrackingChannelName(isSuperAdmin?: boolean, companyId?: number): string {
+  if (isSuperAdmin || !companyId) {
+    return 'live-tracking';
+  }
+  return `live-tracking.${companyId}`;
+}
+
+function mergeTrackUpdate(prev: EmployeeTrack[], incomingTrack: EmployeeTrack): EmployeeTrack[] {
+  const updatedTrack: EmployeeTrack = {
+    ...incomingTrack,
+    status: 'active',
+    status_label: 'Aktif (Online)',
+    minutes_ago: 0,
+    formatted_time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+  };
+  const index = prev.findIndex((t) => t.user_id === incomingTrack.user_id);
+  if (index === -1) {
+    return [updatedTrack, ...prev];
+  }
+  const copy = [...prev];
+  copy[index] = { ...copy[index], ...updatedTrack };
+  return copy;
+}
+
+function getMarkerRingColor(status?: string): string {
+  if (status === 'active') {
+    return 'border-emerald-500 ring-4 ring-emerald-100 shadow-emerald-200';
+  }
+  if (status === 'idle') {
+    return 'border-amber-500 ring-4 ring-amber-100 shadow-amber-200';
+  }
+  return 'border-slate-400 ring-2 ring-slate-100 shadow-slate-200';
+}
+
+function getMarkerStatusDot(status?: string): string {
+  if (status === 'active') {
+    return '<span class="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full shadow-sm animate-ping"></span><span class="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full shadow-sm"></span>';
+  }
+  if (status === 'idle') {
+    return '<span class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 border-2 border-white rounded-full shadow-sm"></span>';
+  }
+  return '<span class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-slate-400 border-2 border-white rounded-full shadow-sm"></span>';
+}
+
+function getStatusBadgeColor(status?: string): string {
+  if (status === 'active') return 'bg-emerald-50 text-emerald-700';
+  if (status === 'idle') return 'bg-amber-50 text-amber-700';
+  return 'bg-slate-100 text-slate-600';
+}
+
+function getTechnicianCardBorder(isSelected: boolean, isOnline: boolean, isIdle: boolean): string {
+  if (isSelected) {
+    return 'border-l-orange-600 bg-orange-50/50 shadow-md border-orange-200';
+  }
+  if (isOnline) {
+    return 'border-l-emerald-500 bg-white hover:border-l-emerald-600 border-slate-100';
+  }
+  if (isIdle) {
+    return 'border-l-amber-400 bg-white hover:border-l-amber-500 border-slate-100';
+  }
+  return 'border-l-slate-300 bg-slate-50/50 hover:border-l-slate-400 border-slate-100';
+}
+
+function getTechnicianStatusDot(isOnline: boolean, isIdle: boolean): string {
+  if (isOnline) return 'bg-emerald-500 animate-pulse';
+  if (isIdle) return 'bg-amber-400';
+  return 'bg-slate-300';
+}
+
+function renderRouteSummary(routeSummary: RouteSummary | null, historyLoading: boolean) {
+  if (historyLoading) {
+    return (
+      <div className="text-[11px] text-orange-600 font-bold flex items-center gap-1.5 animate-pulse py-1">
+        <RefreshCw size={12} className="animate-spin" /> Memuat rute perjalanan hari ini...
+      </div>
+    );
+  }
+  if (!routeSummary) return null;
+  return (
+    <div className="grid grid-cols-3 gap-2 bg-white/80 p-2 rounded-xl border border-orange-200/60 text-center">
+      <div>
+        <p className="text-[9px] font-bold text-slate-400 uppercase">Jarak</p>
+        <p className="text-xs font-black text-slate-800">{routeSummary.total_distance_km} km</p>
+      </div>
+      <div>
+        <p className="text-[9px] font-bold text-slate-400 uppercase">Durasi</p>
+        <p className="text-xs font-black text-slate-800">{routeSummary.duration_minutes} mnt</p>
+      </div>
+      <div>
+        <p className="text-[9px] font-bold text-slate-400 uppercase">Titik GPS</p>
+        <p className="text-xs font-black text-slate-800">{routeSummary.total_points}</p>
+      </div>
+    </div>
+  );
+}
+
+export default function TrackingMap({ onOpenSettings }: Readonly<TrackingMapProps> = {}) {
   const { user: currentUser } = useAuth();
-  const isSuperAdmin = !currentUser?.company_id || 
+  const isSuperAdmin = Boolean(!currentUser?.company_id || 
                        currentUser?.role?.name?.toLowerCase().includes('super') || 
-                       currentUser?.role?.name?.toLowerCase().includes('admin');
+                       currentUser?.role?.name?.toLowerCase().includes('admin'));
 
   const [tracks, setTracks] = useState<EmployeeTrack[]>([]);
-  const [summary, setSummary] = useState<TrackingSummary>({
-    total_tracked: 0,
-    active_count: 0,
-    idle_count: 0,
-    offline_count: 0,
-    low_battery_count: 0,
-  });
-
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [leafletLib, setLeafletLib] = useState<any>(null);
@@ -182,15 +283,9 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'idle' | 'offline'>('all');
-  const [selectedRole, setSelectedRole] = useState<string>('all');
-  const [selectedCompany, setSelectedCompany] = useState<string>('all');
-  
-  // Options
-  const [availableRoles, setAvailableRoles] = useState<{ id: number; name: string }[]>([]);
-  const [availableCompanies, setAvailableCompanies] = useState<{ id: number; name: string }[]>([]);
   
   // Map View States
-  const [mapCenter, setMapCenter] = useState<[number, number]>([-6.200000, 106.816666]); // Default Jakarta
+  const [mapCenter, setMapCenter] = useState<[number, number]>([-6.2, 106.816666]); // Default Jakarta
   const [mapZoom, setMapZoom] = useState<number>(12);
   const [mapBounds, setMapBounds] = useState<any>(null);
   const [wsConnected, setWsConnected] = useState(false);
@@ -206,36 +301,11 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
     loadLeaflet();
   }, []);
 
-  // Fetch Available Filter Options (Roles & Companies)
-  useEffect(() => {
-    const fetchOptions = async () => {
-      try {
-        const [rolesRes, companiesRes] = await Promise.allSettled([
-          axiosInstance.get('/roles'),
-          isSuperAdmin ? axiosInstance.get('/companies') : Promise.reject(),
-        ]);
-
-        if (rolesRes.status === 'fulfilled' && rolesRes.value.data?.data) {
-          setAvailableRoles(rolesRes.value.data.data);
-        }
-        if (companiesRes.status === 'fulfilled' && companiesRes.value.data?.data) {
-          setAvailableCompanies(companiesRes.value.data.data);
-        }
-      } catch (err) {
-        console.error('Error fetching filter options:', err);
-      }
-    };
-
-    fetchOptions();
-  }, [isSuperAdmin]);
-
   // Fetch Live Tracking Data
   const fetchLiveTracking = useCallback(async (showIndicator = false) => {
     if (showIndicator) setRefreshing(true);
     try {
       const params = new URLSearchParams();
-      if (selectedCompany !== 'all') params.append('company_id', selectedCompany);
-      if (selectedRole !== 'all') params.append('role_id', selectedRole);
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (searchQuery.trim()) params.append('search', searchQuery.trim());
 
@@ -243,17 +313,12 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
       if (res.data.status === 'success') {
         const data: EmployeeTrack[] = res.data.data || [];
         setTracks(data);
-        if (res.data.summary) {
-          setSummary(res.data.summary);
-        }
         setLastSyncTime(new Date());
         setCountdown(15);
 
         // If bounds not yet set and we have tracks, center to fleet
         if (data.length > 0 && !selectedUser && leafletLib) {
-          const validCoords = data
-            .map(t => [parseFloat(t.latitude.toString()), parseFloat(t.longitude.toString())] as [number, number])
-            .filter(coord => !isNaN(coord[0]) && !isNaN(coord[1]));
+          const validCoords = extractValidCoords(data);
           
           if (validCoords.length === 1) {
             setMapCenter(validCoords[0]);
@@ -270,7 +335,7 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedCompany, selectedRole, statusFilter, searchQuery, selectedUser, leafletLib]);
+  }, [statusFilter, searchQuery, selectedUser, leafletLib]);
 
   // Initial & Filter-triggered fetch
   useEffect(() => {
@@ -297,32 +362,15 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
     if (!echo) return;
 
     try {
-      const channelName = isSuperAdmin ? 'live-tracking' : (currentUser?.company_id ? `live-tracking.${currentUser.company_id}` : 'live-tracking');
+      const channelName = getTrackingChannelName(isSuperAdmin, currentUser?.company_id);
       const channel = echo.private(channelName);
 
       channel.listen('.location.updated', (event: { track: EmployeeTrack }) => {
         setWsConnected(true);
         const incomingTrack = event.track;
-        if (!incomingTrack || !incomingTrack.user_id) return;
+        if (!incomingTrack?.user_id) return;
 
-        setTracks((prev) => {
-          const index = prev.findIndex((t) => t.user_id === incomingTrack.user_id);
-          const updatedTrack: EmployeeTrack = {
-            ...incomingTrack,
-            status: 'active',
-            status_label: 'Aktif (Online)',
-            minutes_ago: 0,
-            formatted_time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-          };
-
-          if (index !== -1) {
-            const copy = [...prev];
-            copy[index] = { ...copy[index], ...updatedTrack };
-            return copy;
-          } else {
-            return [updatedTrack, ...prev];
-          }
-        });
+        setTracks((prev) => mergeTrackUpdate(prev, incomingTrack));
 
         // If inspecting this user's history, append coordinate to polyline
         if (selectedUser === incomingTrack.user_id) {
@@ -362,9 +410,7 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
 
         // Fit map bounds to user's history
         if (historyData.length > 0 && leafletLib) {
-          const coords = historyData
-            .map((h: any) => [parseFloat(h.latitude.toString()), parseFloat(h.longitude.toString())] as [number, number])
-            .filter((c: [number, number]) => !isNaN(c[0]) && !isNaN(c[1]));
+          const coords = extractValidCoords(historyData);
           
           if (coords.length > 1) {
             setMapBounds(leafletLib.latLngBounds(coords));
@@ -383,9 +429,9 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
 
   const handleSelectTechnician = (track: EmployeeTrack) => {
     setSelectedUser(track.user_id);
-    const lat = parseFloat(track.latitude.toString());
-    const lng = parseFloat(track.longitude.toString());
-    if (!isNaN(lat) && !isNaN(lng)) {
+    const lat = Number.parseFloat(String(track.latitude));
+    const lng = Number.parseFloat(String(track.longitude));
+    if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
       setMapBounds(null);
       setMapCenter([lat, lng]);
       setMapZoom(16);
@@ -395,9 +441,7 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
   const handleResetView = () => {
     setSelectedUser(null);
     if (tracks.length > 0 && leafletLib) {
-      const validCoords = tracks
-        .map(t => [parseFloat(t.latitude.toString()), parseFloat(t.longitude.toString())] as [number, number])
-        .filter(coord => !isNaN(coord[0]) && !isNaN(coord[1]));
+      const validCoords = extractValidCoords(tracks);
       
       if (validCoords.length > 0) {
         setMapBounds(leafletLib.latLngBounds(validCoords));
@@ -440,16 +484,11 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
     const battery = item.battery_level;
     
     // Status colors
-    const isOnline = item.status === 'active';
-    const isIdle = item.status === 'idle';
-
-    const ringColor = isOnline 
-      ? 'border-emerald-500 ring-4 ring-emerald-100 shadow-emerald-200' 
-      : (isIdle ? 'border-amber-500 ring-4 ring-amber-100 shadow-amber-200' : 'border-slate-400 ring-2 ring-slate-100 shadow-slate-200');
-
-    const statusDot = isOnline 
-      ? '<span class="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full shadow-sm animate-ping"></span><span class="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full shadow-sm"></span>'
-      : (isIdle ? '<span class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 border-2 border-white rounded-full shadow-sm"></span>' : '<span class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-slate-400 border-2 border-white rounded-full shadow-sm"></span>');
+    const ringColor = getMarkerRingColor(item.status);
+    const statusDot = getMarkerStatusDot(item.status);
+    const batteryBadge = typeof battery === 'number'
+      ? `<span class="text-[9px] text-amber-300 font-bold">${battery}%</span>`
+      : '';
 
     const html = `
       <div class="relative flex flex-col items-center group cursor-pointer transition-transform duration-300 ${isSelected ? 'scale-125 z-50' : 'hover:scale-110'}">
@@ -457,7 +496,7 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
         <div class="mb-1 px-2.5 py-0.5 bg-slate-900/90 backdrop-blur-sm text-white rounded-full shadow-lg border border-white/20 text-[10px] font-black tracking-tight whitespace-nowrap flex items-center gap-1.5 pointer-events-none">
           <span>${name.split(' ')[0]}</span>
           <span class="text-[8px] px-1 py-0.2 bg-white/20 rounded font-normal text-slate-200">${roleName}</span>
-          ${battery !== null ? `<span class="text-[9px] text-amber-300 font-bold">${battery}%</span>` : ''}
+          ${batteryBadge}
         </div>
 
         <!-- Avatar Circle -->
@@ -530,9 +569,9 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
 
             {/* Render Current Location Markers */}
             {tracks.map((item) => {
-              const lat = parseFloat(item.latitude.toString());
-              const lng = parseFloat(item.longitude.toString());
-              if (isNaN(lat) || isNaN(lng)) return null;
+              const lat = Number.parseFloat(String(item.latitude));
+              const lng = Number.parseFloat(String(item.longitude));
+              if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
 
               return (
                 <Marker 
@@ -569,7 +608,7 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
                       <div className="space-y-2 text-xs text-slate-600">
                         <div className="flex items-center justify-between">
                           <span className="flex items-center gap-1.5 text-slate-500"><Navigation size={13} /> Akurasi GPS</span>
-                          <span className="font-bold text-slate-800">±{parseFloat(item.accuracy.toString()).toFixed(1)}m</span>
+                          <span className="font-bold text-slate-800">±{Number.parseFloat(String(item.accuracy)).toFixed(1)}m</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="flex items-center gap-1.5 text-slate-500"><Clock size={13} /> Update Terakhir</span>
@@ -577,9 +616,7 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="flex items-center gap-1.5 text-slate-500"><Activity size={13} /> Status</span>
-                          <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${
-                            item.status === 'active' ? 'bg-emerald-50 text-emerald-700' : (item.status === 'idle' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600')
-                          }`}>
+                          <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${getStatusBadgeColor(item.status)}`}>
                             {item.status_label || (item.status === 'active' ? 'Aktif' : 'Offline')}
                           </span>
                         </div>
@@ -615,9 +652,9 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
             {history.length > 0 && (
               <>
                 {/* Start Marker */}
-                {history[0] && !isNaN(parseFloat(history[0].latitude)) && (
+                {history[0] && !Number.isNaN(Number.parseFloat(String(history[0].latitude))) && (
                   <Marker 
-                    position={[parseFloat(history[0].latitude), parseFloat(history[0].longitude)]}
+                    position={[Number.parseFloat(String(history[0].latitude)), Number.parseFloat(String(history[0].longitude))]}
                     icon={createStartIcon()}
                   >
                     <Tooltip permanent direction="top" offset={[0, -10]}>
@@ -628,7 +665,7 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
 
                 {/* Polyline Path */}
                 <Polyline 
-                  positions={history.map(h => [parseFloat(h.latitude.toString()), parseFloat(h.longitude.toString())])}
+                  positions={extractValidCoords(history)}
                   color="#ea580c"
                   weight={5}
                   opacity={0.85}
@@ -758,26 +795,7 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
               </div>
 
               {/* Route Summary Stats */}
-              {historyLoading ? (
-                <div className="text-[11px] text-orange-600 font-bold flex items-center gap-1.5 animate-pulse py-1">
-                  <RefreshCw size={12} className="animate-spin" /> Memuat rute perjalanan hari ini...
-                </div>
-              ) : routeSummary ? (
-                <div className="grid grid-cols-3 gap-2 bg-white/80 p-2 rounded-xl border border-orange-200/60 text-center">
-                  <div>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase">Jarak</p>
-                    <p className="text-xs font-black text-slate-800">{routeSummary.total_distance_km} km</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase">Durasi</p>
-                    <p className="text-xs font-black text-slate-800">{routeSummary.duration_minutes} mnt</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase">Titik GPS</p>
-                    <p className="text-xs font-black text-slate-800">{routeSummary.total_points}</p>
-                  </div>
-                </div>
-              ) : null}
+              {renderRouteSummary(routeSummary, historyLoading)}
             </div>
           )}
 
@@ -791,15 +809,7 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
               return (
                 <Card 
                   key={`card-${track.id}-${track.user_id}`} 
-                  className={`p-3 cursor-pointer transition-all border-l-4 rounded-2xl hover:shadow-md ${
-                    isSelected 
-                      ? 'border-l-orange-600 bg-orange-50/50 shadow-md border-orange-200' 
-                      : (isOnline 
-                          ? 'border-l-emerald-500 bg-white hover:border-l-emerald-600 border-slate-100' 
-                          : (isIdle 
-                              ? 'border-l-amber-400 bg-white hover:border-l-amber-500 border-slate-100' 
-                              : 'border-l-slate-300 bg-slate-50/50 hover:border-l-slate-400 border-slate-100'))
-                  }`}
+                  className={`p-3 cursor-pointer transition-all border-l-4 rounded-2xl hover:shadow-md ${getTechnicianCardBorder(isSelected, isOnline, isIdle)}`}
                   onClick={() => handleSelectTechnician(track)}
                 >
                   <div className="flex items-center gap-3">
@@ -814,9 +824,7 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
                           </div>
                         )}
                       </div>
-                      <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${
-                        isOnline ? 'bg-emerald-500 animate-pulse' : (isIdle ? 'bg-amber-400' : 'bg-slate-300')
-                      }`}></span>
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${getTechnicianStatusDot(isOnline, isIdle)}`}></span>
                     </div>
 
                     {/* Information Body */}
@@ -839,7 +847,7 @@ export default function TrackingMap({ onOpenSettings }: TrackingMapProps = {}) {
                           {track.formatted_time || new Date(track.recorded_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                           <span className="font-normal text-slate-400">({formatRelativeTime(track.recorded_at, track.minutes_ago)})</span>
                         </span>
-                        <span className="font-bold text-slate-500">±{parseFloat(track.accuracy?.toString() || '0').toFixed(0)}m</span>
+                        <span className="font-bold text-slate-500">±{Number.parseFloat(String(track.accuracy ?? 0)).toFixed(0)}m</span>
                       </div>
                     </div>
 

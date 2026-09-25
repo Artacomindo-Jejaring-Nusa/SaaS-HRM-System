@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import React, { Component, type ReactNode, useState, useEffect, useCallback, useMemo } from "react";
 import axiosInstance from "@/lib/axios";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
@@ -14,13 +14,45 @@ import {
   CheckCircle2,
   ChevronDown,
   Search,
-  Maximize2,
   RefreshCw,
   ArrowDownUp,
   ArrowLeftRight,
 } from "lucide-react";
 
-import { ErrorBoundary } from "react-error-boundary";
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  fallbackRender: (props: { error: any; resetErrorBoundary: () => void }) => ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: any;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  resetErrorBoundary = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallbackRender({
+        error: this.state.error,
+        resetErrorBoundary: this.resetErrorBoundary,
+      });
+    }
+    return this.props.children;
+  }
+}
 
 import {
   ReactFlow,
@@ -84,6 +116,26 @@ interface OrgNodeData extends Record<string, unknown> {
 const NODE_WIDTH = 230;
 const NODE_HEIGHT = 145;
 
+function hasPath(start: string, target: string, adj: Map<string, string[]>): boolean {
+  const visited = new Set<string>();
+  const stack = [start];
+
+  while (stack.length > 0) {
+    const curr = stack.pop()!;
+    if (curr === target) {
+      return true;
+    }
+    if (!visited.has(curr)) {
+      visited.add(curr);
+      const neighbors = adj.get(curr) || [];
+      for (const n of neighbors) {
+        stack.push(n);
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * Remove any edges that form a cycle so Dagre never crashes
  */
@@ -96,29 +148,11 @@ function removeCycles(edges: Edge[], nodeIds: Set<string>): Edge[] {
   }
 
   for (const edge of edges) {
-    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) continue;
-    if (edge.source === edge.target) continue;
-
-    const visited = new Set<string>();
-    const stack = [edge.target];
-    let createsCycle = false;
-
-    while (stack.length > 0) {
-      const curr = stack.pop()!;
-      if (curr === edge.source) {
-        createsCycle = true;
-        break;
-      }
-      if (!visited.has(curr)) {
-        visited.add(curr);
-        const neighbors = adj.get(curr) || [];
-        for (const n of neighbors) {
-          stack.push(n);
-        }
-      }
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target) || edge.source === edge.target) {
+      continue;
     }
 
-    if (!createsCycle) {
+    if (!hasPath(edge.target, edge.source, adj)) {
       adj.get(edge.source)?.push(edge.target);
       validEdges.push(edge);
     }
@@ -168,9 +202,9 @@ function getLayoutedElements(
     const hasValidPos =
       nodeObj &&
       typeof nodeObj.x === "number" &&
-      !isNaN(nodeObj.x) &&
+      !Number.isNaN(nodeObj.x) &&
       typeof nodeObj.y === "number" &&
-      !isNaN(nodeObj.y);
+      !Number.isNaN(nodeObj.y);
 
     const x = hasValidPos
       ? nodeObj.x - NODE_WIDTH / 2
@@ -191,7 +225,7 @@ function getLayoutedElements(
 }
 
 // ─── Custom Node Component ──────────────────────────────────────────
-function OrgChartNode({ data }: NodeProps<Node<OrgNodeData>>) {
+function OrgChartNode({ data }: Readonly<NodeProps<Node<OrgNodeData>>>) {
   const handleCardClick = () => {
     if (data.onEdit) {
       data.onEdit({
@@ -211,12 +245,20 @@ function OrgChartNode({ data }: NodeProps<Node<OrgNodeData>>) {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       className={`group relative cursor-pointer transition-all duration-300 ${
         isHighlighted
           ? "ring-4 ring-[#8B0000] ring-offset-2 scale-105 rounded-2xl shadow-2xl"
           : ""
       }`}
       onClick={handleCardClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleCardClick();
+        }
+      }}
     >
       <Handle
         type="target"
@@ -306,13 +348,13 @@ function FlowChartCanvas({
   onNodesChange,
   onEdgesChange,
   minimapNodeColor,
-}: {
+}: Readonly<{
   nodes: Node<OrgNodeData>[];
   edges: Edge[];
   onNodesChange: any;
   onEdgesChange: any;
   minimapNodeColor: (node: Node) => string;
-}) {
+}>) {
   const { fitView } = useReactFlow();
 
   useEffect(() => {
@@ -420,8 +462,8 @@ export default function OrganizationChartPage() {
           s.length > 0 &&
           Boolean(
             (emp.name || "").toLowerCase().includes(s) ||
-              (emp.role && emp.role.toLowerCase().includes(s)) ||
-              (emp.cost_center && emp.cost_center.toLowerCase().includes(s))
+              emp.role?.toLowerCase().includes(s) ||
+              emp.cost_center?.toLowerCase().includes(s)
           );
 
         return {
@@ -546,83 +588,9 @@ export default function OrganizationChartPage() {
         (emp) =>
           supervisorSearch === "" ||
           emp.name.toLowerCase().includes(supervisorSearch.toLowerCase()) ||
-          (emp.role &&
-            emp.role.toLowerCase().includes(supervisorSearch.toLowerCase()))
+          emp.role?.toLowerCase().includes(supervisorSearch.toLowerCase())
       );
   }, [employeesList, flatData, editingEmployee, supervisorSearch]);
-
-  const renderContent = () => {
-    if (isLoading) {
-      return (
-        <div className="flex-1 flex flex-col items-center justify-center min-h-[400px]">
-          <Loader2 className="animate-spin text-[#8B0000] mb-4" size={40} />
-          <p className="font-bold text-gray-500 animate-pulse uppercase tracking-widest text-sm">
-            Menghimpun Data Struktur Organisasi...
-          </p>
-        </div>
-      );
-    }
-
-    if (flatData.length === 0) {
-      return (
-        <div className="flex-1 flex flex-col items-center justify-center bg-white border border-gray-100 border-dashed rounded-3xl p-12 text-center my-8 shadow-sm">
-          <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4 text-[#8B0000]">
-            <AlertCircle size={36} />
-          </div>
-          <h3 className="text-lg font-bold text-gray-900 mb-2">
-            Belum Ada Data Karyawan
-          </h3>
-          <p className="text-sm text-gray-500 max-w-sm mx-auto mb-4">
-            Belum ada karyawan terdaftar untuk ditampilkan dalam bagan hierarki.
-          </p>
-          <button
-            onClick={() => fetchData()}
-            className="px-4 py-2 bg-[#8B0000] text-white rounded-xl text-xs font-bold shadow-md hover:bg-[#700000] transition-colors inline-flex items-center gap-2"
-          >
-            <RefreshCw size={14} /> Muat Ulang Data
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <ErrorBoundary
-        fallbackRender={({ error, resetErrorBoundary }) => (
-          <div className="flex-1 flex flex-col items-center justify-center bg-red-50 border border-red-200 rounded-3xl p-12 text-center my-8 shadow-sm h-[550px]">
-            <AlertCircle size={36} className="text-red-500 mb-4" />
-            <h3 className="text-lg font-bold text-red-900 mb-2">Terjadi Kesalahan (Crash)</h3>
-            <p className="text-xs text-red-700 max-w-lg mb-4 whitespace-pre-wrap break-all">
-              {(error as any)?.message || String(error)}
-            </p>
-            <button
-              onClick={() => {
-                resetErrorBoundary();
-                fetchData();
-              }}
-              className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-red-700 transition-colors"
-            >
-              Coba Lagi
-            </button>
-          </div>
-        )}
-      >
-        <div
-          className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden relative flex-1 min-h-[550px] w-full"
-          style={{ height: "calc(100vh - 220px)" }}
-        >
-          <ReactFlowProvider>
-            <FlowChartCanvas
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              minimapNodeColor={minimapNodeColor}
-            />
-          </ReactFlowProvider>
-        </div>
-      </ErrorBoundary>
-    );
-  };
 
   return (
     <div className="flex flex-col h-full bg-gray-50/30 rounded-3xl overflow-hidden p-6 animate-in fade-in zoom-in-95 duration-500">
@@ -716,7 +684,72 @@ export default function OrganizationChartPage() {
       </div>
 
       {/* Content Area */}
-      {renderContent()}
+      {isLoading && (
+        <div className="flex-1 flex flex-col items-center justify-center min-h-[400px]">
+          <Loader2 className="animate-spin text-[#8B0000] mb-4" size={40} />
+          <p className="font-bold text-gray-500 animate-pulse uppercase tracking-widest text-sm">
+            Menghimpun Data Struktur Organisasi...
+          </p>
+        </div>
+      )}
+
+      {!isLoading && flatData.length === 0 && (
+        <div className="flex-1 flex flex-col items-center justify-center bg-white border border-gray-100 border-dashed rounded-3xl p-12 text-center my-8 shadow-sm">
+          <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4 text-[#8B0000]">
+            <AlertCircle size={36} />
+          </div>
+          <h3 className="text-lg font-bold text-gray-900 mb-2">
+            Belum Ada Data Karyawan
+          </h3>
+          <p className="text-sm text-gray-500 max-w-sm mx-auto mb-4">
+            Belum ada karyawan terdaftar untuk ditampilkan dalam bagan hierarki.
+          </p>
+          <button
+            onClick={() => fetchData()}
+            className="px-4 py-2 bg-[#8B0000] text-white rounded-xl text-xs font-bold shadow-md hover:bg-[#700000] transition-colors inline-flex items-center gap-2"
+          >
+            <RefreshCw size={14} /> Muat Ulang Data
+          </button>
+        </div>
+      )}
+
+      {!isLoading && flatData.length > 0 && (
+        <ErrorBoundary
+          fallbackRender={({ error, resetErrorBoundary }) => (
+            <div className="flex-1 flex flex-col items-center justify-center bg-red-50 border border-red-200 rounded-3xl p-12 text-center my-8 shadow-sm h-[550px]">
+              <AlertCircle size={36} className="text-red-500 mb-4" />
+              <h3 className="text-lg font-bold text-red-900 mb-2">Terjadi Kesalahan (Crash)</h3>
+              <p className="text-xs text-red-700 max-w-lg mb-4 whitespace-pre-wrap break-all">
+                {error?.message || String(error)}
+              </p>
+              <button
+                onClick={() => {
+                  resetErrorBoundary();
+                  fetchData();
+                }}
+                className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-red-700 transition-colors"
+              >
+                Coba Lagi
+              </button>
+            </div>
+          )}
+        >
+          <div
+            className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden relative flex-1 min-h-[550px] w-full"
+            style={{ height: "calc(100vh - 220px)" }}
+          >
+            <ReactFlowProvider>
+              <FlowChartCanvas
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                minimapNodeColor={minimapNodeColor}
+              />
+            </ReactFlowProvider>
+          </div>
+        </ErrorBoundary>
+      )}
 
       {/* Edit Supervisor & Role Modal */}
       {editingEmployee && (
@@ -795,11 +828,12 @@ export default function OrganizationChartPage() {
             <div className="space-y-4">
               {/* Role Dropdown */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                <label htmlFor="edit-org-role-select" className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                   Jabatan / Role
                 </label>
                 <div className="relative">
                   <select
+                    id="edit-org-role-select"
                     value={selectedRoleId}
                     onChange={(e) =>
                       setSelectedRoleId(
@@ -824,7 +858,7 @@ export default function OrganizationChartPage() {
 
               {/* Supervisor Dropdown with Search */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                <label htmlFor="edit-org-supervisor-select" className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                   Atasan Langsung (Supervisor)
                 </label>
                 <div className="relative mb-2">
@@ -834,6 +868,7 @@ export default function OrganizationChartPage() {
                   />
                   <input
                     type="text"
+                    aria-label="Ketik untuk memfilter atasan"
                     placeholder="Ketik untuk memfilter atasan..."
                     value={supervisorSearch}
                     onChange={(e) => setSupervisorSearch(e.target.value)}
@@ -842,6 +877,7 @@ export default function OrganizationChartPage() {
                 </div>
                 <div className="relative">
                   <select
+                    id="edit-org-supervisor-select"
                     value={
                       selectedSupervisorId === null
                         ? "none"

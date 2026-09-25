@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
-import { Plus, Search, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, ArrowRightLeft, UserX, ShieldAlert, CreditCard, Mail, MapPin, Phone, Building2, BadgeCheck, Clock, Eye, Key, Briefcase, ChevronDown, UserCog, Pencil } from "lucide-react";
+import { Plus, Search, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, UserX, ShieldAlert, CreditCard, Mail, MapPin, Phone, Building2, BadgeCheck, Clock, Eye, Key, Briefcase, ChevronDown, UserCog } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
 import { PermissionGuard } from "@/components/PermissionGuard";
@@ -12,7 +12,6 @@ import { TableSkeleton } from "@/components/Skeleton";
 import { useSearchParams } from "next/navigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ErrorModal } from "@/components/ErrorModal";
-import { useRef } from "react";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -102,6 +101,49 @@ interface PaginationData {
   last_page: number;
   total: number;
   per_page: number;
+}
+
+function buildEmployeeFormData(formData: EmployeeFormData, isEdit: boolean): FormData {
+  const data = new FormData();
+  Object.keys(formData).forEach((key) => {
+    const val = formData[key as keyof EmployeeFormData];
+    if (val === undefined) return;
+
+    if (key === "photo") {
+      if (val instanceof File) data.append("photo", val);
+      return;
+    }
+
+    if (key === "can_access_manager_portal") {
+      let portalVal = "";
+      if (val !== null) {
+        portalVal = val ? "1" : "0";
+      }
+      data.append(key, portalVal);
+      return;
+    }
+
+    // Kirim string kosong untuk nilai null agar Laravel bisa menghapus nilai di DB (nullable)
+    data.append(key, val === null ? "" : val.toString());
+  });
+
+  if (isEdit) {
+    data.append("_method", "PUT");
+  }
+
+  return data;
+}
+
+function getPortalAccessValue(access: boolean | null | undefined): string {
+  if (access === true) return "enabled";
+  if (access === false) return "disabled";
+  return "default";
+}
+
+function parsePortalAccessValue(val: string): boolean | null {
+  if (val === "enabled") return true;
+  if (val === "disabled") return false;
+  return null;
 }
 
 function EmployeesContent() {
@@ -531,28 +573,15 @@ function EmployeesContent() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const data = new FormData();
-      Object.keys(formData).forEach(key => {
-        const val = formData[key as keyof EmployeeFormData];
-        if (val !== undefined) {
-          if (key === 'photo') {
-            if (val instanceof File) data.append('photo', val);
-          } else if (key === 'can_access_manager_portal') {
-            data.append(key, val === null ? "" : val ? "1" : "0");
-          } else {
-            // Kirim string kosong untuk nilai null agar Laravel bisa menghapus nilai di DB (nullable)
-            data.append(key, val === null ? "" : val.toString());
-          }
-        }
-      });
+      const isEdit = modalMode !== "add";
+      const data = buildEmployeeFormData(formData, isEdit);
 
-      if (modalMode === "add") {
+      if (!isEdit) {
         await axiosInstance.post("/employees", data, {
           headers: { "Content-Type": "multipart/form-data" }
         });
         toast.success("Karyawan baru berhasil ditambahkan! Undangan email sedang dikirim.");
       } else {
-        data.append('_method', 'PUT');
         await axiosInstance.post(`/employees/${formData.id}`, data, {
           headers: { "Content-Type": "multipart/form-data" }
         });
@@ -980,7 +1009,7 @@ function EmployeesContent() {
                        <div className="flex flex-col items-center gap-0.5">
                           <span className="text-xs font-black text-gray-700">{formatDate(emp.join_date)}</span>
                           <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1">
-                             <Clock size={8} /> {emp.join_date ? Math.floor((new Date().getTime() - new Date(emp.join_date).getTime()) / (1000 * 60 * 60 * 24 * 365)) : 0} Thn
+                             <Clock size={8} /> {emp.join_date ? Math.floor((Date.now() - new Date(emp.join_date).getTime()) / (1000 * 60 * 60 * 24 * 365)) : 0} Thn
                           </span>
                        </div>
                     </td>
@@ -1240,8 +1269,9 @@ function EmployeesContent() {
                       </div>
                       {modalMode === "add" ? (
                         <div className="space-y-1.5">
-                          <label className="text-sm font-medium text-gray-700">Password Sementara*</label>
+                          <label htmlFor="employee-temp-password-input" className="text-sm font-medium text-gray-700">Password Sementara*</label>
                           <input 
+                            id="employee-temp-password-input"
                             type="password" 
                             required
                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
@@ -1252,8 +1282,9 @@ function EmployeesContent() {
                         </div>
                       ) : (
                         <div className="space-y-1.5">
-                          <label className="text-sm font-medium text-gray-700">Ubah Kata Sandi (Opsional)</label>
+                          <label htmlFor="employee-edit-password-input" className="text-sm font-medium text-gray-700">Ubah Kata Sandi (Opsional)</label>
                           <input 
+                            id="employee-edit-password-input"
                             type="password" 
                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
                             value={formData.password || ""}
@@ -1449,14 +1480,15 @@ function EmployeesContent() {
                         </select>
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Sisa Jatah Cuti (Hari)</label>
+                        <label htmlFor="employee-leave-balance-input" className="text-sm font-medium text-gray-700">Sisa Jatah Cuti (Hari)</label>
                         <input 
+                          id="employee-leave-balance-input"
                           type="number" 
-                          min="0"
+                          min="0" 
                           max="365"
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
                           value={formData.leave_balance ?? 12}
-                          onChange={(e) => setFormData({...formData, leave_balance: parseInt(e.target.value) || 0})}
+                          onChange={(e) => setFormData({...formData, leave_balance: Number.parseInt(e.target.value, 10) || 0})}
                         />
                       </div>
                       <div className="space-y-1.5">
@@ -1472,17 +1504,17 @@ function EmployeesContent() {
                       <div className="space-y-1.5 md:col-span-2 bg-gray-50/80 p-3.5 rounded-xl border border-gray-200">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <div>
-                            <label className="text-sm font-semibold text-gray-800">Akses Portal Manager</label>
+                            <label htmlFor="employee-manager-portal-select" className="text-sm font-semibold text-gray-800">Akses Portal Manager</label>
                             <p className="text-xs text-gray-500">Izin akun ini untuk melihat Tab & Fitur Manager (Approval Cuti, Lembur, Klaim, Izin, Fleet Log, dll.)</p>
                           </div>
                           <select
+                            id="employee-manager-portal-select"
                             className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e] bg-white font-medium cursor-pointer"
-                            value={formData.can_access_manager_portal === true ? "enabled" : formData.can_access_manager_portal === false ? "disabled" : "default"}
+                            value={getPortalAccessValue(formData.can_access_manager_portal)}
                             onChange={(e) => {
-                              const val = e.target.value;
                               setFormData({
                                 ...formData,
-                                can_access_manager_portal: val === "enabled" ? true : val === "disabled" ? false : null,
+                                can_access_manager_portal: parsePortalAccessValue(e.target.value),
                               });
                             }}
                           >
@@ -1522,8 +1554,9 @@ function EmployeesContent() {
                     <h4 className="font-bold border-b border-gray-200 pb-2 mb-4 text-emerald-600 text-sm uppercase tracking-wider">Informasi Rekening & Payroll</h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Nama Bank</label>
+                        <label htmlFor="employee-bank-name-input" className="text-sm font-medium text-gray-700">Nama Bank</label>
                         <input 
+                          id="employee-bank-name-input"
                           type="text" 
                           placeholder="Contoh: BCA, Mandiri, BRI, BNI"
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -1532,8 +1565,9 @@ function EmployeesContent() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Nomor Rekening</label>
+                        <label htmlFor="employee-bank-account-no-input" className="text-sm font-medium text-gray-700">Nomor Rekening</label>
                         <input 
+                          id="employee-bank-account-no-input"
                           type="text" 
                           placeholder="Contoh: 1234567890"
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -1542,8 +1576,9 @@ function EmployeesContent() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Atas Nama Rekening</label>
+                        <label htmlFor="employee-bank-account-name-input" className="text-sm font-medium text-gray-700">Atas Nama Rekening</label>
                         <input 
+                          id="employee-bank-account-name-input"
                           type="text" 
                           placeholder="Nama pemilik rekening..."
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"

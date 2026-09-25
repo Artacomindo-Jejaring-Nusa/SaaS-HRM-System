@@ -15,6 +15,24 @@ interface Permission {
   group: string;
 }
 
+const SUPERADMIN_ONLY_SLUGS = new Set([
+  'create-employees',
+  'edit-employees',
+  'delete-employees',
+  'manage-company',
+  'manage-roles',
+  'manage-wfh',
+  'manage-offices',
+  'view-directory',
+  'manage-shifts',
+  'manage-schedules',
+  'manage-holidays',
+  'manage-announcements',
+  'manage-approvals',
+  'manage-documents',
+  'manage-kpis',
+]);
+
 export default function PermissionsPage() {
   const [permissionsGrouped, setPermissionsGrouped] = useState<Record<string, Permission[]>>({});
   const [loading, setLoading] = useState(true);
@@ -26,24 +44,6 @@ export default function PermissionsPage() {
     fetchPermissions();
   }, []);
 
-  const SUPERADMIN_ONLY_SLUGS = [
-    'create-employees',
-    'edit-employees',
-    'delete-employees',
-    'manage-company',
-    'manage-roles',
-    'manage-wfh',
-    'manage-offices',
-    'view-directory',
-    'manage-shifts',
-    'manage-schedules',
-    'manage-holidays',
-    'manage-announcements',
-    'manage-approvals',
-    'manage-documents',
-    'manage-kpis',
-  ];
-
   const fetchPermissions = async () => {
     try {
       setLoading(true);
@@ -51,7 +51,7 @@ export default function PermissionsPage() {
       const raw = response.data.data || {};
       const cleanGrouped: Record<string, Permission[]> = {};
       Object.entries(raw).forEach(([group, perms]: [string, any]) => {
-        const filtered = perms.filter((p: Permission) => !SUPERADMIN_ONLY_SLUGS.includes(p.slug));
+        const filtered = perms.filter((p: Permission) => !SUPERADMIN_ONLY_SLUGS.has(p.slug));
         if (filtered.length > 0) {
           cleanGrouped[group] = filtered;
         }

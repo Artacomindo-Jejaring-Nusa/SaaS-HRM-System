@@ -128,7 +128,7 @@ class ApprovalWorkflowController extends Controller
                     'flow_json' => $request->flow_json,
                     'scope_type' => $request->scope_type ?? $workflow->scope_type,
                     'scope_id' => $request->scope_id ?? $workflow->scope_id,
-                    'priority' => ($request->scope_type === 'user') ? 2 : (($request->scope_type === 'role') ? 1 : 0),
+                    'priority' => $this->getScopePriority($request->scope_type),
                 ]);
             } else {
                 $scopeType = $request->scope_type ?? 'company';
@@ -147,23 +147,14 @@ class ApprovalWorkflowController extends Controller
                         'is_active' => $request->is_active,
                         'is_custom' => $request->boolean('is_custom', false),
                         'flow_json' => $request->flow_json,
-                        'priority' => ($scopeType === 'user') ? 2 : (($scopeType === 'role') ? 1 : 0),
+                        'priority' => $this->getScopePriority($scopeType),
                     ]
                 );
             }
 
             // Delete old steps and recreate
             $workflow->steps()->delete();
-
-            foreach ($request->steps as $stepData) {
-                $workflow->steps()->create([
-                    'step_number' => $stepData['step_number'],
-                    'approver_type' => $stepData['approver_type'],
-                    'approver_role_id' => $stepData['approver_type'] === 'role' ? ($stepData['approver_role_id'] ?? null) : null,
-                    'approver_user_id' => $stepData['approver_type'] === 'user' ? ($stepData['approver_user_id'] ?? null) : null,
-                    'sla_hours' => $stepData['sla_hours'] ?? 24,
-                ]);
-            }
+            $this->createWorkflowSteps($workflow, $request->steps);
 
             return $workflow->load(['steps.role', 'steps.approverUser', 'scopeRole', 'scopeUser']);
         });
@@ -217,25 +208,7 @@ class ApprovalWorkflowController extends Controller
                 'is_custom' => true,
             ]);
 
-            $stepsData = $request->input('steps');
-            if (empty($stepsData)) {
-                // Default step 1: Atasan Langsung
-                $workflow->steps()->create([
-                    'step_number' => 1,
-                    'approver_type' => 'supervisor',
-                    'sla_hours' => 24,
-                ]);
-            } else {
-                foreach ($stepsData as $step) {
-                    $workflow->steps()->create([
-                        'step_number' => $step['step_number'],
-                        'approver_type' => $step['approver_type'],
-                        'approver_role_id' => $step['approver_type'] === 'role' ? ($step['approver_role_id'] ?? null) : null,
-                        'approver_user_id' => $step['approver_type'] === 'user' ? ($step['approver_user_id'] ?? null) : null,
-                        'sla_hours' => $step['sla_hours'] ?? 24,
-                    ]);
-                }
-            }
+            $this->createWorkflowSteps($workflow, $request->input('steps'));
 
             return $workflow->load(['steps.role', 'steps.approverUser']);
         });
@@ -268,15 +241,15 @@ class ApprovalWorkflowController extends Controller
         if (! $workflow->is_custom && array_key_exists($moduleKey, ApprovalService::SYSTEM_MODULES)) {
             // Cannot delete built-in system modules, but can deactivate
             $workflow->update(['is_active' => false]);
-            return $this->successResponse(null, 'Alur sistem inti dinonaktifkan (tidak dapat dihapus permanen).');
+            $msg = 'Alur sistem inti dinonaktifkan (tidak dapat dihapus permanen).';
+        } else {
+            $workflow->steps()->delete();
+            $workflow->delete();
+            $this->logActivity('DELETE_CUSTOM_WORKFLOW', "Deleted workflow: {$moduleKey} (Company: {$companyId})");
+            $msg = 'Alur persetujuan berhasil dihapus.';
         }
 
-        $workflow->steps()->delete();
-        $workflow->delete();
-
-        $this->logActivity('DELETE_CUSTOM_WORKFLOW', "Deleted workflow: {$moduleKey} (Company: {$companyId})");
-
-        return $this->successResponse(null, 'Alur persetujuan berhasil dihapus.');
+        return $this->successResponse(null, $msg);
     }
 
     /**
@@ -300,37 +273,16 @@ class ApprovalWorkflowController extends Controller
         $companyId = $this->resolveCompanyId($request);
         $source = ApprovalWorkflow::with('steps')->findOrFail($request->source_workflow_id);
 
-        // Compute automatic numeric tag (e.g. Perizinan-2, Perizinan-3, etc.)
         $rawName = $request->filled('name') ? trim($request->name) : $source->name;
-        $baseName = preg_replace('/(\s*\(\s*Khusus\s*\)|-\d+)$/i', '', $rawName);
-        if (empty($baseName)) {
-            $baseName = $source->name;
-        }
-
         $existingNames = ApprovalWorkflow::where('company_id', $companyId)
             ->where('module_key', $source->module_key)
             ->pluck('name')
             ->toArray();
 
-        $maxNum = 1;
-        foreach ($existingNames as $name) {
-            if (preg_match('/^' . preg_quote($baseName, '/') . '-(\d+)$/i', trim($name), $matches)) {
-                $num = (int) $matches[1];
-                if ($num > $maxNum) {
-                    $maxNum = $num;
-                }
-            }
-        }
-        $nextTag = $maxNum + 1;
-
-        if ($rawName === $baseName || preg_match('/^' . preg_quote($baseName, '/') . '(-\d+)?$/i', $rawName) || str_contains($rawName, '(Khusus)')) {
-            $finalName = "{$baseName}-{$nextTag}";
-        } else {
-            $finalName = in_array($rawName, $existingNames) ? "{$rawName}-{$nextTag}" : $rawName;
-        }
+        $finalName = $this->resolveDuplicateFinalName($rawName, $source->name, $existingNames);
 
         $newWorkflow = DB::transaction(function () use ($request, $source, $companyId, $finalName) {
-            $priority = $request->scope_type === 'user' ? 2 : ($request->scope_type === 'role' ? 1 : 0);
+            $priority = $this->getScopePriority($request->scope_type);
 
             $duplicate = ApprovalWorkflow::create([
                 'company_id' => $companyId,
@@ -464,15 +416,15 @@ class ApprovalWorkflowController extends Controller
             ->count();
         if ($count <= 1 && ($workflow->scope_type === 'company' || empty($workflow->scope_type)) && array_key_exists($workflow->module_key, ApprovalService::SYSTEM_MODULES)) {
             $workflow->update(['is_active' => false]);
-            return $this->successResponse(null, 'Alur default dinonaktifkan (karena merupakan alur utama fitur).');
+            $msg = 'Alur default dinonaktifkan (karena merupakan alur utama fitur).';
+        } else {
+            $workflow->steps()->delete();
+            $workflow->delete();
+            $this->logActivity('DELETE_WORKFLOW_VARIANT', "Deleted workflow variant ID {$id}: {$workflow->name}");
+            $msg = 'Varian alur persetujuan berhasil dihapus.';
         }
 
-        $workflow->steps()->delete();
-        $workflow->delete();
-
-        $this->logActivity('DELETE_WORKFLOW_VARIANT', "Deleted workflow variant ID {$id}: {$workflow->name}");
-
-        return $this->successResponse(null, 'Varian alur persetujuan berhasil dihapus.');
+        return $this->successResponse(null, $msg);
     }
 
     /**
@@ -494,74 +446,13 @@ class ApprovalWorkflowController extends Controller
 
         // 1. Process standard System Modules (from ApprovalService::SYSTEM_MODULES)
         foreach (ApprovalService::SYSTEM_MODULES as $key => $meta) {
-            $variants = $configuredWorkflows->get($key, collect());
-            $defaultVariant = $variants->first(fn ($w) => $w->scope_type === 'company' || empty($w->scope_type)) ?? $variants->first();
-
-            $stepCount = $defaultVariant && $defaultVariant->steps->count() > 0
-                ? $defaultVariant->steps->count()
-                : ($meta['default_layers'] ?? 1);
-
-            $mappedVariants = $variants->map(function ($wf) {
-                $scopeLabel = 'Semua Karyawan (Default)';
-                if ($wf->scope_type === 'role') {
-                    $scopeLabel = 'Divisi/Jabatan: ' . ($wf->scopeRole ? $wf->scopeRole->name : "Role #{$wf->scope_id}");
-                } elseif ($wf->scope_type === 'user') {
-                    $scopeLabel = 'Karyawan: ' . ($wf->scopeUser ? $wf->scopeUser->name : "User #{$wf->scope_id}");
-                }
-
-                return [
-                    'id' => $wf->id,
-                    'name' => $wf->name,
-                    'scope_type' => $wf->scope_type ?? 'company',
-                    'scope_id' => $wf->scope_id,
-                    'scope_label' => $scopeLabel,
-                    'is_active' => $wf->is_active,
-                    'layers' => $wf->steps->count(),
-                    'is_default' => ($wf->scope_type === 'company' || empty($wf->scope_type)),
-                ];
-            })->values();
-
-            $resultModules->push([
-                'key' => $key,
-                'label' => $meta['name'],
-                'category' => $meta['category'] ?? 'Umum',
-                'icon' => $meta['icon'] ?? 'GitBranch',
-                'description' => $meta['description'] ?? '',
-                'layers' => $stepCount,
-                'is_custom' => false,
-                'is_active' => $defaultVariant ? $defaultVariant->is_active : false,
-                'is_configured' => $variants->isNotEmpty(),
-                'active_workflow_id' => $defaultVariant ? $defaultVariant->id : null,
-                'variants' => $mappedVariants,
-            ]);
+            $resultModules->push($this->mapSystemModuleItem($key, $meta, $configuredWorkflows));
         }
 
         // 2. Process Custom Modules added previously (if any exist)
         foreach ($configuredWorkflows as $key => $variants) {
             if (! array_key_exists($key, ApprovalService::SYSTEM_MODULES)) {
-                $first = $variants->first();
-                $resultModules->push([
-                    'key' => $key,
-                    'label' => $first->name,
-                    'category' => $first->category ?? 'Kustom',
-                    'icon' => $first->icon ?? 'CheckCircle2',
-                    'description' => $first->description ?? 'Alur persetujuan kustom',
-                    'layers' => $first->steps->count() ?: 1,
-                    'is_custom' => true,
-                    'is_active' => $first->is_active,
-                    'is_configured' => true,
-                    'active_workflow_id' => $first->id,
-                    'variants' => $variants->map(fn ($wf) => [
-                        'id' => $wf->id,
-                        'name' => $wf->name,
-                        'scope_type' => $wf->scope_type ?? 'company',
-                        'scope_id' => $wf->scope_id,
-                        'scope_label' => 'Semua Karyawan (Default)',
-                        'is_active' => $wf->is_active,
-                        'layers' => $wf->steps->count(),
-                        'is_default' => true,
-                    ])->values(),
-                ]);
+                $resultModules->push($this->mapCustomModuleItem($key, $variants));
             }
         }
 
@@ -716,5 +607,134 @@ class ApprovalWorkflowController extends Controller
             ->get();
 
         return $this->successResponse($users, 'Users retrieved successfully.');
+    }
+
+    private function getScopePriority(?string $scopeType): int
+    {
+        if ($scopeType === 'user') {
+            return 2;
+        }
+        if ($scopeType === 'role') {
+            return 1;
+        }
+        return 0;
+    }
+
+    private function createWorkflowSteps(ApprovalWorkflow $workflow, ?array $stepsData): void
+    {
+        if (empty($stepsData)) {
+            $workflow->steps()->create([
+                'step_number' => 1,
+                'approver_type' => 'supervisor',
+                'sla_hours' => 24,
+            ]);
+            return;
+        }
+
+        foreach ($stepsData as $step) {
+            $workflow->steps()->create([
+                'step_number' => $step['step_number'],
+                'approver_type' => $step['approver_type'],
+                'approver_role_id' => $step['approver_type'] === 'role' ? ($step['approver_role_id'] ?? null) : null,
+                'approver_user_id' => $step['approver_type'] === 'user' ? ($step['approver_user_id'] ?? null) : null,
+                'sla_hours' => $step['sla_hours'] ?? 24,
+            ]);
+        }
+    }
+
+    private function resolveDuplicateFinalName(string $rawName, string $sourceName, array $existingNames): string
+    {
+        $baseName = preg_replace('/(\s*\(\s*Khusus\s*\)|-\d+)$/i', '', $rawName);
+        if (empty($baseName)) {
+            $baseName = $sourceName;
+        }
+
+        $maxNum = 1;
+        foreach ($existingNames as $name) {
+            if (preg_match('/^' . preg_quote($baseName, '/') . '-(\d+)$/i', trim($name), $matches)) {
+                $num = (int) $matches[1];
+                if ($num > $maxNum) {
+                    $maxNum = $num;
+                }
+            }
+        }
+        $nextTag = $maxNum + 1;
+
+        if ($rawName === $baseName || preg_match('/^' . preg_quote($baseName, '/') . '(-\d+)?$/i', $rawName) || str_contains($rawName, '(Khusus)')) {
+            return "{$baseName}-{$nextTag}";
+        }
+
+        return in_array($rawName, $existingNames) ? "{$rawName}-{$nextTag}" : $rawName;
+    }
+
+    private function mapSystemModuleItem(string $key, array $meta, $configuredWorkflows): array
+    {
+        $variants = $configuredWorkflows->get($key, collect());
+        $defaultVariant = $variants->first(fn ($w) => $w->scope_type === 'company' || empty($w->scope_type)) ?? $variants->first();
+
+        $stepCount = $defaultVariant && $defaultVariant->steps->count() > 0
+            ? $defaultVariant->steps->count()
+            : ($meta['default_layers'] ?? 1);
+
+        $mappedVariants = $variants->map(function ($wf) {
+            $scopeLabel = 'Semua Karyawan (Default)';
+            if ($wf->scope_type === 'role') {
+                $scopeLabel = 'Divisi/Jabatan: ' . ($wf->scopeRole ? $wf->scopeRole->name : "Role #{$wf->scope_id}");
+            } elseif ($wf->scope_type === 'user') {
+                $scopeLabel = 'Karyawan: ' . ($wf->scopeUser ? $wf->scopeUser->name : "User #{$wf->scope_id}");
+            }
+
+            return [
+                'id' => $wf->id,
+                'name' => $wf->name,
+                'scope_type' => $wf->scope_type ?? 'company',
+                'scope_id' => $wf->scope_id,
+                'scope_label' => $scopeLabel,
+                'is_active' => $wf->is_active,
+                'layers' => $wf->steps->count(),
+                'is_default' => ($wf->scope_type === 'company' || empty($wf->scope_type)),
+            ];
+        })->values();
+
+        return [
+            'key' => $key,
+            'label' => $meta['name'],
+            'category' => $meta['category'] ?? 'Umum',
+            'icon' => $meta['icon'] ?? 'GitBranch',
+            'description' => $meta['description'] ?? '',
+            'layers' => $stepCount,
+            'is_custom' => false,
+            'is_active' => $defaultVariant ? $defaultVariant->is_active : false,
+            'is_configured' => $variants->isNotEmpty(),
+            'active_workflow_id' => $defaultVariant ? $defaultVariant->id : null,
+            'variants' => $mappedVariants,
+        ];
+    }
+
+    private function mapCustomModuleItem(string $key, $variants): array
+    {
+        $first = $variants->first();
+        return [
+            'key' => $key,
+            'label' => $first->name,
+            'category' => $first->category ?? 'Kustom',
+            'icon' => $first->icon ?? 'CheckCircle2',
+            'description' => $first->description ?? 'Alur persetujuan kustom',
+            'layers' => $first->steps->count() ?: 1,
+            'is_custom' => true,
+            'is_active' => $first->is_active,
+            'is_configured' => true,
+            'active_workflow_id' => $first->id,
+            'variants' => $variants->map(fn ($wf) => [
+                'id' => $wf->id,
+                'name' => $wf->name,
+                'scope_type' => $wf->scope_type ?? 'company',
+                'scope_id' => $wf->scope_id,
+                'scope_label' => 'Semua Karyawan (Default)',
+                'is_active' => $wf->is_active,
+                'layers' => $wf->steps->count(),
+                'is_default' => true,
+            ])->values(),
+        ];
     }
 }

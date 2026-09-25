@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 
 class TaskController extends Controller
 {
+    private const PATH_TASK_DASHBOARD = '/dashboard/tasks/';
+
     public function index(Request $request)
     {
         $user = $request->user();
@@ -44,6 +46,79 @@ class TaskController extends Controller
         return $this->successResponse($tasks, 'Data tugas berhasil diambil.');
     }
 
+    private function resolveTargetUserIds(Request $request): array
+    {
+        if ($request->has('user_id') && is_array($request->user_id)) {
+            return $request->user_id;
+        }
+
+        if ($request->has('division_id')) {
+            return User::where('company_id', $request->user()->company_id)
+                ->where('role_id', $request->division_id)
+                ->pluck('id')
+                ->toArray();
+        }
+
+        return [];
+    }
+
+    private function createTaskWithActivities(int $userId, Request $request, ?array $approvalInfo): Task
+    {
+        $task = Task::create([
+            'user_id' => $userId,
+            'company_id' => $request->user()->company_id,
+            'assigned_by' => $request->user()->id,
+            'title' => $request->title,
+            'description' => $request->description,
+            'deadline' => $request->deadline,
+            'priority' => $request->priority ?? 1,
+            'status' => $approvalInfo ? 'pending' : 'ongoing',
+            'current_approval_step' => $approvalInfo['current_approval_step'] ?? null,
+        ]);
+
+        if ($request->has('activities') && is_array($request->activities)) {
+            foreach ($request->activities as $index => $activityData) {
+                TaskActivity::create([
+                    'task_id' => $task->id,
+                    'activity_name' => $activityData['activity_name'],
+                    'description' => $activityData['description'] ?? null,
+                    'sort_order' => $activityData['sort_order'] ?? $index,
+                    'status' => 'pending',
+                ]);
+            }
+        }
+
+        return $task;
+    }
+
+    private function notifyTaskCreation(Task $task, int $userId, ?array $approvalInfo): void
+    {
+        $assignedUser = User::find($userId);
+        if ($assignedUser) {
+            $this->sendNotification(
+                $assignedUser->id,
+                'Tugas Baru Diterima 📝',
+                "Anda mendapat tugas baru: {$task->title}. Segera cek aplikasi ya!",
+                'info',
+                self::PATH_TASK_DASHBOARD.$task->id,
+                'notif'
+            );
+        }
+
+        if ($approvalInfo && !empty($approvalInfo['approvers'])) {
+            foreach ($approvalInfo['approvers'] as $approver) {
+                $this->sendNotification(
+                    $approver->id,
+                    'Persetujuan Penugasan Baru 📋',
+                    "Penugasan '{$task->title}' membutuhkan persetujuan Anda ({$approvalInfo['step_label']}).",
+                    'warning',
+                    self::PATH_TASK_DASHBOARD.$task->id,
+                    'approval'
+                );
+            }
+        }
+    }
+
     public function store(Request $request)
     {
         $user = $request->user();
@@ -67,20 +142,7 @@ class TaskController extends Controller
             'activities.*.sort_order' => 'nullable|integer|min:0',
         ]);
 
-        // Determine target users
-        $targetUserIds = [];
-
-        if ($request->has('user_id') && is_array($request->user_id)) {
-            // Multiple users selected
-            $targetUserIds = $request->user_id;
-        } elseif ($request->has('division_id')) {
-            // Division selected - get all users in that role/division
-            $targetUserIds = User::where('company_id', $request->user()->company_id)
-                ->where('role_id', $request->division_id)
-                ->pluck('id')
-                ->toArray();
-        }
-
+        $targetUserIds = $this->resolveTargetUserIds($request);
         if (empty($targetUserIds)) {
             return $this->errorResponse('Pilih minimal satu penerima tugas.', 422);
         }
@@ -91,59 +153,9 @@ class TaskController extends Controller
 
         // Create task for each user
         foreach ($targetUserIds as $userId) {
-            $task = Task::create([
-                'user_id' => $userId,
-                'company_id' => $request->user()->company_id,
-                'assigned_by' => $request->user()->id,
-                'title' => $request->title,
-                'description' => $request->description,
-                'deadline' => $request->deadline,
-                'priority' => $request->priority ?? 1,
-                'status' => $approvalInfo ? 'pending' : 'ongoing',
-                'current_approval_step' => $approvalInfo['current_approval_step'] ?? null,
-            ]);
-
-            // Create activities if provided
-            if ($request->has('activities') && is_array($request->activities)) {
-                foreach ($request->activities as $index => $activityData) {
-                    TaskActivity::create([
-                        'task_id' => $task->id,
-                        'activity_name' => $activityData['activity_name'],
-                        'description' => $activityData['description'] ?? null,
-                        'sort_order' => $activityData['sort_order'] ?? $index,
-                        'status' => 'pending',
-                    ]);
-                }
-            }
-
+            $task = $this->createTaskWithActivities($userId, $request, $approvalInfo);
             $createdTasks[] = $task->load('activities');
-
-            // Send notification to each assigned user
-            $assignedUser = User::find($userId);
-            if ($assignedUser) {
-                $this->sendNotification(
-                    $assignedUser->id,
-                    'Tugas Baru Diterima 📝',
-                    "Anda mendapat tugas baru: {$task->title}. Segera cek aplikasi ya!",
-                    'info',
-                    '/dashboard/tasks/'.$task->id,
-                    'notif'
-                );
-            }
-
-            // Send notification to approver if workflow is active
-            if ($approvalInfo && !empty($approvalInfo['approvers'])) {
-                foreach ($approvalInfo['approvers'] as $approver) {
-                    $this->sendNotification(
-                        $approver->id,
-                        'Persetujuan Penugasan Baru 📋',
-                        "Penugasan '{$task->title}' membutuhkan persetujuan Anda ({$approvalInfo['step_label']}).",
-                        'warning',
-                        '/dashboard/tasks/'.$task->id,
-                        'approval'
-                    );
-                }
-            }
+            $this->notifyTaskCreation($task, $userId, $approvalInfo);
         }
 
         // Log activity
@@ -184,7 +196,7 @@ class TaskController extends Controller
                     'Update Progres Tugas 📊',
                     "Tugas '{$task->title}' telah diperbarui statusnya menjadi ".strtoupper($request->status),
                     'info',
-                    '/dashboard/tasks/'.$task->id,
+                    self::PATH_TASK_DASHBOARD.$task->id,
                     'notif'
                 );
             }
@@ -240,7 +252,7 @@ class TaskController extends Controller
                     'Tugas Disetujui ✅',
                     "Tugas '{$task->title}' telah disetujui dan siap dikerjakan.",
                     'success',
-                    '/dashboard/tasks/'.$task->id
+                    self::PATH_TASK_DASHBOARD.$task->id
                 );
             } else {
                 $task->update([
@@ -253,7 +265,7 @@ class TaskController extends Controller
                         'Persetujuan Tugas Berjenjang 📋',
                         "Tugas '{$task->title}' membutuhkan persetujuan Anda ({$result['step_label']}).",
                         'warning',
-                        '/dashboard/tasks/'.$task->id,
+                        self::PATH_TASK_DASHBOARD.$task->id,
                         'approval'
                     );
                 }

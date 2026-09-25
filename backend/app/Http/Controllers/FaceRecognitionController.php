@@ -11,6 +11,9 @@ use Illuminate\Support\Str;
 
 class FaceRecognitionController extends Controller
 {
+    private const DIR_FACE_REGISTRATIONS = 'face_registrations/';
+    private const PATH_FACE_REGISTRATIONS = 'face_registrations';
+
     protected FaceRecognitionService $faceService;
 
     public function __construct(FaceRecognitionService $faceService)
@@ -37,26 +40,22 @@ class FaceRecognitionController extends Controller
 
         // 1. Ekstraksi Vektor 128-d menggunakan AI Pipeline
         $imageInput = $request->hasFile('image') ? $request->file('image') : $request->input('image_base64');
-        $extraction = $this->faceService->extractFaceEmbedding($imageInput);
-
-        if (!isset($extraction['success']) || !$extraction['success']) {
-            return $this->errorResponse($extraction['message'] ?? 'Gagal mendeteksi wajah pada foto. Pastikan wajah terlihat jelas dan pencahayaan cukup.', 422);
+        $extractResult = $this->validateAndExtractFace($imageInput);
+        if (isset($extractResult['error'])) {
+            return $this->errorResponse($extractResult['error'], $extractResult['code']);
         }
-
-        if (empty($extraction['embedding']) || count($extraction['embedding']) !== 128) {
-            return $this->errorResponse('Gagal menghasilkan representasi vektor wajah 128-d yang valid.', 500);
-        }
+        $extraction = $extractResult['extraction'];
 
         // 2. Simpan file foto pendaftaran
         $photoPath = null;
         if ($request->hasFile('image')) {
             $filename = 'face_' . $user->id . '_' . Str::random(10) . '.' . $request->file('image')->getClientOriginalExtension();
-            $photoPath = $request->file('image')->storeAs('face_registrations', $filename, 'public');
+            $photoPath = $request->file('image')->storeAs(self::PATH_FACE_REGISTRATIONS, $filename, 'public');
         } elseif ($request->filled('image_base64')) {
             $filename = 'face_' . $user->id . '_' . Str::random(10) . '.jpg';
             $data = str_contains($request->image_base64, ',') ? explode(',', $request->image_base64)[1] : $request->image_base64;
-            Storage::disk('public')->put('face_registrations/' . $filename, base64_decode($data));
-            $photoPath = 'face_registrations/' . $filename;
+            Storage::disk('public')->put(self::DIR_FACE_REGISTRATIONS . $filename, base64_decode($data));
+            $photoPath = self::DIR_FACE_REGISTRATIONS . $filename;
         }
 
         // 3. Update data User dengan status PENDING
@@ -141,7 +140,7 @@ class FaceRecognitionController extends Controller
     /**
      * Admin/HR: Menyetujui pengajuan pendaftaran wajah karyawan.
      */
-    public function approve(Request $request, $id)
+    public function approve($id)
     {
         $this->authorizeAdminOrHrd();
 
@@ -222,12 +221,12 @@ class FaceRecognitionController extends Controller
         $photoPath = null;
         if ($request->hasFile('image')) {
             $filename = 'face_admin_' . $user->id . '_' . Str::random(10) . '.' . $request->file('image')->getClientOriginalExtension();
-            $photoPath = $request->file('image')->storeAs('face_registrations', $filename, 'public');
+            $photoPath = $request->file('image')->storeAs(self::PATH_FACE_REGISTRATIONS, $filename, 'public');
         } elseif ($request->filled('image_base64')) {
             $filename = 'face_admin_' . $user->id . '_' . Str::random(10) . '.jpg';
             $data = str_contains($request->image_base64, ',') ? explode(',', $request->image_base64)[1] : $request->image_base64;
-            Storage::disk('public')->put('face_registrations/' . $filename, base64_decode($data));
-            $photoPath = 'face_registrations/' . $filename;
+            Storage::disk('public')->put(self::DIR_FACE_REGISTRATIONS . $filename, base64_decode($data));
+            $photoPath = self::DIR_FACE_REGISTRATIONS . $filename;
         }
 
         $user->update([
@@ -252,7 +251,7 @@ class FaceRecognitionController extends Controller
     /**
      * Admin/HR: Reset data wajah karyawan sehingga dapat didaftarkan ulang.
      */
-    public function resetFace(Request $request, $id)
+    public function resetFace($id)
     {
         $this->authorizeAdminOrHrd();
 
@@ -303,6 +302,27 @@ class FaceRecognitionController extends Controller
         return $this->successResponse([
             'face_status' => 'not_registered',
         ], 'Data wajah berhasil di-reset. Silakan lakukan pendaftaran wajah baru.');
+    }
+
+    private function validateAndExtractFace($imageInput): array
+    {
+        $extraction = $this->faceService->extractFaceEmbedding($imageInput);
+
+        if (!isset($extraction['success']) || !$extraction['success']) {
+            return [
+                'error' => $extraction['message'] ?? 'Gagal mendeteksi wajah pada foto. Pastikan wajah terlihat jelas dan pencahayaan cukup.',
+                'code' => 422,
+            ];
+        }
+
+        if (empty($extraction['embedding']) || count($extraction['embedding']) !== 128) {
+            return [
+                'error' => 'Gagal menghasilkan representasi vektor wajah 128-d yang valid.',
+                'code' => 500,
+            ];
+        }
+
+        return ['extraction' => $extraction];
     }
 
     protected function authorizeAdminOrHrd()

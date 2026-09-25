@@ -13,8 +13,8 @@ class LeaveController extends Controller
 {
     use Notifiable;
 
-    private const TYPE_ANNUAL_LEAVE = 'Cuti Tahunan';
     private const ARTICLE_PASAL_93 = 'Pasal 93 UU No. 13/2003';
+    private const ARTICLE_KEBIJAKAN_PERUSAHAAN = 'Kebijakan Perusahaan';
 
     private const KEMNAKER_LEAVE_TYPES = [
         'Cuti Tahunan' => ['days' => 12, 'paid' => true, 'article' => 'Pasal 79 UU No. 13/2003', 'uses_quota' => true],
@@ -30,7 +30,7 @@ class LeaveController extends Controller
         'Haid (Hari 1 & 2)' => ['days' => 2, 'paid' => true, 'article' => 'Pasal 81 UU No. 13/2003', 'uses_quota' => false],
         'Cuti Besar/Panjang' => ['days' => 0, 'paid' => false, 'article' => 'Pasal 79 UU No. 13/2003', 'uses_quota' => false],
         'Cuti Alasan Penting' => ['days' => 0, 'paid' => true, 'article' => self::ARTICLE_PASAL_93, 'uses_quota' => true],
-        'Lainnya' => ['days' => 0, 'paid' => true, 'article' => 'Kebijakan Perusahaan', 'uses_quota' => true],
+        'Lainnya' => ['days' => 0, 'paid' => true, 'article' => self::ARTICLE_KEBIJAKAN_PERUSAHAAN, 'uses_quota' => true],
     ];
 
     public function index(Request $request): \Illuminate\Http\JsonResponse
@@ -100,12 +100,12 @@ class LeaveController extends Controller
         $typeMeta = self::KEMNAKER_LEAVE_TYPES[$request->type] ?? [
             'days' => 0,
             'paid' => true,
-            'article' => 'Kebijakan Perusahaan',
+            'article' => self::ARTICLE_KEBIJAKAN_PERUSAHAAN,
             'uses_quota' => false,
         ];
         $requestedDays = Carbon::parse($request->start_date)->diffInDays(Carbon::parse($request->end_date)) + 1;
 
-        $validationError = $this->validateLeaveRequest($user, $request, $typeMeta, $requestedDays);
+        $validationError = $this->validateLeaveRequest($request, $typeMeta, $requestedDays);
         if ($validationError !== null) {
             return response()->json([
                 'status' => 'error',
@@ -260,7 +260,7 @@ class LeaveController extends Controller
         $leave->update($updateData);
 
         if ($result['is_final'] && $result['status'] === 'approved') {
-            self::processLeaveApprovalDeduction($leave);
+            self::processLeaveApprovalDeduction();
 
             $this->notify(
                 $leave->user,
@@ -370,7 +370,7 @@ class LeaveController extends Controller
      */
     private function finalizeLeaveApproval(Leave $leave): \Illuminate\Http\JsonResponse
     {
-        self::processLeaveApprovalDeduction($leave);
+        self::processLeaveApprovalDeduction();
 
         $this->notify(
             $leave->user,
@@ -385,7 +385,7 @@ class LeaveController extends Controller
     /**
      * Helper to process leave approval deduction (disabled automatic decrement per requirements).
      */
-    public static function processLeaveApprovalDeduction(Leave $leave): void
+    public static function processLeaveApprovalDeduction(): void
     {
         // Decrement otomatis jatah cuti tahunan dihilangkan
     }
@@ -393,7 +393,7 @@ class LeaveController extends Controller
     /**
      * Helper to refund leave balance if approved leave is rejected or deleted.
      */
-    public static function processLeaveApprovalRefund(Leave $leave): void
+    public static function processLeaveApprovalRefund(): void
     {
         // No refund needed since automatic deduction is disabled
     }
@@ -511,7 +511,7 @@ class LeaveController extends Controller
         }
 
         if ($leave->status === 'approved') {
-            self::processLeaveApprovalRefund($leave);
+            self::processLeaveApprovalRefund();
         }
 
         $leave->delete();
@@ -527,7 +527,7 @@ class LeaveController extends Controller
         ]);
     }
 
-    private function validateLeaveRequest(User $user, Request $request, ?array $typeMeta, int $requestedDays): ?string
+    private function validateLeaveRequest(Request $request, ?array $typeMeta, int $requestedDays): ?string
     {
         if ($typeMeta && isset($typeMeta['days']) && $typeMeta['days'] > 0 && $requestedDays > $typeMeta['days']) {
             return "Durasi cuti {$request->type} melebihi batas maksimal UU Ketenagakerjaan ({$typeMeta['days']} hari).";

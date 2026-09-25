@@ -52,6 +52,20 @@ type SubmenuItem = {
   feature?: string;
 };
 
+function isSubmenuActive(pathname: string, subHref: string, allSubmenus: Array<{ href: string }>): boolean {
+  if (pathname === subHref) return true;
+  if (pathname.startsWith(`${subHref}/`)) {
+    const hasMoreSpecificMatch = allSubmenus.some(
+      (otherSub) =>
+        otherSub.href !== subHref &&
+        otherSub.href.startsWith(subHref) &&
+        (pathname === otherSub.href || pathname.startsWith(`${otherSub.href}/`))
+    );
+    return !hasMoreSpecificMatch;
+  }
+  return false;
+}
+
 type SidebarLink = {
   isHeading?: boolean;
   name: string;
@@ -598,18 +612,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                 {isOpen && (
                   <ul className="dash-submenu-list">
                     {filteredSubmenus.map((sub) => {
-                      const isActive = (() => {
-                        if (pathname === sub.href) return true;
-                        if (pathname.startsWith(`${sub.href}/`)) {
-                          const hasMoreSpecificMatch = filteredSubmenus.some(
-                            otherSub => otherSub.href !== sub.href && 
-                                        otherSub.href.startsWith(sub.href) && 
-                                        (pathname === otherSub.href || pathname.startsWith(`${otherSub.href}/`))
-                          );
-                          return !hasMoreSpecificMatch;
-                        }
-                        return false;
-                      })();
+                      const isActive = isSubmenuActive(pathname, sub.href, filteredSubmenus);
 
                       return (
                         <li key={sub.href}>

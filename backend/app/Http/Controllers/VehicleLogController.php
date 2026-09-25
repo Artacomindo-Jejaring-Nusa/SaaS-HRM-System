@@ -19,6 +19,7 @@ class VehicleLogController extends Controller
     private const MSG_FORBIDDEN = 'Akses ditolak.';
     private const URL_FLEET_LOGS = '/dashboard/fleet-logs';
     private const RULE_NULL_NUM = 'nullable|numeric|min:0';
+    private const DIR_ODOMETER = 'vehicle-logs/odometer/';
 
     /**
      * List all vehicle logs (with data isolation)
@@ -95,7 +96,8 @@ class VehicleLogController extends Controller
         $workflowResult = \App\Services\ApprovalService::initApproval('vehicle_log', $companyId, $user);
 
         $driverType = $request->driver_type ?? 'self';
-        $driverName = $driverType === 'driver' ? ($request->driver_name ?: 'Supir Kantor') : $user->name;
+        $defaultDriverName = $request->driver_name ?: 'Supir Kantor';
+        $driverName = $driverType === 'driver' ? $defaultDriverName : $user->name;
 
         $logData = [
             'company_id' => $companyId,
@@ -179,7 +181,7 @@ class VehicleLogController extends Controller
             $photoPath = $log->odometer_start_photo;
             if ($request->hasFile('odometer_start_photo')) {
                 $file = $request->file('odometer_start_photo');
-                $photoPath = 'vehicle-logs/odometer/'.Str::random(40).'.jpg';
+                $photoPath = self::DIR_ODOMETER.Str::random(40).'.jpg';
 
                 $img = Image::decode($file);
                 $img->scale(width: 1000);
@@ -221,7 +223,7 @@ class VehicleLogController extends Controller
         $photoPath = null;
         if ($request->hasFile('odometer_start_photo')) {
             $file = $request->file('odometer_start_photo');
-            $photoPath = 'vehicle-logs/odometer/'.Str::random(40).'.jpg';
+            $photoPath = self::DIR_ODOMETER.Str::random(40).'.jpg';
 
             $img = Image::decode($file);
             $img->scale(width: 1000);
@@ -280,7 +282,7 @@ class VehicleLogController extends Controller
         $photoPath = $log->odometer_end_photo;
         if ($request->hasFile('odometer_end_photo')) {
             $file = $request->file('odometer_end_photo');
-            $photoPath = 'vehicle-logs/odometer/'.Str::random(40).'.jpg';
+            $photoPath = self::DIR_ODOMETER.Str::random(40).'.jpg';
 
             $img = Image::decode($file);
             $img->scale(width: 1000);
@@ -329,6 +331,61 @@ class VehicleLogController extends Controller
         return $this->successResponse($log, 'Pencatatan kepulangan berhasil.');
     }
 
+    private function processDynamicApproval(VehicleLog $log, Request $request)
+    {
+        $result = \App\Services\ApprovalService::processApproval(
+            'vehicle_log',
+            $log->company_id,
+            $request->user(),
+            $log->user,
+            $log->current_approval_step,
+            'approve'
+        );
+
+        if ($result && isset($result['error'])) {
+            return $this->errorResponse($result['error'], 403);
+        }
+
+        if ($result) {
+            if ($result['is_final']) {
+                $log->update([
+                    'status' => 'approved',
+                    'current_approval_step' => null,
+                    'approved_by' => $request->user()->id,
+                    'remark' => $request->remark,
+                ]);
+
+                $this->notify(
+                    $log->user,
+                    'PEMINJAMAN KENDARAAN DISETUJUI',
+                    "Pengajuan peminjaman unit {$log->vehicle_name} ({$log->plate_number}) telah DISETUJUI sepenuhnya. Unit siap diambil & digunakan.",
+                    'success',
+                    self::URL_FLEET_LOGS
+                );
+            } else {
+                $log->update([
+                    'current_approval_step' => $result['current_approval_step'],
+                ]);
+
+                foreach ($result['approvers'] as $approver) {
+                    $this->notify(
+                        $approver,
+                        'PERSETUJUAN PEMINJAMAN KENDARAAN',
+                        "Ada pengajuan peminjaman unit {$log->vehicle_name} ({$log->plate_number}) dari {$log->user->name} yang memerlukan persetujuan Anda ({$result['step_label']}).",
+                        'warning',
+                        self::URL_FLEET_LOGS
+                    );
+                }
+            }
+
+            $this->logActivity('APPROVE_VEHICLE_LOG', "Menyetujui tahap pengajuan peminjaman kendaraan {$log->vehicle_name} dari {$log->user->name}", $log);
+
+            return $this->successResponse($log, 'Persetujuan peminjaman kendaraan berhasil.');
+        }
+
+        return null;
+    }
+
     /**
      * Approve a vehicle loan request or completed vehicle log
      */
@@ -344,54 +401,9 @@ class VehicleLogController extends Controller
 
         // Dynamic multi-step approval
         if ($log->current_approval_step) {
-            $result = \App\Services\ApprovalService::processApproval(
-                'vehicle_log',
-                $log->company_id,
-                $request->user(),
-                $log->user,
-                $log->current_approval_step,
-                'approve'
-            );
-
-            if ($result && isset($result['error'])) {
-                return $this->errorResponse($result['error'], 403);
-            }
-
-            if ($result) {
-                if ($result['is_final']) {
-                    $log->update([
-                        'status' => 'approved',
-                        'current_approval_step' => null,
-                        'approved_by' => $request->user()->id,
-                        'remark' => $request->remark,
-                    ]);
-
-                    $this->notify(
-                        $log->user,
-                        'PEMINJAMAN KENDARAAN DISETUJUI',
-                        "Pengajuan peminjaman unit {$log->vehicle_name} ({$log->plate_number}) telah DISETUJUI sepenuhnya. Unit siap diambil & digunakan.",
-                        'success',
-                        self::URL_FLEET_LOGS
-                    );
-                } else {
-                    $log->update([
-                        'current_approval_step' => $result['current_approval_step'],
-                    ]);
-
-                    foreach ($result['approvers'] as $approver) {
-                        $this->notify(
-                            $approver,
-                            'PERSETUJUAN PEMINJAMAN KENDARAAN',
-                            "Ada pengajuan peminjaman unit {$log->vehicle_name} ({$log->plate_number}) dari {$log->user->name} yang memerlukan persetujuan Anda ({$result['step_label']}).",
-                            'warning',
-                            self::URL_FLEET_LOGS
-                        );
-                    }
-                }
-
-                $this->logActivity('APPROVE_VEHICLE_LOG', "Menyetujui tahap pengajuan peminjaman kendaraan {$log->vehicle_name} dari {$log->user->name}", $log);
-
-                return $this->successResponse($log, 'Persetujuan peminjaman kendaraan berhasil.');
+            $dynamicResponse = $this->processDynamicApproval($log, $request);
+            if ($dynamicResponse) {
+                return $dynamicResponse;
             }
         }
 
@@ -567,12 +579,14 @@ class VehicleLogController extends Controller
         $result = $rawVehicles->map(function ($v) use ($activeTrips) {
             $active = $activeTrips->get($v->plate_number);
             $isAvailable = ! $active;
+            $activeStatusLabel = $active?->status === 'in_use' ? 'Sedang Digunakan' : 'Sudah Dipesan';
+            $statusLabel = $isAvailable ? 'Tersedia' : $activeStatusLabel;
 
             return [
                 'vehicle_name' => $v->vehicle_name,
                 'plate_number' => $v->plate_number,
                 'is_available' => $isAvailable,
-                'status_label' => $isAvailable ? 'Tersedia' : ($active->status === 'in_use' ? 'Sedang Digunakan' : 'Sudah Dipesan'),
+                'status_label' => $statusLabel,
                 'current_user' => $active?->user?->name,
                 'destination' => $active?->destination,
                 'until' => $active?->return_date ? Carbon::parse($active->return_date)->format('d M Y') : null,

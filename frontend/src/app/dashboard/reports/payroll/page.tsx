@@ -3,9 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
 import { 
-  Download, Search, FileSpreadsheet, Calendar, 
-  Users, TrendingUp, DollarSign, Loader2, ArrowRight,
-  ShieldCheck, Clock, UserX, CheckCircle2
+  Search, FileSpreadsheet, Calendar, 
+  Users, TrendingUp, DollarSign, Loader2, Clock
 } from "lucide-react";
 import { toast } from "sonner";
 import { ReportSkeleton } from "@/components/Skeleton";
@@ -42,6 +41,27 @@ interface SalaryRow {
     email: string;
     ptkp_status?: string;
   };
+}
+
+function parseAmount(val: number | string | undefined | null): number {
+  if (val === undefined || val === null) return 0;
+  if (typeof val === 'number') return val;
+  const parsed = Number.parseFloat(val);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function getPayrollStatusBadgeClass(status?: string): string {
+  if (status === 'paid') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (status === 'approved') return 'bg-blue-50 text-blue-700 border-blue-200';
+  if (status === 'rejected') return 'bg-rose-50 text-rose-700 border-rose-200';
+  return 'bg-amber-50 text-amber-700 border-amber-200';
+}
+
+function getPayrollStatusLabel(status?: string): string {
+  if (status === 'paid') return 'Terbayar';
+  if (status === 'approved') return 'Disetujui';
+  if (status === 'rejected') return 'Ditolak';
+  return 'Draft';
 }
 
 export default function ReportsPayrollPage() {
@@ -86,7 +106,7 @@ export default function ReportsPayrollPage() {
         params: { month: monthFilter, year: yearFilter },
         responseType: 'blob',
       });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = globalThis.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `Laporan_Payroll_${monthFilter}_${yearFilter}.xlsx`);
@@ -114,11 +134,10 @@ export default function ReportsPayrollPage() {
 
   // Calculate totals
   const totalEmployees = filteredSalaries.length;
-  const totalGross = filteredSalaries.reduce((acc, s) => acc + (parseFloat(s.total_earnings as any) || 0), 0);
-  const totalDeductions = filteredSalaries.reduce((acc, s) => acc + (parseFloat(s.total_deductions as any) || 0), 0);
-  const totalNetTHP = filteredSalaries.reduce((acc, s) => acc + (parseFloat(s.net_salary as any) || 0), 0);
-  const totalLateDeductions = filteredSalaries.reduce((acc, s) => acc + (parseFloat(s.deduction_late as any) || 0), 0);
-  const totalAbsenceDeductions = filteredSalaries.reduce((acc, s) => acc + (parseFloat(s.deduction_absence as any) || 0), 0);
+  const totalGross = filteredSalaries.reduce((acc, s) => acc + parseAmount(s.total_earnings), 0);
+  const totalNetTHP = filteredSalaries.reduce((acc, s) => acc + parseAmount(s.net_salary), 0);
+  const totalLateDeductions = filteredSalaries.reduce((acc, s) => acc + parseAmount(s.deduction_late), 0);
+  const totalAbsenceDeductions = filteredSalaries.reduce((acc, s) => acc + parseAmount(s.deduction_absence), 0);
 
   if (loading && salaries.length === 0) {
     return <ReportSkeleton />;
@@ -250,12 +269,12 @@ export default function ReportsPayrollPage() {
                 </tr>
               ) : (
                 filteredSalaries.map((s) => {
-                  const discDeduction = (parseFloat(s.deduction_late as any) || 0) + (parseFloat(s.deduction_absence as any) || 0);
-                  const taxAndBpjs = (parseFloat(s.deduction_bpjs_jht as any) || 0) + 
-                                     (parseFloat(s.deduction_bpjs_jp as any) || 0) + 
-                                     (parseFloat(s.deduction_bpjs_kes as any) || 0) + 
-                                     (parseFloat(s.deduction_tax as any) || 0);
-                  const allowances = (parseFloat(s.total_earnings as any) || 0) - (parseFloat(s.basic_salary as any) || 0);
+                  const discDeduction = parseAmount(s.deduction_late) + parseAmount(s.deduction_absence);
+                  const taxAndBpjs = parseAmount(s.deduction_bpjs_jht) + 
+                                     parseAmount(s.deduction_bpjs_jp) + 
+                                     parseAmount(s.deduction_bpjs_kes) + 
+                                     parseAmount(s.deduction_tax);
+                  const allowances = parseAmount(s.total_earnings) - parseAmount(s.basic_salary);
 
                   return (
                     <tr key={s.id} className="hover:bg-gray-50/80 transition-colors">
@@ -267,7 +286,7 @@ export default function ReportsPayrollPage() {
                         {s.month} {s.year}
                       </td>
                       <td className="py-4 px-4 font-semibold text-gray-700">
-                        Rp {Math.round(parseFloat(s.basic_salary as any) || 0).toLocaleString('id-ID')}
+                        Rp {Math.round(parseAmount(s.basic_salary)).toLocaleString('id-ID')}
                       </td>
                       <td className="py-4 px-4 font-semibold text-emerald-600">
                         +Rp {Math.round(allowances).toLocaleString('id-ID')}
@@ -279,16 +298,11 @@ export default function ReportsPayrollPage() {
                         -Rp {Math.round(taxAndBpjs).toLocaleString('id-ID')}
                       </td>
                       <td className="py-4 px-4 font-black text-[#8B0000] text-base">
-                        Rp {Math.round(parseFloat(s.net_salary as any) || 0).toLocaleString('id-ID')}
+                        Rp {Math.round(parseAmount(s.net_salary)).toLocaleString('id-ID')}
                       </td>
                       <td className="py-4 px-6 text-center">
-                        <span className={`px-3 py-1 text-[11px] font-bold rounded-full border inline-flex items-center gap-1 ${
-                          s.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                          s.status === 'approved' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                          s.status === 'rejected' ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                          'bg-amber-50 text-amber-700 border-amber-200'
-                        }`}>
-                          {s.status === 'paid' ? 'Terbayar' : s.status === 'approved' ? 'Disetujui' : s.status === 'rejected' ? 'Ditolak' : 'Draft'}
+                        <span className={`px-3 py-1 text-[11px] font-bold rounded-full border inline-flex items-center gap-1 ${getPayrollStatusBadgeClass(s.status)}`}>
+                          {getPayrollStatusLabel(s.status)}
                         </span>
                       </td>
                     </tr>

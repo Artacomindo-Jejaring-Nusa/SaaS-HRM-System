@@ -368,6 +368,16 @@ class AttendanceController extends Controller
 
     private function validateDeviceAndSecurity($user, $request, string $type = 'in')
     {
+        $deviceErr = $this->checkDeviceSecurity($user, $request);
+        if ($deviceErr) {
+            return $deviceErr;
+        }
+
+        return $this->verifyFaceAttendance($user, $request, $type);
+    }
+
+    private function checkDeviceSecurity($user, $request): ?array
+    {
         if ($request->is_mocked) {
             return ['message' => 'Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli perangkat Anda.', 'code' => 403];
         }
@@ -380,18 +390,21 @@ class AttendanceController extends Controller
             }
         }
 
-        // 1. Verifikasi Status Pendaftaran Wajah Wajib
+        return null;
+    }
+
+    private function verifyFaceAttendance($user, $request, string $type): ?array
+    {
         if ($user->face_status !== 'approved' || empty($user->face_embedding)) {
-            $msg = $user->face_status === 'pending'
-                ? 'Pendaftaran foto wajah Anda masih dalam status PENDING (Menunggu persetujuan Super Admin). Anda belum dapat melakukan absensi hingga disetujui.'
-                : ($user->face_status === 'rejected'
-                    ? 'Pendaftaran wajah Anda DITOLAK oleh Admin. Silakan lakukan pendaftaran ulang wajah di menu Pengaturan.'
-                    : 'Wajah Anda belum terdaftar di sistem. Silakan daftarkan wajah Anda terlebih dahulu pada menu Pengaturan -> Pendaftaran Wajah.');
+            $msg = match ($user->face_status) {
+                'pending' => 'Pendaftaran foto wajah Anda masih dalam status PENDING (Menunggu persetujuan Super Admin). Anda belum dapat melakukan absensi hingga disetujui.',
+                'rejected' => 'Pendaftaran wajah Anda DITOLAK oleh Admin. Silakan lakukan pendaftaran ulang wajah di menu Pengaturan.',
+                default => 'Wajah Anda belum terdaftar di sistem. Silakan daftarkan wajah Anda terlebih dahulu pada menu Pengaturan -> Pendaftaran Wajah.',
+            };
 
             return ['message' => $msg, 'code' => 422];
         }
 
-        // 2. Verifikasi Kecocokan Wajah AI Machine Learning
         $imageInput = $request->hasFile('image') ? $request->file('image') : ($request->image ?? $request->image_base64);
         if (!$imageInput) {
             return ['message' => 'Foto selfie absensi wajib disertakan untuk verifikasi wajah.', 'code' => 422];

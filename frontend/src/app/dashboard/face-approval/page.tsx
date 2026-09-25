@@ -10,7 +10,6 @@ import {
   RotateCcw,
   Camera,
   Search,
-  Filter,
   UserCheck,
   ShieldCheck,
   AlertCircle,
@@ -20,7 +19,6 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { ListPageSkeleton } from "@/components/Skeleton";
-import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -41,7 +39,6 @@ interface FaceRegistration {
 }
 
 export default function FaceApprovalPage() {
-  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<FaceRegistration[]>([]);
   const [pagination, setPagination] = useState({
@@ -295,15 +292,17 @@ export default function FaceApprovalPage() {
       </div>
 
       {/* Main Table */}
-      {loading ? (
-        <ListPageSkeleton />
-      ) : data.length === 0 ? (
+      {loading && <ListPageSkeleton />}
+
+      {!loading && data.length === 0 && (
         <div className="bg-white dark:bg-slate-900 p-12 text-center rounded-2xl border border-slate-200/80 dark:border-slate-800">
           <AlertCircle className="w-12 h-12 text-slate-400 mx-auto mb-3" />
           <h4 className="text-base font-semibold text-slate-800 dark:text-white">Tidak ada data pendaftaran wajah</h4>
           <p className="text-sm text-slate-500 mt-1">Belum ada pengajuan pendaftaran wajah pada filter ini.</p>
         </div>
-      ) : (
+      )}
+
+      {!loading && data.length > 0 && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -337,7 +336,11 @@ export default function FaceApprovalPage() {
                       <td className="px-6 py-4">
                         {photoSrc ? (
                           <div className="flex items-center gap-3">
-                            <div className="relative group cursor-pointer" onClick={() => setPreviewPhotoUrl(photoSrc)}>
+                            <button
+                              type="button"
+                              className="relative group cursor-pointer focus:outline-none"
+                              onClick={() => setPreviewPhotoUrl(photoSrc)}
+                            >
                               <img
                                 src={photoSrc}
                                 alt={item.name}
@@ -346,7 +349,7 @@ export default function FaceApprovalPage() {
                               <div className="absolute inset-0 bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
                                 <Eye className="w-4 h-4 text-white" />
                               </div>
-                            </div>
+                            </button>
                             <span className="text-xs text-slate-500">128-d Vector Diekstrak</span>
                           </div>
                         ) : (
@@ -464,17 +467,20 @@ export default function FaceApprovalPage() {
 
       {/* Image Preview Modal */}
       {previewPhotoUrl && (
-        <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => setPreviewPhotoUrl(null)}
-        >
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm w-full h-full border-0 cursor-default"
+            onClick={() => setPreviewPhotoUrl(null)}
+            aria-label="Tutup Preview"
+          />
           <div
-            className="bg-white dark:bg-slate-900 p-4 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800"
-            onClick={(e) => e.stopPropagation()}
+            className="relative z-10 bg-white dark:bg-slate-900 p-4 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800"
           >
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-bold text-slate-900 dark:text-white text-sm">Preview Foto Pendaftaran Wajah</h3>
               <button
+                type="button"
                 onClick={() => setPreviewPhotoUrl(null)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-white"
               >
@@ -507,9 +513,9 @@ export default function FaceApprovalPage() {
             </p>
 
             <div>
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
                 Pilih Alasan Cepat:
-              </label>
+              </span>
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {[
                   "Foto Buram / Tidak Jelas",
@@ -531,6 +537,7 @@ export default function FaceApprovalPage() {
 
               <textarea
                 rows={3}
+                aria-label="Alasan penolakan"
                 placeholder="Tulis alasan penolakan..."
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}

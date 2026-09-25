@@ -4,13 +4,14 @@ import { useState, useEffect, useMemo } from "react";
 import axiosInstance from "@/lib/axios";
 import {
   Coins, Plus, Search, Edit2, Trash2, CheckCircle2,
-  Calendar, Users, Calculator, Sliders, ShieldCheck,
-  AlertCircle, HelpCircle, ArrowRight, Loader2,
-  TrendingUp, Percent, Sparkles, Filter, X,
-  Clock, Award, RefreshCw, Check, AlertTriangle
+  Calendar, Users, Calculator, Sliders,
+  AlertCircle, Loader2,
+  TrendingUp, Percent, Sparkles, X,
+  Clock, Award, RefreshCw, Check
 } from "lucide-react";
 import { toast } from "sonner";
-import { useLanguage } from "@/contexts/LanguageContext";
+
+type ModalTab = 'basic' | 'rule' | 'trigger' | 'assignment';
 
 interface ComponentTrigger {
   id?: number;
@@ -46,8 +47,141 @@ interface PayrollComponent {
   assignments?: ComponentAssignment[];
 }
 
+function evaluateSafeFormula(expr: string): number {
+  const tokens = expr.match(/(?:\d+(?:\.\d+)?|[+\-*/()])/g) || [];
+  let pos = 0;
+
+  const peek = () => tokens[pos] ?? null;
+  const consume = () => tokens[pos++] ?? null;
+
+  const parseFactor = (): number => {
+    const token = peek();
+    if (token === '+') {
+      consume();
+      return parseFactor();
+    }
+    if (token === '-') {
+      consume();
+      return -parseFactor();
+    }
+    if (token === '(') {
+      consume();
+      const value = parseExpression();
+      if (peek() === ')') {
+        consume();
+      } else {
+        throw new Error("Mismatched parentheses");
+      }
+      return value;
+    }
+    if (token !== null && !Number.isNaN(Number(token))) {
+      consume();
+      return Number(token);
+    }
+    throw new Error(`Invalid token: ${token}`);
+  };
+
+  const parseTerm = (): number => {
+    let value = parseFactor();
+    while (true) {
+      const op = peek();
+      if (op === '*' || op === '/') {
+        consume();
+        const right = parseFactor();
+        if (op === '/') {
+          if (right === 0) throw new Error("Division by zero");
+          value = value / right;
+        } else {
+          value = value * right;
+        }
+      } else {
+        break;
+      }
+    }
+    return value;
+  };
+
+  const parseExpression = (): number => {
+    let value = parseTerm();
+    while (true) {
+      const op = peek();
+      if (op === '+' || op === '-') {
+        consume();
+        const right = parseTerm();
+        value = op === '+' ? value + right : value - right;
+      } else {
+        break;
+      }
+    }
+    return value;
+  };
+
+  if (tokens.length === 0) return 0;
+  const result = parseExpression();
+  if (pos < tokens.length) throw new Error("Unexpected trailing tokens");
+  return result;
+}
+
+function formatRupiah(num: any) {
+  const val = Number(num) || 0;
+  return new Intl.NumberFormat('id-ID').format(val);
+}
+
+function getRuleBadge(rule: string) {
+  switch (rule) {
+    case 'fixed':
+      return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">Nominal Tetap</span>;
+    case 'attendance':
+      return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Kehadiran (Absensi)</span>;
+    case 'percentage':
+      return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">Persentase (%)</span>;
+    case 'formula':
+      return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">Rumus Kustom (Formula)</span>;
+    case 'adhoc':
+      return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">Fleksibel / Ad-Hoc</span>;
+    default:
+      return <span className="px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-600 rounded">{rule}</span>;
+  }
+}
+
+function getTriggerBadge(triggers?: ComponentTrigger[]) {
+  const trigger = triggers?.[0]?.trigger_type || 'recurring_monthly';
+  switch (trigger) {
+    case 'recurring_monthly':
+      return <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg"><CheckCircle2 size={12} /> Bulanan Rutin</span>;
+    case 'fixed_calendar_date':
+      return <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg"><Calendar size={12} /> Tanggal Tertentu</span>;
+    case 'date_range':
+      return <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg"><Clock size={12} /> Rentang Tanggal</span>;
+    case 'employee_anniversary':
+      return <span className="inline-flex items-center gap-1 text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-lg"><Award size={12} /> Masa Kerja (Anniversary)</span>;
+    case 'manual':
+      return <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-lg"><Sliders size={12} /> Manual / Draft</span>;
+    default:
+      return <span className="text-xs text-gray-500">{trigger}</span>;
+  }
+}
+
+function getAssignmentText(assignments?: ComponentAssignment[]) {
+  if (!assignments || assignments.length === 0) return "Semua Karyawan (Global)";
+  const hasGlobal = assignments.some(a => a.is_global);
+  if (hasGlobal) return "Semua Karyawan (Global)";
+
+  const roleAssignment = assignments.find(a => a.role_id);
+  if (roleAssignment) {
+    const roleName = roleAssignment.role?.name || `Role #${roleAssignment.role_id}`;
+    return `Jabatan: ${roleName}`;
+  }
+
+  const userCount = assignments.filter(a => a.user_id).length;
+  if (userCount > 0) {
+    return `${userCount} Karyawan Spesifik`;
+  }
+
+  return "Semua Karyawan (Global)";
+}
+
 export default function PayrollComponentsPage() {
-  const { t } = useLanguage();
   const [components, setComponents] = useState<PayrollComponent[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -62,7 +196,7 @@ export default function PayrollComponentsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingComponent, setEditingComponent] = useState<PayrollComponent | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [activeModalTab, setActiveModalTab] = useState<'basic' | 'rule' | 'trigger' | 'assignment'>('basic');
+  const [activeModalTab, setActiveModalTab] = useState<ModalTab>('basic');
 
   // Form State
   const [formData, setFormData] = useState<{
@@ -171,7 +305,6 @@ export default function PayrollComponentsPage() {
 
     const roleAssignment = assignments.find(a => a.role_id);
     const userAssignments = assignments.filter(a => a.user_id);
-    const hasGlobal = assignments.some(a => a.is_global);
 
     if (roleAssignment) {
       assignmentType = 'role';
@@ -179,8 +312,6 @@ export default function PayrollComponentsPage() {
     } else if (userAssignments.length > 0) {
       assignmentType = 'users';
       userIds = userAssignments.map(a => a.user_id as number);
-    } else {
-      assignmentType = 'global';
     }
 
     setFormData({
@@ -215,7 +346,7 @@ export default function PayrollComponentsPage() {
 
     const payload: any = {
       name: formData.name,
-      code: formData.code || formData.name.toUpperCase().replace(/[^A-Z0-9]/g, "_").substring(0, 30),
+      code: formData.code || formData.name.toUpperCase().replaceAll(/[^A-Z0-9]/g, "_").substring(0, 30),
       type: formData.type,
       calculation_rule: formData.calculation_rule,
       default_amount: Number(formData.default_amount) || 0,
@@ -255,7 +386,7 @@ export default function PayrollComponentsPage() {
   };
 
   const handleDelete = async (comp: PayrollComponent) => {
-    if (!window.confirm(`Hapus komponen "${comp.name}"? Riwayat payslip sebelumnya tetap tersimpan aman karena snapshot immutable.`)) {
+    if (!globalThis.confirm(`Hapus komponen "${comp.name}"? Riwayat payslip sebelumnya tetap tersimpan aman karena snapshot immutable.`)) {
       return;
     }
 
@@ -276,6 +407,7 @@ export default function PayrollComponentsPage() {
       toast.success(`Komponen ${comp.is_active ? "dinonaktifkan" : "diaktifkan"}.`);
       setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, is_active: !c.is_active } : c));
     } catch (err: any) {
+      console.error(err);
       toast.error("Gagal mengubah status aktif.");
     }
   };
@@ -285,22 +417,22 @@ export default function PayrollComponentsPage() {
     if (formData.calculation_rule !== 'formula' || !formData.formula_expression) return null;
     try {
       let expr = formData.formula_expression;
-      expr = expr.replace(/\{basic_salary\}/g, String(simContext.basic_salary));
-      expr = expr.replace(/\{attendance_days\}/g, String(simContext.attendance_days));
-      expr = expr.replace(/\{total_working_days\}/g, String(simContext.total_working_days));
-      expr = expr.replace(/\{absent_days\}/g, String(simContext.absent_days));
-      expr = expr.replace(/\{overtime_hours\}/g, String(simContext.overtime_hours));
-      expr = expr.replace(/\{late_minutes\}/g, String(simContext.late_minutes));
-      expr = expr.replace(/\{tenure_years\}/g, String(simContext.tenure_years));
+      expr = expr.replaceAll('{basic_salary}', String(simContext.basic_salary));
+      expr = expr.replaceAll('{attendance_days}', String(simContext.attendance_days));
+      expr = expr.replaceAll('{total_working_days}', String(simContext.total_working_days));
+      expr = expr.replaceAll('{absent_days}', String(simContext.absent_days));
+      expr = expr.replaceAll('{overtime_hours}', String(simContext.overtime_hours));
+      expr = expr.replaceAll('{late_minutes}', String(simContext.late_minutes));
+      expr = expr.replaceAll('{tenure_years}', String(simContext.tenure_years));
 
       // Quick syntax safety check: allow only digits, parentheses, +, -, *, /, ., space
       if (!/^[0-9+\-*/().\s]+$/.test(expr)) {
         return "Format ekspresi belum valid (hanya gunakan variabel dan +, -, *, /, ())";
       }
-      // eslint-disable-next-line no-eval
-      const res = Function(`'use strict'; return (${expr})`)();
-      return isNaN(res) ? "Tidak valid" : `Rp ${new Intl.NumberFormat('id-ID').format(Math.round(res))}`;
-    } catch (e) {
+
+      const res = evaluateSafeFormula(expr);
+      return Number.isNaN(res) ? "Tidak valid" : `Rp ${new Intl.NumberFormat('id-ID').format(Math.round(res))}`;
+    } catch {
       return "Format belum lengkap";
     }
   }, [formData.calculation_rule, formData.formula_expression, simContext]);
@@ -309,7 +441,7 @@ export default function PayrollComponentsPage() {
   const filteredComponents = useMemo(() => {
     return components.filter(c => {
       const matchSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (c.code && c.code.toLowerCase().includes(searchQuery.toLowerCase()));
+                          Boolean(c.code?.toLowerCase().includes(searchQuery.toLowerCase()));
       const matchType = typeFilter === "all" || c.type === typeFilter;
       const matchRule = ruleFilter === "all" || c.calculation_rule === ruleFilter;
       return matchSearch && matchType && matchRule;
@@ -330,62 +462,187 @@ export default function PayrollComponentsPage() {
     };
   }, [components]);
 
-  const formatRupiah = (num: any) => {
-    const val = Number(num) || 0;
-    return new Intl.NumberFormat('id-ID').format(val);
+  const handleToggleUserId = (empId: number, checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      user_ids: checked
+        ? [...prev.user_ids, empId]
+        : prev.user_ids.filter(id => id !== empId),
+    }));
   };
 
-  const getRuleBadge = (rule: string) => {
-    switch (rule) {
-      case 'fixed':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">Nominal Tetap</span>;
-      case 'attendance':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Kehadiran (Absensi)</span>;
-      case 'percentage':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">Persentase (%)</span>;
-      case 'formula':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">Rumus Kustom (Formula)</span>;
-      case 'adhoc':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">Fleksibel / Ad-Hoc</span>;
-      default:
-        return <span className="px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-600 rounded">{rule}</span>;
-    }
-  };
-
-  const getTriggerBadge = (triggers?: ComponentTrigger[]) => {
-    const trigger = triggers?.[0]?.trigger_type || 'recurring_monthly';
-    switch (trigger) {
-      case 'recurring_monthly':
-        return <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg"><CheckCircle2 size={12} /> Bulanan Rutin</span>;
-      case 'fixed_calendar_date':
-        return <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg"><Calendar size={12} /> Tanggal Tertentu</span>;
-      case 'date_range':
-        return <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg"><Clock size={12} /> Rentang Tanggal</span>;
-      case 'employee_anniversary':
-        return <span className="inline-flex items-center gap-1 text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-lg"><Award size={12} /> Masa Kerja (Anniversary)</span>;
-      case 'manual':
-        return <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-lg"><Sliders size={12} /> Manual / Draft</span>;
-      default:
-        return <span className="text-xs text-gray-500">{trigger}</span>;
-    }
-  };
-
-  const getAssignmentText = (assignments?: ComponentAssignment[]) => {
-    if (!assignments || assignments.length === 0) return "Semua Karyawan (Global)";
-    const hasGlobal = assignments.some(a => a.is_global);
-    if (hasGlobal) return "Semua Karyawan (Global)";
-
-    const roleAssignment = assignments.find(a => a.role_id);
-    if (roleAssignment) {
-      return `Jabatan: ${roleAssignment.role?.name || `Role #${roleAssignment.role_id}`}`;
+  const renderTableContent = () => {
+    if (loading) {
+      return (
+        <div className="py-24 flex flex-col items-center justify-center gap-3">
+          <Loader2 className="animate-spin text-[#8B0000]" size={36} />
+          <p className="text-gray-400 font-medium text-sm">Memuat komponen penggajian...</p>
+        </div>
+      );
     }
 
-    const userCount = assignments.filter(a => a.user_id).length;
-    if (userCount > 0) {
-      return `${userCount} Karyawan Spesifik`;
+    if (filteredComponents.length === 0) {
+      return (
+        <div className="py-20 text-center px-4">
+          <div className="w-16 h-16 rounded-3xl bg-gray-50 text-gray-400 flex items-center justify-center mx-auto mb-3">
+            <Coins size={32} />
+          </div>
+          <h3 className="text-base font-bold text-gray-800">Tidak ada komponen ditemukan</h3>
+          <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1">
+            Buat komponen gaji baru seperti Tunjangan Komunikasi, Uang Transport, Bonus Tahunan, atau Potongan Koperasi.
+          </p>
+          <button
+            onClick={handleOpenCreate}
+            className="mt-5 px-5 py-2.5 bg-[#8B0000] text-white rounded-xl text-xs font-bold shadow-md hover:bg-[#700000] transition-all"
+          >
+            + Tambah Komponen Baru
+          </button>
+        </div>
+      );
     }
 
-    return "Semua Karyawan (Global)";
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead className="bg-gray-50/70 border-b border-gray-100">
+            <tr>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest pl-8">Komponen</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Tipe & Aturan</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Nominal / Rumus</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Pemicu (Trigger)</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Penerima</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">PPh 21</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Status</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Aksi</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {filteredComponents.map((comp) => {
+              const isEarning = comp.type === "earning";
+              return (
+                <tr key={comp.id} className="hover:bg-gray-50/60 transition-colors group">
+                  <td className="px-6 py-4 pl-8">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shrink-0 ${
+                          isEarning ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+                        }`}
+                      >
+                        {isEarning ? "+" : "-"}
+                      </div>
+                      <div>
+                        <span className="font-bold text-gray-900 block text-sm">{comp.name}</span>
+                        <span className="text-[11px] font-mono text-gray-400 block mt-0.5 tracking-wider uppercase">
+                          {comp.code}
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="space-y-1">
+                      <span
+                        className={`inline-block text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                          isEarning ? "bg-emerald-100/60 text-emerald-700" : "bg-rose-100/60 text-rose-700"
+                        }`}
+                      >
+                        {isEarning ? "Pendapatan" : "Potongan"}
+                      </span>
+                      <div>{getRuleBadge(comp.calculation_rule)}</div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {comp.calculation_rule === 'fixed' && (
+                      <span className="text-sm font-bold text-gray-800">
+                        Rp {formatRupiah(comp.default_amount)}
+                      </span>
+                    )}
+                    {comp.calculation_rule === 'attendance' && (
+                      <div>
+                        <span className="text-sm font-bold text-gray-800">
+                          Rp {formatRupiah(comp.default_amount)}
+                        </span>
+                        <span className="text-[11px] text-gray-400 block">/ hari kehadiran</span>
+                      </div>
+                    )}
+                    {comp.calculation_rule === 'percentage' && (
+                      <div>
+                        <span className="text-sm font-black text-purple-700">
+                          {comp.percentage_value}%
+                        </span>
+                        <span className="text-[11px] text-gray-400 block">
+                          dari {comp.percentage_basis === 'basic_salary' ? 'Gaji Pokok' : 'Gross'}
+                        </span>
+                      </div>
+                    )}
+                    {comp.calculation_rule === 'formula' && (
+                      <div className="max-w-[220px]" title={comp.formula_expression || ""}>
+                        <code className="text-xs font-mono bg-gray-100 px-2 py-1 rounded text-gray-700 block truncate">
+                          {comp.formula_expression}
+                        </code>
+                      </div>
+                    )}
+                    {comp.calculation_rule === 'adhoc' && (
+                      <span className="text-xs italic text-gray-500 font-medium">Diinput saat periode payroll</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
+                    {getTriggerBadge(comp.triggers)}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-xs font-semibold text-gray-600 block">
+                      {getAssignmentText(comp.assignments)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    {comp.is_taxable ? (
+                      <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                        Kena Pajak
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
+                        Non-Pajak
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <button
+                      onClick={() => handleToggleActive(comp)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                        comp.is_active ? "bg-emerald-500" : "bg-gray-200"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          comp.is_active ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        onClick={() => handleOpenEdit(comp)}
+                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                        title="Edit Komponen"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(comp)}
+                        className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                        title="Hapus Komponen"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
   };
 
   return (
@@ -525,169 +782,7 @@ export default function PayrollComponentsPage() {
 
       {/* ═══ Component Table ═══ */}
       <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
-        {loading ? (
-          <div className="py-24 flex flex-col items-center justify-center gap-3">
-            <Loader2 className="animate-spin text-[#8B0000]" size={36} />
-            <p className="text-gray-400 font-medium text-sm">Memuat komponen penggajian...</p>
-          </div>
-        ) : filteredComponents.length === 0 ? (
-          <div className="py-20 text-center px-4">
-            <div className="w-16 h-16 rounded-3xl bg-gray-50 text-gray-400 flex items-center justify-center mx-auto mb-3">
-              <Coins size={32} />
-            </div>
-            <h3 className="text-base font-bold text-gray-800">Tidak ada komponen ditemukan</h3>
-            <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1">
-              Buat komponen gaji baru seperti Tunjangan Komunikasi, Uang Transport, Bonus Tahunan, atau Potongan Koperasi.
-            </p>
-            <button
-              onClick={handleOpenCreate}
-              className="mt-5 px-5 py-2.5 bg-[#8B0000] text-white rounded-xl text-xs font-bold shadow-md hover:bg-[#700000] transition-all"
-            >
-              + Tambah Komponen Baru
-            </button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-gray-50/70 border-b border-gray-100">
-                <tr>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest pl-8">Komponen</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Tipe & Aturan</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Nominal / Rumus</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Pemicu (Trigger)</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Penerima</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">PPh 21</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Status</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filteredComponents.map((comp) => {
-                  const isEarning = comp.type === "earning";
-                  return (
-                    <tr key={comp.id} className="hover:bg-gray-50/60 transition-colors group">
-                      <td className="px-6 py-4 pl-8">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shrink-0 ${
-                              isEarning ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
-                            }`}
-                          >
-                            {isEarning ? "+" : "-"}
-                          </div>
-                          <div>
-                            <span className="font-bold text-gray-900 block text-sm">{comp.name}</span>
-                            <span className="text-[11px] font-mono text-gray-400 block mt-0.5 tracking-wider uppercase">
-                              {comp.code}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <span
-                            className={`inline-block text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                              isEarning ? "bg-emerald-100/60 text-emerald-700" : "bg-rose-100/60 text-rose-700"
-                            }`}
-                          >
-                            {isEarning ? "Pendapatan" : "Potongan"}
-                          </span>
-                          <div>{getRuleBadge(comp.calculation_rule)}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        {comp.calculation_rule === 'fixed' && (
-                          <span className="text-sm font-bold text-gray-800">
-                            Rp {formatRupiah(comp.default_amount)}
-                          </span>
-                        )}
-                        {comp.calculation_rule === 'attendance' && (
-                          <div>
-                            <span className="text-sm font-bold text-gray-800">
-                              Rp {formatRupiah(comp.default_amount)}
-                            </span>
-                            <span className="text-[11px] text-gray-400 block">/ hari kehadiran</span>
-                          </div>
-                        )}
-                        {comp.calculation_rule === 'percentage' && (
-                          <div>
-                            <span className="text-sm font-black text-purple-700">
-                              {comp.percentage_value}%
-                            </span>
-                            <span className="text-[11px] text-gray-400 block">
-                              dari {comp.percentage_basis === 'basic_salary' ? 'Gaji Pokok' : 'Gross'}
-                            </span>
-                          </div>
-                        )}
-                        {comp.calculation_rule === 'formula' && (
-                          <div className="max-w-[220px]" title={comp.formula_expression || ""}>
-                            <code className="text-xs font-mono bg-gray-100 px-2 py-1 rounded text-gray-700 block truncate">
-                              {comp.formula_expression}
-                            </code>
-                          </div>
-                        )}
-                        {comp.calculation_rule === 'adhoc' && (
-                          <span className="text-xs italic text-gray-500 font-medium">Diinput saat periode payroll</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {getTriggerBadge(comp.triggers)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-xs font-semibold text-gray-600 block">
-                          {getAssignmentText(comp.assignments)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        {comp.is_taxable ? (
-                          <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
-                            Kena Pajak
-                          </span>
-                        ) : (
-                          <span className="text-[11px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
-                            Non-Pajak
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => handleToggleActive(comp)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                            comp.is_active ? "bg-emerald-500" : "bg-gray-200"
-                          }`}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              comp.is_active ? "translate-x-6" : "translate-x-1"
-                            }`}
-                          />
-                        </button>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => handleOpenEdit(comp)}
-                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                            title="Edit Komponen"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(comp)}
-                            className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                            title="Hapus Komponen"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {renderTableContent()}
       </div>
 
       {/* ═══ Create / Edit Modal ═══ */}
@@ -729,7 +824,7 @@ export default function PayrollComponentsPage() {
                   <button
                     key={tItem.id}
                     type="button"
-                    onClick={() => setActiveModalTab(tItem.id as any)}
+                    onClick={() => setActiveModalTab(tItem.id as ModalTab)}
                     className={`flex items-center gap-2 py-3.5 font-bold text-xs border-b-2 transition-all ${
                       active
                         ? "border-[#8B0000] text-[#8B0000]"
@@ -750,10 +845,11 @@ export default function PayrollComponentsPage() {
                 <div className="space-y-5 animate-in fade-in duration-200">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-black text-gray-600 uppercase tracking-wider">
+                      <label htmlFor="comp-name-input" className="text-xs font-black text-gray-600 uppercase tracking-wider">
                         Nama Komponen <span className="text-rose-500">*</span>
                       </label>
                       <input
+                        id="comp-name-input"
                         type="text"
                         required
                         value={formData.name}
@@ -762,7 +858,7 @@ export default function PayrollComponentsPage() {
                           setFormData(prev => ({
                             ...prev,
                             name: val,
-                            code: prev.code ? prev.code : val.toUpperCase().replace(/[^A-Z0-9]/g, "_").substring(0, 30),
+                            code: prev.code ? prev.code : val.toUpperCase().replaceAll(/[^A-Z0-9]/g, "_").substring(0, 30),
                           }));
                         }}
                         placeholder="Contoh: Tunjangan Makan, Bonus Loyalitas"
@@ -771,13 +867,14 @@ export default function PayrollComponentsPage() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-black text-gray-600 uppercase tracking-wider">
+                      <label htmlFor="comp-code-input" className="text-xs font-black text-gray-600 uppercase tracking-wider">
                         Kode Komponen (Unik)
                       </label>
                       <input
+                        id="comp-code-input"
                         type="text"
                         value={formData.code}
-                        onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "") }))}
+                        onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value.toUpperCase().replaceAll(/[^A-Z0-9_]/g, "") }))}
                         placeholder="Contoh: TUNJ_MAKAN"
                         className="w-full h-12 bg-gray-50 border-none rounded-2xl px-4 font-mono font-bold text-gray-700 uppercase focus:ring-2 focus:ring-[#8B0000]/20 outline-none"
                       />
@@ -786,9 +883,9 @@ export default function PayrollComponentsPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-black text-gray-600 uppercase tracking-wider">
+                      <span className="block text-xs font-black text-gray-600 uppercase tracking-wider">
                         Tipe Komponen <span className="text-rose-500">*</span>
-                      </label>
+                      </span>
                       <div className="grid grid-cols-2 gap-3">
                         <button
                           type="button"
@@ -818,11 +915,12 @@ export default function PayrollComponentsPage() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-black text-gray-600 uppercase tracking-wider">
+                      <span className="block text-xs font-black text-gray-600 uppercase tracking-wider">
                         Objek PPh 21
-                      </label>
-                      <label className="flex items-center gap-3 h-12 bg-gray-50 px-4 rounded-2xl cursor-pointer border border-transparent hover:border-gray-200">
+                      </span>
+                      <label htmlFor="comp-taxable-checkbox" className="flex items-center gap-3 h-12 bg-gray-50 px-4 rounded-2xl cursor-pointer border border-transparent hover:border-gray-200">
                         <input
+                          id="comp-taxable-checkbox"
                           type="checkbox"
                           checked={formData.is_taxable}
                           onChange={(e) => setFormData(prev => ({ ...prev, is_taxable: e.target.checked }))}
@@ -836,10 +934,11 @@ export default function PayrollComponentsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-black text-gray-600 uppercase tracking-wider">
+                    <label htmlFor="comp-desc-textarea" className="text-xs font-black text-gray-600 uppercase tracking-wider">
                       Deskripsi / Catatan Peraturan Perusahaan
                     </label>
                     <textarea
+                      id="comp-desc-textarea"
                       rows={3}
                       value={formData.description}
                       onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
@@ -854,9 +953,9 @@ export default function PayrollComponentsPage() {
               {activeModalTab === 'rule' && (
                 <div className="space-y-6 animate-in fade-in duration-200">
                   <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-600 uppercase tracking-wider">
+                    <span className="block text-xs font-black text-gray-600 uppercase tracking-wider">
                       Pilih Metode Kalkulasi <span className="text-rose-500">*</span>
-                    </label>
+                    </span>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       {[
                         { id: 'fixed', title: 'Nominal Tetap', desc: 'Nilai rupiah pasti setiap bulan' },
@@ -865,10 +964,11 @@ export default function PayrollComponentsPage() {
                         { id: 'formula', title: 'Formula Kustom', desc: 'Rumus matematika logika fleksibel' },
                         { id: 'adhoc', title: 'Ad-Hoc / Variabel', desc: 'Diinput manual saat draft penggajian' },
                       ].map((item) => (
-                        <div
+                        <button
                           key={item.id}
+                          type="button"
                           onClick={() => setFormData(prev => ({ ...prev, calculation_rule: item.id as any }))}
-                          className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                          className={`p-4 rounded-2xl border-2 text-left cursor-pointer transition-all ${
                             formData.calculation_rule === item.id
                               ? "border-[#8B0000] bg-red-50/40 shadow-sm"
                               : "border-gray-100 bg-gray-50/50 hover:bg-gray-100"
@@ -876,7 +976,7 @@ export default function PayrollComponentsPage() {
                         >
                           <div className="font-bold text-xs text-gray-900">{item.title}</div>
                           <div className="text-[11px] text-gray-400 mt-1 leading-snug">{item.desc}</div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -884,10 +984,11 @@ export default function PayrollComponentsPage() {
                   {/* Rule Specific Fields */}
                   {formData.calculation_rule === 'fixed' && (
                     <div className="p-5 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-2">
-                      <label className="text-xs font-black text-blue-900 uppercase tracking-wider">
+                      <label htmlFor="comp-fixed-amount-input" className="text-xs font-black text-blue-900 uppercase tracking-wider">
                         Nominal Rupiah (Rp)
                       </label>
                       <input
+                        id="comp-fixed-amount-input"
                         type="number"
                         min={0}
                         value={formData.default_amount}
@@ -903,10 +1004,11 @@ export default function PayrollComponentsPage() {
 
                   {formData.calculation_rule === 'attendance' && (
                     <div className="p-5 bg-emerald-50/50 rounded-2xl border border-emerald-100 space-y-2">
-                      <label className="text-xs font-black text-emerald-900 uppercase tracking-wider">
+                      <label htmlFor="comp-attendance-amount-input" className="text-xs font-black text-emerald-900 uppercase tracking-wider">
                         Nominal Per Hari Hadir (Rp)
                       </label>
                       <input
+                        id="comp-attendance-amount-input"
                         type="number"
                         min={0}
                         value={formData.default_amount}
@@ -924,10 +1026,11 @@ export default function PayrollComponentsPage() {
                     <div className="p-5 bg-purple-50/50 rounded-2xl border border-purple-100 space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                          <label className="text-xs font-black text-purple-900 uppercase tracking-wider">
+                          <label htmlFor="comp-percentage-value-input" className="text-xs font-black text-purple-900 uppercase tracking-wider">
                             Persentase (%)
                           </label>
                           <input
+                            id="comp-percentage-value-input"
                             type="number"
                             step="0.01"
                             min={0}
@@ -939,10 +1042,11 @@ export default function PayrollComponentsPage() {
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-xs font-black text-purple-900 uppercase tracking-wider">
+                          <label htmlFor="comp-percentage-basis-select" className="text-xs font-black text-purple-900 uppercase tracking-wider">
                             Dihitung Dari Basis
                           </label>
                           <select
+                            id="comp-percentage-basis-select"
                             value={formData.percentage_basis}
                             onChange={(e) => setFormData(prev => ({ ...prev, percentage_basis: e.target.value }))}
                             className="w-full h-12 bg-white border border-purple-200 rounded-xl px-4 font-bold text-sm text-gray-800 focus:ring-2 focus:ring-purple-400 outline-none"
@@ -959,7 +1063,7 @@ export default function PayrollComponentsPage() {
                     <div className="p-5 bg-amber-50/50 rounded-2xl border border-amber-200 space-y-4">
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <label className="text-xs font-black text-amber-900 uppercase tracking-wider">
+                          <label htmlFor="comp-formula-expr-input" className="text-xs font-black text-amber-900 uppercase tracking-wider">
                             Ekspresi Rumus Formula
                           </label>
                           <span className="text-[11px] text-amber-700 font-medium">
@@ -967,6 +1071,7 @@ export default function PayrollComponentsPage() {
                           </span>
                         </div>
                         <input
+                          id="comp-formula-expr-input"
                           type="text"
                           value={formData.formula_expression}
                           onChange={(e) => setFormData(prev => ({ ...prev, formula_expression: e.target.value }))}
@@ -1020,8 +1125,9 @@ export default function PayrollComponentsPage() {
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-gray-100">
                           <div>
-                            <label className="text-[10px] text-gray-400 font-bold block">Gaji Pokok</label>
+                            <label htmlFor="sim-basic-salary-input" className="text-[10px] text-gray-400 font-bold block">Gaji Pokok</label>
                             <input
+                              id="sim-basic-salary-input"
                               type="number"
                               value={simContext.basic_salary}
                               onChange={(e) => setSimContext(prev => ({ ...prev, basic_salary: Number(e.target.value) }))}
@@ -1029,8 +1135,9 @@ export default function PayrollComponentsPage() {
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-400 font-bold block">Hari Hadir</label>
+                            <label htmlFor="sim-attendance-days-input" className="text-[10px] text-gray-400 font-bold block">Hari Hadir</label>
                             <input
+                              id="sim-attendance-days-input"
                               type="number"
                               value={simContext.attendance_days}
                               onChange={(e) => setSimContext(prev => ({ ...prev, attendance_days: Number(e.target.value) }))}
@@ -1038,8 +1145,9 @@ export default function PayrollComponentsPage() {
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-400 font-bold block">Hari Efektif</label>
+                            <label htmlFor="sim-working-days-input" className="text-[10px] text-gray-400 font-bold block">Hari Efektif</label>
                             <input
+                              id="sim-working-days-input"
                               type="number"
                               value={simContext.total_working_days}
                               onChange={(e) => setSimContext(prev => ({ ...prev, total_working_days: Number(e.target.value) }))}
@@ -1047,8 +1155,9 @@ export default function PayrollComponentsPage() {
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-400 font-bold block">Masa Kerja (Thn)</label>
+                            <label htmlFor="sim-tenure-years-input" className="text-[10px] text-gray-400 font-bold block">Masa Kerja (Thn)</label>
                             <input
+                              id="sim-tenure-years-input"
                               type="number"
                               value={simContext.tenure_years}
                               onChange={(e) => setSimContext(prev => ({ ...prev, tenure_years: Number(e.target.value) }))}
@@ -1070,8 +1179,9 @@ export default function PayrollComponentsPage() {
                         Komponen ini dapat ditambahkan kapan saja secara manual saat Anda meninjau Draft Payroll di halaman Persetujuan Payroll.
                       </p>
                       <div className="pt-2">
-                        <label className="text-xs font-bold text-gray-700 block mb-1">Nominal Default (Opsional):</label>
+                        <label htmlFor="comp-adhoc-amount-input" className="text-xs font-bold text-gray-700 block mb-1">Nominal Default (Opsional):</label>
                         <input
+                          id="comp-adhoc-amount-input"
                           type="number"
                           value={formData.default_amount}
                           onChange={(e) => setFormData(prev => ({ ...prev, default_amount: e.target.value }))}
@@ -1088,9 +1198,9 @@ export default function PayrollComponentsPage() {
               {activeModalTab === 'trigger' && (
                 <div className="space-y-6 animate-in fade-in duration-200">
                   <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-600 uppercase tracking-wider">
+                    <span className="block text-xs font-black text-gray-600 uppercase tracking-wider">
                       Kapan Komponen Ini Otomatis Diberikan?
-                    </label>
+                    </span>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {[
                         {
@@ -1127,10 +1237,11 @@ export default function PayrollComponentsPage() {
                         const Icon = item.icon;
                         const isSelected = formData.trigger_type === item.id;
                         return (
-                          <div
+                          <button
                             key={item.id}
+                            type="button"
                             onClick={() => setFormData(prev => ({ ...prev, trigger_type: item.id as any }))}
-                            className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                            className={`p-4 rounded-2xl border-2 text-left cursor-pointer transition-all flex items-start gap-3 ${
                               isSelected
                                 ? "border-[#8B0000] bg-red-50/40 shadow-sm"
                                 : "border-gray-100 bg-gray-50/50 hover:bg-gray-100"
@@ -1143,7 +1254,7 @@ export default function PayrollComponentsPage() {
                               <div className="font-bold text-xs text-gray-900">{item.title}</div>
                               <div className="text-[11px] text-gray-400 mt-1 leading-snug">{item.desc}</div>
                             </div>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
@@ -1155,8 +1266,9 @@ export default function PayrollComponentsPage() {
                       <div className="font-bold text-xs text-blue-900">Konfigurasi Tanggal & Bulan Kalender</div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="text-[11px] font-bold text-blue-800 block mb-1">Bulan</label>
+                          <label htmlFor="trigger-month-select" className="text-[11px] font-bold text-blue-800 block mb-1">Bulan</label>
                           <select
+                            id="trigger-month-select"
                             value={formData.trigger_config?.month || 8}
                             onChange={(e) => setFormData(prev => ({
                               ...prev,
@@ -1170,8 +1282,9 @@ export default function PayrollComponentsPage() {
                           </select>
                         </div>
                         <div>
-                          <label className="text-[11px] font-bold text-blue-800 block mb-1">Hari / Tanggal (1-31)</label>
+                          <label htmlFor="trigger-day-input" className="text-[11px] font-bold text-blue-800 block mb-1">Hari / Tanggal (1-31)</label>
                           <input
+                            id="trigger-day-input"
                             type="number"
                             min={1}
                             max={31}
@@ -1192,8 +1305,9 @@ export default function PayrollComponentsPage() {
                       <div className="font-bold text-xs text-amber-900">Konfigurasi Rentang Tanggal</div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="text-[11px] font-bold text-amber-800 block mb-1">Tanggal Mulai</label>
+                          <label htmlFor="trigger-start-date-input" className="text-[11px] font-bold text-amber-800 block mb-1">Tanggal Mulai</label>
                           <input
+                            id="trigger-start-date-input"
                             type="date"
                             value={formData.trigger_config?.start_date || ""}
                             onChange={(e) => setFormData(prev => ({
@@ -1204,8 +1318,9 @@ export default function PayrollComponentsPage() {
                           />
                         </div>
                         <div>
-                          <label className="text-[11px] font-bold text-amber-800 block mb-1">Tanggal Selesai</label>
+                          <label htmlFor="trigger-end-date-input" className="text-[11px] font-bold text-amber-800 block mb-1">Tanggal Selesai</label>
                           <input
+                            id="trigger-end-date-input"
                             type="date"
                             value={formData.trigger_config?.end_date || ""}
                             onChange={(e) => setFormData(prev => ({
@@ -1224,8 +1339,9 @@ export default function PayrollComponentsPage() {
                       <div className="font-bold text-xs text-purple-900">Konfigurasi Ulang Tahun Masa Kerja</div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="text-[11px] font-bold text-purple-800 block mb-1">Minimal Masa Kerja (Tahun)</label>
+                          <label htmlFor="trigger-min-tenure-input" className="text-[11px] font-bold text-purple-800 block mb-1">Minimal Masa Kerja (Tahun)</label>
                           <input
+                            id="trigger-min-tenure-input"
                             type="number"
                             min={1}
                             value={formData.trigger_config?.min_tenure_years || 1}
@@ -1237,8 +1353,9 @@ export default function PayrollComponentsPage() {
                           />
                         </div>
                         <div>
-                          <label className="text-[11px] font-bold text-purple-800 block mb-1">Diberikan Di Bulan Join Saja?</label>
+                          <label htmlFor="trigger-exact-anniversary-select" className="text-[11px] font-bold text-purple-800 block mb-1">Diberikan Di Bulan Join Saja?</label>
                           <select
+                            id="trigger-exact-anniversary-select"
                             value={formData.trigger_config?.exact_anniversary_month ? "yes" : "no"}
                             onChange={(e) => setFormData(prev => ({
                               ...prev,
@@ -1260,19 +1377,20 @@ export default function PayrollComponentsPage() {
               {activeModalTab === 'assignment' && (
                 <div className="space-y-6 animate-in fade-in duration-200">
                   <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-600 uppercase tracking-wider">
+                    <span className="block text-xs font-black text-gray-600 uppercase tracking-wider">
                       Siapa Yang Berhak Menerima Komponen Ini?
-                    </label>
+                    </span>
                     <div className="grid grid-cols-3 gap-3">
                       {[
                         { id: 'global', title: 'Seluruh Karyawan', desc: 'Berlaku otomatis ke semua pegawai perusahaan ini' },
                         { id: 'role', title: 'Berdasarkan Jabatan (Role)', desc: 'Berlaku hanya untuk role tertentu' },
                         { id: 'users', title: 'Karyawan Spesifik', desc: 'Pilih satu per satu nama karyawan' },
                       ].map((item) => (
-                        <div
+                        <button
                           key={item.id}
+                          type="button"
                           onClick={() => setFormData(prev => ({ ...prev, assignment_type: item.id as any }))}
-                          className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                          className={`p-4 rounded-2xl border-2 text-left cursor-pointer transition-all ${
                             formData.assignment_type === item.id
                               ? "border-[#8B0000] bg-red-50/40 shadow-sm"
                               : "border-gray-100 bg-gray-50/50 hover:bg-gray-100"
@@ -1280,17 +1398,18 @@ export default function PayrollComponentsPage() {
                         >
                           <div className="font-bold text-xs text-gray-900">{item.title}</div>
                           <div className="text-[11px] text-gray-400 mt-1 leading-snug">{item.desc}</div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
 
                   {formData.assignment_type === 'role' && (
                     <div className="p-5 bg-gray-50 rounded-2xl border border-gray-200 space-y-2">
-                      <label className="text-xs font-black text-gray-700 uppercase tracking-wider">
+                      <label htmlFor="assignment-role-select" className="text-xs font-black text-gray-700 uppercase tracking-wider">
                         Pilih Jabatan / Role Target
                       </label>
                       <select
+                        id="assignment-role-select"
                         value={formData.role_id}
                         onChange={(e) => setFormData(prev => ({ ...prev, role_id: e.target.value }))}
                         className="w-full h-12 bg-white border border-gray-300 rounded-xl px-4 font-bold text-sm text-gray-800 focus:ring-2 focus:ring-[#8B0000]/20 outline-none"
@@ -1308,9 +1427,9 @@ export default function PayrollComponentsPage() {
                   {formData.assignment_type === 'users' && (
                     <div className="p-5 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs font-black text-gray-700 uppercase tracking-wider">
+                        <span className="text-xs font-black text-gray-700 uppercase tracking-wider">
                           Pilih Karyawan ({formData.user_ids.length} dipilih)
-                        </label>
+                        </span>
                         <button
                           type="button"
                           onClick={() => setFormData(prev => ({ ...prev, user_ids: [] }))}
@@ -1333,13 +1452,7 @@ export default function PayrollComponentsPage() {
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setFormData(prev => ({ ...prev, user_ids: [...prev.user_ids, emp.id] }));
-                                    } else {
-                                      setFormData(prev => ({ ...prev, user_ids: prev.user_ids.filter(id => id !== emp.id) }));
-                                    }
-                                  }}
+                                  onChange={(e) => handleToggleUserId(emp.id, e.target.checked)}
                                   className="w-4 h-4 rounded text-[#8B0000] focus:ring-[#8B0000]"
                                 />
                                 <span className="text-xs font-semibold">{emp.name}</span>
@@ -1361,7 +1474,7 @@ export default function PayrollComponentsPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        const tabs: ('basic' | 'rule' | 'trigger' | 'assignment')[] = ['basic', 'rule', 'trigger', 'assignment'];
+                        const tabs: ModalTab[] = ['basic', 'rule', 'trigger', 'assignment'];
                         const prevIdx = tabs.indexOf(activeModalTab) - 1;
                         if (prevIdx >= 0) setActiveModalTab(tabs[prevIdx]);
                       }}
@@ -1373,19 +1486,7 @@ export default function PayrollComponentsPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {activeModalTab !== 'assignment' ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const tabs: ('basic' | 'rule' | 'trigger' | 'assignment')[] = ['basic', 'rule', 'trigger', 'assignment'];
-                        const nextIdx = tabs.indexOf(activeModalTab) + 1;
-                        if (nextIdx < tabs.length) setActiveModalTab(tabs[nextIdx]);
-                      }}
-                      className="px-6 h-11 bg-gray-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-all shadow-sm"
-                    >
-                      Lanjut Langkah Berikutnya →
-                    </button>
-                  ) : (
+                  {activeModalTab === 'assignment' ? (
                     <button
                       type="submit"
                       disabled={submitting}
@@ -1393,6 +1494,18 @@ export default function PayrollComponentsPage() {
                     >
                       {submitting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                       {editingComponent ? "Simpan Perubahan Komponen" : "Buat Komponen Penggajian"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const tabs: ModalTab[] = ['basic', 'rule', 'trigger', 'assignment'];
+                        const nextIdx = tabs.indexOf(activeModalTab) + 1;
+                        if (nextIdx < tabs.length) setActiveModalTab(tabs[nextIdx]);
+                      }}
+                      className="px-6 h-11 bg-gray-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                    >
+                      Lanjut Langkah Berikutnya →
                     </button>
                   )}
                 </div>

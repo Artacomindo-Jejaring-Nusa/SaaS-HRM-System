@@ -7,7 +7,6 @@ import {
   X, 
   Sliders, 
   Users, 
-  ShieldCheck, 
   Search, 
   CheckCircle2, 
   XCircle, 
@@ -15,12 +14,9 @@ import {
   RefreshCw, 
   Layers, 
   User, 
-  Building2, 
   CheckSquare, 
   Square,
-  AlertCircle,
-  ToggleLeft,
-  ToggleRight
+  AlertCircle
 } from 'lucide-react';
 
 interface RoleSetting {
@@ -52,11 +48,17 @@ interface TrackingSettingsModalProps {
   onSettingsChanged?: () => void;
 }
 
+function getRoleActiveBadgeClass(isAllActive: boolean, isPartial: boolean): string {
+  if (isAllActive) return 'bg-emerald-100 text-emerald-700';
+  if (isPartial) return 'bg-amber-100 text-amber-700';
+  return 'bg-slate-100 text-slate-500';
+}
+
 export default function TrackingSettingsModal({
   isOpen,
   onClose,
   onSettingsChanged,
-}: TrackingSettingsModalProps) {
+}: Readonly<TrackingSettingsModalProps>) {
   const [activeTab, setActiveTab] = useState<'roles' | 'users'>('roles');
   const [roles, setRoles] = useState<RoleSetting[]>([]);
   const [users, setUsers] = useState<UserSetting[]>([]);
@@ -213,6 +215,225 @@ export default function TrackingSettingsModal({
     );
   };
 
+  const renderRolesContent = () => {
+    if (loading) {
+      return (
+        <div className="py-16 flex flex-col items-center justify-center text-slate-400">
+          <Loader2 size={32} className="animate-spin text-orange-500 mb-2" />
+          <p className="text-xs font-semibold">Memuat daftar divisi...</p>
+        </div>
+      );
+    }
+
+    if (roles.length === 0) {
+      return (
+        <div className="py-12 text-center text-slate-400">
+          <AlertCircle size={32} className="mx-auto mb-2 opacity-50" />
+          <p className="text-xs font-semibold">Tidak ada data divisi ditemukan.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        {roles.map((role) => {
+          const isUpdating = updatingId === `role-${role.id}`;
+          const isAllActive = role.total_users > 0 && role.enabled_users === role.total_users;
+          const isPartial = role.enabled_users > 0 && role.enabled_users < role.total_users;
+
+          return (
+            <div
+              key={role.id}
+              className={`p-4 rounded-2xl border transition-all duration-200 flex items-center justify-between ${
+                role.is_tracking_enabled
+                  ? 'bg-orange-50/20 border-orange-200 shadow-sm'
+                  : 'bg-slate-50/50 border-slate-200/80 opacity-75'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
+                    role.is_tracking_enabled
+                      ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
+                      : 'bg-slate-200 text-slate-500'
+                  }`}
+                >
+                  <Layers size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-800">{role.name}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {role.total_users} Anggota
+                    </span>
+                    <span className="text-slate-300">•</span>
+                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${getRoleActiveBadgeClass(isAllActive, isPartial)}`}>
+                      {role.enabled_users} Aktif
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Toggle Switch */}
+              <button
+                onClick={() => handleToggleRole(role)}
+                disabled={isUpdating || isBulkProcessing}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
+                  role.is_tracking_enabled ? 'bg-orange-600' : 'bg-slate-300'
+                }`}
+                title={role.is_tracking_enabled ? 'Klik untuk nonaktifkan' : 'Klik untuk aktifkan'}
+              >
+                {isUpdating ? (
+                  <span className="flex items-center justify-center w-full h-full">
+                    <Loader2 size={12} className="animate-spin text-white" />
+                  </span>
+                ) : (
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      role.is_tracking_enabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                )}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderUsersContent = () => {
+    if (loading) {
+      return (
+        <div className="py-16 flex flex-col items-center justify-center text-slate-400">
+          <Loader2 size={32} className="animate-spin text-orange-500 mb-2" />
+          <p className="text-xs font-semibold">Memuat data pegawai...</p>
+        </div>
+      );
+    }
+
+    if (users.length === 0) {
+      return (
+        <div className="py-12 text-center text-slate-400">
+          <AlertCircle size={32} className="mx-auto mb-2 opacity-50" />
+          <p className="text-xs font-semibold">Tidak ada data pegawai yang sesuai filter.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-sm">
+        {/* Table Header */}
+        <div className="bg-slate-50 px-4 py-2.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleSelectAllUsers}
+              className="text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              {selectedUserIds.length === users.length && users.length > 0 ? (
+                <CheckSquare size={16} className="text-orange-600" />
+              ) : (
+                <Square size={16} />
+              )}
+            </button>
+            <span>Pegawai</span>
+          </div>
+          <div className="flex items-center gap-8 pr-3">
+            <span className="hidden sm:inline">Divisi / Kantor</span>
+            <span>Status Live Tracking</span>
+          </div>
+        </div>
+
+        {/* Table Body */}
+        {users.map((u) => {
+          const isSelected = selectedUserIds.includes(u.id);
+          const isUpdating = updatingId === `user-${u.id}`;
+
+          return (
+            <div
+              key={u.id}
+              className={`px-4 py-3 flex items-center justify-between hover:bg-slate-50/80 transition-colors ${
+                isSelected ? 'bg-orange-50/40' : ''
+              }`}
+            >
+              {/* User Info */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => toggleSelectUser(u.id)}
+                  className="text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  {isSelected ? (
+                    <CheckSquare size={16} className="text-orange-600" />
+                  ) : (
+                    <Square size={16} />
+                  )}
+                </button>
+
+                <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center font-bold text-slate-500 shrink-0 border border-slate-200">
+                  {u.profile_photo_url ? (
+                    <img src={u.profile_photo_url} alt={u.name} className="w-full h-full object-cover" />
+                  ) : (
+                    u.name.charAt(0)
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-xs font-bold text-slate-800 leading-snug">{u.name}</p>
+                  <p className="text-[10px] text-slate-400">{u.nik || u.email || '-'}</p>
+                </div>
+              </div>
+
+              {/* Right: Division & Toggle Switch */}
+              <div className="flex items-center gap-6">
+                <div className="hidden sm:flex flex-col items-end text-right">
+                  <span className="text-xs font-semibold text-slate-700">
+                    {u.role?.name || 'Karyawan'}
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    {u.office?.name || u.company?.name || '-'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      u.is_tracking_enabled
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {u.is_tracking_enabled ? 'Aktif' : 'Nonaktif'}
+                  </span>
+
+                  <button
+                    onClick={() => handleToggleUser(u)}
+                    disabled={isUpdating || isBulkProcessing}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
+                      u.is_tracking_enabled ? 'bg-orange-600' : 'bg-slate-300'
+                    }`}
+                    title={u.is_tracking_enabled ? 'Klik untuk nonaktifkan' : 'Klik untuk aktifkan'}
+                  >
+                    {isUpdating ? (
+                      <span className="flex items-center justify-center w-full h-full">
+                        <Loader2 size={12} className="animate-spin text-white" />
+                      </span>
+                    ) : (
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          u.is_tracking_enabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -352,90 +573,7 @@ export default function TrackingSettingsModal({
               </div>
             </div>
 
-            {loading ? (
-              <div className="py-16 flex flex-col items-center justify-center text-slate-400">
-                <Loader2 size={32} className="animate-spin text-orange-500 mb-2" />
-                <p className="text-xs font-semibold">Memuat daftar divisi...</p>
-              </div>
-            ) : roles.length === 0 ? (
-              <div className="py-12 text-center text-slate-400">
-                <AlertCircle size={32} className="mx-auto mb-2 opacity-50" />
-                <p className="text-xs font-semibold">Tidak ada data divisi ditemukan.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                {roles.map((role) => {
-                  const isUpdating = updatingId === `role-${role.id}`;
-                  const isAllActive = role.total_users > 0 && role.enabled_users === role.total_users;
-                  const isPartial = role.enabled_users > 0 && role.enabled_users < role.total_users;
-
-                  return (
-                    <div
-                      key={role.id}
-                      className={`p-4 rounded-2xl border transition-all duration-200 flex items-center justify-between ${
-                        role.is_tracking_enabled
-                          ? 'bg-orange-50/20 border-orange-200 shadow-sm'
-                          : 'bg-slate-50/50 border-slate-200/80 opacity-75'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
-                            role.is_tracking_enabled
-                              ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-                              : 'bg-slate-200 text-slate-500'
-                          }`}
-                        >
-                          <Layers size={18} />
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-slate-800">{role.name}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[11px] font-semibold text-slate-500">
-                              {role.total_users} Anggota
-                            </span>
-                            <span className="text-slate-300">•</span>
-                            <span
-                              className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                                isAllActive
-                                  ? 'bg-emerald-100 text-emerald-700'
-                                  : isPartial
-                                  ? 'bg-amber-100 text-amber-700'
-                                  : 'bg-slate-100 text-slate-500'
-                              }`}
-                            >
-                              {role.enabled_users} Aktif
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Toggle Switch */}
-                      <button
-                        onClick={() => handleToggleRole(role)}
-                        disabled={isUpdating || isBulkProcessing}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
-                          role.is_tracking_enabled ? 'bg-orange-600' : 'bg-slate-300'
-                        }`}
-                        title={role.is_tracking_enabled ? 'Klik untuk nonaktifkan' : 'Klik untuk aktifkan'}
-                      >
-                        {isUpdating ? (
-                          <span className="flex items-center justify-center w-full h-full">
-                            <Loader2 size={12} className="animate-spin text-white" />
-                          </span>
-                        ) : (
-                          <span
-                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                              role.is_tracking_enabled ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                          />
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            {renderRolesContent()}
           </div>
         )}
 
@@ -507,127 +645,7 @@ export default function TrackingSettingsModal({
 
             {/* Users Table / List */}
             <div className="flex-1 overflow-y-auto p-4">
-              {loading ? (
-                <div className="py-16 flex flex-col items-center justify-center text-slate-400">
-                  <Loader2 size={32} className="animate-spin text-orange-500 mb-2" />
-                  <p className="text-xs font-semibold">Memuat data pegawai...</p>
-                </div>
-              ) : users.length === 0 ? (
-                <div className="py-12 text-center text-slate-400">
-                  <AlertCircle size={32} className="mx-auto mb-2 opacity-50" />
-                  <p className="text-xs font-semibold">Tidak ada data pegawai yang sesuai filter.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-sm">
-                  {/* Table Header */}
-                  <div className="bg-slate-50 px-4 py-2.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={toggleSelectAllUsers}
-                        className="text-slate-400 hover:text-slate-600 transition-colors"
-                      >
-                        {selectedUserIds.length === users.length && users.length > 0 ? (
-                          <CheckSquare size={16} className="text-orange-600" />
-                        ) : (
-                          <Square size={16} />
-                        )}
-                      </button>
-                      <span>Pegawai</span>
-                    </div>
-                    <div className="flex items-center gap-8 pr-3">
-                      <span className="hidden sm:inline">Divisi / Kantor</span>
-                      <span>Status Live Tracking</span>
-                    </div>
-                  </div>
-
-                  {/* Table Body */}
-                  {users.map((u) => {
-                    const isSelected = selectedUserIds.includes(u.id);
-                    const isUpdating = updatingId === `user-${u.id}`;
-
-                    return (
-                      <div
-                        key={u.id}
-                        className={`px-4 py-3 flex items-center justify-between hover:bg-slate-50/80 transition-colors ${
-                          isSelected ? 'bg-orange-50/40' : ''
-                        }`}
-                      >
-                        {/* User Info */}
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => toggleSelectUser(u.id)}
-                            className="text-slate-400 hover:text-slate-600 transition-colors"
-                          >
-                            {isSelected ? (
-                              <CheckSquare size={16} className="text-orange-600" />
-                            ) : (
-                              <Square size={16} />
-                            )}
-                          </button>
-
-                          <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center font-bold text-slate-500 shrink-0 border border-slate-200">
-                            {u.profile_photo_url ? (
-                              <img src={u.profile_photo_url} alt={u.name} className="w-full h-full object-cover" />
-                            ) : (
-                              u.name.charAt(0)
-                            )}
-                          </div>
-
-                          <div>
-                            <p className="text-xs font-bold text-slate-800 leading-snug">{u.name}</p>
-                            <p className="text-[10px] text-slate-400">{u.nik || u.email || '-'}</p>
-                          </div>
-                        </div>
-
-                        {/* Right: Division & Toggle Switch */}
-                        <div className="flex items-center gap-6">
-                          <div className="hidden sm:flex flex-col items-end text-right">
-                            <span className="text-xs font-semibold text-slate-700">
-                              {u.role?.name || 'Karyawan'}
-                            </span>
-                            <span className="text-[10px] text-slate-400">
-                              {u.office?.name || u.company?.name || '-'}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2.5">
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                u.is_tracking_enabled
-                                  ? 'bg-emerald-100 text-emerald-700'
-                                  : 'bg-slate-100 text-slate-500'
-                              }`}
-                            >
-                              {u.is_tracking_enabled ? 'Aktif' : 'Nonaktif'}
-                            </span>
-
-                            <button
-                              onClick={() => handleToggleUser(u)}
-                              disabled={isUpdating || isBulkProcessing}
-                              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
-                                u.is_tracking_enabled ? 'bg-orange-600' : 'bg-slate-300'
-                              }`}
-                              title={u.is_tracking_enabled ? 'Klik untuk nonaktifkan' : 'Klik untuk aktifkan'}
-                            >
-                              {isUpdating ? (
-                                <span className="flex items-center justify-center w-full h-full">
-                                  <Loader2 size={12} className="animate-spin text-white" />
-                                </span>
-                              ) : (
-                                <span
-                                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                    u.is_tracking_enabled ? 'translate-x-5' : 'translate-x-0'
-                                  }`}
-                                />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              {renderUsersContent()}
             </div>
           </div>
         )}

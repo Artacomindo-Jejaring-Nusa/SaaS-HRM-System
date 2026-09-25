@@ -31,8 +31,8 @@ export default function LoginPage() {
 
   // Check URL query parameter for unauthorized redirection
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
+    if (typeof globalThis.window !== "undefined") {
+      const params = new URLSearchParams(globalThis.location.search);
       if (params.get("unauthorized") === "1") {
         setError("Akses Website hanya diperuntukkan bagi Super Admin. Karyawan dan Manajer silakan masuk melalui Aplikasi Mobile On Time HRMS.");
       }

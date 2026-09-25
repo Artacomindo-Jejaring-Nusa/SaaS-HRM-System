@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { 
   Users, UserCheck, Search, Filter, Plus, Calendar, Star, MoreVertical,
   Eye, Edit, Trash2, CheckCircle, Clock, AlertCircle, X, ArrowUpRight,
-  Sparkles, SlidersHorizontal, CheckSquare, Square, Layers, Send
+  Sparkles, SlidersHorizontal, Send
 } from "lucide-react";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,6 +26,7 @@ interface PerformanceReview {
     name: string;
     nik: string;
     profile_photo_url: string | null;
+    role?: { name: string };
   };
   reviewer: {
     name: string;
@@ -45,6 +46,111 @@ interface BatchEmployeeRow {
   achievements: string;
   improvements: string;
   comments: string;
+}
+
+function getScoreBadgeClass(isHigh: boolean, isMed: boolean): string {
+  if (isHigh) return 'bg-emerald-100 text-emerald-800';
+  if (isMed) return 'bg-amber-100 text-amber-800';
+  return 'bg-red-100 text-red-800';
+}
+
+function getReviewSubmitLabel(submitting: boolean, status: string, editingId: number | null): string {
+  if (submitting) return "Menyimpan...";
+  if (status === 'published') {
+    return editingId ? "Perbarui & Terbitkan" : "Simpan & Terbitkan";
+  }
+  return editingId ? "Perbarui Draf" : "Simpan sebagai Draf";
+}
+
+function generatePDF(review: any) {
+  const doc = new jsPDF();
+  const logoUrl = "/logo.png"; // Public URL
+  
+  // Create an image element to get base64
+  const img = new (globalThis as any).Image();
+  img.src = logoUrl;
+  img.onload = () => {
+    // Header with Logo
+    doc.addImage(img, 'PNG', 20, 10, 30, 30);
+    
+    doc.setFontSize(22);
+    doc.setTextColor(139, 0, 0); // #8B0000
+    doc.setFont("helvetica", "bold");
+    doc.text("LAPORAN PENILAIAN KPI", 105, 25, { align: 'center' });
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Periode: ${review.period}`, 105, 33, { align: 'center' });
+    
+    // Employee Info
+    doc.setDrawColor(230);
+    doc.line(20, 45, 190, 45);
+    
+    doc.setFontSize(12);
+    doc.setTextColor(0);
+    doc.setFont("helvetica", "bold");
+    doc.text("INFORMASI KARYAWAN", 20, 55);
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Nama: ${review.user.name}`, 20, 62);
+    doc.text(`NIK: ${review.user.nik}`, 20, 67);
+    doc.text(`Jabatan: ${review.user.role?.name || "Karyawan"}`, 20, 72);
+    doc.text(`Penilai: ${review.reviewer.name}`, 20, 77);
+    doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 190, 62, { align: 'right' });
+
+    // Scores Table
+    autoTable(doc, {
+      startY: 85,
+      head: [['Kategori Penilaian', 'Skor']],
+      body: [
+        ['Kedisplinan', review.score_discipline],
+        ['Teknis / Kerja', review.score_technical],
+        ['Kerjasama Tim', review.score_cooperation],
+        ['Sikap / Attitude', review.score_attitude],
+        ['TOTAL SKOR (Rata-rata)', review.score_total],
+      ],
+      headStyles: { fillColor: [139, 0, 0] },
+      footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' }
+    });
+
+    // Notes
+    const finalY = (doc as any).lastAutoTable.finalY + 15;
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("CATATAN & EVALUASI", 20, finalY);
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("Pencapaian:", 20, finalY + 10);
+    doc.setFont("helvetica", "italic");
+    doc.text(review.achievements || "Tidak ada catatan pencapaian khusus.", 25, finalY + 16, { maxWidth: 160 });
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("Perlu Peningkatan:", 20, finalY + 30);
+    doc.setFont("helvetica", "italic");
+    doc.text(review.improvements || "Tetap pertahankan performa yang sudah baik.", 25, finalY + 36, { maxWidth: 160 });
+
+    // Footer
+    doc.setFont("helvetica", "normal");
+    doc.text("Reviewer,", 40, finalY + 60);
+    doc.text(review.reviewer.name, 40, finalY + 85);
+    
+    doc.text("Management,", 150, finalY + 60);
+    doc.text("Direktur HRD", 150, finalY + 85);
+
+    doc.save(`KPI_${review.user.name}_${review.period}.pdf`);
+  };
+  
+  img.onerror = () => {
+     // Fallback without logo if error
+     toast.warning("Gagal memuat logo, sistem akan mencetak tanpa logo.");
+     doc.setFontSize(22);
+     doc.setTextColor(139, 0, 0); 
+     doc.text("LAPORAN PENILAIAN KPI", 105, 25, { align: 'center' });
+     doc.save(`KPI_${review.user.name}_${review.period}.pdf`);
+  };
 }
 
 export default function PerformanceReviewsPage() {
@@ -83,7 +189,6 @@ export default function PerformanceReviewsPage() {
   const [batchRows, setBatchRows] = useState<BatchEmployeeRow[]>([]);
   const [batchSearch, setBatchSearch] = useState("");
   const [batchSubmitting, setBatchSubmitting] = useState(false);
-  const [presetScore, setPresetScore] = useState(80);
 
   const openBatchModal = async () => {
     let emps = employees;
@@ -94,6 +199,7 @@ export default function PerformanceReviewsPage() {
         emps = Array.isArray(rawData) ? rawData : (rawData?.data || []);
         setEmployees(emps);
       } catch (e) {
+        console.error("Gagal memuat data karyawan:", e);
         toast.error("Gagal memuat data karyawan");
         return;
       }
@@ -119,7 +225,6 @@ export default function PerformanceReviewsPage() {
   };
 
   const applyPresetToAll = (score: number) => {
-    setPresetScore(score);
     setBatchRows(prev => prev.map(r => r.selected ? {
       ...r,
       score_discipline: score,
@@ -280,7 +385,7 @@ export default function PerformanceReviewsPage() {
       await axiosInstance.post(`/kpi-reviews/${id}/publish`);
       toast.success("Review KPI berhasil diterbitkan!");
       fetchReviews();
-      if (viewingReview && viewingReview.id === id) {
+      if (viewingReview?.id === id) {
         setViewingReview({ ...viewingReview, status: 'published' });
       }
     } catch (e: any) {
@@ -300,98 +405,6 @@ export default function PerformanceReviewsPage() {
     } catch (e: any) {
       toast.error(e.response?.data?.message || "Gagal menerbitkan review massal");
     }
-  };
-
-  const generatePDF = (review: any) => {
-    const doc = new jsPDF();
-    const logoUrl = "/logo.png"; // Public URL
-    
-    // Create an image element to get base64
-    const img = new (window as any).Image();
-    img.src = logoUrl;
-    img.onload = () => {
-      // Header with Logo
-      doc.addImage(img, 'PNG', 20, 10, 30, 30);
-      
-      doc.setFontSize(22);
-      doc.setTextColor(139, 0, 0); // #8B0000
-      doc.setFont("helvetica", "bold");
-      doc.text("LAPORAN PENILAIAN KPI", 105, 25, { align: 'center' });
-      
-      doc.setFontSize(10);
-      doc.setTextColor(100);
-      doc.setFont("helvetica", "normal");
-      doc.text(`Periode: ${review.period}`, 105, 33, { align: 'center' });
-      
-      // Employee Info
-      doc.setDrawColor(230);
-      doc.line(20, 45, 190, 45);
-      
-      doc.setFontSize(12);
-      doc.setTextColor(0);
-      doc.setFont("helvetica", "bold");
-      doc.text("INFORMASI KARYAWAN", 20, 55);
-      
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text(`Nama: ${review.user.name}`, 20, 62);
-      doc.text(`NIK: ${review.user.nik}`, 20, 67);
-      doc.text(`Jabatan: ${review.user.role?.name || "Karyawan"}`, 20, 72);
-      doc.text(`Penilai: ${review.reviewer.name}`, 20, 77);
-      doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 190, 62, { align: 'right' });
-
-      // Scores Table
-      autoTable(doc, {
-        startY: 85,
-        head: [['Kategori Penilaian', 'Skor']],
-        body: [
-          ['Kedisplinan', review.score_discipline],
-          ['Teknis / Kerja', review.score_technical],
-          ['Kerjasama Tim', review.score_cooperation],
-          ['Sikap / Attitude', review.score_attitude],
-          ['TOTAL SKOR (Rata-rata)', review.score_total],
-        ],
-        headStyles: { fillColor: [139, 0, 0] },
-        footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' }
-      });
-
-      // Notes
-      const finalY = (doc as any).lastAutoTable.finalY + 15;
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "bold");
-      doc.text("CATATAN & EVALUASI", 20, finalY);
-      
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.text("Pencapaian:", 20, finalY + 10);
-      doc.setFont("helvetica", "italic");
-      doc.text(review.achievements || "Tidak ada catatan pencapaian khusus.", 25, finalY + 16, { maxWidth: 160 });
-      
-      doc.setFont("helvetica", "bold");
-      doc.text("Perlu Peningkatan:", 20, finalY + 30);
-      doc.setFont("helvetica", "italic");
-      doc.text(review.improvements || "Tetap pertahankan performa yang sudah baik.", 25, finalY + 36, { maxWidth: 160 });
-
-      // Footer
-      doc.setFont("helvetica", "normal");
-      doc.text("Reviewer,", 40, finalY + 60);
-      doc.text(review.reviewer.name, 40, finalY + 85);
-      
-      doc.text("Management,", 150, finalY + 60);
-      doc.text("Direktur HRD", 150, finalY + 85);
-
-      doc.save(`KPI_${review.user.name}_${review.period}.pdf`);
-    };
-    
-    img.onerror = () => {
-       // Fallback without logo if error
-       toast.warning("Gagal memuat logo, sistem akan mencetak tanpa logo.");
-       doc.setFontSize(22);
-       doc.setTextColor(139, 0, 0); 
-       doc.text("LAPORAN PENILAIAN KPI", 105, 25, { align: 'center' });
-       // ... (logic from before or just skip)
-       doc.save(`KPI_${review.user.name}_${review.period}.pdf`);
-    };
   };
 
   const handleDelete = async (id: number) => {
@@ -758,7 +771,7 @@ export default function PerformanceReviewsPage() {
                 </div>
 
                 <div className="space-y-2 pt-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Status Publikasi</label>
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none block">Status Publikasi</span>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
@@ -800,11 +813,7 @@ export default function PerformanceReviewsPage() {
                 disabled={submitting}
                 className="px-10 py-3 bg-[#8B0000] text-white rounded-2xl font-black shadow-xl shadow-red-900/20 hover:scale-[1.02] active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-2 cursor-pointer disabled:opacity-50"
                >
-                 {submitting 
-                   ? "Menyimpan..." 
-                   : formData.status === 'published' 
-                     ? (editingId ? "Perbarui & Terbitkan" : "Simpan & Terbitkan") 
-                     : (editingId ? "Perbarui Draf" : "Simpan sebagai Draf")} 
+                 {getReviewSubmitLabel(submitting, formData.status, editingId)} 
                  <ArrowUpRight size={16} />
                </button>
             </div>
@@ -993,7 +1002,7 @@ export default function PerformanceReviewsPage() {
                               max="100"
                               disabled={!row.selected}
                               value={row.score_discipline}
-                              onChange={(e) => updateBatchRow(row.user_id, 'score_discipline', parseInt(e.target.value) || 0)}
+                              onChange={(e) => updateBatchRow(row.user_id, 'score_discipline', Number.parseInt(e.target.value, 10) || 0)}
                               className="w-20 px-2 py-1.5 text-center font-bold bg-emerald-50/60 border border-emerald-200 text-emerald-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50"
                             />
                           </td>
@@ -1004,7 +1013,7 @@ export default function PerformanceReviewsPage() {
                               max="100"
                               disabled={!row.selected}
                               value={row.score_technical}
-                              onChange={(e) => updateBatchRow(row.user_id, 'score_technical', parseInt(e.target.value) || 0)}
+                              onChange={(e) => updateBatchRow(row.user_id, 'score_technical', Number.parseInt(e.target.value, 10) || 0)}
                               className="w-20 px-2 py-1.5 text-center font-bold bg-blue-50/60 border border-blue-200 text-blue-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50"
                             />
                           </td>
@@ -1015,7 +1024,7 @@ export default function PerformanceReviewsPage() {
                               max="100"
                               disabled={!row.selected}
                               value={row.score_cooperation}
-                              onChange={(e) => updateBatchRow(row.user_id, 'score_cooperation', parseInt(e.target.value) || 0)}
+                              onChange={(e) => updateBatchRow(row.user_id, 'score_cooperation', Number.parseInt(e.target.value, 10) || 0)}
                               className="w-20 px-2 py-1.5 text-center font-bold bg-amber-50/60 border border-amber-200 text-amber-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 disabled:opacity-50"
                             />
                           </td>
@@ -1026,16 +1035,12 @@ export default function PerformanceReviewsPage() {
                               max="100"
                               disabled={!row.selected}
                               value={row.score_attitude}
-                              onChange={(e) => updateBatchRow(row.user_id, 'score_attitude', parseInt(e.target.value) || 0)}
+                              onChange={(e) => updateBatchRow(row.user_id, 'score_attitude', Number.parseInt(e.target.value, 10) || 0)}
                               className="w-20 px-2 py-1.5 text-center font-bold bg-red-50/60 border border-red-200 text-red-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 disabled:opacity-50"
                             />
                           </td>
                           <td className="py-2 px-2 text-center">
-                            <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-black ${
-                              isHigh ? 'bg-emerald-100 text-emerald-800' :
-                              isMed ? 'bg-amber-100 text-amber-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
+                            <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-black ${getScoreBadgeClass(isHigh, isMed)}`}>
                               {avg}
                             </span>
                           </td>
