@@ -1,0 +1,78 @@
+# ==============================================================================
+# HRMS Narwasthu Group - Docker Compose STAGING Environment (Ultra-Lean)
+# ==============================================================================
+# - Terisolasi penuh dari container produksi.
+# - Menggunakan database terpisah: hrm_saas_staging (di MySQL yang sudah ada).
+# - Memory limit ketat (max 512M per service) agar tidak mengganggu RAM produksi.
+# - Port default Staging: 8088 (http://<IP-VM>:8088 atau via proxy subdomain).
+# ==============================================================================
+
+services:
+  # ── Backend Staging (Laravel) ───────────────────────────
+  backend-staging:
+    image: ghcr.io/ahmad-rizki21/saas-backend:staging
+    container_name: hrms-backend-staging
+    restart: unless-stopped
+    env_file: .env.staging
+    environment:
+      APP_ENV: staging
+      APP_DEBUG: "true"
+      DB_DATABASE: ${DB_DATABASE:-hrm_saas_staging}
+      DB_HOST: mysql-master
+      DB_READ_HOST: mysql-master
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          memory: 128M
+    volumes:
+      - backend_storage_staging:/var/www/html/storage/app/public
+      - backend_logs_staging:/var/www/html/storage/logs
+    networks:
+      - hrms-network
+
+  # ── Frontend Staging (Next.js) ──────────────────────────
+  frontend-staging:
+    image: ghcr.io/ahmad-rizki21/saas-frontend:staging
+    container_name: hrms-frontend-staging
+    restart: unless-stopped
+    env_file: .env.staging
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      - backend-staging
+    networks:
+      - hrms-network
+
+  # ── Staging Nginx Gateway (Port 8088) ────────────────────
+  nginx-proxy-staging:
+    image: nginx:1.27-alpine
+    container_name: hrms-proxy-staging
+    restart: unless-stopped
+    ports:
+      - "${STAGING_HTTP_PORT:-8088}:80"
+    volumes:
+      - ./docker/nginx/proxy-staging.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend-staging
+      - backend-staging
+    networks:
+      - hrms-network
+
+networks:
+  hrms-network:
+    external: true
+    name: hrms-network
+
+volumes:
+  backend_storage_staging:
+    name: saas-hrm-system_backend_storage_staging
+  backend_logs_staging:
+    name: saas-hrm-system_backend_logs_staging

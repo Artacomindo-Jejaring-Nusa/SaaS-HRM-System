@@ -7,8 +7,8 @@ pipeline {
         // Konfigurasi Registry GHCR
         REGISTRY = 'ghcr.io'
         IMAGE_OWNER = 'ahmad-rizki21'
-        BACKEND_IMAGE = "${REGISTRY}/${IMAGE_OWNER}/saas-backend:latest"
-        FRONTEND_IMAGE = "${REGISTRY}/${IMAGE_OWNER}/saas-frontend:latest"
+        BACKEND_IMAGE_NAME = "${REGISTRY}/${IMAGE_OWNER}/saas-backend"
+        FRONTEND_IMAGE_NAME = "${REGISTRY}/${IMAGE_OWNER}/saas-frontend"
         
         // Target Server Deployment (VM Aplikasi)
         TARGET_VM_IP = '192.168.222.5'
@@ -24,8 +24,13 @@ pipeline {
     stages {
         stage('Checkout Source Code') {
             steps {
-                // Menarik repositori otomatis dari Git SCM
                 checkout scm
+                script {
+                    def branch = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'main').replace('origin/', '')
+                    echo "=========================================================="
+                    echo " Mendeteksi Branch Aktif: [${branch}]"
+                    echo "=========================================================="
+                }
             }
         }
 
@@ -48,57 +53,178 @@ pipeline {
             }
         }
 
-        stage('Build & Push Docker Images') {
+        stage('Build & Push Docker Images (Staging)') {
+            when {
+                expression {
+                    def branch = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').replace('origin/', '')
+                    return branch == 'staging'
+                }
+            }
             steps {
                 script {
-                    // Login ke GHCR menggunakan kredensial Jenkins (Username & PAT)
                     withCredentials([usernamePassword(credentialsId: "${GHCR_AUTH_ID}", usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
                         sh "echo \${GH_TOKEN} | docker login ${REGISTRY} -u \${GH_USER} --password-stdin"
                         
-                        echo "Membangun Image Backend..."
-                        sh "docker build -t ${BACKEND_IMAGE} -f ./backend/Dockerfile ./backend"
-                        sh "docker push ${BACKEND_IMAGE}"
+                        echo "Membangun Image Backend (Staging)..."
+                        sh "docker build -t ${BACKEND_IMAGE_NAME}:staging -f ./backend/Dockerfile ./backend"
+                        sh "docker push ${BACKEND_IMAGE_NAME}:staging"
                         
-                        echo "Membangun Image Frontend..."
-                        sh "docker build --build-arg NEXT_PUBLIC_API_URL=https://ontime.jelantik.com/api -t ${FRONTEND_IMAGE} -f ./frontend/Dockerfile ./frontend"
-                        sh "docker push ${FRONTEND_IMAGE}"
+                        echo "Membangun Image Frontend (Staging)..."
+                        sh "docker build --build-arg NEXT_PUBLIC_API_URL=http://${TARGET_VM_IP}:8088/api -t ${FRONTEND_IMAGE_NAME}:staging -f ./frontend/Dockerfile ./frontend"
+                        sh "docker push ${FRONTEND_IMAGE_NAME}:staging"
                     }
                 }
             }
         }
 
-        stage('Deploy to VM Production') {
+        stage('Deploy to VM Staging') {
+            when {
+                expression {
+                    def branch = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').replace('origin/', '')
+                    return branch == 'staging'
+                }
+            }
             steps {
                 script {
+                    echo "=========================================================="
+                    echo " Memulai Deployment Lingkungan STAGING (Port 8088)"
+                    echo "=========================================================="
+                    
+                    // Siapkan file .env.staging
+                    sh '''
+                        if [ -f .env.staging.example ]; then
+                            cp .env.staging.example .env.staging
+                        fi
+                    '''
+                    
+                    def isLocal = sh(script: "[ -d '${TARGET_DIR}' ] && echo 'true' || echo 'false'", returnStdout: true).trim() == 'true'
+                    
+                    if (isLocal) {
+                        sh "cp docker-compose.staging.yml ${TARGET_DIR}/docker-compose.staging.yml"
+                        sh "mkdir -p ${TARGET_DIR}/docker/nginx"
+                        sh "cp docker/nginx/proxy-staging.conf ${TARGET_DIR}/docker/nginx/proxy-staging.conf"
+                        sh "cp .env.staging ${TARGET_DIR}/.env.staging"
+                        
+                        withCredentials([usernamePassword(credentialsId: "${GHCR_AUTH_ID}", usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+                            sh """
+                                cd ${TARGET_DIR}
+                                echo "\${GH_TOKEN}" | docker login ${REGISTRY} -u \${GH_USER} --password-stdin
+                                
+                                # Buat database staging jika belum ada
+                                docker exec -i hrms-mysql-master mysql -uroot -pOnTimeNarwastugo2026 -e "CREATE DATABASE IF NOT EXISTS hrm_saas_staging;" || true
+                                
+                                echo "Menarik Image Staging..."
+                                docker compose -f docker-compose.staging.yml pull
+                                
+                                echo "Mengaktifkan Container Staging..."
+                                docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --remove-orphans
+                                
+                                echo "Menjalankan migrasi database Staging..."
+                                sleep 5
+                                docker exec -i hrms-backend-staging php artisan migrate --force || true
+                                
+                                echo "Deployment Staging Sukses! Akses via: http://${TARGET_VM_IP}:8088"
+                            """
+                        }
+                    } else {
+                        withCredentials([sshUserPrivateKey(credentialsId: "${SSH_CREDENTIAL_ID}", keyFileVariable: 'SSH_KEY')]) {
+                            sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no docker-compose.staging.yml ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/docker-compose.staging.yml"
+                            sh "ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no ${TARGET_VM_USER}@${TARGET_VM_IP} 'mkdir -p ${TARGET_DIR}/docker/nginx'"
+                            sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no docker/nginx/proxy-staging.conf ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/docker/nginx/proxy-staging.conf"
+                            sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no .env.staging ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/.env.staging"
+                            
+                            withCredentials([usernamePassword(credentialsId: "${GHCR_AUTH_ID}", usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+                                sh """
+                                    ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no ${TARGET_VM_USER}@${TARGET_VM_IP} '
+                                        cd ${TARGET_DIR}
+                                        echo "\${GH_TOKEN}" | docker login ${REGISTRY} -u \${GH_USER} --password-stdin
+                                        docker exec -i hrms-mysql-master mysql -uroot -pOnTimeNarwastugo2026 -e "CREATE DATABASE IF NOT EXISTS hrm_saas_staging;" || true
+                                        docker compose -f docker-compose.staging.yml pull
+                                        docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --remove-orphans
+                                        sleep 5
+                                        docker exec -i hrms-backend-staging php artisan migrate --force || true
+                                        echo "Deployment Staging Sukses! Akses via: http://${TARGET_VM_IP}:8088"
+                                    '
+                                """
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Build & Push Docker Images (Production)') {
+            when {
+                expression {
+                    def branch = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').replace('origin/', '')
+                    return branch == 'main'
+                }
+            }
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: "${GHCR_AUTH_ID}", usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+                        sh "echo \${GH_TOKEN} | docker login ${REGISTRY} -u \${GH_USER} --password-stdin"
+                        
+                        echo "Membangun Image Backend (Production)..."
+                        sh "docker build -t ${BACKEND_IMAGE_NAME}:latest -f ./backend/Dockerfile ./backend"
+                        sh "docker push ${BACKEND_IMAGE_NAME}:latest"
+                        
+                        echo "Membangun Image Frontend (Production)..."
+                        sh "docker build --build-arg NEXT_PUBLIC_API_URL=https://ontime.jelantik.com/api -t ${FRONTEND_IMAGE_NAME}:latest -f ./frontend/Dockerfile ./frontend"
+                        sh "docker push ${FRONTEND_IMAGE_NAME}:latest"
+                    }
+                }
+            }
+        }
+
+        stage('Approval: Rilis ke Server Produksi') {
+            when {
+                expression {
+                    def branch = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').replace('origin/', '')
+                    return branch == 'main'
+                }
+            }
+            steps {
+                timeout(time: 24, unit: 'HOURS') {
+                    input message: '⚠️ PERHATIAN: Anda akan merilis update ini ke Server PRODUKSI (ontime.jelantik.com).\nApakah pengujian di Staging sudah CLEAR dan aman?', 
+                          ok: 'Ya, Lanjutkan Rilis ke Produksi!'
+                }
+            }
+        }
+
+        stage('Deploy to VM Production') {
+            when {
+                expression {
+                    def branch = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').replace('origin/', '')
+                    return branch == 'main'
+                }
+            }
+            steps {
+                script {
+                    echo "=========================================================="
+                    echo " Memulai Deployment Lingkungan PRODUKSI (ontime.jelantik.com)"
+                    echo "=========================================================="
+                    
                     // 1. Tulis file .env.prod secara lokal di Jenkins VM dari credentials
                     withCredentials([string(credentialsId: "${ENV_PROD_ID}", variable: 'ENV_PROD_CONTENT')]) {
-                        // Tulis credential lalu perbaiki format: Jenkins Secret Text kehilangan newline
                         sh '''
                             echo "$ENV_PROD_CONTENT" > .env.prod
-                            # Kembalikan newline sebelum setiap KEY= (huruf kapital + underscore)
                             sed -i -E 's/ ([A-Z][A-Z_]{2,}=)/\\n\\1/g; s/ (#)/\\n\\1/g' .env.prod
                         '''
                     }
                     
-                    // Cek apakah agent berjalan secara lokal di target VM (memiliki target directory)
                     def isLocal = sh(script: "[ -d '${TARGET_DIR}' ] && echo 'true' || echo 'false'", returnStdout: true).trim() == 'true'
                     
                     if (isLocal) {
                         echo "Mendeteksi agent berjalan di VM target secara lokal. Menjalankan deployment lokal..."
                         
-                        // Copy file secara lokal
                         sh "cp docker-compose.prod.yml ${TARGET_DIR}/docker-compose.prod.yml"
                         sh "cp .env.prod ${TARGET_DIR}/.env.prod"
-                        
-                        // Verifikasi .env.prod
                         sh "echo \"[VERIFY] .env.prod lines: \$(wc -l < ${TARGET_DIR}/.env.prod), DB_PASSWORD set: \$(grep -c DB_PASSWORD ${TARGET_DIR}/.env.prod)\""
                         
-                        // Eksekusi docker compose pull & up secara lokal
                         withCredentials([usernamePassword(credentialsId: "${GHCR_AUTH_ID}", usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
                             sh """
                                 cd ${TARGET_DIR}
-                                
-                                # Login ke GHCR
                                 echo "\${GH_TOKEN}" | docker login ${REGISTRY} -u \${GH_USER} --password-stdin
                                 
                                 echo "Menarik Image Terbaru..."
@@ -113,27 +239,20 @@ pipeline {
                                 echo "Restart hrms-proxy..."
                                 docker restart hrms-proxy
                                 
-                                echo "Deployment Lokal Sukses!"
+                                echo "Deployment Produksi Sukses!"
                             """
                         }
                     } else {
                         echo "Menjalankan deployment remote via SSH/SCP..."
-                        // 2. Hubungkan SSH dan jalankan proses deployment di VM Aplikasi
                         withCredentials([sshUserPrivateKey(credentialsId: "${SSH_CREDENTIAL_ID}", keyFileVariable: 'SSH_KEY')]) {
-                            // Transfer docker-compose.prod.yml dan .env.prod ke VM Aplikasi
                             sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no docker-compose.prod.yml ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/docker-compose.prod.yml"
                             sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no .env.prod ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/.env.prod"
-                            
-                            // Verifikasi .env.prod terkirim dengan benar
                             sh "ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no ${TARGET_VM_USER}@${TARGET_VM_IP} 'echo \"[VERIFY] .env.prod lines: \$(wc -l < ${TARGET_DIR}/.env.prod), DB_PASSWORD set: \$(grep -c DB_PASSWORD ${TARGET_DIR}/.env.prod)\"'"
                             
-                            // Eksekusi pull dan up di server target
                             withCredentials([usernamePassword(credentialsId: "${GHCR_AUTH_ID}", usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
                                 sh """
                                     ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no ${TARGET_VM_USER}@${TARGET_VM_IP} '
                                         cd ${TARGET_DIR}
-                                        
-                                        # Login ke GHCR di VM Aplikasi agar diizinkan pull image
                                         echo "\${GH_TOKEN}" | docker login ${REGISTRY} -u \${GH_USER} --password-stdin
                                         
                                         echo "Menarik Image Terbaru..."
@@ -148,7 +267,7 @@ pipeline {
                                         echo "Restart hrms-proxy..."
                                         docker restart hrms-proxy
                                         
-                                        echo "Deployment Remote Sukses!"
+                                        echo "Deployment Produksi Remote Sukses!"
                                     '
                                 """
                             }
@@ -161,8 +280,7 @@ pipeline {
 
     post {
         always {
-            // Bersihkan workspace dan file sementara .env.prod demi keamanan
-            sh "rm -f .env.prod"
+            sh "rm -f .env.prod .env.staging"
             cleanWs()
         }
     }
