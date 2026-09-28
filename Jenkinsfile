@@ -70,7 +70,7 @@ pipeline {
                         sh "docker push ${BACKEND_IMAGE_NAME}:staging"
                         
                         echo "Membangun Image Frontend (Staging)..."
-                        sh "docker build --build-arg NEXT_PUBLIC_API_URL=http://${TARGET_VM_IP}:8088/api -t ${FRONTEND_IMAGE_NAME}:staging -f ./frontend/Dockerfile ./frontend"
+                        sh "docker build --build-arg NEXT_PUBLIC_API_URL=https://staging-dev.jelantik.com/api -t ${FRONTEND_IMAGE_NAME}:staging -f ./frontend/Dockerfile ./frontend"
                         sh "docker push ${FRONTEND_IMAGE_NAME}:staging"
                     }
                 }
@@ -116,8 +116,8 @@ pipeline {
                                         cp .env.prod .env.staging
                                         sed -i 's/^DB_DATABASE=.*/DB_DATABASE=hrm_saas_staging/' .env.staging
                                         sed -i 's/^APP_ENV=.*/APP_ENV=staging/' .env.staging
-                                        sed -i 's|^APP_URL=.*|APP_URL=http://${TARGET_VM_IP}:8088|' .env.staging
-                                        sed -i 's|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=http://${TARGET_VM_IP}:8088/api|' .env.staging
+                                        sed -i 's|^APP_URL=.*|APP_URL=https://staging-dev.jelantik.com|' .env.staging
+                                        sed -i 's|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=https://staging-dev.jelantik.com/api|' .env.staging
                                     elif [ -f .env.staging.example ]; then
                                         cp .env.staging.example .env.staging
                                     fi
@@ -136,7 +136,7 @@ pipeline {
                                 sleep 5
                                 docker exec -i hrms-backend-staging php artisan migrate --force || true
                                 
-                                echo "Deployment Staging Sukses! Akses via: http://${TARGET_VM_IP}:8088"
+                                echo "Deployment Staging Sukses! Akses via: https://staging-dev.jelantik.com (Port lokal: http://${TARGET_VM_IP}:8088)"
                             """
                         }
                     } else {
@@ -158,8 +158,8 @@ pipeline {
                                                 cp .env.prod .env.staging
                                                 sed -i "s/^DB_DATABASE=.*/DB_DATABASE=hrm_saas_staging/" .env.staging
                                                 sed -i "s/^APP_ENV=.*/APP_ENV=staging/" .env.staging
-                                                sed -i "s|^APP_URL=.*|APP_URL=http://${TARGET_VM_IP}:8088|" .env.staging
-                                                sed -i "s|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=http://${TARGET_VM_IP}:8088/api|" .env.staging
+                                                sed -i "s|^APP_URL=.*|APP_URL=https://staging-dev.jelantik.com|" .env.staging
+                                                sed -i "s|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=https://staging-dev.jelantik.com/api|" .env.staging
                                             elif [ -f .env.staging.example ]; then
                                                 cp .env.staging.example .env.staging
                                             fi
@@ -170,7 +170,7 @@ pipeline {
                                         docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --remove-orphans
                                         sleep 5
                                         docker exec -i hrms-backend-staging php artisan migrate --force || true
-                                        echo "Deployment Staging Sukses! Akses via: http://${TARGET_VM_IP}:8088"
+                                        echo "Deployment Staging Sukses! Akses via: https://staging-dev.jelantik.com (Port lokal: http://${TARGET_VM_IP}:8088)"
                                     '
                                 """
                             }
