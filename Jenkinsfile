@@ -257,10 +257,10 @@ pipeline {
                                 echo "\${GH_TOKEN}" | docker login ${REGISTRY} -u \${GH_USER} --password-stdin
                                 
                                 echo "Menarik Image Terbaru..."
-                                docker compose -f docker-compose.prod.yml pull
+                                docker compose -p hrms-prod -f docker-compose.prod.yml pull
                                 
                                 echo "Mengaktifkan Container Baru..."
-                                docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans
+                                docker compose -p hrms-prod --env-file .env.prod -f docker-compose.prod.yml up -d
                                 
                                 echo "Membersihkan Image Lama yang Gantung..."
                                 docker image prune -f
@@ -285,10 +285,10 @@ pipeline {
                                         echo "\${GH_TOKEN}" | docker login ${REGISTRY} -u \${GH_USER} --password-stdin
                                         
                                         echo "Menarik Image Terbaru..."
-                                        docker compose -f docker-compose.prod.yml pull
+                                        docker compose -p hrms-prod -f docker-compose.prod.yml pull
                                         
                                         echo "Mengaktifkan Container Baru..."
-                                        docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans
+                                        docker compose -p hrms-prod --env-file .env.prod -f docker-compose.prod.yml up -d
                                         
                                         echo "Membersihkan Image Lama yang Gantung..."
                                         docker image prune -f
