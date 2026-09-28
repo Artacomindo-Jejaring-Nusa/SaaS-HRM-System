@@ -413,7 +413,7 @@ interface ImportResult {
 }
 
 function validateImportFile(file: File): string | null {
-  if (!file.name.match(/\.(xlsx|xls|csv)$/)) {
+  if (!/\.(xlsx|xls|csv)$/i.exec(file.name)) {
     return "Hanya file Excel atau CSV yang diperbolehkan.";
   }
   return null;
@@ -459,6 +459,157 @@ async function runResendVerification(
 ): Promise<{ success: boolean; clearSelection: boolean }> {
   const res = await sendBulkOrSingleVerification(targetId, selectedIds, employees);
   return { success: true, clearSelection: !!res };
+}
+
+function confirmResendVerificationAction(
+  id: number | undefined,
+  selectedIds: number[],
+  employees: Employee[],
+  onSuccess: () => void,
+  setIsSubmitting: (val: boolean) => void
+) {
+  const run = async (targetId?: number) => {
+    setIsSubmitting(true);
+    try {
+      const result = await runResendVerification(targetId, selectedIds, employees);
+      if (result.clearSelection) onSuccess();
+    } catch (e: unknown) {
+      toast.error(extractEmployeeErrorMessage(e, "Gagal mengirim ulang verifikasi."));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (id) {
+    toast("Kirim ulang verifikasi?", {
+      description: "Link verifikasi baru akan dikirim ke email karyawan.",
+      action: { label: "Kirim", onClick: () => run(id) }
+    });
+    return;
+  }
+  run();
+}
+
+function confirmDeleteEmployeeAction(
+  id: number,
+  onSuccess: () => void,
+  setIsSubmitting: (val: boolean) => void
+) {
+  toast("Hapus karyawan ini?", {
+    description: "Peringatan: Semua data yang terhubung dengan pekerja ini (absensi, cuti, dll) akan kehilangan akses loginnya.",
+    action: {
+      label: "Hapus",
+      onClick: async () => {
+        setIsSubmitting(true);
+        try {
+          await executeEmployeeDelete(id);
+          toast.success("Karyawan berhasil dihapus.");
+          onSuccess();
+        } catch {
+          toast.error("Gagal menghapus data karyawan.");
+        } finally {
+          setIsSubmitting(false);
+        }
+      }
+    }
+  });
+}
+
+function confirmBulkDeleteEmployeesAction(
+  selectedIds: number[],
+  onSuccess: () => void,
+  setIsSubmitting: (val: boolean) => void
+) {
+  if (selectedIds.length === 0) return;
+
+  toast(`Hapus ${selectedIds.length} karyawan?`, {
+    description: "Peringatan: Semua data yang terhubung dengan pekerja terpilih akan dihapus secara permanen.",
+    action: {
+      label: "Hapus Semua",
+      onClick: async () => {
+        setIsSubmitting(true);
+        try {
+          await executeBulkEmployeeDelete(selectedIds);
+          toast.success(`${selectedIds.length} karyawan berhasil dihapus.`);
+          onSuccess();
+        } catch (e: unknown) {
+          toast.error(extractEmployeeErrorMessage(e, "Gagal menghapus beberapa data karyawan."));
+        } finally {
+          setIsSubmitting(false);
+        }
+      }
+    }
+  });
+}
+
+function confirmResetDeviceAction(
+  id: number,
+  onSuccess: () => void,
+  setIsSubmitting: (val: boolean) => void
+) {
+  toast("Apakah Anda yakin ingin meriset Device ID karyawan ini?", {
+    description: "Ini akan memungkinkan karyawan login di perangkat baru.",
+    action: {
+      label: "Reset",
+      onClick: async () => {
+        setIsSubmitting(true);
+        try {
+          await executeResetDevice(id);
+          toast.success("Device ID berhasil direset!");
+          onSuccess();
+        } catch (e: unknown) {
+          toast.error(extractEmployeeErrorMessage(e, "Gagal mereset Device ID."));
+        } finally {
+          setIsSubmitting(false);
+        }
+      }
+    }
+  });
+}
+
+function confirmResetPasswordAction(
+  id: number,
+  name: string,
+  onSuccess: () => void,
+  setIsSubmitting: (val: boolean) => void
+) {
+  toast(`Apakah Anda yakin ingin mereset password untuk ${name}?`, {
+    description: "Password akan diubah kembali menjadi default 'password'.",
+    action: {
+      label: "Reset",
+      onClick: async () => {
+        setIsSubmitting(true);
+        try {
+          await executeResetPassword(id);
+          toast.success(`Password ${name} berhasil direset menjadi 'password'!`);
+          onSuccess();
+        } catch (e: unknown) {
+          toast.error(extractEmployeeErrorMessage(e, "Gagal mereset password."));
+        } finally {
+          setIsSubmitting(false);
+        }
+      }
+    }
+  });
+}
+
+async function executeEmployeeDisciplineAction(
+  employeeName: string,
+  disciplineNote: string,
+  setIsSubmitting: (val: boolean) => void,
+  onSuccess: () => void
+) {
+  if (!disciplineNote.trim()) return;
+  setIsSubmitting(true);
+  try {
+    await new Promise(r => setTimeout(r, 800));
+    toast.success(`Tindakan disiplin untuk ${employeeName} berhasil dicatat.`);
+    onSuccess();
+  } catch {
+    toast.error("Gagal mencatat tindakan disiplin");
+  } finally {
+    setIsSubmitting(false);
+  }
 }
 
 function EmployeesContent() {
@@ -510,21 +661,17 @@ function EmployeesContent() {
   const [errorMessage, setErrorMessage] = useState("");
   const [modalType, setModalType] = useState<"error" | "success">("error");
 
-  const handleDisciplineSubmit = async (e: React.FormEvent) => {
+  const handleDisciplineSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!disciplineNote.trim()) return;
-    setIsSubmitting(true);
-    try {
-      // Mock request
-      await new Promise(r => setTimeout(r, 800));
-      toast.success(`Tindakan disiplin untuk ${disciplinedEmployee?.name} berhasil dicatat.`);
-      setDisciplineModalOpen(false);
-      setDisciplineNote("");
-    } catch {
-      toast.error("Gagal mencatat tindakan disiplin");
-    } finally {
-      setIsSubmitting(false);
-    }
+    executeEmployeeDisciplineAction(
+      disciplinedEmployee?.name || "",
+      disciplineNote,
+      setIsSubmitting,
+      () => {
+        setDisciplineModalOpen(false);
+        setDisciplineNote("");
+      }
+    );
   };
 
   // Handle Debouncing Search
@@ -695,113 +842,26 @@ function EmployeesContent() {
   };
 
   const handleResendVerification = (id?: number) => {
-    const run = async (targetId?: number) => {
-      setIsSubmitting(true);
-      try {
-        const result = await runResendVerification(targetId, selectedIds, employees);
-        if (result.clearSelection) setSelectedIds([]);
-      } catch (e: unknown) {
-        toast.error(extractEmployeeErrorMessage(e, "Gagal mengirim ulang verifikasi."));
-      } finally {
-        setIsSubmitting(false);
-      }
-    };
-
-    if (id) {
-      toast("Kirim ulang verifikasi?", {
-        description: "Link verifikasi baru akan dikirim ke email karyawan.",
-        action: { label: "Kirim", onClick: () => run(id) }
-      });
-      return;
-    }
-    run();
+    confirmResendVerificationAction(id, selectedIds, employees, () => setSelectedIds([]), setIsSubmitting);
   };
 
   const handleConfirmDelete = (id: number) => {
-    toast("Hapus karyawan ini?", {
-      description: "Peringatan: Semua data yang terhubung dengan pekerja ini (absensi, cuti, dll) akan kehilangan akses loginnya.",
-      action: {
-        label: "Hapus",
-        onClick: async () => {
-          setIsSubmitting(true);
-          try {
-            await executeEmployeeDelete(id);
-            toast.success("Karyawan berhasil dihapus.");
-            fetchEmployees(pagination?.current_page || 1);
-          } catch {
-            toast.error("Gagal menghapus data karyawan.");
-          } finally {
-            setIsSubmitting(false);
-          }
-        }
-      }
-    });
+    confirmDeleteEmployeeAction(id, () => fetchEmployees(pagination?.current_page || 1), setIsSubmitting);
   };
 
   const handleBulkDelete = () => {
-    if (selectedIds.length === 0) return;
-
-    toast(`Hapus ${selectedIds.length} karyawan?`, {
-      description: "Peringatan: Semua data yang terhubung dengan pekerja terpilih akan dihapus secara permanen.",
-      action: {
-        label: "Hapus Semua",
-        onClick: async () => {
-          setIsSubmitting(true);
-          try {
-            await executeBulkEmployeeDelete(selectedIds);
-            toast.success(`${selectedIds.length} karyawan berhasil dihapus.`);
-            setSelectedIds([]);
-            fetchEmployees(pagination?.current_page || 1);
-          } catch (e: unknown) {
-            toast.error(extractEmployeeErrorMessage(e, "Gagal menghapus beberapa data karyawan."));
-          } finally {
-            setIsSubmitting(false);
-          }
-        }
-      }
-    });
+    confirmBulkDeleteEmployeesAction(selectedIds, () => {
+      setSelectedIds([]);
+      fetchEmployees(pagination?.current_page || 1);
+    }, setIsSubmitting);
   };
 
   const handleResetDevice = (id: number) => {
-    toast("Apakah Anda yakin ingin meriset Device ID karyawan ini?", {
-      description: "Ini akan memungkinkan karyawan login di perangkat baru.",
-      action: {
-        label: "Reset",
-        onClick: async () => {
-          setIsSubmitting(true);
-          try {
-            await executeResetDevice(id);
-            toast.success("Device ID berhasil direset!");
-            fetchEmployees(pagination?.current_page || 1);
-          } catch (e: unknown) {
-            toast.error(extractEmployeeErrorMessage(e, "Gagal mereset Device ID."));
-          } finally {
-            setIsSubmitting(false);
-          }
-        }
-      }
-    });
+    confirmResetDeviceAction(id, () => fetchEmployees(pagination?.current_page || 1), setIsSubmitting);
   };
 
   const handleResetPassword = (id: number, name: string) => {
-    toast(`Apakah Anda yakin ingin mereset password untuk ${name}?`, {
-      description: "Password akan diubah kembali menjadi default 'password'.",
-      action: {
-        label: "Reset",
-        onClick: async () => {
-          setIsSubmitting(true);
-          try {
-            await executeResetPassword(id);
-            toast.success(`Password ${name} berhasil direset menjadi 'password'!`);
-            fetchEmployees(pagination?.current_page || 1);
-          } catch (e: unknown) {
-            toast.error(extractEmployeeErrorMessage(e, "Gagal mereset password."));
-          } finally {
-            setIsSubmitting(false);
-          }
-        }
-      }
-    });
+    confirmResetPasswordAction(id, name, () => fetchEmployees(pagination?.current_page || 1), setIsSubmitting);
   };
 
 

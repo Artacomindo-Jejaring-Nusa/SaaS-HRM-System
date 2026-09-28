@@ -338,6 +338,179 @@ function filterBatchSalaries(salaries: SalaryRecord[] | undefined, search: strin
   );
 }
 
+function confirmPayrollStatusChange(
+  selectedBatch: PayrollBatch | null,
+  action: PayrollAction,
+  setActionSubmitting: (val: boolean) => void,
+  refreshCurrentBatch: () => void,
+  note?: string
+) {
+  if (!selectedBatch) return;
+
+  toast(`Apakah Anda yakin ingin melakukan "${ACTION_LABELS[action]}"?`, {
+    action: {
+      label: "Lanjutkan",
+      onClick: async () => {
+        try {
+          setActionSubmitting(true);
+          await executeBatchStatusAction(selectedBatch.id, action, note);
+          toast.success(`Payroll berhasil di-${action}`);
+          refreshCurrentBatch();
+        } catch (e: any) {
+          toast.error(e.response?.data?.message || "Aksi gagal dieksekusi.");
+        } finally {
+          setActionSubmitting(false);
+        }
+      },
+    },
+  });
+}
+
+function confirmDeleteBatchAction(
+  batchId: number,
+  onDeleted: () => void
+) {
+  toast("Hapus draft batch payroll ini?", {
+    description: "Data kalkulasi draft akan dihapus. Riwayat payslip lama tetap aman.",
+    action: {
+      label: "Hapus",
+      onClick: async () => {
+        try {
+          await executeDeleteBatch(batchId);
+          toast.success("Draft payroll berhasil dihapus.");
+          onDeleted();
+        } catch (e: any) {
+          toast.error(e.response?.data?.message || "Gagal menghapus batch.");
+        }
+      },
+    },
+  });
+}
+
+async function executeExportExcelAllAction(
+  yearFilter: number | string,
+  setExporting: (val: boolean) => void
+) {
+  try {
+    setExporting(true);
+    const response = await axiosInstance.get('/payroll/export', {
+      params: { year: yearFilter === "all" ? undefined : yearFilter },
+      responseType: 'blob',
+    });
+    triggerBlobDownload(response.data, `Laporan_Payroll_Semua_${yearFilter}.xlsx`);
+  } catch (e) {
+    console.error(e);
+    toast.error("Gagal mengekspor data Excel.");
+  } finally {
+    setExporting(false);
+  }
+}
+
+async function executeExportBatchRekapAction(batchId: number, month: string, year: number) {
+  try {
+    const response = await axiosInstance.get(`/payroll/batches/${batchId}/export-rekap`, {
+      responseType: 'blob',
+    });
+    triggerBlobDownload(response.data, `Rekap_Payroll_${month}_${year}.xlsx`);
+    toast.success("File rekap payroll berhasil diunduh.");
+  } catch (e) {
+    console.error(e);
+    toast.error("Gagal mengunduh rekap Excel.");
+  }
+}
+
+async function executeDownloadPDFAction(salaryId: number, name: string) {
+  try {
+    const response = await axiosInstance.get(`/payroll/download-slip/${salaryId}`, {
+      responseType: 'blob',
+    });
+    triggerBlobDownload(response.data, `Slip_Gaji_${name.replaceAll(/\s+/g, '_')}.pdf`);
+  } catch (e) {
+    console.error(e);
+    toast.error("Gagal mengunduh slip PDF");
+  }
+}
+
+async function executePreviewSlipAction(
+  salary: SalaryRecord,
+  setPreviewSalary: (s: SalaryRecord) => void,
+  setPreviewLoading: (l: boolean) => void,
+  setPreviewOpen: (o: boolean) => void,
+  setPreviewHtml: (h: string) => void
+) {
+  try {
+    setPreviewSalary(salary);
+    setPreviewLoading(true);
+    setPreviewOpen(true);
+    const res = await axiosInstance.get(`/payroll/preview-slip/${salary.id}`);
+    setPreviewHtml(res.data.html);
+  } catch (e) {
+    console.error(e);
+    toast.error("Gagal memuat slip gaji");
+  } finally {
+    setPreviewLoading(false);
+  }
+}
+
+async function executeSaveSalaryAction(
+  editingSalary: SalaryRecord | null,
+  setSavingSalary: (val: boolean) => void,
+  onSuccess: () => void
+) {
+  if (!editingSalary) return;
+  try {
+    setSavingSalary(true);
+    await executeSaveSalary(editingSalary);
+    toast.success("Perubahan gaji berhasil disimpan.");
+    onSuccess();
+  } catch (e: any) {
+    toast.error(e.response?.data?.message || "Gagal menyimpan perubahan.");
+  } finally {
+    setSavingSalary(false);
+  }
+}
+
+async function executeAddAdhocItemAction(
+  editingSalary: SalaryRecord | null,
+  adhocName: string,
+  adhocType: "earning" | "deduction",
+  adhocAmount: string,
+  adhocNote: string,
+  setSubmittingAdhoc: (val: boolean) => void,
+  onSuccess: (updatedSalary: SalaryRecord) => void
+) {
+  if (!editingSalary || !adhocName.trim() || !adhocAmount) {
+    toast.error("Nama komponen dan nominal wajib diisi.");
+    return;
+  }
+  try {
+    setSubmittingAdhoc(true);
+    const updatedSalary = await executeAddAdhocItem(editingSalary.id, adhocName, adhocType, Number(adhocAmount), adhocNote);
+    toast.success("Komponen ad-hoc berhasil ditambahkan.");
+    onSuccess(updatedSalary);
+  } catch (err: any) {
+    toast.error(err.response?.data?.message || "Gagal menambahkan komponen ad-hoc.");
+  } finally {
+    setSubmittingAdhoc(false);
+  }
+}
+
+async function executeRemoveAdhocItemAction(
+  editingSalary: SalaryRecord | null,
+  detailId: number,
+  onSuccess: (updatedSalary: SalaryRecord) => void
+) {
+  if (!editingSalary) return;
+  if (!globalThis.confirm("Hapus komponen ini dari rincian payslip?")) return;
+  try {
+    const updatedSalary = await executeRemoveAdhocItem(editingSalary.id, detailId);
+    toast.success("Komponen berhasil dihapus.");
+    onSuccess(updatedSalary);
+  } catch (err: any) {
+    toast.error(err.response?.data?.message || "Gagal menghapus komponen.");
+  }
+}
+
 export default function PayrollManagementPage() {
   const [loading, setLoading] = useState(true);
   const [batches, setBatches] = useState<PayrollBatch[]>([]);
@@ -425,44 +598,14 @@ export default function PayrollManagementPage() {
 
   // Status Change Workflow (Submit, Approve, Reject, Paid)
   const handleStatusChange = (action: PayrollAction, note?: string) => {
-    if (!selectedBatch) return;
-
-    toast(`Apakah Anda yakin ingin melakukan "${ACTION_LABELS[action]}"?`, {
-      action: {
-        label: "Lanjutkan",
-        onClick: async () => {
-          try {
-            setActionSubmitting(true);
-            await executeBatchStatusAction(selectedBatch.id, action, note);
-            toast.success(`Payroll berhasil di-${action}`);
-            refreshCurrentBatch();
-          } catch (e: any) {
-            toast.error(e.response?.data?.message || 'Aksi gagal dieksekusi.');
-          } finally {
-            setActionSubmitting(false);
-          }
-        }
-      }
-    });
+    confirmPayrollStatusChange(selectedBatch, action, setActionSubmitting, refreshCurrentBatch, note);
   };
 
   // Delete Draft Batch
   const handleDeleteBatch = (batchId: number) => {
-    toast("Hapus draft batch payroll ini?", {
-      description: "Data kalkulasi draft akan dihapus. Riwayat payslip lama tetap aman.",
-      action: {
-        label: "Hapus",
-        onClick: async () => {
-          try {
-            await executeDeleteBatch(batchId);
-            toast.success("Draft payroll berhasil dihapus.");
-            setSelectedBatch(null);
-            fetchBatches();
-          } catch (e: any) {
-            toast.error(e.response?.data?.message || "Gagal menghapus batch.");
-          }
-        }
-      }
+    confirmDeleteBatchAction(batchId, () => {
+      setSelectedBatch(null);
+      fetchBatches();
     });
   };
 
@@ -502,64 +645,18 @@ export default function PayrollManagementPage() {
   };
 
   // Export All Batches
-  const handleExportExcelAll = async () => {
-    try {
-      setExporting(true);
-      const response = await axiosInstance.get('/payroll/export', {
-        params: { year: yearFilter === "all" ? undefined : yearFilter },
-        responseType: 'blob',
-      });
-      triggerBlobDownload(response.data, `Laporan_Payroll_Semua_${yearFilter}.xlsx`);
-    } catch (e) {
-      console.error(e);
-      toast.error("Gagal mengekspor data Excel.");
-    } finally {
-      setExporting(false);
-    }
-  };
+  const handleExportExcelAll = () => executeExportExcelAllAction(yearFilter, setExporting);
 
   // Export Single Batch Rekap
-  const handleExportBatchRekap = async (batchId: number, month: string, year: number) => {
-    try {
-      const response = await axiosInstance.get(`/payroll/batches/${batchId}/export-rekap`, {
-        responseType: 'blob',
-      });
-      triggerBlobDownload(response.data, `Rekap_Payroll_${month}_${year}.xlsx`);
-      toast.success("File rekap payroll berhasil diunduh.");
-    } catch (e) {
-      console.error(e);
-      toast.error("Gagal mengunduh rekap Excel.");
-    }
-  };
+  const handleExportBatchRekap = (batchId: number, month: string, year: number) =>
+    executeExportBatchRekapAction(batchId, month, year);
 
   // Download PDF Slip
-  const handleDownloadPDF = async (salaryId: number, name: string) => {
-    try {
-      const response = await axiosInstance.get(`/payroll/download-slip/${salaryId}`, {
-        responseType: 'blob',
-      });
-      triggerBlobDownload(response.data, `Slip_Gaji_${name.replaceAll(/\s+/g, '_')}.pdf`);
-    } catch (e) {
-      console.error(e);
-      toast.error("Gagal mengunduh slip PDF");
-    }
-  };
+  const handleDownloadPDF = (salaryId: number, name: string) => executeDownloadPDFAction(salaryId, name);
 
   // Preview Slip in Modal
-  const handlePreviewSlip = async (salary: SalaryRecord) => {
-    try {
-      setPreviewSalary(salary);
-      setPreviewLoading(true);
-      setPreviewOpen(true);
-      const res = await axiosInstance.get(`/payroll/preview-slip/${salary.id}`);
-      setPreviewHtml(res.data.html);
-    } catch (e) {
-      console.error(e);
-      toast.error("Gagal memuat slip gaji");
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
+  const handlePreviewSlip = (salary: SalaryRecord) =>
+    executePreviewSlipAction(salary, setPreviewSalary, setPreviewLoading, setPreviewOpen, setPreviewHtml);
 
   const handlePrintSlip = () => {
     const iframe = document.querySelector('iframe');
@@ -569,57 +666,40 @@ export default function PayrollManagementPage() {
   };
 
   // Save Salary (Base & Discipline)
-  const handleSaveSalary = async (e: React.FormEvent) => {
+  const handleSaveSalary = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingSalary) return;
-    try {
-      setSavingSalary(true);
-      await executeSaveSalary(editingSalary);
-      toast.success("Perubahan gaji berhasil disimpan.");
+    executeSaveSalaryAction(editingSalary, setSavingSalary, () => {
       setEditingSalary(null);
       refreshCurrentBatch();
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || "Gagal menyimpan perubahan.");
-    } finally {
-      setSavingSalary(false);
-    }
+    });
   };
 
   // Add Ad-Hoc Item in Modal
-  const handleAddAdhocItem = async (e: React.FormEvent) => {
+  const handleAddAdhocItem = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingSalary || !adhocName.trim() || !adhocAmount) {
-      toast.error("Nama komponen dan nominal wajib diisi.");
-      return;
-    }
-    try {
-      setSubmittingAdhoc(true);
-      const updatedSalary = await executeAddAdhocItem(editingSalary.id, adhocName, adhocType, Number(adhocAmount), adhocNote);
-      toast.success("Komponen ad-hoc berhasil ditambahkan.");
-      setAdhocName("");
-      setAdhocAmount("");
-      setAdhocNote("");
-      setEditingSalary(updatedSalary);
-      refreshCurrentBatch();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Gagal menambahkan komponen ad-hoc.");
-    } finally {
-      setSubmittingAdhoc(false);
-    }
+    executeAddAdhocItemAction(
+      editingSalary,
+      adhocName,
+      adhocType,
+      adhocAmount,
+      adhocNote,
+      setSubmittingAdhoc,
+      (updatedSalary) => {
+        setAdhocName("");
+        setAdhocAmount("");
+        setAdhocNote("");
+        setEditingSalary(updatedSalary);
+        refreshCurrentBatch();
+      }
+    );
   };
 
   // Remove Ad-Hoc Item in Modal
-  const handleRemoveAdhocItem = async (detailId: number) => {
-    if (!editingSalary) return;
-    if (!globalThis.confirm("Hapus komponen ini dari rincian payslip?")) return;
-    try {
-      const updatedSalary = await executeRemoveAdhocItem(editingSalary.id, detailId);
-      toast.success("Komponen berhasil dihapus.");
+  const handleRemoveAdhocItem = (detailId: number) => {
+    executeRemoveAdhocItemAction(editingSalary, detailId, (updatedSalary) => {
       setEditingSalary(updatedSalary);
       refreshCurrentBatch();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Gagal menghapus komponen.");
-    }
+    });
   };
 
   // Filter batches by status tab and year

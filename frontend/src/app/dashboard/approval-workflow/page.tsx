@@ -986,6 +986,489 @@ async function executeToggleWorkflow(
   return axiosInstance.patch(url, { company_id: companyId || undefined });
 }
 
+interface WorkflowVariantBarProps {
+  readonly activeModule: WorkflowModule | undefined;
+  readonly activeWorkflow: BackendWorkflow | null;
+  readonly selectedWorkflowId: number | null;
+  readonly customActive: boolean;
+  readonly isAuthorized: boolean;
+  readonly loading: boolean;
+  readonly selected: string;
+  readonly onSelectVariant: (id: number) => void;
+  readonly onToggleActive: (workflowId?: number | null, moduleKey?: string) => void;
+  readonly onOpenDuplicateModal: () => void;
+  readonly onDeleteVariant: (variantId: number, variantName: string) => void;
+}
+
+function WorkflowVariantBar({
+  activeModule,
+  activeWorkflow,
+  selectedWorkflowId,
+  customActive,
+  isAuthorized,
+  loading,
+  selected,
+  onSelectVariant,
+  onToggleActive,
+  onOpenDuplicateModal,
+  onDeleteVariant,
+}: Readonly<WorkflowVariantBarProps>) {
+  const isWorkflowActive = activeWorkflow?.is_active ?? customActive;
+  const canDeleteCurrentVariant =
+    isAuthorized &&
+    ((activeWorkflow && (activeWorkflow.scope_type !== "company" || activeWorkflow.is_custom)) ||
+      Boolean(selectedWorkflowId && activeModule?.variants?.some((v) => v.id === selectedWorkflowId && !v.is_default)));
+
+  return (
+    <div className="bg-white p-3.5 rounded-2xl border border-gray-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-bold text-gray-500 flex items-center gap-1.5 mr-1">
+          <GitBranch size={14} className="text-[#8B0000]" /> Varian Alur ({activeModule?.label}):
+        </span>
+
+        {activeModule?.variants && activeModule.variants.length > 0 ? (
+          activeModule.variants.map((v) => {
+            const isSelectedVariant = selectedWorkflowId
+              ? selectedWorkflowId === v.id
+              : v.is_default || activeModule.active_workflow_id === v.id;
+            return (
+              <div
+                key={v.id}
+                className={`inline-flex items-center rounded-xl transition-all ${
+                  isSelectedVariant
+                    ? "bg-[#8B0000] text-white shadow-xs font-bold ring-2 ring-[#8B0000]/30"
+                    : "bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 font-medium"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelectVariant(v.id)}
+                  className="px-3 py-1.5 text-xs flex items-center gap-1.5 focus:outline-none"
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full shrink-0 ${getVariantBadgeColor(v.is_active, isSelectedVariant)}`}
+                    title={v.is_active ? "Alur Aktif" : "Alur Dinonaktifkan"}
+                  />
+                  {renderScopeIcon(v.scope_type)}
+                  <span>{v.name}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                      isSelectedVariant ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"
+                    }`}
+                  >
+                    {v.layers}L
+                  </span>
+                  {v.is_default && (
+                    <span
+                      className={`text-[9px] px-1 rounded uppercase font-bold tracking-wider ${
+                        isSelectedVariant ? "bg-amber-400 text-amber-950" : "bg-gray-200 text-gray-700"
+                      }`}
+                    >
+                      Default
+                    </span>
+                  )}
+                </button>
+
+                {!v.is_default && isAuthorized && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteVariant(v.id, v.name);
+                    }}
+                    className={`mr-1.5 p-1 rounded-lg transition-colors cursor-pointer ${
+                      isSelectedVariant
+                        ? "text-white/70 hover:text-white hover:bg-white/20"
+                        : "text-gray-400 hover:text-red-600 hover:bg-red-50"
+                    }`}
+                    title={`Hapus duplikasi '${v.name}'`}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <span className="text-xs text-gray-400 italic">
+            Alur Sistem Default
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2">
+        {isAuthorized && (
+          <button
+            onClick={() => onToggleActive(activeWorkflow?.id, selected)}
+            disabled={loading}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all shadow-2xs ${
+              isWorkflowActive
+                ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                : "bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200"
+            }`}
+            title={isWorkflowActive ? "Klik untuk menonaktifkan alur ini" : "Klik untuk mengaktifkan alur ini"}
+          >
+            {isWorkflowActive ? (
+              <>
+                <CheckCircle2 size={13} className="text-emerald-600" />
+                <span>Alur: Aktif</span>
+              </>
+            ) : (
+              <>
+                <X size={13} className="text-gray-500" />
+                <span>Alur: Non-Aktif</span>
+              </>
+            )}
+          </button>
+        )}
+
+        {isAuthorized && (
+          <button
+            onClick={onOpenDuplicateModal}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 transition-all shadow-2xs"
+            title="Duplikasi alur ini untuk divisi atau karyawan tertentu"
+          >
+            <Copy size={13} className="text-amber-700" />
+            <span>Duplikasi Alur</span>
+          </button>
+        )}
+
+        {canDeleteCurrentVariant && (
+          <button
+            onClick={() => {
+              const targetId = activeWorkflow?.id || selectedWorkflowId;
+              const targetName = activeWorkflow?.name || "Varian";
+              if (targetId) onDeleteVariant(targetId, targetName);
+            }}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-all shadow-2xs"
+            title="Hapus varian alur ini"
+          >
+            <Trash2 size={13} />
+            <span>Hapus Duplikasi</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface WorkflowCanvasHeaderProps {
+  readonly selected: string;
+  readonly activeModule: WorkflowModule | undefined;
+  readonly activeWorkflow: BackendWorkflow | null;
+  readonly customActive: boolean;
+}
+
+function WorkflowCanvasHeader({
+  selected,
+  activeModule,
+  activeWorkflow,
+  customActive,
+}: Readonly<WorkflowCanvasHeaderProps>) {
+  const isWorkflowActive = activeWorkflow?.is_active ?? customActive;
+
+  return (
+    <CardHeader className="border-b border-gray-50 py-3 px-5 flex flex-row items-center justify-between">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-2.5 w-2.5 relative">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+        </span>
+        <span className="text-gray-700 text-xs font-mono font-bold">
+          workflow.{selected}.flow
+        </span>
+        {activeModule?.category && (
+          <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-semibold">
+            {activeModule.category}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        {renderScopeBadge(activeWorkflow?.scope_type, activeWorkflow?.scope_user?.name, activeWorkflow?.scope_role?.name)}
+
+        {isWorkflowActive ? (
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-300 flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Alur Aktif</span>
+          </span>
+        ) : (
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full border bg-red-50 text-red-700 border-red-200 flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+            <span>Alur Non-Aktif (Dilewati)</span>
+          </span>
+        )}
+      </div>
+    </CardHeader>
+  );
+}
+
+interface WorkflowBuilderPanelProps {
+  readonly customActive: boolean;
+  readonly activeWorkflow: BackendWorkflow | null;
+  readonly activeModule: WorkflowModule | undefined;
+  readonly isSuperAdmin: boolean;
+  readonly steps: BackendStep[];
+  readonly roles: AppRole[];
+  readonly users: AppUser[];
+  readonly loading: boolean;
+  readonly onToggleCustomActive: () => void;
+  readonly onChangeWorkflowName: (name: string) => void;
+  readonly onStepChange: (index: number, field: keyof BackendStep, value: any) => void;
+  readonly onMoveStep: (index: number, direction: "up" | "down") => void;
+  readonly onRemoveStep: (index: number) => void;
+  readonly onAddStep: () => void;
+  readonly onSaveWorkflow: () => void;
+  readonly onDeleteWorkflow: () => void;
+}
+
+function WorkflowBuilderPanel({
+  customActive,
+  activeWorkflow,
+  activeModule,
+  isSuperAdmin,
+  steps,
+  roles,
+  users,
+  loading,
+  onToggleCustomActive,
+  onChangeWorkflowName,
+  onStepChange,
+  onMoveStep,
+  onRemoveStep,
+  onAddStep,
+  onSaveWorkflow,
+  onDeleteWorkflow,
+}: Readonly<WorkflowBuilderPanelProps>) {
+  return (
+    <div className="xl:col-span-1 space-y-6">
+      <Card className="shadow-md border border-gray-100">
+        <CardHeader className="pb-3 pt-4 px-5 flex flex-row items-center justify-between">
+          <h3 className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+            <Sparkles size={16} className="text-[#8B0000]" />
+            Workflow Builder
+          </h3>
+
+          <button
+            onClick={onToggleCustomActive}
+            className="flex items-center gap-1.5 focus:outline-none"
+          >
+            {customActive ? (
+              <ToggleRight className="text-emerald-500 h-7 w-7" />
+            ) : (
+              <ToggleLeft className="text-gray-300 h-7 w-7" />
+            )}
+          </button>
+        </CardHeader>
+        <CardContent className="px-5 pb-5 space-y-4">
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+            <span className="text-xs font-semibold text-gray-600">Gunakan Alur Kustom</span>
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                customActive ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-500"
+              }`}
+            >
+              {customActive ? "AKTIF" : "NON-AKTIF"}
+            </span>
+          </div>
+
+          {customActive && (
+            <div className="space-y-3">
+              <div className="space-y-2 p-3 bg-gray-50/90 rounded-xl border border-gray-200/70">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="workflow-variant-name-input" className="text-[10px] font-black text-gray-500 uppercase tracking-wider">
+                    Nama Alur / Varian
+                  </label>
+                  {renderScopeVariantBadge(activeWorkflow?.scope_type)}
+                </div>
+                <input
+                  id="workflow-variant-name-input"
+                  type="text"
+                  value={activeWorkflow?.name || ""}
+                  onChange={(e) => onChangeWorkflowName(e.target.value)}
+                  placeholder="Nama alur persetujuan"
+                  className="w-full text-xs font-bold text-gray-800 bg-white border border-gray-200 rounded-lg p-2 focus:outline-none focus:border-[#8B0000]"
+                />
+                {activeWorkflow?.scope_type === "role" && activeWorkflow.scope_role && (
+                  <div className="text-[11px] text-gray-600 font-medium">
+                    🎯 Target: <strong className="text-gray-900">{activeWorkflow.scope_role.name}</strong>
+                  </div>
+                )}
+                {activeWorkflow?.scope_type === "user" && activeWorkflow.scope_user && (
+                  <div className="text-[11px] text-gray-600 font-medium">
+                    🎯 Target: <strong className="text-gray-900">{activeWorkflow.scope_user.name}</strong> ({activeWorkflow.scope_user.email})
+                  </div>
+                )}
+              </div>
+
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                Tahapan Persetujuan
+              </p>
+
+              {steps.length === 0 ? (
+                <div className="text-center p-6 border-2 border-dashed border-gray-200 rounded-xl">
+                  <p className="text-xs text-gray-400">Belum ada tahapan kustom.</p>
+                  <button
+                    onClick={onAddStep}
+                    className="mt-2 text-xs font-bold text-[#8B0000] hover:underline flex items-center gap-1 mx-auto"
+                  >
+                    <Plus size={12} /> Tambah Step Pertama
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
+                  {steps.map((step, index) => (
+                    <div
+                      key={`workflow-step-${step.step_number}`}
+                      className="p-3 border border-gray-100 bg-white shadow-sm rounded-xl space-y-2 relative"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-gray-400">STEP {step.step_number}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => onMoveStep(index, "up")}
+                            disabled={index === 0}
+                            className="p-1 hover:bg-gray-50 rounded disabled:opacity-30"
+                          >
+                            <ArrowUp size={12} />
+                          </button>
+                          <button
+                            onClick={() => onMoveStep(index, "down")}
+                            disabled={index === steps.length - 1}
+                            className="p-1 hover:bg-gray-50 rounded disabled:opacity-30"
+                          >
+                            <ArrowDown size={12} />
+                          </button>
+                          <button
+                            onClick={() => onRemoveStep(index)}
+                            className="p-1 text-red-500 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label htmlFor={`step-approver-type-${step.step_number}`} className="text-[10px] font-bold text-gray-500">Tipe Penyetuju</label>
+                        <select
+                          id={`step-approver-type-${step.step_number}`}
+                          value={step.approver_type}
+                          onChange={(e) => {
+                            const newType = e.target.value as "supervisor" | "role" | "user";
+                            onStepChange(index, "approver_type", newType);
+                            if (newType === "role" && !step.approver_role_id && roles.length > 0) {
+                              onStepChange(index, "approver_role_id", roles[0].id);
+                            }
+                            if (newType === "user" && !step.approver_user_id && users.length > 0) {
+                              onStepChange(index, "approver_user_id", users[0].id);
+                            }
+                          }}
+                          className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
+                        >
+                          <option value="supervisor">Supervisor (Atasan Langsung)</option>
+                          <option value="role">Role Jabatan (COO, HRD, Direktur, dll)</option>
+                          <option value="user">User / Pejabat Tertentu</option>
+                        </select>
+                      </div>
+
+                      {step.approver_type === "role" && (
+                        <div className="space-y-1">
+                          <label htmlFor={`step-role-${step.step_number}`} className="text-[10px] font-bold text-gray-500">Pilih Role</label>
+                          <select
+                            id={`step-role-${step.step_number}`}
+                            value={step.approver_role_id || ""}
+                            onChange={(e) =>
+                              onStepChange(index, "approver_role_id", Number.parseInt(e.target.value, 10))
+                            }
+                            className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
+                          >
+                            {roles.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {step.approver_type === "user" && (
+                        <div className="space-y-1">
+                          <label htmlFor={`step-user-${step.step_number}`} className="text-[10px] font-bold text-gray-500">Pilih User / Pejabat</label>
+                          <select
+                            id={`step-user-${step.step_number}`}
+                            value={step.approver_user_id || ""}
+                            onChange={(e) =>
+                              onStepChange(index, "approver_user_id", Number.parseInt(e.target.value, 10))
+                            }
+                            className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
+                          >
+                            {users.length === 0 ? (
+                              <option value="">Tidak ada karyawan tersedia</option>
+                            ) : (
+                              users.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.name} {u.role?.name ? `(${u.role.name})` : ""}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="space-y-1">
+                        <label htmlFor={`step-sla-${step.step_number}`} className="text-[10px] font-bold text-gray-500">
+                          Batas SLA Persetujuan (Jam)
+                        </label>
+                        <input
+                          id={`step-sla-${step.step_number}`}
+                          type="number"
+                          value={step.sla_hours}
+                          onChange={(e) =>
+                            onStepChange(index, "sla_hours", Number.parseInt(e.target.value, 10) || 24)
+                          }
+                          className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
+                          min={1}
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  <button
+                    onClick={onAddStep}
+                    className="w-full py-2 bg-gray-50 hover:bg-gray-100 border border-dashed border-gray-200 text-xs font-bold text-gray-600 rounded-xl flex items-center justify-center gap-1"
+                  >
+                    <Plus size={14} /> Tambah Langkah Baru
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <button
+            onClick={onSaveWorkflow}
+            disabled={loading}
+            className="w-full py-3 bg-[#8B0000] hover:bg-[#8B0000]/95 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-[#8B0000]/10 transition-all disabled:opacity-50"
+          >
+            <Save size={16} />
+            {loading ? "Menyimpan..." : "Simpan Konfigurasi"}
+          </button>
+
+          {activeModule?.is_custom && isSuperAdmin && (
+            <button
+              onClick={onDeleteWorkflow}
+              disabled={loading}
+              className="w-full py-2.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+            >
+              <Trash2 size={14} />
+              Hapus Alur Kustom Ini
+            </button>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function ApprovalWorkflowPage() {
   const { user } = useAuth();
   const [selected, setSelected] = useState<string>("leave");
@@ -1401,182 +1884,31 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
       />
 
       {/* Variant & Scope Switcher Bar */}
-      <div className="bg-white p-3.5 rounded-2xl border border-gray-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-bold text-gray-500 flex items-center gap-1.5 mr-1">
-            <GitBranch size={14} className="text-[#8B0000]" /> Varian Alur ({activeModule?.label}):
-          </span>
-
-          {activeModule?.variants && activeModule.variants.length > 0 ? (
-            activeModule.variants.map((v) => {
-              const isSelectedVariant = selectedWorkflowId
-                ? selectedWorkflowId === v.id
-                : v.is_default || activeModule.active_workflow_id === v.id;
-              return (
-                <div
-                  key={v.id}
-                  className={`inline-flex items-center rounded-xl transition-all ${
-                    isSelectedVariant
-                      ? "bg-[#8B0000] text-white shadow-xs font-bold ring-2 ring-[#8B0000]/30"
-                      : "bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 font-medium"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedWorkflowId(v.id)}
-                    className="px-3 py-1.5 text-xs flex items-center gap-1.5 focus:outline-none"
-                  >
-                    <span
-                      className={`h-2 w-2 rounded-full shrink-0 ${getVariantBadgeColor(v.is_active, isSelectedVariant)}`}
-                      title={v.is_active ? "Alur Aktif" : "Alur Dinonaktifkan"}
-                    />
-                    {renderScopeIcon(v.scope_type)}
-                    <span>{v.name}</span>
-                    <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
-                        isSelectedVariant ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"
-                      }`}
-                    >
-                      {v.layers}L
-                    </span>
-                    {v.is_default && (
-                      <span
-                        className={`text-[9px] px-1 rounded uppercase font-bold tracking-wider ${
-                          isSelectedVariant ? "bg-amber-400 text-amber-950" : "bg-gray-200 text-gray-700"
-                        }`}
-                      >
-                        Default
-                      </span>
-                    )}
-                  </button>
-
-                  {!v.is_default && isAuthorized && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteVariant(v.id, v.name);
-                      }}
-                      className={`mr-1.5 p-1 rounded-lg transition-colors cursor-pointer ${
-                        isSelectedVariant
-                          ? "text-white/70 hover:text-white hover:bg-white/20"
-                          : "text-gray-400 hover:text-red-600 hover:bg-red-50"
-                      }`}
-                      title={`Hapus duplikasi '${v.name}'`}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  )}
-                </div>
-              );
-            })
-          ) : (
-            <span className="text-xs text-gray-400 italic">
-              Alur Sistem Default
-            </span>
-          )}
-        </div>
-
-        {/* Variant Actions */}
-        <div className="flex items-center gap-2">
-          {/* Quick Toggle Active Status */}
-          {isAuthorized && (
-            <button
-              onClick={() => handleToggleActive(activeWorkflow?.id, selected)}
-              disabled={loading}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all shadow-2xs ${
-                (activeWorkflow?.is_active ?? customActive)
-                  ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
-                  : "bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200"
-              }`}
-              title={
-                (activeWorkflow?.is_active ?? customActive)
-                  ? "Klik untuk menonaktifkan alur ini"
-                  : "Klik untuk mengaktifkan alur ini"
-              }
-            >
-              {(activeWorkflow?.is_active ?? customActive) ? (
-                <>
-                  <CheckCircle2 size={13} className="text-emerald-600" />
-                  <span>Alur: Aktif</span>
-                </>
-              ) : (
-                <>
-                  <X size={13} className="text-gray-500" />
-                  <span>Alur: Non-Aktif</span>
-                </>
-              )}
-            </button>
-          )}
-
-          {isAuthorized && (
-            <button
-              onClick={handleOpenDuplicateModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 transition-all shadow-2xs"
-              title="Duplikasi alur ini untuk divisi atau karyawan tertentu"
-            >
-              <Copy size={13} className="text-amber-700" />
-              <span>Duplikasi Alur</span>
-            </button>
-          )}
-
-          {isAuthorized && (
-            (activeWorkflow && (activeWorkflow.scope_type !== "company" || activeWorkflow.is_custom)) ||
-            (selectedWorkflowId && activeModule?.variants?.some((v) => v.id === selectedWorkflowId && !v.is_default))
-          ) && (
-            <button
-              onClick={() => {
-                const targetId = activeWorkflow?.id || selectedWorkflowId;
-                const targetName = activeWorkflow?.name || "Varian";
-                if (targetId) handleDeleteVariant(targetId, targetName);
-              }}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-all shadow-2xs"
-              title="Hapus varian alur ini"
-            >
-              <Trash2 size={13} />
-              <span>Hapus Duplikasi</span>
-            </button>
-          )}
-        </div>
-      </div>
+      <WorkflowVariantBar
+        activeModule={activeModule}
+        activeWorkflow={activeWorkflow}
+        selectedWorkflowId={selectedWorkflowId}
+        customActive={customActive}
+        isAuthorized={isAuthorized}
+        loading={loading}
+        selected={selected}
+        onSelectVariant={setSelectedWorkflowId}
+        onToggleActive={handleToggleActive}
+        onOpenDuplicateModal={handleOpenDuplicateModal}
+        onDeleteVariant={handleDeleteVariant}
+      />
 
       {/* Editor & Flow Panel */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* SVG Flow Canvas */}
         <div className={isEditing ? "xl:col-span-2" : "xl:col-span-3"}>
           <Card className="overflow-hidden border border-gray-100 shadow-md bg-white">
-            <CardHeader className="border-b border-gray-50 py-3 px-5 flex flex-row items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-2.5 w-2.5 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                </span>
-                <span className="text-gray-700 text-xs font-mono font-bold">
-                  workflow.{selected}.flow
-                </span>
-                {activeModule?.category && (
-                  <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-semibold">
-                    {activeModule.category}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {renderScopeBadge(activeWorkflow?.scope_type, activeWorkflow?.scope_user?.name, activeWorkflow?.scope_role?.name)}
-
-                {(activeWorkflow?.is_active ?? customActive) ? (
-                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-300 flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>Alur Aktif</span>
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full border bg-red-50 text-red-700 border-red-200 flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-                    <span>Alur Non-Aktif (Dilewati)</span>
-                  </span>
-                )}
-              </div>
-            </CardHeader>
+            <WorkflowCanvasHeader
+              selected={selected}
+              activeModule={activeModule}
+              activeWorkflow={activeWorkflow}
+              customActive={customActive}
+            />
             <CardContent className="p-6 bg-white relative overflow-x-auto">
               <div
                 className="absolute inset-0 opacity-40 pointer-events-none"
@@ -1790,244 +2122,32 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
 
         {/* Dynamic Admin Builder Panel */}
         {isEditing && (
-          <div className="xl:col-span-1 space-y-6">
-            <Card className="shadow-md border border-gray-100">
-              <CardHeader className="pb-3 pt-4 px-5 flex flex-row items-center justify-between">
-                <h3 className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
-                  <Sparkles size={16} className="text-[#8B0000]" />
-                  Workflow Builder
-                </h3>
-
-                {/* Switch Active */}
-                <button
-                  onClick={() => setCustomActive(!customActive)}
-                  className="flex items-center gap-1.5 focus:outline-none"
-                >
-                  {customActive ? (
-                    <ToggleRight className="text-emerald-500 h-7 w-7" />
-                  ) : (
-                    <ToggleLeft className="text-gray-300 h-7 w-7" />
-                  )}
-                </button>
-              </CardHeader>
-              <CardContent className="px-5 pb-5 space-y-4">
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                  <span className="text-xs font-semibold text-gray-600">Gunakan Alur Kustom</span>
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      customActive ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-500"
-                    }`}
-                  >
-                    {customActive ? "AKTIF" : "NON-AKTIF"}
-                  </span>
-                </div>
-
-                {customActive && (
-                  <div className="space-y-3">
-                    {/* Workflow Variant Name & Scope Badge */}
-                    <div className="space-y-2 p-3 bg-gray-50/90 rounded-xl border border-gray-200/70">
-                      <div className="flex items-center justify-between">
-                        <label htmlFor="workflow-variant-name-input" className="text-[10px] font-black text-gray-500 uppercase tracking-wider">
-                          Nama Alur / Varian
-                        </label>
-                        {renderScopeVariantBadge(activeWorkflow?.scope_type)}
-                      </div>
-                      <input
-                        id="workflow-variant-name-input"
-                        type="text"
-                        value={activeWorkflow?.name || ""}
-                        onChange={(e) => {
-                          if (activeWorkflow) {
-                            setActiveWorkflow({ ...activeWorkflow, name: e.target.value });
-                          }
-                        }}
-                        placeholder="Nama alur persetujuan"
-                        className="w-full text-xs font-bold text-gray-800 bg-white border border-gray-200 rounded-lg p-2 focus:outline-none focus:border-[#8B0000]"
-                      />
-                      {activeWorkflow?.scope_type === "role" && activeWorkflow.scope_role && (
-                        <div className="text-[11px] text-gray-600 font-medium">
-                          🎯 Target: <strong className="text-gray-900">{activeWorkflow.scope_role.name}</strong>
-                        </div>
-                      )}
-                      {activeWorkflow?.scope_type === "user" && activeWorkflow.scope_user && (
-                        <div className="text-[11px] text-gray-600 font-medium">
-                          🎯 Target: <strong className="text-gray-900">{activeWorkflow.scope_user.name}</strong> ({activeWorkflow.scope_user.email})
-                        </div>
-                      )}
-                    </div>
-
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
-                      Tahapan Persetujuan
-                    </p>
-
-                    {steps.length === 0 ? (
-                      <div className="text-center p-6 border-2 border-dashed border-gray-200 rounded-xl">
-                        <p className="text-xs text-gray-400">Belum ada tahapan kustom.</p>
-                        <button
-                          onClick={handleAddStep}
-                          className="mt-2 text-xs font-bold text-[#8B0000] hover:underline flex items-center gap-1 mx-auto"
-                        >
-                          <Plus size={12} /> Tambah Step Pertama
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
-                        {steps.map((step, index) => (
-                          <div
-                            key={`workflow-step-${step.step_number}`}
-                            className="p-3 border border-gray-100 bg-white shadow-sm rounded-xl space-y-2 relative"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-black text-gray-400">STEP {step.step_number}</span>
-                              <div className="flex items-center gap-1">
-                                <button
-                                  onClick={() => moveStep(index, "up")}
-                                  disabled={index === 0}
-                                  className="p-1 hover:bg-gray-50 rounded disabled:opacity-30"
-                                >
-                                  <ArrowUp size={12} />
-                                </button>
-                                <button
-                                  onClick={() => moveStep(index, "down")}
-                                  disabled={index === steps.length - 1}
-                                  className="p-1 hover:bg-gray-50 rounded disabled:opacity-30"
-                                >
-                                  <ArrowDown size={12} />
-                                </button>
-                                <button
-                                  onClick={() => handleRemoveStep(index)}
-                                  className="p-1 text-red-500 hover:bg-red-50 rounded"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Approver Type */}
-                            <div className="space-y-1">
-                              <label htmlFor={`step-approver-type-${step.step_number}`} className="text-[10px] font-bold text-gray-500">Tipe Penyetuju</label>
-                              <select
-                                id={`step-approver-type-${step.step_number}`}
-                                value={step.approver_type}
-                                onChange={(e) => {
-                                  const newType = e.target.value as "supervisor" | "role" | "user";
-                                  handleStepChange(index, "approver_type", newType);
-                                  if (newType === "role" && !step.approver_role_id && roles.length > 0) {
-                                    handleStepChange(index, "approver_role_id", roles[0].id);
-                                  }
-                                  if (newType === "user" && !step.approver_user_id && users.length > 0) {
-                                    handleStepChange(index, "approver_user_id", users[0].id);
-                                  }
-                                }}
-                                className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
-                              >
-                                <option value="supervisor">Supervisor (Atasan Langsung)</option>
-                                <option value="role">Role Jabatan (COO, HRD, Direktur, dll)</option>
-                                <option value="user">User / Pejabat Tertentu</option>
-                              </select>
-                            </div>
-
-                            {/* Specific Role Dropdown */}
-                            {step.approver_type === "role" && (
-                              <div className="space-y-1">
-                                <label htmlFor={`step-role-${step.step_number}`} className="text-[10px] font-bold text-gray-500">Pilih Role</label>
-                                <select
-                                  id={`step-role-${step.step_number}`}
-                                  value={step.approver_role_id || ""}
-                                  onChange={(e) =>
-                                    handleStepChange(index, "approver_role_id", Number.parseInt(e.target.value, 10))
-                                  }
-                                  className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
-                                >
-                                  {roles.map((r) => (
-                                    <option key={r.id} value={r.id}>
-                                      {r.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            )}
-
-                            {/* Specific User Dropdown */}
-                            {step.approver_type === "user" && (
-                              <div className="space-y-1">
-                                <label htmlFor={`step-user-${step.step_number}`} className="text-[10px] font-bold text-gray-500">Pilih User / Pejabat</label>
-                                <select
-                                  id={`step-user-${step.step_number}`}
-                                  value={step.approver_user_id || ""}
-                                  onChange={(e) =>
-                                    handleStepChange(index, "approver_user_id", Number.parseInt(e.target.value, 10))
-                                  }
-                                  className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
-                                >
-                                  {users.length === 0 ? (
-                                    <option value="">Tidak ada karyawan tersedia</option>
-                                  ) : (
-                                    users.map((u) => (
-                                      <option key={u.id} value={u.id}>
-                                        {u.name} {u.role?.name ? `(${u.role.name})` : ""}
-                                      </option>
-                                    ))
-                                  )}
-                                </select>
-                              </div>
-                            )}
-
-                            {/* SLA hours */}
-                            <div className="space-y-1">
-                              <label htmlFor={`step-sla-${step.step_number}`} className="text-[10px] font-bold text-gray-500">
-                                Batas SLA Persetujuan (Jam)
-                              </label>
-                              <input
-                                id={`step-sla-${step.step_number}`}
-                                type="number"
-                                value={step.sla_hours}
-                                onChange={(e) =>
-                                  handleStepChange(index, "sla_hours", Number.parseInt(e.target.value, 10) || 24)
-                                }
-                                className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
-                                min={1}
-                              />
-                            </div>
-                          </div>
-                        ))}
-
-                        <button
-                          onClick={handleAddStep}
-                          className="w-full py-2 bg-gray-50 hover:bg-gray-100 border border-dashed border-gray-200 text-xs font-bold text-gray-600 rounded-xl flex items-center justify-center gap-1"
-                        >
-                          <Plus size={14} /> Tambah Langkah Baru
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Save button */}
-                <button
-                  onClick={handleSaveWorkflow}
-                  disabled={loading}
-                  className="w-full py-3 bg-[#8B0000] hover:bg-[#8B0000]/95 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-[#8B0000]/10 transition-all disabled:opacity-50"
-                >
-                  <Save size={16} />
-                  {loading ? "Menyimpan..." : "Simpan Konfigurasi"}
-                </button>
-
-                {/* Delete Custom Workflow button (if custom) */}
-                {activeModule?.is_custom && isSuperAdmin && (
-                  <button
-                    onClick={handleDeleteWorkflow}
-                    disabled={loading}
-                    className="w-full py-2.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                  >
-                    <Trash2 size={14} />
-                    Hapus Alur Kustom Ini
-                  </button>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <WorkflowBuilderPanel
+            customActive={customActive}
+            activeWorkflow={activeWorkflow}
+            activeModule={activeModule}
+            isSuperAdmin={isSuperAdmin}
+            steps={steps}
+            roles={roles}
+            users={users}
+            loading={loading}
+            onToggleCustomActive={() => setCustomActive(!customActive)}
+            onChangeWorkflowName={(name) => {
+              if (activeWorkflow) {
+                setActiveWorkflow({ ...activeWorkflow, name });
+              }
+            }}
+            onStepChange={handleStepChange}
+            onMoveStep={moveStep}
+            onRemoveStep={handleRemoveStep}
+            onAddStep={handleAddStep}
+            onSaveWorkflow={handleSaveWorkflow}
+            onDeleteWorkflow={handleDeleteWorkflow}
+          />
         )}
+
+
+
       </div>
 
       {/* Legend & Info */}
