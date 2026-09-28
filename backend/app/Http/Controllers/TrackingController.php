@@ -110,24 +110,20 @@ class TrackingController extends Controller
 
     private function matchesAttendanceFilters($att, Request $request, $user): bool
     {
-        if ($user->company_id && !$user->canAccessAllCompanies() && $att->company_id !== $user->company_id) {
-            return false;
-        }
-        if ($request->filled('company_id') && $request->company_id !== 'all' && (string) $att->company_id !== (string) $request->company_id) {
-            return false;
-        }
-        if ($request->filled('role_id') && $request->role_id !== 'all' && (string) ($att->user?->role_id ?? '') !== (string) $request->role_id) {
-            return false;
-        }
+        $mismatchCompany = ($user->company_id && !$user->canAccessAllCompanies() && $att->company_id !== $user->company_id)
+            || ($request->filled('company_id') && $request->company_id !== 'all' && (string) $att->company_id !== (string) $request->company_id);
+
+        $mismatchRole = $request->filled('role_id') && $request->role_id !== 'all' && (string) ($att->user?->role_id ?? '') !== (string) $request->role_id;
+
+        $mismatchSearch = false;
         if ($request->filled('search')) {
             $search = strtolower($request->search);
             $userName = strtolower($att->user?->name ?? '');
             $userNik = strtolower($att->user?->nik ?? '');
-            if (!str_contains($userName, $search) && !str_contains($userNik, $search)) {
-                return false;
-            }
+            $mismatchSearch = !str_contains($userName, $search) && !str_contains($userNik, $search);
         }
-        return true;
+
+        return !$mismatchCompany && !$mismatchRole && !$mismatchSearch;
     }
 
     private function mergeTodayAttendances($tracks, Request $request, $user, Carbon $today)

@@ -363,7 +363,6 @@ class PayrollController extends Controller
             $context,
             $startDate,
             $endDate,
-            $monthNum,
             (int) $year
         );
 

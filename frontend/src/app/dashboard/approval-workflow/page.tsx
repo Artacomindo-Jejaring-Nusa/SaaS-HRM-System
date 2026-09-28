@@ -507,7 +507,7 @@ function getDynamicFlowData(
     });
   });
 
-  const lastStepId = `step_${steps[steps.length - 1].step_number}`;
+  const lastStepId = `step_${steps.at(-1)?.step_number}`;
   const finalX = 40 + (steps.length + 1) * GAP_X;
   nodes.push({
     id: "ok",
@@ -529,6 +529,137 @@ function getDynamicFlowData(
   });
 
   return { nodes, edges };
+}
+
+function createNewStep(steps: BackendStep[], roles: AppRole[], users: AppUser[]): BackendStep {
+  const nextNumber = steps.length > 0 ? Math.max(...steps.map((s) => s.step_number)) + 1 : 1;
+  return {
+    step_number: nextNumber,
+    approver_type: "supervisor",
+    approver_role_id: roles.length > 0 ? roles[0].id : null,
+    approver_user_id: users.length > 0 ? users[0].id : null,
+    sla_hours: 24,
+  };
+}
+
+function removeStepFromList(steps: BackendStep[], index: number): BackendStep[] {
+  return steps
+    .filter((_, idx) => idx !== index)
+    .map((s, idx) => ({
+      ...s,
+      step_number: idx + 1,
+    }));
+}
+
+function moveStepInList(steps: BackendStep[], index: number, direction: "up" | "down"): BackendStep[] {
+  if (direction === "up" && index === 0) return steps;
+  if (direction === "down" && index === steps.length - 1) return steps;
+
+  const targetIdx = direction === "up" ? index - 1 : index + 1;
+  const updated = [...steps];
+  const temp = updated[index];
+  updated[index] = updated[targetIdx];
+  updated[targetIdx] = temp;
+
+  return updated.map((s, idx) => ({
+    ...s,
+    step_number: idx + 1,
+  }));
+}
+
+interface WorkflowCategoryChipsProps {
+  readonly categories: string[];
+  readonly activeCategory: string;
+  readonly onSelectCategory: (cat: string) => void;
+}
+
+function WorkflowCategoryChips({ categories, activeCategory, onSelectCategory }: WorkflowCategoryChipsProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 pb-1">
+      <span className="text-[11px] font-bold text-gray-400 mr-2 flex items-center gap-1">
+        <Layers size={13} /> Kategori:
+      </span>
+      {categories.map((cat) => (
+        <button
+          key={cat}
+          type="button"
+          onClick={() => onSelectCategory(cat)}
+          className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+            activeCategory === cat
+              ? "bg-gray-900 text-white shadow-sm"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          {cat}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface WorkflowModuleTabsSelectorProps {
+  readonly filteredModules: WorkflowModule[];
+  readonly selected: string;
+  readonly customActive: boolean;
+  readonly stepsCount: number;
+  readonly onSelectModule: (key: string) => void;
+}
+
+function WorkflowModuleTabsSelector({
+  filteredModules,
+  selected,
+  customActive,
+  stepsCount,
+  onSelectModule,
+}: WorkflowModuleTabsSelectorProps) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {filteredModules.map((m) => {
+        const isCurrent = selected === m.key;
+        const variantCount = m.variants?.length || 0;
+        return (
+          <button
+            key={m.key}
+            type="button"
+            onClick={() => onSelectModule(m.key)}
+            className={`px-4 py-2.5 text-sm font-bold rounded-xl transition-all relative flex items-center gap-2 ${
+              isCurrent
+                ? "bg-[#8B0000] text-white shadow-lg shadow-[#8B0000]/20 scale-102"
+                : "bg-white text-gray-700 border border-gray-200/80 hover:bg-gray-50"
+            }`}
+          >
+            <span>{m.label}</span>
+            {variantCount > 1 && (
+              <span
+                className={`text-[9px] px-1.5 py-0.5 rounded font-bold tracking-wide ${
+                  isCurrent ? "bg-amber-400 text-amber-950" : "bg-amber-100 text-amber-900 border border-amber-200"
+                }`}
+              >
+                {variantCount} Varian
+              </span>
+            )}
+            {m.is_custom ? (
+              <span
+                className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-black tracking-wide ${
+                  isCurrent ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                Kustom
+              </span>
+            ) : (
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                  isCurrent ? "bg-white/20" : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                {isCurrent && customActive ? `${stepsCount}L` : `${m.layers}L`}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function ApprovalWorkflowPage() {
@@ -676,43 +807,15 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
   const maxY = Math.max(...flow.nodes.map((n) => n.y + NODE_H)) + 60;
 
   const handleAddStep = () => {
-    const nextNumber = steps.length > 0 ? Math.max(...steps.map((s) => s.step_number)) + 1 : 1;
-    const newStep: BackendStep = {
-      step_number: nextNumber,
-      approver_type: "supervisor",
-      approver_role_id: roles.length > 0 ? roles[0].id : null,
-      approver_user_id: users.length > 0 ? users[0].id : null,
-      sla_hours: 24,
-    };
-    setSteps([...steps, newStep]);
+    setSteps([...steps, createNewStep(steps, roles, users)]);
   };
 
   const handleRemoveStep = (index: number) => {
-    const updated = steps
-      .filter((_, idx) => idx !== index)
-      .map((s, idx) => ({
-        ...s,
-        step_number: idx + 1,
-      }));
-    setSteps(updated);
+    setSteps(removeStepFromList(steps, index));
   };
 
   const moveStep = (index: number, direction: "up" | "down") => {
-    if (direction === "up" && index === 0) return;
-    if (direction === "down" && index === steps.length - 1) return;
-
-    const targetIdx = direction === "up" ? index - 1 : index + 1;
-    const updated = [...steps];
-    const temp = updated[index];
-    updated[index] = updated[targetIdx];
-    updated[targetIdx] = temp;
-
-    setSteps(
-      updated.map((s, idx) => ({
-        ...s,
-        step_number: idx + 1,
-      }))
-    );
+    setSteps(moveStepInList(steps, index, direction));
   };
 
   const handleStepChange = (index: number, field: keyof BackendStep, value: any) => {
@@ -1006,74 +1109,23 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
       )}
 
       {/* Category Filter Chips */}
-      <div className="flex flex-wrap items-center gap-1.5 pb-1">
-        <span className="text-[11px] font-bold text-gray-400 mr-2 flex items-center gap-1">
-          <Layers size={13} /> Kategori:
-        </span>
-        {categories.map((cat) => (
-          <button
-            key={cat}
-            onClick={() => setActiveCategory(cat)}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-              activeCategory === cat
-                ? "bg-gray-900 text-white shadow-sm"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
+      <WorkflowCategoryChips
+        categories={categories}
+        activeCategory={activeCategory}
+        onSelectCategory={setActiveCategory}
+      />
 
       {/* Dynamic Module Tabs */}
-      <div className="flex flex-wrap gap-2">
-        {filteredModules.map((m) => {
-          const isCurrent = selected === m.key;
-          const variantCount = m.variants?.length || 0;
-          return (
-            <button
-              key={m.key}
-              onClick={() => {
-                setSelected(m.key);
-                setSelectedWorkflowId(null);
-              }}
-              className={`px-4 py-2.5 text-sm font-bold rounded-xl transition-all relative flex items-center gap-2 ${
-                isCurrent
-                  ? "bg-[#8B0000] text-white shadow-lg shadow-[#8B0000]/20 scale-102"
-                  : "bg-white text-gray-700 border border-gray-200/80 hover:bg-gray-50"
-              }`}
-            >
-              <span>{m.label}</span>
-              {variantCount > 1 && (
-                <span
-                  className={`text-[9px] px-1.5 py-0.5 rounded font-bold tracking-wide ${
-                    isCurrent ? "bg-amber-400 text-amber-950" : "bg-amber-100 text-amber-900 border border-amber-200"
-                  }`}
-                >
-                  {variantCount} Varian
-                </span>
-              )}
-              {m.is_custom ? (
-                <span
-                  className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-black tracking-wide ${
-                    isCurrent ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"
-                  }`}
-                >
-                  Kustom
-                </span>
-              ) : (
-                <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                    isCurrent ? "bg-white/20" : "bg-gray-100 text-gray-500"
-                  }`}
-                >
-                  {isCurrent && customActive ? `${steps.length}L` : `${m.layers}L`}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      <WorkflowModuleTabsSelector
+        filteredModules={filteredModules}
+        selected={selected}
+        customActive={customActive}
+        stepsCount={steps.length}
+        onSelectModule={(key) => {
+          setSelected(key);
+          setSelectedWorkflowId(null);
+        }}
+      />
 
       {/* Variant & Scope Switcher Bar */}
       <div className="bg-white p-3.5 rounded-2xl border border-gray-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">

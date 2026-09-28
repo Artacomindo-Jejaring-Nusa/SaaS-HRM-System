@@ -522,11 +522,9 @@ class ManagerController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Pengajuan tidak ditemukan atau Anda tidak memiliki hak akses.'], 404);
         }
 
-        $response = !empty($item->current_approval_step)
+        return !empty($item->current_approval_step)
             ? $this->handleDynamicApproval($item, $request, $user)
             : $this->handleLegacyApproval($item, $request, $user, $isGlobalAdmin, $isCompanyAdmin);
-
-        return $response;
     }
 
     /**

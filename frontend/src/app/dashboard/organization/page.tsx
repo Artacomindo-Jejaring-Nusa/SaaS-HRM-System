@@ -21,7 +21,8 @@ import {
 
 interface ErrorBoundaryProps {
   children: ReactNode;
-  fallbackRender: (props: { error: any; resetErrorBoundary: () => void }) => ReactNode;
+  fallbackRender?: (props: { error: any; resetErrorBoundary: () => void }) => ReactNode;
+  onRetry?: () => void;
 }
 
 interface ErrorBoundaryState {
@@ -45,10 +46,19 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
   render() {
     if (this.state.hasError) {
-      return this.props.fallbackRender({
-        error: this.state.error,
-        resetErrorBoundary: this.resetErrorBoundary,
-      });
+      if (this.props.fallbackRender) {
+        return this.props.fallbackRender({
+          error: this.state.error,
+          resetErrorBoundary: this.resetErrorBoundary,
+        });
+      }
+      return (
+        <OrganizationErrorFallback
+          error={this.state.error}
+          resetErrorBoundary={this.resetErrorBoundary}
+          onRetry={this.props.onRetry || (() => {})}
+        />
+      );
     }
     return this.props.children;
   }
@@ -741,15 +751,7 @@ export default function OrganizationChartPage() {
       )}
 
       {!isLoading && flatData.length > 0 && (
-        <ErrorBoundary
-          fallbackRender={({ error, resetErrorBoundary }) => (
-            <OrganizationErrorFallback
-              error={error}
-              resetErrorBoundary={resetErrorBoundary}
-              onRetry={fetchData}
-            />
-          )}
-        >
+        <ErrorBoundary onRetry={fetchData}>
           <div
             className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden relative flex-1 min-h-[550px] w-full"
             style={{ height: "calc(100vh - 220px)" }}

@@ -14,7 +14,7 @@ class DynamicPayrollEngine
     /**
      * Get all components assigned and active for a user in a given period.
      */
-    public function getApplicableComponentsForUser(User $user, Carbon $startDate, Carbon $endDate, int $month, int $year): array
+    public function getApplicableComponentsForUser(User $user, Carbon $startDate, Carbon $endDate, int $year): array
     {
         $allComponents = PayrollComponent::where('company_id', $user->company_id)
             ->active()
@@ -345,9 +345,9 @@ class DynamicPayrollEngine
         return $details;
     }
 
-    private function buildDynamicComponentsSnapshot(Salary $salary, User $user, array $context, Carbon $startDate, Carbon $endDate, int $month, int $year): array
+    private function buildDynamicComponentsSnapshot(Salary $salary, User $user, array $context, Carbon $startDate, Carbon $endDate, int $year): array
     {
-        $applicable = $this->getApplicableComponentsForUser($user, $startDate, $endDate, $month, $year);
+        $applicable = $this->getApplicableComponentsForUser($user, $startDate, $endDate, $year);
         $totalDynamicEarnings = 0;
         $totalDynamicDeductions = 0;
         $details = [];
@@ -488,13 +488,13 @@ class DynamicPayrollEngine
     /**
      * Generate complete immutable snapshot rows into payslip_details.
      */
-    public function generateSnapshotDetails(Salary $salary, User $user, array $context, Carbon $startDate, Carbon $endDate, int $month, int $year): array
+    public function generateSnapshotDetails(Salary $salary, User $user, array $context, Carbon $startDate, Carbon $endDate, int $year): array
     {
         // 1. Delete previous snapshot if generating draft anew
         PayslipDetail::where('salary_id', $salary->id)->delete();
 
         $statutoryEarnings = $this->buildStatutoryEarningsSnapshot($salary, $context);
-        $dynamicResult = $this->buildDynamicComponentsSnapshot($salary, $user, $context, $startDate, $endDate, $month, $year);
+        $dynamicResult = $this->buildDynamicComponentsSnapshot($salary, $user, $context, $startDate, $endDate, $year);
         $statutoryDeductions = $this->buildStatutoryDeductionsSnapshot($salary, $context);
 
         $snapshotDetails = array_merge($statutoryEarnings, $dynamicResult['details'], $statutoryDeductions);

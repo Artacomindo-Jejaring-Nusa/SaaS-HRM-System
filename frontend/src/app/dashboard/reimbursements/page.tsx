@@ -205,19 +205,19 @@ function getTimelineStepBadgeClass(stepState: TimelineStepState, isRejected: boo
   return 'bg-gray-100 text-gray-400 border border-gray-200';
 }
 
-function getTimelineStepTextClass(stepState: "passed" | "current" | "upcoming", isRejected: boolean): string {
+function getTimelineStepTextClass(stepState: TimelineStepState, isRejected: boolean): string {
   if (stepState === 'passed') return 'text-emerald-600';
   if (stepState === 'current') return isRejected ? 'text-rose-600' : 'text-amber-600';
   return 'text-gray-400';
 }
 
-function getTimelineStepStatusText(stepState: "passed" | "current" | "upcoming", isRejected: boolean): string {
+function getTimelineStepStatusText(stepState: TimelineStepState, isRejected: boolean): string {
   if (stepState === 'passed') return 'Disetujui';
   if (stepState === 'current') return isRejected ? 'Ditolak' : 'Menunggu Persetujuan';
   return 'Menunggu Giliran';
 }
 
-function getTimelineStepIcon(stepState: "passed" | "current" | "upcoming", isRejected: boolean, stepIndex: number) {
+function getTimelineStepIcon(stepState: TimelineStepState, isRejected: boolean, stepIndex: number) {
   if (stepState === 'passed') return <Check size={16} />;
   if (isRejected && stepState === 'current') return <XCircle size={16} />;
   return stepIndex;

@@ -43,7 +43,12 @@ function getTextAreaBaseClass(canEdit: boolean): string {
 
 function getWatzapInputClass(canEdit: boolean, isMono = false, isMuted = false): string {
   const bgClass = canEdit ? "bg-white shadow-sm" : "bg-gray-100";
-  const extra = isMono ? " font-mono" : (isMuted ? " text-gray-500" : "");
+  let extra = "";
+  if (isMono) {
+    extra = " font-mono";
+  } else if (isMuted) {
+    extra = " text-gray-500";
+  }
   return `w-full h-11 px-4 text-sm ${bgClass} border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all${extra}`;
 }
 

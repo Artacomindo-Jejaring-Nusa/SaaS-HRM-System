@@ -262,6 +262,38 @@ function filterPayrollBatches(
   });
 }
 
+function triggerBlobDownload(data: BlobPart, filename: string) {
+  const url = window.URL.createObjectURL(new Blob([data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function buildPayrollStatusPayload(action: string, note?: string): Record<string, string> {
+  if (action === 'reject') {
+    return { rejection_note: note || 'Perlu revisi komponen' };
+  }
+  return {};
+}
+
+function countUnsavedProfiles(emps: any[]): number {
+  return emps.filter((e: any) => !e.basic_salary || Number.parseInt(e.basic_salary, 10) === 0).length;
+}
+
+function filterBatchSalaries(salaries: SalaryRecord[] | undefined, search: string): SalaryRecord[] {
+  if (!salaries) return [];
+  if (!search.trim()) return salaries;
+  const q = search.toLowerCase();
+  return salaries.filter(s =>
+    Boolean(s.user?.name.toLowerCase().includes(q)) ||
+    Boolean(s.department?.toLowerCase().includes(q)) ||
+    Boolean(s.bank_name?.toLowerCase().includes(q))
+  );
+}
+
 export default function PayrollManagementPage() {
   const [loading, setLoading] = useState(true);
   const [batches, setBatches] = useState<PayrollBatch[]>([]);
@@ -357,7 +389,7 @@ export default function PayrollManagementPage() {
         onClick: async () => {
           try {
             setActionSubmitting(true);
-            const payload = action === 'reject' ? { rejection_note: note || 'Perlu revisi komponen' } : {};
+            const payload = buildPayrollStatusPayload(action, note);
             await axiosInstance.post(`/payroll/batches/${selectedBatch.id}/${action}`, payload);
             toast.success(`Payroll berhasil di-${action}`);
             refreshCurrentBatch();
@@ -398,7 +430,7 @@ export default function PayrollManagementPage() {
       const res = await axiosInstance.get('/employees?per_page=1000');
       const emps = res.data.data.data || [];
       const total = res.data.data.total ?? emps.length;
-      const unsaved = emps.filter((e: any) => !e.basic_salary || Number.parseInt(e.basic_salary, 10) === 0).length;
+      const unsaved = countUnsavedProfiles(emps);
       setGenStats({ total_employees: total, unsaved_profiles: unsaved });
     } catch (e) {
       console.error(e);
@@ -434,13 +466,7 @@ export default function PayrollManagementPage() {
         params: { year: yearFilter === "all" ? undefined : yearFilter },
         responseType: 'blob',
       });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Laporan_Payroll_Semua_${yearFilter}.xlsx`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      triggerBlobDownload(response.data, `Laporan_Payroll_Semua_${yearFilter}.xlsx`);
     } catch (e) {
       console.error(e);
       toast.error("Gagal mengekspor data Excel.");
@@ -455,13 +481,7 @@ export default function PayrollManagementPage() {
       const response = await axiosInstance.get(`/payroll/batches/${batchId}/export-rekap`, {
         responseType: 'blob',
       });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Rekap_Payroll_${month}_${year}.xlsx`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      triggerBlobDownload(response.data, `Rekap_Payroll_${month}_${year}.xlsx`);
       toast.success("File rekap payroll berhasil diunduh.");
     } catch (e) {
       console.error(e);
@@ -475,13 +495,7 @@ export default function PayrollManagementPage() {
       const response = await axiosInstance.get(`/payroll/download-slip/${salaryId}`, {
         responseType: 'blob',
       });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Slip_Gaji_${name.replaceAll(/\s+/g, '_')}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      triggerBlobDownload(response.data, `Slip_Gaji_${name.replaceAll(/\s+/g, '_')}.pdf`);
     } catch (e) {
       console.error(e);
       toast.error("Gagal mengunduh slip PDF");
@@ -577,15 +591,8 @@ export default function PayrollManagementPage() {
 
   // Filter salaries inside selected batch
   const filteredSalaries = useMemo(() => {
-    if (!selectedBatch?.salaries) return [];
-    if (!employeeSearch.trim()) return selectedBatch.salaries;
-    const q = employeeSearch.toLowerCase();
-    return selectedBatch.salaries.filter(s =>
-      Boolean(s.user?.name.toLowerCase().includes(q)) ||
-      Boolean(s.department?.toLowerCase().includes(q)) ||
-      Boolean(s.bank_name?.toLowerCase().includes(q))
-    );
-  }, [selectedBatch, employeeSearch]);
+    return filterBatchSalaries(selectedBatch?.salaries, employeeSearch);
+  }, [selectedBatch?.salaries, employeeSearch]);
 
   if (loading && !selectedBatch) {
     return <PayrollSkeleton />;

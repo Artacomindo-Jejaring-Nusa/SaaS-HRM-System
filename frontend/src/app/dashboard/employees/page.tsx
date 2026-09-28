@@ -123,8 +123,21 @@ function buildEmployeeFormData(formData: EmployeeFormData, isEdit: boolean): For
       return;
     }
 
-    // Kirim string kosong untuk nilai null agar Laravel bisa menghapus nilai di DB (nullable)
-    data.append(key, (val === null || val === undefined) ? "" : String(val));
+    if (val === null) {
+      data.append(key, "");
+      return;
+    }
+
+    if (typeof val === "object") {
+      if (val instanceof File) {
+        data.append(key, val);
+      } else {
+        data.append(key, JSON.stringify(val));
+      }
+      return;
+    }
+
+    data.append(key, String(val));
   });
 
   if (isEdit) {
@@ -226,12 +239,118 @@ function downloadPayrollAccountTemplate() {
   XLSX.writeFile(workbook, "Template_Data_Rekening_Karyawan.xlsx");
 }
 
+function checkIsHRorAdmin(hasPermission: (perm: string) => boolean, roleName?: string): boolean {
+  if (hasPermission('manage-employees')) return true;
+  const lowerRole = roleName?.toLowerCase() || '';
+  return lowerRole.includes('admin') || lowerRole.includes('hr');
+}
+
+function getResponsivePerPage(width: number): number {
+  if (width < 768) return 5;
+  if (width < 1280) return 10;
+  return 15;
+}
+
+function buildEmployeeDatatablesParams(
+  p: number,
+  perPage: number,
+  search: string,
+  activeFilter: 'all' | 'unverified' | 'team',
+  selectedRole: string,
+  urlId: string | null
+): URLSearchParams {
+  const start = (p - 1) * perPage;
+  const params = new URLSearchParams({
+    draw: '1',
+    start: start.toString(),
+    length: perPage.toString(),
+    "search[value]": search,
+    filter: activeFilter === 'unverified' ? 'unverified' : 'all',
+    is_team: activeFilter === 'team' ? 'true' : 'false'
+  });
+
+  if (selectedRole && selectedRole !== 'all') {
+    params.append('role_id', selectedRole);
+  }
+
+  if (urlId) {
+    params.append('id', urlId);
+  }
+
+  return params;
+}
+
+function getInitialAddFormData(): EmployeeFormData {
+  return {
+    role_id: 3,
+    leave_balance: 12,
+    employment_status: 'Permanent',
+    work_location: 'Kantor Pusat',
+    attendance_type: 'office_hour',
+    office_id: null,
+    cost_center: "",
+    bank_name: "",
+    bank_account_no: "",
+    bank_account_name: "",
+    can_access_manager_portal: null,
+  };
+}
+
+function getEditEmployeeFormData(emp: Employee): EmployeeFormData {
+  return {
+    id: emp.id,
+    name: emp.name,
+    email: emp.email,
+    role_id: emp.role_id,
+    nik: emp.nik || "",
+    phone: emp.phone || "",
+    address: emp.address || "",
+    join_date: emp.join_date ? emp.join_date.substring(0, 10) : "",
+    supervisor_id: emp.supervisor_id || null,
+    leave_balance: emp.leave_balance ?? 12,
+    employment_status: emp.employment_status || 'Permanent',
+    work_location: emp.work_location || 'Kantor Pusat',
+    attendance_type: emp.attendance_type || 'office_hour',
+    ktp_no: emp.ktp_no || "",
+    place_of_birth: emp.place_of_birth || "",
+    date_of_birth: emp.date_of_birth ? emp.date_of_birth.substring(0, 10) : "",
+    gender: emp.gender || "",
+    marital_status: emp.marital_status || "",
+    religion: emp.religion || "",
+    blood_type: emp.blood_type || "",
+    emergency_contact_name: emp.emergency_contact_name || "",
+    emergency_contact_phone: emp.emergency_contact_phone || "",
+    office_id: emp.office_id || null,
+    cost_center: emp.cost_center || "",
+    bank_name: emp.bank_name || "",
+    bank_account_no: emp.bank_account_no || "",
+    bank_account_name: emp.bank_account_name || "",
+    can_access_manager_portal: emp.can_access_manager_portal ?? null,
+  };
+}
+
+function extractEmployeeErrorMessage(err: unknown, fallback: string): string {
+  const errorResponse = err as { response?: { data?: { message?: string; error?: string } } };
+  let msg = errorResponse.response?.data?.message || errorResponse.response?.data?.error || fallback;
+  if (typeof msg === 'object') {
+    msg = JSON.stringify(msg, null, 2);
+  }
+  return msg;
+}
+
+function formatEmployeeDate(dateString?: string): string {
+  if (!dateString) return "-";
+  return new Date(dateString).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
+}
+
 function EmployeesContent() {
   const { hasPermission, permissions, user: currentUser } = useAuth();
   const isSuperAdmin = currentUser?.role_id === 1 || currentUser?.role?.name === 'Super Admin';
-  const isHRorAdmin = hasPermission('manage-employees') || 
-                      currentUser?.role?.name?.toLowerCase().includes('admin') || 
-                      currentUser?.role?.name?.toLowerCase().includes('hr');
+  const isHRorAdmin = checkIsHRorAdmin(hasPermission, currentUser?.role?.name);
   const searchParams = useSearchParams();
   const urlSearch = searchParams.get("search");
   const urlId = searchParams.get("id");
@@ -306,15 +425,7 @@ function EmployeesContent() {
 
   // Handle Dynamic Page Length based on Device
   useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 768) {
-        setPerPage(5);
-      } else if (window.innerWidth < 1280) {
-        setPerPage(10);
-      } else {
-        setPerPage(15);
-      }
-    };
+    const handleResize = () => setPerPage(getResponsivePerPage(window.innerWidth));
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -365,12 +476,8 @@ function EmployeesContent() {
       setErrorModalOpen(true);
       fetchEmployees(1);
     } catch (err: unknown) {
-      // Menghapus console.error agar Next.js tidak memunculkan overlay hitam di mode Dev
-      const errorResponse = err as { response?: { data?: { message?: string; error?: string } } };
-      let msg = errorResponse.response?.data?.message || errorResponse.response?.data?.error || "Gagal mengimpor file. Pastikan format sesuai template.";
-      if (typeof msg === 'object') msg = JSON.stringify(msg, null, 2);
       setModalType("error");
-      setErrorMessage(msg);
+      setErrorMessage(extractEmployeeErrorMessage(err, "Gagal mengimpor file. Pastikan format sesuai template."));
       setErrorModalOpen(true);
     } finally {
       setLoading(false);
@@ -395,9 +502,8 @@ function EmployeesContent() {
       setErrorModalOpen(true);
       fetchEmployees(1);
     } catch (err: unknown) {
-      const errorResponse = err as { response?: { data?: { message?: string } } };
       setModalType("error");
-      setErrorMessage(errorResponse.response?.data?.message || "Gagal mengimpor data payroll.");
+      setErrorMessage(extractEmployeeErrorMessage(err, "Gagal mengimpor data payroll."));
       setErrorModalOpen(true);
     } finally {
       setLoading(false);
@@ -435,27 +541,7 @@ function EmployeesContent() {
   const fetchEmployees = async (p = 1) => {
     try {
       setLoading(true);
-      const s = debouncedSearch;
-      const isTeam = activeFilter === 'team';
-      const isUnverified = activeFilter === 'unverified';
-      
-      // Menggunakan endpoint DataTables untuk efisiensi maksimal
-      const start = (p - 1) * perPage;
-      const params = new URLSearchParams({
-        draw: '1',
-        start: start.toString(),
-        length: perPage.toString(),
-        "search[value]": s,
-        filter: isUnverified ? 'unverified' : 'all',
-        is_team: isTeam ? 'true' : 'false'
-      });
-
-      if (selectedRole && selectedRole !== 'all') {
-        params.append('role_id', selectedRole);
-      }
-
-      if (urlId) params.append('id', urlId);
-
+      const params = buildEmployeeDatatablesParams(p, perPage, debouncedSearch, activeFilter, selectedRole, urlId);
       const response = await axiosInstance.get(`/employees/datatables?${params.toString()}`);
       
       // Mapping DataTables response format ke format lokal
@@ -492,55 +578,14 @@ function EmployeesContent() {
 
   const handleOpenAddModal = () => {
     setModalMode("add");
-    setFormData({ 
-      role_id: 3, 
-      leave_balance: 12,
-      employment_status: 'Permanent',
-      work_location: 'Kantor Pusat',
-      attendance_type: 'office_hour',
-      office_id: null,
-      cost_center: "",
-      bank_name: "",
-      bank_account_no: "",
-      bank_account_name: "",
-      can_access_manager_portal: null,
-    });
+    setFormData(getInitialAddFormData());
     fetchPotentialSupervisors();
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (emp: Employee) => {
     setModalMode("edit");
-    setFormData({
-      id: emp.id,
-      name: emp.name,
-      email: emp.email,
-      role_id: emp.role_id,
-      nik: emp.nik || "",
-      phone: emp.phone || "",
-      address: emp.address || "",
-      join_date: emp.join_date ? emp.join_date.substring(0, 10) : "",
-      supervisor_id: emp.supervisor_id || null,
-      leave_balance: emp.leave_balance ?? 12,
-      employment_status: emp.employment_status || 'Permanent',
-      work_location: emp.work_location || 'Kantor Pusat',
-      attendance_type: emp.attendance_type || 'office_hour',
-      ktp_no: emp.ktp_no || "",
-      place_of_birth: emp.place_of_birth || "",
-      date_of_birth: emp.date_of_birth ? emp.date_of_birth.substring(0, 10) : "",
-      gender: emp.gender || "",
-      marital_status: emp.marital_status || "",
-      religion: emp.religion || "",
-      blood_type: emp.blood_type || "",
-      emergency_contact_name: emp.emergency_contact_name || "",
-      emergency_contact_phone: emp.emergency_contact_phone || "",
-      office_id: emp.office_id || null,
-      cost_center: emp.cost_center || "",
-      bank_name: emp.bank_name || "",
-      bank_account_no: emp.bank_account_no || "",
-      bank_account_name: emp.bank_account_name || "",
-      can_access_manager_portal: emp.can_access_manager_portal ?? null,
-    });
+    setFormData(getEditEmployeeFormData(emp));
     fetchPotentialSupervisors(emp.id);
     setPhotoPreview(emp.profile_photo_url || null);
     setIsModalOpen(true);
@@ -717,14 +762,7 @@ function EmployeesContent() {
   };
 
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "short",
-      year: "numeric"
-    });
-  };
+  const formatDate = formatEmployeeDate;
 
   const filteredEmployees = employees;
   const unverifiedCount = totalUnverified;

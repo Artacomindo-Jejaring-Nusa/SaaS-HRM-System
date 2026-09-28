@@ -160,6 +160,92 @@ function PermitTableRow({ permit, hasApprovePermission, onViewDetail, onActionCl
   );
 }
 
+function parsePermitsApiResponse(responseData: any) {
+  const list = responseData?.data?.data || responseData?.data || [];
+  let pagination = null;
+  if (responseData?.data?.current_page) {
+    pagination = {
+      current_page: responseData.data.current_page,
+      last_page: responseData.data.last_page,
+      total: responseData.data.total
+    };
+  }
+  return { list, pagination };
+}
+
+function updatePermitRecord(
+  prev: PermitRecord | null,
+  targetId: number,
+  action: 'approve' | 'reject',
+  remarkInput: string,
+  overrideCategory: string,
+  overrideDoctorNote: boolean
+): PermitRecord | null {
+  if (!prev || prev.id !== targetId) return prev;
+  return {
+    ...prev,
+    status: action === 'approve' ? 'approved' : 'rejected',
+    remark: remarkInput || prev.remark,
+    category: overrideCategory,
+    has_doctor_note: overrideDoctorNote,
+  };
+}
+
+interface PermitTableContentProps {
+  loading: boolean;
+  permits: PermitRecord[];
+  hasApprovePermission: boolean;
+  onViewDetail: (item: PermitRecord) => void;
+  onActionClick: (item: PermitRecord, action: 'approve' | 'reject') => void;
+}
+
+function PermitTableContent({
+  loading,
+  permits,
+  hasApprovePermission,
+  onViewDetail,
+  onActionClick
+}: PermitTableContentProps) {
+  if (loading) {
+    return <div className="p-6"><TableSkeleton rows={6} cols={6} /></div>;
+  }
+  if (permits.length === 0) {
+    return (
+      <div className="p-8 text-center text-gray-500 text-sm">
+        Tidak ada data pengajuan Izin.
+      </div>
+    );
+  }
+  return (
+    <div className="dash-table-wrapper">
+      <table className="dash-table">
+        <thead>
+          <tr>
+            <th>Info Karyawan</th>
+            <th>Kategori</th>
+            <th>Tipe Izin</th>
+            <th>Tanggal</th>
+            <th>Potong</th>
+            <th>Status</th>
+            <th className="text-right">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {permits.map((permit) => (
+            <PermitTableRow
+              key={permit.id}
+              permit={permit}
+              hasApprovePermission={hasApprovePermission}
+              onViewDetail={onViewDetail}
+              onActionClick={onActionClick}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function PermitsPage() {
   const { hasPermission } = useAuth();
   const [permits, setpermits] = useState<PermitRecord[]>([]);
@@ -204,13 +290,10 @@ export default function PermitsPage() {
     try {
       setLoading(true);
       const response = await axiosInstance.get(`/permits?page=${pageNumber}`);
-      setpermits(response.data.data?.data || response.data.data || []);
-      if (response.data.data && response.data.data.current_page) {
-        setPagination({
-          current_page: response.data.data.current_page,
-          last_page: response.data.data.last_page,
-          total: response.data.data.total
-        });
+      const { list, pagination: newPagination } = parsePermitsApiResponse(response.data);
+      setpermits(list);
+      if (newPagination) {
+        setPagination(newPagination);
       }
     } catch (e) {
       console.error("Gagal mendapatkan data Izin", e);
@@ -258,15 +341,7 @@ export default function PermitsPage() {
       await axiosInstance.post(`/permits/${item.id}/${action}`, payload);
       toast.success(`Pengajuan Izin berhasil di-${action === 'approve' ? 'setujui' : 'tolak'}!`);
       setActionModal({ isOpen: false, action: null, item: null });
-      if (selectedItem?.id === item.id) {
-        setSelectedItem({
-          ...selectedItem,
-          status: action === 'approve' ? 'approved' : 'rejected',
-          remark: remarkInput || selectedItem.remark,
-          category: overrideCategory,
-          has_doctor_note: overrideDoctorNote,
-        });
-      }
+      setSelectedItem(prev => updatePermitRecord(prev, item.id, action, remarkInput, overrideCategory, overrideDoctorNote));
       fetchpermits(page);
     } catch (error) {
       const err = error as { response?: { data?: { message?: string } } };
@@ -294,48 +369,6 @@ export default function PermitsPage() {
     downloadFile(`/export/permit/${recordId}`, `Izin_${sanitizeFileName(userName)}.pdf`, 'pdf');
   const handleDownloadExcel = (recordId: number, userName: string) =>
     downloadFile(`/export/permit/${recordId}/excel`, `Izin_${sanitizeFileName(userName)}.xlsx`, 'excel');
-
-
-  const renderTableContent = () => {
-    if (loading) {
-      return <div className="p-6"><TableSkeleton rows={6} cols={6} /></div>;
-    }
-    if (permits.length === 0) {
-      return (
-        <div className="p-8 text-center text-gray-500 text-sm">
-          Tidak ada data pengajuan Izin.
-        </div>
-      );
-    }
-    return (
-      <div className="dash-table-wrapper">
-        <table className="dash-table">
-          <thead>
-            <tr>
-              <th>Info Karyawan</th>
-              <th>Kategori</th>
-              <th>Tipe Izin</th>
-              <th>Tanggal</th>
-              <th>Potong</th>
-              <th>Status</th>
-              <th className="text-right">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {permits.map((permit) => (
-              <PermitTableRow
-                key={permit.id}
-                permit={permit}
-                hasApprovePermission={hasPermission('approve-permits')}
-                onViewDetail={handleViewDetail}
-                onActionClick={handleActionClick}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
 
   return (
     <>
@@ -372,7 +405,13 @@ export default function PermitsPage() {
         </div>
 
         <div className="dash-table-container">
-          {renderTableContent()}
+          <PermitTableContent
+            loading={loading}
+            permits={permits}
+            hasApprovePermission={hasPermission('approve-permits')}
+            onViewDetail={handleViewDetail}
+            onActionClick={handleActionClick}
+          />
           
           {pagination.last_page > 1 && (
             <Pagination 

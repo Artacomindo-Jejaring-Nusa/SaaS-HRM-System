@@ -44,25 +44,32 @@ class ExpressionEvaluator
         return $this->tokens[$this->pos++] ?? null;
     }
 
+    private function parseUnaryFactor(string $sign): float
+    {
+        $this->consume();
+        $factor = $this->parseFactor();
+        return $sign === '-' ? -$factor : $factor;
+    }
+
+    private function parseParenthesizedExpression(): float
+    {
+        $this->consume();
+        $value = $this->parseExpression();
+        if ($this->peek() !== ')') {
+            throw new \InvalidArgumentException('Tanda kurung tidak seimbang');
+        }
+        $this->consume();
+        return $value;
+    }
+
     private function parseFactor(): float
     {
         $token = $this->peek();
-        if ($token === '+') {
-            $this->consume();
-            return $this->parseFactor();
-        }
-        if ($token === '-') {
-            $this->consume();
-            return -$this->parseFactor();
+        if ($token === '+' || $token === '-') {
+            return $this->parseUnaryFactor($token);
         }
         if ($token === '(') {
-            $this->consume();
-            $value = $this->parseExpression();
-            if ($this->peek() !== ')') {
-                throw new \InvalidArgumentException('Tanda kurung tidak seimbang');
-            }
-            $this->consume();
-            return $value;
+            return $this->parseParenthesizedExpression();
         }
         if ($token !== null && is_numeric($token)) {
             $this->consume();

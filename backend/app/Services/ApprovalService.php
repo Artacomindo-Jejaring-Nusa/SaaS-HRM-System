@@ -439,11 +439,8 @@ class ApprovalService
             return false;
         }
 
-        if (in_array($moduleKey, ['fund_request', 'reimbursement'])) {
-            return self::canApproveFinancialRoleStep($step, $approver);
-        }
-
-        return true;
+        return !in_array($moduleKey, ['fund_request', 'reimbursement'])
+            || self::canApproveFinancialRoleStep($step, $approver);
     }
 
     private static function canApproveUserStep(WorkflowStep $step, User $approver, bool $hasModulePermission): bool
