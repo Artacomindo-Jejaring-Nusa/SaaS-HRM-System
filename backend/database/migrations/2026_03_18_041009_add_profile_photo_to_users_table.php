@@ -12,8 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->string('profile_photo_path', 2048)->nullable();
-            $table->text('face_embedding')->nullable(); // Untuk menyimpan data vector wajah nanti
+            if (!Schema::hasColumn('users', 'profile_photo_path')) {
+                $table->string('profile_photo_path', 2048)->nullable();
+            }
+            if (!Schema::hasColumn('users', 'face_embedding')) {
+                $table->text('face_embedding')->nullable(); // Untuk menyimpan data vector wajah nanti
+            }
         });
     }
 
