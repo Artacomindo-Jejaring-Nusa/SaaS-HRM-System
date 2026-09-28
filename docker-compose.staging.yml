@@ -75,6 +75,4 @@ networks:
 
 volumes:
   backend_storage_staging:
-    name: saas-hrm-system_backend_storage_staging
   backend_logs_staging:
-    name: saas-hrm-system_backend_logs_staging

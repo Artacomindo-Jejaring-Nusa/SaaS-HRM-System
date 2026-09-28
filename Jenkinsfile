@@ -131,6 +131,7 @@ pipeline {
                                 docker compose -p hrms-staging -f docker-compose.staging.yml pull
                                 
                                 echo "Mengaktifkan Container Staging..."
+                                docker rm -f hrms-backend-staging hrms-frontend-staging hrms-proxy-staging 2>/dev/null || true
                                 docker compose -p hrms-staging --env-file .env.staging -f docker-compose.staging.yml up -d
                                 
                                 echo "Menjalankan migrasi database Staging..."
@@ -169,6 +170,7 @@ pipeline {
                                         
                                         docker exec -i hrms-mysql-master mysql -uroot -pOnTimeNarwastugo2026 -e "CREATE DATABASE IF NOT EXISTS hrm_saas_staging;" || true
                                         docker compose -p hrms-staging -f docker-compose.staging.yml pull
+                                        docker rm -f hrms-backend-staging hrms-frontend-staging hrms-proxy-staging 2>/dev/null || true
                                         docker compose -p hrms-staging --env-file .env.staging -f docker-compose.staging.yml up -d
                                         sleep 5
                                         docker exec -i hrms-backend-staging php artisan migrate --force || true
