@@ -115,6 +115,7 @@ pipeline {
                                         echo "Membuat .env.staging aman dari .env.prod yang sudah ada..."
                                         cp .env.prod .env.staging
                                         sed -i 's/^DB_DATABASE=.*/DB_DATABASE=hrm_saas_staging/' .env.staging
+                                        sed -i 's/^DB_HOST=.*/DB_HOST=hrms-mysql-master/' .env.staging
                                         sed -i 's/^APP_ENV=.*/APP_ENV=staging/' .env.staging
                                         sed -i 's|^APP_URL=.*|APP_URL=https://staging-dev.jelantik.com|' .env.staging
                                         sed -i 's|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=https://staging-dev.jelantik.com/api|' .env.staging
@@ -127,10 +128,10 @@ pipeline {
                                 docker exec -i hrms-mysql-master mysql -uroot -pOnTimeNarwastugo2026 -e "CREATE DATABASE IF NOT EXISTS hrm_saas_staging;" || true
                                 
                                 echo "Menarik Image Staging..."
-                                docker compose -f docker-compose.staging.yml pull
+                                docker compose -p hrms-staging -f docker-compose.staging.yml pull
                                 
                                 echo "Mengaktifkan Container Staging..."
-                                docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --remove-orphans
+                                docker compose -p hrms-staging --env-file .env.staging -f docker-compose.staging.yml up -d
                                 
                                 echo "Menjalankan migrasi database Staging..."
                                 sleep 5
@@ -157,6 +158,7 @@ pipeline {
                                                 echo "Membuat .env.staging aman dari .env.prod yang sudah ada..."
                                                 cp .env.prod .env.staging
                                                 sed -i "s/^DB_DATABASE=.*/DB_DATABASE=hrm_saas_staging/" .env.staging
+                                                sed -i "s/^DB_HOST=.*/DB_HOST=hrms-mysql-master/" .env.staging
                                                 sed -i "s/^APP_ENV=.*/APP_ENV=staging/" .env.staging
                                                 sed -i "s|^APP_URL=.*|APP_URL=https://staging-dev.jelantik.com|" .env.staging
                                                 sed -i "s|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=https://staging-dev.jelantik.com/api|" .env.staging
@@ -166,8 +168,8 @@ pipeline {
                                         fi
                                         
                                         docker exec -i hrms-mysql-master mysql -uroot -pOnTimeNarwastugo2026 -e "CREATE DATABASE IF NOT EXISTS hrm_saas_staging;" || true
-                                        docker compose -f docker-compose.staging.yml pull
-                                        docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --remove-orphans
+                                        docker compose -p hrms-staging -f docker-compose.staging.yml pull
+                                        docker compose -p hrms-staging --env-file .env.staging -f docker-compose.staging.yml up -d
                                         sleep 5
                                         docker exec -i hrms-backend-staging php artisan migrate --force || true
                                         echo "Deployment Staging Sukses! Akses via: https://staging-dev.jelantik.com (Port lokal: http://${TARGET_VM_IP}:8088)"

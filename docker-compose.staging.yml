@@ -7,6 +7,8 @@
 # - Port default Staging: 8088 (http://<IP-VM>:8088 atau via proxy subdomain).
 # ==============================================================================
 
+name: hrms-staging
+
 services:
   # ── Backend Staging (Laravel) ───────────────────────────
   backend-staging:
@@ -18,8 +20,8 @@ services:
       APP_ENV: staging
       APP_DEBUG: "true"
       DB_DATABASE: ${DB_DATABASE:-hrm_saas_staging}
-      DB_HOST: mysql-master
-      DB_READ_HOST: mysql-master
+      DB_HOST: ${DB_HOST:-hrms-mysql-master}
+      DB_READ_HOST: ${DB_READ_HOST:-hrms-mysql-master}
     deploy:
       resources:
         limits:

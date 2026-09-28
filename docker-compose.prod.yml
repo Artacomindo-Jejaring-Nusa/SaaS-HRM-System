@@ -1,3 +1,5 @@
+name: hrms-prod
+
 services:
   # ── Backend 1 (Laravel) ───────────────────────────
   backend1:
