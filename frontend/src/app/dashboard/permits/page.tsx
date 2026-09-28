@@ -29,6 +29,8 @@ interface PermitRecord {
   approved_by?: string;
 }
 
+type PermitAction = 'approve' | 'reject';
+
 const CATEGORY_LABELS: Record<string, string> = {
   I: 'Izin',
   A: 'Alpha/Mangkir',
@@ -49,7 +51,7 @@ const SUB_TYPES: Record<string, string[]> = {
   L: ['Duka Cita', 'Menikah', 'Lainnya'],
 };
 
-function getActionModalButtonText(isSubmitting: boolean, action: 'approve' | 'reject' | null): string {
+function getActionModalButtonText(isSubmitting: boolean, action: PermitAction | null): string {
   if (isSubmitting) return "Memproses...";
   return action === 'approve' ? "Ya, Setujui" : "Ya, Tolak";
 }
@@ -64,7 +66,7 @@ function getStatusBadge(status: string) {
 }
 
 function buildPermitActionPayload(
-  action: 'approve' | 'reject',
+  action: PermitAction,
   remarkInput: string,
   overrideCategory: string,
   overrideDoctorNote: boolean
@@ -83,7 +85,7 @@ interface PermitTableRowProps {
   readonly permit: PermitRecord;
   readonly hasApprovePermission: boolean;
   readonly onViewDetail: (item: PermitRecord) => void;
-  readonly onActionClick: (item: PermitRecord, action: 'approve' | 'reject') => void;
+  readonly onActionClick: (item: PermitRecord, action: PermitAction) => void;
 }
 
 function PermitTableRow({ permit, hasApprovePermission, onViewDetail, onActionClick }: Readonly<PermitTableRowProps>) {
@@ -176,7 +178,7 @@ function parsePermitsApiResponse(responseData: any) {
 function updatePermitRecord(
   prev: PermitRecord | null,
   targetId: number,
-  action: 'approve' | 'reject',
+  action: PermitAction,
   remarkInput: string,
   overrideCategory: string,
   overrideDoctorNote: boolean
@@ -196,7 +198,7 @@ interface PermitTableContentProps {
   readonly permits: PermitRecord[];
   readonly hasApprovePermission: boolean;
   readonly onViewDetail: (item: PermitRecord) => void;
-  readonly onActionClick: (item: PermitRecord, action: 'approve' | 'reject') => void;
+  readonly onActionClick: (item: PermitRecord, action: PermitAction) => void;
 }
 
 function PermitTableContent({
@@ -252,7 +254,7 @@ async function submitPermitApplication(formData: any) {
 
 async function sendPermitApprovalAction(
   itemId: number,
-  action: 'approve' | 'reject',
+  action: PermitAction,
   remarkInput: string,
   overrideCategory: string,
   overrideDoctorNote: boolean
@@ -264,7 +266,7 @@ async function sendPermitApprovalAction(
 interface PermitActionConfirmationModalProps {
   readonly actionModal: {
     isOpen: boolean;
-    action: 'approve' | 'reject' | null;
+    action: PermitAction | null;
     item: PermitRecord | null;
   };
   readonly isSubmitting: boolean;
@@ -426,7 +428,7 @@ export default function PermitsPage() {
   // Modal Persetujuan / Penolakan
   const [actionModal, setActionModal] = useState<{
     isOpen: boolean;
-    action: 'approve' | 'reject' | null;
+    action: PermitAction | null;
     item: PermitRecord | null;
   }>({ isOpen: false, action: null, item: null });
   const [remarkInput, setRemarkInput] = useState("");
@@ -484,7 +486,7 @@ export default function PermitsPage() {
     }
   };
 
-  const handleActionClick = (item: PermitRecord, action: 'approve' | 'reject') => {
+  const handleActionClick = (item: PermitRecord, action: PermitAction) => {
     setActionModal({ isOpen: true, action, item });
     setRemarkInput("");
     setOverrideCategory(item.category || 'I');

@@ -84,6 +84,9 @@ interface PayrollBatch {
   approver?: { id: number; name: string };
 }
 
+type PayrollAction = 'submit' | 'approve' | 'reject' | 'paid';
+type PayrollStatusTab = 'all' | 'pending' | 'completed';
+
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"
@@ -238,7 +241,7 @@ function BatchTableContent({
   );
 }
 
-const ACTION_LABELS: Record<'submit' | 'approve' | 'reject' | 'paid', string> = {
+const ACTION_LABELS: Record<PayrollAction, string> = {
   submit: 'Submit ke CEO / Approver',
   approve: 'Setujui Payroll',
   reject: 'Tolak (Revisi)',
@@ -247,7 +250,7 @@ const ACTION_LABELS: Record<'submit' | 'approve' | 'reject' | 'paid', string> = 
 
 function filterPayrollBatches(
   batches: PayrollBatch[],
-  statusTab: 'all' | 'pending' | 'completed',
+  statusTab: PayrollStatusTab,
   yearFilter: number | string
 ): PayrollBatch[] {
   return batches.filter(b => {
@@ -281,7 +284,7 @@ function buildPayrollStatusPayload(action: string, note?: string): Record<string
 
 async function executeBatchStatusAction(
   batchId: number,
-  action: 'submit' | 'approve' | 'reject' | 'paid',
+  action: PayrollAction,
   note?: string
 ) {
   const payload = buildPayrollStatusPayload(action, note);
@@ -338,7 +341,7 @@ function filterBatchSalaries(salaries: SalaryRecord[] | undefined, search: strin
 export default function PayrollManagementPage() {
   const [loading, setLoading] = useState(true);
   const [batches, setBatches] = useState<PayrollBatch[]>([]);
-  const [statusTab, setStatusTab] = useState<'all' | 'pending' | 'completed'>('all');
+  const [statusTab, setStatusTab] = useState<PayrollStatusTab>('all');
   const [yearFilter, setYearFilter] = useState<number | string>("all");
   const [exporting, setExporting] = useState(false);
 
@@ -421,7 +424,7 @@ export default function PayrollManagementPage() {
   };
 
   // Status Change Workflow (Submit, Approve, Reject, Paid)
-  const handleStatusChange = (action: 'submit' | 'approve' | 'reject' | 'paid', note?: string) => {
+  const handleStatusChange = (action: PayrollAction, note?: string) => {
     if (!selectedBatch) return;
 
     toast(`Apakah Anda yakin ingin melakukan "${ACTION_LABELS[action]}"?`, {

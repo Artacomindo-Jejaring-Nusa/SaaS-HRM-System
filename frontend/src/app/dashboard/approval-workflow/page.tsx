@@ -937,6 +937,55 @@ function DuplicateWorkflowModal({
   );
 }
 
+function validateDuplicateWorkflowInputs(
+  activeWorkflow: BackendWorkflow | null,
+  duplicateName: string,
+  duplicateScopeType: "role" | "user",
+  duplicateScopeId: number | null
+): string | null {
+  if (!activeWorkflow) return "Silakan pilih alur yang ingin diduplikasi.";
+  if (!duplicateName.trim()) return "Nama alur duplikat wajib diisi.";
+  if (duplicateScopeType === "role" && !duplicateScopeId) return "Silakan pilih divisi / jabatan target.";
+  if (duplicateScopeType === "user" && !duplicateScopeId) return "Silakan pilih karyawan spesifik target.";
+  return null;
+}
+
+function extractDuplicateBaseName(activeWorkflow: BackendWorkflow | null, activeModule: WorkflowModule | undefined): string {
+  let rawBase = (activeWorkflow?.name || activeModule?.label || "Alur").trim();
+  if (rawBase.toLowerCase().endsWith("(khusus)")) {
+    rawBase = rawBase.slice(0, -8).trim();
+  }
+  const lastDash = rawBase.lastIndexOf("-");
+  if (lastDash !== -1) {
+    const suffix = rawBase.slice(lastDash + 1);
+    if (suffix.length > 0 && /^\d+$/.test(suffix)) {
+      rawBase = rawBase.slice(0, lastDash).trim();
+    }
+  }
+  return rawBase;
+}
+
+async function executeDeleteVariant(variantId: number, companyId: number | null) {
+  return axiosInstance.delete(`/approval-workflows/variants/${variantId}`, {
+    params: { company_id: companyId || undefined },
+  });
+}
+
+async function executeDeleteWorkflow(moduleKey: string) {
+  return axiosInstance.delete(`/approval-workflows/${moduleKey}`);
+}
+
+async function executeToggleWorkflow(
+  targetId: number | null | undefined,
+  targetModule: string,
+  companyId: number | null
+) {
+  const url = targetId
+    ? `/approval-workflows/${targetId}/toggle-active`
+    : `/approval-workflows/module/${targetModule}/toggle-active`;
+  return axiosInstance.patch(url, { company_id: companyId || undefined });
+}
+
 export default function ApprovalWorkflowPage() {
   const { user } = useAuth();
   const [selected, setSelected] = useState<string>("leave");
@@ -1136,13 +1185,7 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
 
     setLoading(true);
     try {
-      const url = targetId
-        ? `/approval-workflows/${targetId}/toggle-active`
-        : `/approval-workflows/module/${targetModule}/toggle-active`;
-
-      const res = await axiosInstance.patch(url, {
-        company_id: selectedCompanyId || undefined,
-      });
+      const res = await executeToggleWorkflow(targetId, targetModule, selectedCompanyId);
 
       if (res.data.status === "success") {
         const updatedWf = res.data.data;
@@ -1171,18 +1214,7 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
       toast.error("Alur belum terkonfigurasi untuk diduplikasi. Silakan kustomisasi terlebih dahulu.");
       return;
     }
-    let rawBase = (activeWorkflow?.name || activeModule?.label || "Alur").trim();
-    if (rawBase.toLowerCase().endsWith("(khusus)")) {
-      rawBase = rawBase.slice(0, -8).trim();
-    }
-    const lastDash = rawBase.lastIndexOf("-");
-    if (lastDash !== -1) {
-      const suffix = rawBase.slice(lastDash + 1);
-      if (suffix.length > 0 && /^\d+$/.test(suffix)) {
-        rawBase = rawBase.slice(0, lastDash).trim();
-      }
-    }
-
+    const rawBase = extractDuplicateBaseName(activeWorkflow, activeModule);
     setDuplicateName(calculateNextDuplicateName(rawBase, activeModule?.variants));
     setDuplicateScopeType("role");
     setDuplicateScopeId(roles.length > 0 ? roles[0].id : null);
@@ -1191,27 +1223,16 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
 
   // Handle Duplicate Workflow
   const handleDuplicateWorkflow = async () => {
-    if (!activeWorkflow) {
-      toast.error("Silakan pilih alur yang ingin diduplikasi.");
-      return;
-    }
-    if (!duplicateName.trim()) {
-      toast.error("Nama alur duplikat wajib diisi.");
-      return;
-    }
-    if (duplicateScopeType === "role" && !duplicateScopeId) {
-      toast.error("Silakan pilih divisi / jabatan target.");
-      return;
-    }
-    if (duplicateScopeType === "user" && !duplicateScopeId) {
-      toast.error("Silakan pilih karyawan spesifik target.");
+    const validationError = validateDuplicateWorkflowInputs(activeWorkflow, duplicateName, duplicateScopeType, duplicateScopeId);
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
 
     setSubmittingDuplicate(true);
     try {
       const res = await executeDuplicateWorkflow(
-        activeWorkflow.id,
+        activeWorkflow!.id,
         duplicateName,
         duplicateScopeType,
         duplicateScopeId,
@@ -1221,9 +1242,8 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
       if (res.data.status === "success" && res.data.data) {
         toast.success("Alur persetujuan berhasil diduplikasi!");
         setIsDuplicateModalOpen(false);
-        const newWf = res.data.data;
         fetchModuleKeys();
-        setSelectedWorkflowId(newWf.id);
+        setSelectedWorkflowId(res.data.data.id);
         setIsEditing(true);
       } else {
         toast.error(res.data.message || "Gagal menduplikasi alur persetujuan.");
@@ -1245,9 +1265,7 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
 
     setLoading(true);
     try {
-      const res = await axiosInstance.delete(`/approval-workflows/variants/${variantId}`, {
-        params: { company_id: selectedCompanyId || undefined },
-      });
+      const res = await executeDeleteVariant(variantId, selectedCompanyId);
       if (res.data.status === "success") {
         toast.success(`Varian alur '${variantName}' berhasil dihapus.`);
         setSelectedWorkflowId(null);
@@ -1274,7 +1292,7 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
 
     setLoading(true);
     try {
-      const res = await axiosInstance.delete(`/approval-workflows/${activeModule.key}`);
+      const res = await executeDeleteWorkflow(activeModule.key);
       if (res.data.status === "success") {
         toast.success(`Alur '${activeModule.label}' berhasil dihapus.`);
         setIsEditing(false);

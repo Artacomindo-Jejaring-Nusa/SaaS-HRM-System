@@ -407,6 +407,60 @@ async function executeResetPassword(id: number) {
   await axiosInstance.post(`/employees/${id}/reset-password`);
 }
 
+interface ImportResult {
+  type: "success" | "error";
+  message: string;
+}
+
+function validateImportFile(file: File): string | null {
+  if (!file.name.match(/\.(xlsx|xls|csv)$/)) {
+    return "Hanya file Excel atau CSV yang diperbolehkan.";
+  }
+  return null;
+}
+
+async function executeEmployeeImport(file: File): Promise<ImportResult> {
+  const validationError = validateImportFile(file);
+  if (validationError) {
+    return { type: "error", message: validationError };
+  }
+
+  const formDataUpload = new FormData();
+  formDataUpload.append("file", file);
+
+  try {
+    const res = await axiosInstance.post("/employees/import", formDataUpload, {
+      headers: { "Content-Type": "multipart/form-data" }
+    });
+    return { type: "success", message: res.data.message || "Import berhasil! Data karyawan sedang diproses." };
+  } catch (err: unknown) {
+    return { type: "error", message: extractEmployeeErrorMessage(err, "Gagal mengimpor file. Pastikan format sesuai template.") };
+  }
+}
+
+async function executePayrollImport(file: File): Promise<ImportResult> {
+  const formDataUpload = new FormData();
+  formDataUpload.append("file", file);
+
+  try {
+    const res = await axiosInstance.post("/payroll/import-data", formDataUpload, {
+      headers: { "Content-Type": "multipart/form-data" }
+    });
+    return { type: "success", message: res.data.message };
+  } catch (err: unknown) {
+    return { type: "error", message: extractEmployeeErrorMessage(err, "Gagal mengimpor data payroll.") };
+  }
+}
+
+async function runResendVerification(
+  targetId: number | undefined,
+  selectedIds: number[],
+  employees: Employee[]
+): Promise<{ success: boolean; clearSelection: boolean }> {
+  const res = await sendBulkOrSingleVerification(targetId, selectedIds, employees);
+  return { success: true, clearSelection: !!res };
+}
+
 function EmployeesContent() {
   const { hasPermission, permissions, user: currentUser } = useAuth();
   const isSuperAdmin = currentUser?.role_id === 1 || currentUser?.role?.name === 'Super Admin';
@@ -516,59 +570,28 @@ function EmployeesContent() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.match(/\.(xlsx|xls|csv)$/)) {
-      setModalType("error");
-      setErrorMessage("Hanya file Excel atau CSV yang diperbolehkan.");
-      setErrorModalOpen(true);
-      return;
-    }
-
-    const formDataUpload = new FormData();
-    formDataUpload.append("file", file);
-
-    try {
-      setLoading(true);
-      const res = await axiosInstance.post("/employees/import", formDataUpload, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-      setModalType("success");
-      setErrorMessage(res.data.message || "Import berhasil! Data karyawan sedang diproses.");
-      setErrorModalOpen(true);
-      fetchEmployees(1);
-    } catch (err: unknown) {
-      setModalType("error");
-      setErrorMessage(extractEmployeeErrorMessage(err, "Gagal mengimpor file. Pastikan format sesuai template."));
-      setErrorModalOpen(true);
-    } finally {
-      setLoading(false);
-      e.target.value = '';
-    }
+    setLoading(true);
+    const result = await executeEmployeeImport(file);
+    setModalType(result.type);
+    setErrorMessage(result.message);
+    setErrorModalOpen(true);
+    if (result.type === "success") fetchEmployees(1);
+    setLoading(false);
+    e.target.value = '';
   };
 
   const handlePayrollImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const formDataUpload = new FormData();
-    formDataUpload.append("file", file);
-
-    try {
-      setLoading(true);
-      const res = await axiosInstance.post("/payroll/import-data", formDataUpload, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-      setModalType("success");
-      setErrorMessage(res.data.message);
-      setErrorModalOpen(true);
-      fetchEmployees(1);
-    } catch (err: unknown) {
-      setModalType("error");
-      setErrorMessage(extractEmployeeErrorMessage(err, "Gagal mengimpor data payroll."));
-      setErrorModalOpen(true);
-    } finally {
-      setLoading(false);
-      e.target.value = '';
-    }
+    setLoading(true);
+    const result = await executePayrollImport(file);
+    setModalType(result.type);
+    setErrorMessage(result.message);
+    setErrorModalOpen(true);
+    if (result.type === "success") fetchEmployees(1);
+    setLoading(false);
+    e.target.value = '';
   };
 
   const fetchRoles = async () => {
@@ -673,10 +696,10 @@ function EmployeesContent() {
 
   const handleResendVerification = (id?: number) => {
     const run = async (targetId?: number) => {
+      setIsSubmitting(true);
       try {
-        setIsSubmitting(true);
-        const res = await sendBulkOrSingleVerification(targetId, selectedIds, employees);
-        if (res) setSelectedIds([]);
+        const result = await runResendVerification(targetId, selectedIds, employees);
+        if (result.clearSelection) setSelectedIds([]);
       } catch (e: unknown) {
         toast.error(extractEmployeeErrorMessage(e, "Gagal mengirim ulang verifikasi."));
       } finally {
