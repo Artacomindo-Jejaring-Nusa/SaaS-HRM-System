@@ -347,6 +347,66 @@ function formatEmployeeDate(dateString?: string): string {
   });
 }
 
+async function sendBulkOrSingleVerification(
+  targetId: number | undefined,
+  selectedIds: number[],
+  employees: Employee[]
+): Promise<number[] | null> {
+  if (targetId) {
+    await axiosInstance.post(`/employees/${targetId}/resend-verification`);
+    toast.success("Email verifikasi berhasil dikirim ulang.");
+    return null;
+  }
+  const idsToResend = selectedIds.length > 0
+    ? selectedIds
+    : employees.filter(e => !e.email_verified_at).map(e => e.id);
+
+  if (idsToResend.length === 0) {
+    toast.info("Tidak ada karyawan yang perlu diverifikasi.");
+    return null;
+  }
+
+  await axiosInstance.post(`/employees/bulk-resend-verification`, { ids: idsToResend });
+  toast.success(`Berhasil mengirim ulang ${idsToResend.length} email verifikasi.`);
+  return idsToResend;
+}
+
+async function executeEmployeeSave(
+  formData: EmployeeFormData,
+  modalMode: "add" | "edit"
+) {
+  const isEdit = modalMode !== "add";
+  const data = buildEmployeeFormData(formData, isEdit);
+
+  if (isEdit) {
+    await axiosInstance.post(`/employees/${formData.id}`, data, {
+      headers: { "Content-Type": "multipart/form-data" }
+    });
+    toast.success("Berhasil memperbarui data karyawan!");
+  } else {
+    await axiosInstance.post("/employees", data, {
+      headers: { "Content-Type": "multipart/form-data" }
+    });
+    toast.success("Karyawan baru berhasil ditambahkan! Undangan email sedang dikirim.");
+  }
+}
+
+async function executeEmployeeDelete(id: number) {
+  await axiosInstance.delete(`/employees/${id}`);
+}
+
+async function executeBulkEmployeeDelete(ids: number[]) {
+  await axiosInstance.post(`/employees/bulk-delete`, { ids });
+}
+
+async function executeResetDevice(id: number) {
+  await axiosInstance.post(`/employees/${id}/reset-device`);
+}
+
+async function executeResetPassword(id: number) {
+  await axiosInstance.post(`/employees/${id}/reset-password`);
+}
+
 function EmployeesContent() {
   const { hasPermission, permissions, user: currentUser } = useAuth();
   const isSuperAdmin = currentUser?.role_id === 1 || currentUser?.role?.name === 'Super Admin';
@@ -601,58 +661,24 @@ function EmployeesContent() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const isEdit = modalMode !== "add";
-      const data = buildEmployeeFormData(formData, isEdit);
-
-      if (isEdit) {
-        await axiosInstance.post(`/employees/${formData.id}`, data, {
-          headers: { "Content-Type": "multipart/form-data" }
-        });
-        toast.success("Berhasil memperbarui data karyawan!");
-      } else {
-        await axiosInstance.post("/employees", data, {
-          headers: { "Content-Type": "multipart/form-data" }
-        });
-        toast.success("Karyawan baru berhasil ditambahkan! Undangan email sedang dikirim.");
-      }
+      await executeEmployeeSave(formData, modalMode);
       handleCloseModal();
       fetchEmployees(pagination?.current_page || 1);
     } catch (error: unknown) {
-      console.error(error);
-      const errorResponse = error as { response?: { data?: { message?: string } } };
-      toast.error(errorResponse.response?.data?.message || "Terjadi kesalahan saat menyimpan data.");
+      toast.error(extractEmployeeErrorMessage(error, "Terjadi kesalahan saat menyimpan data."));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleResendVerification = async (id?: number) => {
-    const executeResend = async (targetId?: number) => {
+  const handleResendVerification = (id?: number) => {
+    const run = async (targetId?: number) => {
       try {
         setIsSubmitting(true);
-        if (targetId) {
-          await axiosInstance.post(`/employees/${targetId}/resend-verification`);
-          toast.success("Email verifikasi berhasil dikirim ulang.");
-        } else {
-          let idsToResend: number[] = [];
-          if (selectedIds.length > 0) {
-            idsToResend = selectedIds;
-          } else {
-            idsToResend = employees.filter(e => !e.email_verified_at).map(e => e.id);
-          }
-
-          if (idsToResend.length === 0) {
-            toast.info("Tidak ada karyawan yang perlu diverifikasi.");
-            return;
-          }
-
-          await axiosInstance.post(`/employees/bulk-resend-verification`, { ids: idsToResend });
-          toast.success(`Berhasil mengirim ulang ${idsToResend.length} email verifikasi.`);
-          setSelectedIds([]);
-        }
+        const res = await sendBulkOrSingleVerification(targetId, selectedIds, employees);
+        if (res) setSelectedIds([]);
       } catch (e: unknown) {
-        const errorResponse = e as { response?: { data?: { message?: string } } };
-        toast.error(errorResponse.response?.data?.message || "Gagal mengirim ulang verifikasi.");
+        toast.error(extractEmployeeErrorMessage(e, "Gagal mengirim ulang verifikasi."));
       } finally {
         setIsSubmitting(false);
       }
@@ -661,17 +687,14 @@ function EmployeesContent() {
     if (id) {
       toast("Kirim ulang verifikasi?", {
         description: "Link verifikasi baru akan dikirim ke email karyawan.",
-        action: {
-          label: "Kirim",
-          onClick: () => executeResend(id)
-        }
+        action: { label: "Kirim", onClick: () => run(id) }
       });
-    } else {
-      executeResend();
+      return;
     }
+    run();
   };
 
-  const handleConfirmDelete = async (id: number) => {
+  const handleConfirmDelete = (id: number) => {
     toast("Hapus karyawan ini?", {
       description: "Peringatan: Semua data yang terhubung dengan pekerja ini (absensi, cuti, dll) akan kehilangan akses loginnya.",
       action: {
@@ -679,7 +702,7 @@ function EmployeesContent() {
         onClick: async () => {
           setIsSubmitting(true);
           try {
-            await axiosInstance.delete(`/employees/${id}`);
+            await executeEmployeeDelete(id);
             toast.success("Karyawan berhasil dihapus.");
             fetchEmployees(pagination?.current_page || 1);
           } catch {
@@ -692,7 +715,7 @@ function EmployeesContent() {
     });
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedIds.length === 0) return;
 
     toast(`Hapus ${selectedIds.length} karyawan?`, {
@@ -702,13 +725,12 @@ function EmployeesContent() {
         onClick: async () => {
           setIsSubmitting(true);
           try {
-            await axiosInstance.post(`/employees/bulk-delete`, { ids: selectedIds });
+            await executeBulkEmployeeDelete(selectedIds);
             toast.success(`${selectedIds.length} karyawan berhasil dihapus.`);
             setSelectedIds([]);
             fetchEmployees(pagination?.current_page || 1);
           } catch (e: unknown) {
-            const errorResponse = e as { response?: { data?: { message?: string } } };
-            toast.error(errorResponse.response?.data?.message || "Gagal menghapus beberapa data karyawan.");
+            toast.error(extractEmployeeErrorMessage(e, "Gagal menghapus beberapa data karyawan."));
           } finally {
             setIsSubmitting(false);
           }
@@ -717,7 +739,7 @@ function EmployeesContent() {
     });
   };
 
-  const handleResetDevice = async (id: number) => {
+  const handleResetDevice = (id: number) => {
     toast("Apakah Anda yakin ingin meriset Device ID karyawan ini?", {
       description: "Ini akan memungkinkan karyawan login di perangkat baru.",
       action: {
@@ -725,12 +747,11 @@ function EmployeesContent() {
         onClick: async () => {
           setIsSubmitting(true);
           try {
-            await axiosInstance.post(`/employees/${id}/reset-device`);
+            await executeResetDevice(id);
             toast.success("Device ID berhasil direset!");
             fetchEmployees(pagination?.current_page || 1);
           } catch (e: unknown) {
-            const errorResponse = e as { response?: { data?: { message?: string } } };
-            toast.error(errorResponse.response?.data?.message || "Gagal mereset Device ID.");
+            toast.error(extractEmployeeErrorMessage(e, "Gagal mereset Device ID."));
           } finally {
             setIsSubmitting(false);
           }
@@ -739,7 +760,7 @@ function EmployeesContent() {
     });
   };
 
-  const handleResetPassword = async (id: number, name: string) => {
+  const handleResetPassword = (id: number, name: string) => {
     toast(`Apakah Anda yakin ingin mereset password untuk ${name}?`, {
       description: "Password akan diubah kembali menjadi default 'password'.",
       action: {
@@ -747,12 +768,11 @@ function EmployeesContent() {
         onClick: async () => {
           setIsSubmitting(true);
           try {
-            await axiosInstance.post(`/employees/${id}/reset-password`);
+            await executeResetPassword(id);
             toast.success(`Password ${name} berhasil direset menjadi 'password'!`);
             fetchEmployees(pagination?.current_page || 1);
           } catch (e: unknown) {
-            const errorResponse = e as { response?: { data?: { message?: string } } };
-            toast.error(errorResponse.response?.data?.message || "Gagal mereset password.");
+            toast.error(extractEmployeeErrorMessage(e, "Gagal mereset password."));
           } finally {
             setIsSubmitting(false);
           }

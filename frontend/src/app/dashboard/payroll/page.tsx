@@ -263,7 +263,7 @@ function filterPayrollBatches(
 }
 
 function triggerBlobDownload(data: BlobPart, filename: string) {
-  const url = window.URL.createObjectURL(new Blob([data]));
+  const url = globalThis.URL.createObjectURL(new Blob([data]));
   const link = document.createElement('a');
   link.href = url;
   link.setAttribute('download', filename);
@@ -277,6 +277,47 @@ function buildPayrollStatusPayload(action: string, note?: string): Record<string
     return { rejection_note: note || 'Perlu revisi komponen' };
   }
   return {};
+}
+
+async function executeBatchStatusAction(
+  batchId: number,
+  action: 'submit' | 'approve' | 'reject' | 'paid',
+  note?: string
+) {
+  const payload = buildPayrollStatusPayload(action, note);
+  await axiosInstance.post(`/payroll/batches/${batchId}/${action}`, payload);
+}
+
+async function executeDeleteBatch(batchId: number) {
+  await axiosInstance.delete(`/payroll/batches/${batchId}`);
+}
+
+async function executeSaveSalary(salary: SalaryRecord) {
+  await axiosInstance.put(`/payroll/salaries/${salary.id}`, salary);
+}
+
+async function executeAddAdhocItem(
+  salaryId: number,
+  name: string,
+  type: "earning" | "deduction",
+  amount: number,
+  note: string
+): Promise<SalaryRecord> {
+  const res = await axiosInstance.post(`/payroll/salaries/${salaryId}/adhoc-item`, {
+    name,
+    type,
+    amount,
+    note,
+  });
+  return res.data.data;
+}
+
+async function executeRemoveAdhocItem(
+  salaryId: number,
+  detailId: number
+): Promise<SalaryRecord> {
+  const res = await axiosInstance.delete(`/payroll/salaries/${salaryId}/adhoc-item/${detailId}`);
+  return res.data.data;
 }
 
 function countUnsavedProfiles(emps: any[]): number {
@@ -380,7 +421,7 @@ export default function PayrollManagementPage() {
   };
 
   // Status Change Workflow (Submit, Approve, Reject, Paid)
-  const handleStatusChange = async (action: 'submit' | 'approve' | 'reject' | 'paid', note?: string) => {
+  const handleStatusChange = (action: 'submit' | 'approve' | 'reject' | 'paid', note?: string) => {
     if (!selectedBatch) return;
 
     toast(`Apakah Anda yakin ingin melakukan "${ACTION_LABELS[action]}"?`, {
@@ -389,8 +430,7 @@ export default function PayrollManagementPage() {
         onClick: async () => {
           try {
             setActionSubmitting(true);
-            const payload = buildPayrollStatusPayload(action, note);
-            await axiosInstance.post(`/payroll/batches/${selectedBatch.id}/${action}`, payload);
+            await executeBatchStatusAction(selectedBatch.id, action, note);
             toast.success(`Payroll berhasil di-${action}`);
             refreshCurrentBatch();
           } catch (e: any) {
@@ -404,14 +444,14 @@ export default function PayrollManagementPage() {
   };
 
   // Delete Draft Batch
-  const handleDeleteBatch = async (batchId: number) => {
+  const handleDeleteBatch = (batchId: number) => {
     toast("Hapus draft batch payroll ini?", {
       description: "Data kalkulasi draft akan dihapus. Riwayat payslip lama tetap aman.",
       action: {
         label: "Hapus",
         onClick: async () => {
           try {
-            await axiosInstance.delete(`/payroll/batches/${batchId}`);
+            await executeDeleteBatch(batchId);
             toast.success("Draft payroll berhasil dihapus.");
             setSelectedBatch(null);
             fetchBatches();
@@ -531,7 +571,7 @@ export default function PayrollManagementPage() {
     if (!editingSalary) return;
     try {
       setSavingSalary(true);
-      await axiosInstance.put(`/payroll/salaries/${editingSalary.id}`, editingSalary);
+      await executeSaveSalary(editingSalary);
       toast.success("Perubahan gaji berhasil disimpan.");
       setEditingSalary(null);
       refreshCurrentBatch();
@@ -551,17 +591,12 @@ export default function PayrollManagementPage() {
     }
     try {
       setSubmittingAdhoc(true);
-      const res = await axiosInstance.post(`/payroll/salaries/${editingSalary.id}/adhoc-item`, {
-        name: adhocName,
-        type: adhocType,
-        amount: Number(adhocAmount),
-        note: adhocNote,
-      });
+      const updatedSalary = await executeAddAdhocItem(editingSalary.id, adhocName, adhocType, Number(adhocAmount), adhocNote);
       toast.success("Komponen ad-hoc berhasil ditambahkan.");
       setAdhocName("");
       setAdhocAmount("");
       setAdhocNote("");
-      setEditingSalary(res.data.data);
+      setEditingSalary(updatedSalary);
       refreshCurrentBatch();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Gagal menambahkan komponen ad-hoc.");
@@ -575,9 +610,9 @@ export default function PayrollManagementPage() {
     if (!editingSalary) return;
     if (!globalThis.confirm("Hapus komponen ini dari rincian payslip?")) return;
     try {
-      const res = await axiosInstance.delete(`/payroll/salaries/${editingSalary.id}/adhoc-item/${detailId}`);
+      const updatedSalary = await executeRemoveAdhocItem(editingSalary.id, detailId);
       toast.success("Komponen berhasil dihapus.");
-      setEditingSalary(res.data.data);
+      setEditingSalary(updatedSalary);
       refreshCurrentBatch();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Gagal menghapus komponen.");

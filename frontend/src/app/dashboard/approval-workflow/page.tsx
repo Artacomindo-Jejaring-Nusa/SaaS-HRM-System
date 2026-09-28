@@ -662,6 +662,281 @@ function WorkflowModuleTabsSelector({
   );
 }
 
+function checkIsSuperAdminUser(user: any): boolean {
+  if (!user) return false;
+  return user.role_id === 1 || user.role?.name === "Super Admin" || Boolean(user.can_access_all_companies);
+}
+
+function checkIsAuthorizedWorkflowUser(user: any, isSuperAdmin: boolean): boolean {
+  if (isSuperAdmin) return true;
+  const roleName = user?.role?.name?.toLowerCase() || "";
+  return roleName === "admin" || roleName.includes("hrd") || roleName.includes("admin");
+}
+
+function buildWorkflowSavePayload(
+  activeWorkflow: BackendWorkflow | null,
+  activeModule: WorkflowModule | undefined,
+  selected: string,
+  selectedCompanyId: number | null,
+  customActive: boolean,
+  flow: any,
+  steps: BackendStep[]
+) {
+  return {
+    id: activeWorkflow?.id || undefined,
+    module_key: selected,
+    company_id: selectedCompanyId || undefined,
+    name: activeWorkflow?.name || `${activeModule?.label || selected} Workflow`,
+    description: activeWorkflow?.description || activeModule?.description,
+    icon: activeWorkflow?.icon || activeModule?.icon || "GitBranch",
+    category: activeWorkflow?.category || activeModule?.category || "operasional",
+    is_custom: activeWorkflow?.is_custom ?? false,
+    is_active: customActive,
+    scope_type: activeWorkflow?.scope_type || "company",
+    scope_id: activeWorkflow?.scope_id || null,
+    flow_json: JSON.stringify(flow),
+    steps: steps.map((s) => ({
+      step_number: s.step_number,
+      approver_type: s.approver_type,
+      approver_role_id: s.approver_type === "role" ? s.approver_role_id : null,
+      approver_user_id: s.approver_type === "user" ? s.approver_user_id : null,
+      sla_hours: s.sla_hours,
+    })),
+  };
+}
+
+async function executeDuplicateWorkflow(
+  sourceWorkflowId: number,
+  duplicateName: string,
+  duplicateScopeType: "role" | "user",
+  duplicateScopeId: number | null,
+  selectedCompanyId: number | null
+) {
+  return axiosInstance.post("/approval-workflows/duplicate", {
+    source_workflow_id: sourceWorkflowId,
+    name: duplicateName.trim(),
+    scope_type: duplicateScopeType,
+    scope_id: duplicateScopeId,
+    company_id: selectedCompanyId || undefined,
+  });
+}
+
+interface DuplicateWorkflowModalProps {
+  readonly isOpen: boolean;
+  readonly activeWorkflow: BackendWorkflow | null;
+  readonly activeModule: WorkflowModule | undefined;
+  readonly stepsCount: number;
+  readonly duplicateName: string;
+  readonly duplicateScopeType: "role" | "user";
+  readonly duplicateScopeId: number | null;
+  readonly roles: AppRole[];
+  readonly users: AppUser[];
+  readonly submittingDuplicate: boolean;
+  readonly onClose: () => void;
+  readonly onNameChange: (v: string) => void;
+  readonly onScopeTypeChange: (type: "role" | "user", defaultId: number | null) => void;
+  readonly onScopeIdChange: (id: number) => void;
+  readonly onSubmit: () => void;
+}
+
+function DuplicateWorkflowModal({
+  isOpen,
+  activeWorkflow,
+  activeModule,
+  stepsCount,
+  duplicateName,
+  duplicateScopeType,
+  duplicateScopeId,
+  roles,
+  users,
+  submittingDuplicate,
+  onClose,
+  onNameChange,
+  onScopeTypeChange,
+  onScopeIdChange,
+  onSubmit,
+}: DuplicateWorkflowModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 space-y-5 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 bg-amber-50 text-amber-700 rounded-2xl border border-amber-200">
+              <Copy size={20} className="text-amber-700" />
+            </div>
+            <div>
+              <h2 className="text-base font-extrabold text-gray-900">
+                Duplikasi Alur Persetujuan
+              </h2>
+              <p className="text-xs text-gray-500">
+                Buat alur turunan khusus untuk divisi atau karyawan tertentu
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Source Info Card */}
+        <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-200/80 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+              Alur Sumber (Master):
+            </span>
+            <span className="text-xs font-extrabold text-gray-800">
+              {activeWorkflow?.name || activeModule?.label}
+            </span>
+          </div>
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 font-bold">
+            {stepsCount} Steps
+          </span>
+        </div>
+
+        {/* Form Fields */}
+        <div className="space-y-4">
+          {/* Variant Name */}
+          <div className="space-y-1.5">
+            <label htmlFor="duplicate-variant-name-input" className="text-xs font-bold text-gray-700">
+              Nama Varian Alur Baru
+            </label>
+            <input
+              id="duplicate-variant-name-input"
+              type="text"
+              value={duplicateName}
+              onChange={(e) => onNameChange(e.target.value)}
+              placeholder="Contoh: Pengajuan Cuti (Divisi IT) / Lembur Khusus"
+              className="w-full text-xs font-semibold bg-gray-50 border border-gray-200 rounded-xl p-3 focus:outline-none focus:border-[#8B0000]"
+            />
+          </div>
+
+          {/* Scope Type Selector */}
+          <div className="space-y-1.5">
+            <span className="text-xs font-bold text-gray-700 block">
+              Target Lingkup Khusus (Scope):
+            </span>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => onScopeTypeChange("role", roles.length > 0 ? roles[0].id : null)}
+                className={`p-3 rounded-2xl border text-left flex items-start gap-2.5 transition-all ${
+                  duplicateScopeType === "role"
+                    ? "border-[#8B0000] bg-red-50/40 text-gray-900 ring-1 ring-[#8B0000]"
+                    : "border-gray-200 bg-gray-50/50 text-gray-600 hover:bg-gray-100/70"
+                }`}
+              >
+                <div className={`p-2 rounded-xl shrink-0 ${duplicateScopeType === "role" ? "bg-red-100 text-[#8B0000]" : "bg-gray-200 text-gray-600"}`}>
+                  <Users size={16} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold">Per Divisi / Jabatan</div>
+                  <div className="text-[10px] text-gray-500 mt-0.5">Berlaku untuk semua karyawan di role ini</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onScopeTypeChange("user", users.length > 0 ? users[0].id : null)}
+                className={`p-3 rounded-2xl border text-left flex items-start gap-2.5 transition-all ${
+                  duplicateScopeType === "user"
+                    ? "border-[#8B0000] bg-red-50/40 text-gray-900 ring-1 ring-[#8B0000]"
+                    : "border-gray-200 bg-gray-50/50 text-gray-600 hover:bg-gray-100/70"
+                }`}
+              >
+                <div className={`p-2 rounded-xl shrink-0 ${duplicateScopeType === "user" ? "bg-red-100 text-[#8B0000]" : "bg-gray-200 text-gray-600"}`}>
+                  <UserCheck size={16} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold">Per Karyawan Spesifik</div>
+                  <div className="text-[10px] text-gray-500 mt-0.5">Berlaku hanya untuk satu individu terpilih</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Target Entity Selector */}
+          {duplicateScopeType === "role" ? (
+            <div className="space-y-1.5">
+              <label htmlFor="duplicate-scope-role-select" className="text-xs font-bold text-gray-700">
+                Pilih Divisi / Jabatan Target:
+              </label>
+              <select
+                id="duplicate-scope-role-select"
+                value={duplicateScopeId || ""}
+                onChange={(e) => onScopeIdChange(Number(e.target.value))}
+                className="w-full text-xs font-semibold bg-gray-50 border border-gray-200 rounded-xl p-3 focus:outline-none focus:border-[#8B0000]"
+              >
+                {roles.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <label htmlFor="duplicate-scope-user-select" className="text-xs font-bold text-gray-700">
+                Pilih Karyawan Target:
+              </label>
+              <select
+                id="duplicate-scope-user-select"
+                value={duplicateScopeId || ""}
+                onChange={(e) => onScopeIdChange(Number(e.target.value))}
+                className="w-full text-xs font-semibold bg-gray-50 border border-gray-200 rounded-xl p-3 focus:outline-none focus:border-[#8B0000]"
+              >
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Priority Notice */}
+          <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200/60 flex items-start gap-2.5 text-xs text-amber-800">
+            <Info size={16} className="text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-[11px] leading-relaxed">
+              <strong>Hirarki Penentuan Alur:</strong> Jika karyawan memiliki alur khusus individu, sistem akan menggunakan alur tersebut. Jika tidak, sistem mencari alur khusus divisi/jabatan, lalu alur default perusahaan.
+            </p>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={submittingDuplicate}
+            className="px-5 py-2.5 text-xs font-bold bg-[#8B0000] hover:bg-[#720000] text-white rounded-xl shadow-md transition-all disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {submittingDuplicate ? (
+              "Menduplikasi..."
+            ) : (
+              <>
+                <Copy size={14} /> Duplikasi Alur Sekarang
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ApprovalWorkflowPage() {
   const { user } = useAuth();
   const [selected, setSelected] = useState<string>("leave");
@@ -686,16 +961,8 @@ export default function ApprovalWorkflowPage() {
   const [duplicateScopeId, setDuplicateScopeId] = useState<number | null>(null);
   const [submittingDuplicate, setSubmittingDuplicate] = useState<boolean>(false);
 
-  const isSuperAdmin =
-    user?.role_id === 1 ||
-    user?.role?.name === "Super Admin" ||
-    (user as any)?.can_access_all_companies;
-
-  const isAuthorized =
-    isSuperAdmin ||
-    user?.role?.name === "Admin" ||
-    user?.role?.name?.toLowerCase().includes("hrd") ||
-    user?.role?.name?.toLowerCase().includes("admin");
+  const isSuperAdmin = checkIsSuperAdminUser(user);
+  const isAuthorized = checkIsAuthorizedWorkflowUser(user, isSuperAdmin);
 
   useEffect(() => {
     if (!isAuthorized) {
@@ -836,27 +1103,15 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
 
     setLoading(true);
     try {
-      const payload = {
-        id: activeWorkflow?.id || undefined,
-        module_key: selected,
-        company_id: selectedCompanyId || undefined,
-        name: activeWorkflow?.name || `${activeModule?.label || selected} Workflow`,
-        description: activeWorkflow?.description || activeModule?.description,
-        icon: activeWorkflow?.icon || activeModule?.icon || "GitBranch",
-        category: activeWorkflow?.category || activeModule?.category || "operasional",
-        is_custom: activeWorkflow?.is_custom ?? false,
-        is_active: customActive,
-        scope_type: activeWorkflow?.scope_type || "company",
-        scope_id: activeWorkflow?.scope_id || null,
-        flow_json: JSON.stringify(flow),
-        steps: steps.map((s) => ({
-          step_number: s.step_number,
-          approver_type: s.approver_type,
-          approver_role_id: s.approver_type === "role" ? s.approver_role_id : null,
-          approver_user_id: s.approver_type === "user" ? s.approver_user_id : null,
-          sla_hours: s.sla_hours,
-        })),
-      };
+      const payload = buildWorkflowSavePayload(
+        activeWorkflow,
+        activeModule,
+        selected,
+        selectedCompanyId,
+        customActive,
+        flow,
+        steps
+      );
 
       const res = await axiosInstance.post("/approval-workflows", payload);
       if (res.data.status === "success") {
@@ -955,13 +1210,13 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
 
     setSubmittingDuplicate(true);
     try {
-      const res = await axiosInstance.post("/approval-workflows/duplicate", {
-        source_workflow_id: activeWorkflow.id,
-        name: duplicateName.trim(),
-        scope_type: duplicateScopeType,
-        scope_id: duplicateScopeId,
-        company_id: selectedCompanyId || undefined,
-      });
+      const res = await executeDuplicateWorkflow(
+        activeWorkflow.id,
+        duplicateName,
+        duplicateScopeType,
+        duplicateScopeId,
+        selectedCompanyId
+      );
 
       if (res.data.status === "success" && res.data.data) {
         toast.success("Alur persetujuan berhasil diduplikasi!");
@@ -1845,190 +2100,27 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
 
 
 
-      {/* Modal Duplikasi Alur Persetujuan */}
-      {isDuplicateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 space-y-5 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2.5 bg-amber-50 text-amber-700 rounded-2xl border border-amber-200">
-                  <Copy size={20} className="text-amber-700" />
-                </div>
-                <div>
-                  <h2 className="text-base font-extrabold text-gray-900">
-                    Duplikasi Alur Persetujuan
-                  </h2>
-                  <p className="text-xs text-gray-500">
-                    Buat alur turunan khusus untuk divisi atau karyawan tertentu
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsDuplicateModalOpen(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Source Info Card */}
-            <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-200/80 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                  Alur Sumber (Master):
-                </span>
-                <span className="text-xs font-extrabold text-gray-800">
-                  {activeWorkflow?.name || activeModule?.label}
-                </span>
-              </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 font-bold">
-                {steps.length} Steps
-              </span>
-            </div>
-
-            {/* Form Fields */}
-            <div className="space-y-4">
-              {/* Variant Name */}
-              <div className="space-y-1.5">
-                <label htmlFor="duplicate-variant-name-input" className="text-xs font-bold text-gray-700">
-                  Nama Varian Alur Baru
-                </label>
-                <input
-                  id="duplicate-variant-name-input"
-                  type="text"
-                  value={duplicateName}
-                  onChange={(e) => setDuplicateName(e.target.value)}
-                  placeholder="Contoh: Pengajuan Cuti (Divisi IT) / Lembur Khusus"
-                  className="w-full text-xs font-semibold bg-gray-50 border border-gray-200 rounded-xl p-3 focus:outline-none focus:border-[#8B0000]"
-                />
-              </div>
-
-              {/* Scope Type Selector */}
-              <div className="space-y-1.5">
-                <span className="text-xs font-bold text-gray-700 block">
-                  Target Lingkup Khusus (Scope):
-                </span>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDuplicateScopeType("role");
-                      setDuplicateScopeId(roles.length > 0 ? roles[0].id : null);
-                    }}
-                    className={`p-3 rounded-2xl border text-left flex items-start gap-2.5 transition-all ${
-                      duplicateScopeType === "role"
-                        ? "border-[#8B0000] bg-red-50/40 text-gray-900 ring-1 ring-[#8B0000]"
-                        : "border-gray-200 bg-gray-50/50 text-gray-600 hover:bg-gray-100/70"
-                    }`}
-                  >
-                    <div className={`p-2 rounded-xl shrink-0 ${duplicateScopeType === "role" ? "bg-red-100 text-[#8B0000]" : "bg-gray-200 text-gray-600"}`}>
-                      <Users size={16} />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold">Per Divisi / Jabatan</div>
-                      <div className="text-[10px] text-gray-500 mt-0.5">Berlaku untuk semua karyawan di role ini</div>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDuplicateScopeType("user");
-                      setDuplicateScopeId(users.length > 0 ? users[0].id : null);
-                    }}
-                    className={`p-3 rounded-2xl border text-left flex items-start gap-2.5 transition-all ${
-                      duplicateScopeType === "user"
-                        ? "border-[#8B0000] bg-red-50/40 text-gray-900 ring-1 ring-[#8B0000]"
-                        : "border-gray-200 bg-gray-50/50 text-gray-600 hover:bg-gray-100/70"
-                    }`}
-                  >
-                    <div className={`p-2 rounded-xl shrink-0 ${duplicateScopeType === "user" ? "bg-red-100 text-[#8B0000]" : "bg-gray-200 text-gray-600"}`}>
-                      <UserCheck size={16} />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold">Per Karyawan Spesifik</div>
-                      <div className="text-[10px] text-gray-500 mt-0.5">Berlaku hanya untuk satu individu terpilih</div>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Target Entity Selector */}
-              {duplicateScopeType === "role" ? (
-                <div className="space-y-1.5">
-                  <label htmlFor="duplicate-scope-role-select" className="text-xs font-bold text-gray-700">
-                    Pilih Divisi / Jabatan Target:
-                  </label>
-                  <select
-                    id="duplicate-scope-role-select"
-                    value={duplicateScopeId || ""}
-                    onChange={(e) => setDuplicateScopeId(Number(e.target.value))}
-                    className="w-full text-xs font-semibold bg-gray-50 border border-gray-200 rounded-xl p-3 focus:outline-none focus:border-[#8B0000]"
-                  >
-                    {roles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <label htmlFor="duplicate-scope-user-select" className="text-xs font-bold text-gray-700">
-                    Pilih Karyawan Target:
-                  </label>
-                  <select
-                    id="duplicate-scope-user-select"
-                    value={duplicateScopeId || ""}
-                    onChange={(e) => setDuplicateScopeId(Number(e.target.value))}
-                    className="w-full text-xs font-semibold bg-gray-50 border border-gray-200 rounded-xl p-3 focus:outline-none focus:border-[#8B0000]"
-                  >
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} ({u.email})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Priority Notice */}
-              <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200/60 flex items-start gap-2.5 text-xs text-amber-800">
-                <Info size={16} className="text-amber-600 shrink-0 mt-0.5" />
-                <p className="text-[11px] leading-relaxed">
-                  <strong>Hirarki Penentuan Alur:</strong> Jika karyawan memiliki alur khusus individu, sistem akan menggunakan alur tersebut. Jika tidak, sistem mencari alur khusus divisi/jabatan, lalu alur default perusahaan.
-                </p>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => setIsDuplicateModalOpen(false)}
-                className="px-4 py-2.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleDuplicateWorkflow}
-                disabled={submittingDuplicate}
-                className="px-5 py-2.5 text-xs font-bold bg-[#8B0000] hover:bg-[#720000] text-white rounded-xl shadow-md transition-all disabled:opacity-50 flex items-center gap-1.5"
-              >
-                {submittingDuplicate ? (
-                  "Menduplikasi..."
-                ) : (
-                  <>
-                    <Copy size={14} /> Duplikasi Alur Sekarang
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* MODAL DUPLIKASI ALUR */}
+      <DuplicateWorkflowModal
+        isOpen={isDuplicateModalOpen}
+        activeWorkflow={activeWorkflow}
+        activeModule={activeModule}
+        stepsCount={steps.length}
+        duplicateName={duplicateName}
+        duplicateScopeType={duplicateScopeType}
+        duplicateScopeId={duplicateScopeId}
+        roles={roles}
+        users={users}
+        submittingDuplicate={submittingDuplicate}
+        onClose={() => setIsDuplicateModalOpen(false)}
+        onNameChange={setDuplicateName}
+        onScopeTypeChange={(type, defaultId) => {
+          setDuplicateScopeType(type);
+          setDuplicateScopeId(defaultId);
+        }}
+        onScopeIdChange={setDuplicateScopeId}
+        onSubmit={handleDuplicateWorkflow}
+      />
     </div>
   );
 }

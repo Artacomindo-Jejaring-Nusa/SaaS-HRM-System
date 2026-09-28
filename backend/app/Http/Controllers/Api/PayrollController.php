@@ -229,7 +229,6 @@ class PayrollController extends Controller
         $totalWorkingDays = $ctx['total_working_days'];
         $startDate = $ctx['start_date'];
         $endDate = $ctx['end_date'];
-        $monthNum = $ctx['month_num'];
 
         $basicSalary = (float) ($user->basic_salary ?? 0);
         $totalFixedAllowance = (float) ($user->fixed_allowance ?? 0);
