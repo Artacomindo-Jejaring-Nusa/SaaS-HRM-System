@@ -10,6 +10,35 @@
 name: hrms-staging
 
 services:
+  # ── MySQL Staging (Dedicated Database - 100% Terpisah dari Produksi) ──
+  mysql-staging:
+    image: mysql:8.4
+    container_name: hrms-mysql-staging
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-StagingPass2026!}
+      MYSQL_DATABASE: ${DB_DATABASE:-hrm_saas_staging}
+      MYSQL_USER: ${DB_USERNAME:-hrms_staging}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-StagingPass2026!}
+    command:
+      - "--mysql-native-password=ON"
+      - "--bind-address=0.0.0.0"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    volumes:
+      - mysql_staging_data:/var/lib/mysql
+    networks:
+      - hrms-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_PASSWORD:-StagingPass2026!}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   # ── Backend Staging (Laravel) ───────────────────────────
   backend-staging:
     image: ghcr.io/ahmad-rizki21/saas-backend:staging
@@ -19,9 +48,11 @@ services:
     environment:
       APP_ENV: staging
       APP_DEBUG: "true"
+      DB_HOST: mysql-staging
+      DB_READ_HOST: mysql-staging
       DB_DATABASE: ${DB_DATABASE:-hrm_saas_staging}
-      DB_HOST: ${DB_HOST:-hrms-mysql-master}
-      DB_READ_HOST: ${DB_READ_HOST:-hrms-mysql-master}
+      DB_USERNAME: ${DB_USERNAME:-hrms_staging}
+      DB_PASSWORD: ${DB_PASSWORD:-StagingPass2026!}
     deploy:
       resources:
         limits:
@@ -32,6 +63,9 @@ services:
     volumes:
       - backend_storage_staging:/var/www/html/storage/app/public
       - backend_logs_staging:/var/www/html/storage/logs
+    depends_on:
+      mysql-staging:
+        condition: service_healthy
     networks:
       - hrms-network
 
@@ -74,5 +108,6 @@ networks:
     name: hrms-network
 
 volumes:
+  mysql_staging_data:
   backend_storage_staging:
   backend_logs_staging:

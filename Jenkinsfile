@@ -153,26 +153,15 @@ pipeline {
                                         cd ${TARGET_DIR}
                                         echo "\${GH_TOKEN}" | docker login ${REGISTRY} -u \${GH_USER} --password-stdin
                                         
-                                        # Jika .env.staging belum ada, buat dari .env.prod yang sudah aktif
-                                        if [ ! -f .env.staging ]; then
-                                            if [ -f .env.prod ]; then
-                                                echo "Membuat .env.staging aman dari .env.prod yang sudah ada..."
-                                                cp .env.prod .env.staging
-                                                sed -i "s/^DB_DATABASE=.*/DB_DATABASE=hrm_saas_staging/" .env.staging
-                                                sed -i "s/^DB_HOST=.*/DB_HOST=hrms-mysql-master/" .env.staging
-                                                sed -i "s/^APP_ENV=.*/APP_ENV=staging/" .env.staging
-                                                sed -i "s|^APP_URL=.*|APP_URL=https://staging-dev.jelantik.com|" .env.staging
-                                                sed -i "s|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=https://staging-dev.jelantik.com/api|" .env.staging
-                                            elif [ -f .env.staging.example ]; then
-                                                cp .env.staging.example .env.staging
-                                            fi
+                                        # Pastikan .env.staging ada dan menggunakan dedicated database staging
+                                        if [ ! -f .env.staging ] && [ -f .env.staging.example ]; then
+                                            cp .env.staging.example .env.staging
                                         fi
                                         
-                                        docker exec -i hrms-mysql-master mysql -uroot -pOnTimeNarwastugo2026 -e "CREATE DATABASE IF NOT EXISTS hrm_saas_staging;" || true
                                         docker compose -p hrms-staging -f docker-compose.staging.yml pull
-                                        docker rm -f hrms-backend-staging hrms-frontend-staging hrms-proxy-staging 2>/dev/null || true
                                         docker compose -p hrms-staging --env-file .env.staging -f docker-compose.staging.yml up -d
-                                        sleep 5
+                                        echo "Menunggu MySQL Staging siap..."
+                                        sleep 15
                                         docker exec -i hrms-backend-staging php artisan migrate --force || true
                                         echo "Deployment Staging Sukses! Akses via: https://staging-dev.jelantik.com (Port lokal: http://${TARGET_VM_IP}:8088)"
                                     '
