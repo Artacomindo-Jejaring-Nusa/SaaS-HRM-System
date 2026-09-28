@@ -612,6 +612,1209 @@ async function executeEmployeeDisciplineAction(
   }
 }
 
+interface EmployeePageHeaderProps {
+  readonly onDownloadTemplate: () => void;
+  readonly onDownloadPayrollTemplate: () => void;
+  readonly onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  readonly onPayrollImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  readonly onOpenAddModal: () => void;
+}
+
+function EmployeePageHeader({
+  onDownloadTemplate,
+  onDownloadPayrollTemplate,
+  onFileUpload,
+  onPayrollImport,
+  onOpenAddModal,
+}: EmployeePageHeaderProps) {
+  return (
+    <div className="dash-page-header">
+      <div className="flex items-center gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-[#1a1a2e] text-white flex items-center justify-center shadow-xl shadow-gray-200 group transition-transform hover:rotate-3">
+          <UserIcon size={32} />
+        </div>
+        <div>
+          <h1 className="dash-page-title text-gray-900 font-black tracking-tight">Daftar Karyawan</h1>
+          <p className="dash-page-desc font-medium">Manajemen profil, penugasan, dan status verifikasi seluruh anggota tim.</p>
+        </div>
+      </div>
+      <div className="dash-page-actions flex flex-wrap gap-2">
+        <PermissionGuard slug="create-employees">
+          <button 
+            onClick={onDownloadTemplate}
+            className="dash-btn dash-btn-outline border-gray-200 hover:border-gray-300 text-gray-600 font-bold"
+          >
+            <FileDown size={14} className="mr-1" />
+            Template Karyawan
+          </button>
+          <button 
+            onClick={onDownloadPayrollTemplate}
+            className="dash-btn dash-btn-outline border-blue-200 hover:border-blue-300 text-blue-600 font-bold"
+          >
+            <FileDown size={14} className="mr-1" />
+            Template Payroll
+          </button>
+          <label className="dash-btn dash-btn-outline border-blue-200 hover:border-blue-300 text-blue-600 font-bold cursor-pointer">
+            <FileUp size={14} className="mr-1" />
+            Import Data
+            <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={onFileUpload} />
+          </label>
+          <label className="dash-btn dash-btn-outline border-blue-200 hover:border-blue-300 text-blue-600 font-bold cursor-pointer">
+            <CreditCard size={14} className="mr-1" />
+            Import Rekening/Gaji
+            <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={onPayrollImport} />
+          </label>
+          <button 
+            onClick={onOpenAddModal}
+            className="dash-btn dash-btn-primary shadow-lg shadow-orange-500/20 bg-[#f97316] hover:bg-[#ea580c] border-none font-black text-white"
+          >
+            <Plus size={16} />
+            Tambah Karyawan
+          </button>
+        </PermissionGuard>
+      </div>
+    </div>
+  );
+}
+
+interface EmployeeVerificationBannerProps {
+  readonly unverifiedCount: number;
+  readonly isHRorAdmin: boolean;
+  readonly onResendVerification: () => void;
+}
+
+function EmployeeVerificationBanner({
+  unverifiedCount,
+  isHRorAdmin,
+  onResendVerification,
+}: EmployeeVerificationBannerProps) {
+  if (unverifiedCount <= 0 || !isHRorAdmin) return null;
+
+  return (
+    <div className="mb-6 bg-blue-50 border border-blue-100 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in slide-in-from-top-4 duration-500">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 shrink-0">
+          <UserIcon size={16} />
+        </div>
+        <p className="text-sm text-blue-900 font-bold">
+          Kamu punya <span className="text-blue-600 underline font-black">{unverifiedCount} karyawan</span> yang belum diverifikasi, silakan kirim undangan segera.
+        </p>
+      </div>
+      <button 
+        onClick={onResendVerification}
+        className="text-xs font-black text-blue-700 hover:text-blue-800 tracking-tight flex items-center gap-1 uppercase shrink-0"
+      >
+        Kirim Ulang Semua Undangan <Plus size={14} className="rotate-45" />
+      </button>
+    </div>
+  );
+}
+
+interface EmployeeToolbarProps {
+  readonly activeFilter: 'all' | 'unverified' | 'team';
+  readonly setActiveFilter: (filter: 'all' | 'unverified' | 'team') => void;
+  readonly unverifiedCount: number;
+  readonly isSuperAdmin: boolean;
+  readonly selectedRole: string;
+  readonly onRoleChange: (role: string) => void;
+  readonly availableRoles: Role[];
+  readonly searchQuery: string;
+  readonly onSearchChange: (query: string) => void;
+  readonly selectedIdsCount: number;
+  readonly isSubmitting: boolean;
+  readonly onResendVerification: () => void;
+  readonly onBulkDelete: () => void;
+}
+
+function EmployeeToolbar({
+  activeFilter,
+  setActiveFilter,
+  unverifiedCount,
+  isSuperAdmin,
+  selectedRole,
+  onRoleChange,
+  availableRoles,
+  searchQuery,
+  onSearchChange,
+  selectedIdsCount,
+  isSubmitting,
+  onResendVerification,
+  onBulkDelete,
+}: EmployeeToolbarProps) {
+  return (
+    <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
+      <div className="flex items-center gap-1 p-1 bg-gray-100/50 rounded-xl w-full md:w-fit border border-gray-200/50">
+        <button 
+          onClick={() => setActiveFilter('all')}
+          className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${activeFilter === 'all' ? 'bg-white text-orange-600 shadow-sm border border-orange-100' : 'text-gray-400 hover:text-gray-600'}`}
+        >
+          Semua Karyawan
+        </button>
+        <button 
+          onClick={() => setActiveFilter('team')}
+          className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${activeFilter === 'team' ? 'bg-white text-orange-600 shadow-sm border border-orange-100' : 'text-gray-400 hover:text-gray-600'}`}
+        >
+          Tim Saya
+        </button>
+        <button 
+          onClick={() => setActiveFilter('unverified')}
+          className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${activeFilter === 'unverified' ? 'bg-white text-orange-600 shadow-sm border border-orange-100' : 'text-gray-400 hover:text-gray-600'}`}
+        >
+          Belum diverifikasi ({unverifiedCount})
+        </button>
+      </div>
+
+      <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+        {!isSuperAdmin && (
+          <div className="relative group w-full sm:w-56">
+            <Briefcase className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-orange-500 pointer-events-none transition-colors" size={15} />
+            <select
+              value={selectedRole}
+              onChange={(e) => onRoleChange(e.target.value)}
+              className="w-full h-11 pl-10 pr-9 text-xs font-bold bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-orange-200 focus:ring-4 focus:ring-orange-50/50 transition-all shadow-sm appearance-none cursor-pointer text-gray-700 hover:border-gray-300"
+            >
+              <option value="all">Semua Posisi / Peran</option>
+              {availableRoles.map((role) => (
+                <option key={role.id} value={role.id.toString()}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+          </div>
+        )}
+
+        <div className={`relative flex-1 w-full ${isSuperAdmin ? 'sm:w-80 md:w-[420px]' : 'sm:w-72'} group`}>
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-orange-500 transition-colors" size={16} />
+          <input
+            type="text"
+            placeholder="Cari Nama / Posisi / NIK / Email..."
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="w-full h-11 pl-10 pr-4 text-xs font-bold bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-orange-200 focus:ring-4 focus:ring-orange-50/50 transition-all shadow-sm"
+          />
+        </div>
+
+        {selectedIdsCount > 0 && (
+          <div className="flex items-center gap-2 animate-in slide-in-from-right-4 duration-200">
+            <button 
+              onClick={onResendVerification}
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-6 py-2 bg-blue-50 text-blue-600 rounded-full text-xs font-black hover:bg-blue-100 transition-all border border-blue-100 shadow-sm"
+            >
+              <Mail size={14} className={isSubmitting ? "animate-spin" : ""} />
+              Kirim Verifikasi ({selectedIdsCount})
+            </button>
+
+            <button 
+              onClick={onBulkDelete}
+              className="flex items-center gap-2 px-6 py-2 bg-red-50 text-red-600 rounded-full text-xs font-black hover:bg-red-100 transition-all border border-red-100 shadow-sm"
+            >
+              <Trash2 size={14} />
+              Hapus Karyawan ({selectedIdsCount})
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface EmployeeTableProps {
+  readonly loading: boolean;
+  readonly isHRorAdmin: boolean;
+  readonly employees: Employee[];
+  readonly selectedIds: number[];
+  readonly onSelectAll: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  readonly onSelectRow: (id: number) => void;
+  readonly onView: (emp: Employee) => void;
+  readonly onEdit: (emp: Employee) => void;
+  readonly onDelete: (id: number) => void;
+  readonly onResendVerification: (id?: number) => void;
+  readonly onDiscipline: (emp: Employee) => void;
+  readonly onResetPassword: (id: number, name: string) => void;
+  readonly onResetDevice: (id: number) => void;
+  readonly formatDate: (date?: string) => string;
+  readonly pagination: PaginationData | null;
+  readonly onPageChange: (page: number) => void;
+}
+
+function EmployeeTable({
+  loading,
+  isHRorAdmin,
+  employees,
+  selectedIds,
+  onSelectAll,
+  onSelectRow,
+  onView,
+  onEdit,
+  onDelete,
+  onResendVerification,
+  onDiscipline,
+  onResetPassword,
+  onResetDevice,
+  formatDate,
+  pagination,
+  onPageChange,
+}: EmployeeTableProps) {
+  return (
+    <>
+      <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 overflow-hidden relative">
+        <div className="overflow-x-auto custom-scrollbar scroll-smooth min-h-[360px]">
+          {loading ? (
+            <div className="p-12"><TableSkeleton rows={8} cols={8} /></div>
+          ) : (
+            <table className="w-full text-left border-collapse min-w-[960px]">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  {isHRorAdmin && (
+                    <th className="px-3 py-3 w-10 sticky left-0 bg-gray-50 z-20 text-center">
+                      <input 
+                        type="checkbox" 
+                        onChange={onSelectAll}
+                        checked={selectedIds.length === employees.length && employees.length > 0}
+                        className="rounded-md border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                      />
+                    </th>
+                  )}
+                  <th className={`px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky bg-gray-50 z-20 min-w-[200px] whitespace-nowrap ${isHRorAdmin ? "left-10" : "left-0"}`}>
+                    Karyawan
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest min-w-[170px] whitespace-nowrap">
+                    Detail Kontak
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest min-w-[150px] whitespace-nowrap">
+                    Posisi / Peran
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[110px] whitespace-nowrap">
+                    Bergabung
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[100px] whitespace-nowrap">
+                    Status
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap">
+                    Lokasi
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap">
+                    Email Verification
+                  </th>
+                  {isHRorAdmin && (
+                    <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right sticky right-0 bg-gray-50 z-20 w-14 min-w-[60px] whitespace-nowrap">
+                      Opsi
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {employees.map((emp) => (
+                  <tr key={emp.id} className="group hover:bg-orange-50/20 transition-all">
+                    {isHRorAdmin && (
+                      <td className="px-3 py-3 w-10 sticky left-0 bg-white group-hover:bg-orange-50/20 z-10 text-center">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedIds.includes(emp.id)}
+                          onChange={() => onSelectRow(emp.id)}
+                          className="rounded-md border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                        />
+                      </td>
+                    )}
+                    <td className={`px-3.5 py-3 sticky bg-white group-hover:bg-orange-50/20 z-10 min-w-[200px] ${isHRorAdmin ? "left-10" : "left-0"}`}>
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <Avatar className="size-9 border-2 border-white shadow-md transition-transform group-hover:scale-105">
+                            <AvatarImage src={emp.profile_photo_url} alt={emp.name} />
+                            <AvatarFallback className="bg-orange-100 text-orange-600 font-black text-xs">
+                              {emp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white shadow-sm ${emp.email_verified_at ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-black text-gray-900 text-xs tracking-tight truncate">{emp.name}</span>
+                          <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">EMP-{emp.id.toString().padStart(4, '0')}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3.5 py-3 whitespace-nowrap">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                          <Mail size={12} className="text-gray-400" />
+                          {emp.email}
+                        </div>
+                        {emp.phone && (
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400">
+                            <Phone size={10} />
+                            {emp.phone}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3.5 py-3">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5 bg-gray-100 px-2 py-0.5 rounded-lg w-fit border border-gray-200">
+                          <Building2 size={10} className="text-gray-400" />
+                          <span className="text-[10px] font-black text-gray-700 uppercase">{emp.role?.name || "Member"}</span>
+                        </div>
+                        {emp.cost_center && (
+                          <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md w-fit uppercase tracking-wider">
+                            CC: {emp.cost_center.includes("Artacomindo") ? "Artacomindo" : emp.cost_center.includes("Narwastu") ? "Narwastu" : emp.cost_center}
+                          </span>
+                        )}
+                        {emp.supervisor && (
+                          <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-md w-fit">
+                            Atasan: {emp.supervisor.name}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-xs font-black text-gray-700">{formatDate(emp.join_date)}</span>
+                        <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1">
+                          <Clock size={8} /> {emp.join_date ? Math.floor((Date.now() - new Date(emp.join_date).getTime()) / (1000 * 60 * 60 * 24 * 365)) : 0} Thn
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
+                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border border-gray-100 ${emp.employment_status === 'Permanent' ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-50 text-gray-500'}`}>
+                        {emp.employment_status || 'Permanent'}
+                      </span>
+                    </td>
+                    <td className="px-3.5 py-3 text-center text-xs font-bold text-gray-500 whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1">
+                        <MapPin size={12} className="text-red-400" />
+                        {emp.office?.name || emp.work_location || 'Kantor Pusat'}
+                      </div>
+                    </td>
+                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
+                      {emp.email_verified_at ? (
+                        <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-emerald-100 uppercase tracking-tighter">
+                          <BadgeCheck size={13} className="text-emerald-500" />
+                          Verified
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-amber-100 uppercase tracking-tighter shadow-sm">
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                          Pending
+                        </div>
+                      )}
+                    </td>
+                    {isHRorAdmin && (
+                      <td className="px-3.5 py-3 text-right sticky right-0 bg-white group-hover:bg-orange-50/20 z-10 w-14 min-w-[60px]">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors cursor-pointer outline-none ml-auto">
+                            <MoreVertical size={16} />
+                          </DropdownMenuTrigger>
+                          
+                          <DropdownMenuContent 
+                            side="left" 
+                            align="start" 
+                            sideOffset={8}
+                            className="w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 space-y-1 z-50 text-left"
+                          >
+                            <DropdownMenuItem 
+                              onClick={() => onView(emp)}
+                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                            >
+                              <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-blue-100 group-hover/item:text-blue-600 transition-colors">
+                                <Eye size={18} />
+                              </div>
+                              <div>
+                                <p className="text-sm font-black text-gray-900 group-hover/item:text-blue-600 transition-colors">Lihat Profil</p>
+                                <p className="text-[10px] text-gray-400 font-medium">Lihat detail lengkap karyawan</p>
+                              </div>
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem 
+                              onClick={() => onEdit(emp)}
+                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                            >
+                              <div className="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-100 group-hover/item:text-orange-700 transition-colors">
+                                <UserCog size={18} />
+                              </div>
+                              <div>
+                                <p className="text-sm font-black text-gray-900 group-hover/item:text-orange-600 transition-colors">Edit Profil Karyawan</p>
+                                <p className="text-[10px] text-gray-400 font-medium">Ubah profil lengkap, jabatan, & akses</p>
+                              </div>
+                            </DropdownMenuItem>
+                            
+                            <DropdownMenuItem 
+                              onClick={() => onDelete(emp.id)}
+                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-red-50/50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                            >
+                              <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-red-100 group-hover/item:text-red-600 transition-colors">
+                                <UserX size={18} />
+                              </div>
+                              <div>
+                                <p className="text-sm font-black text-gray-900 group-hover/item:text-red-600 transition-colors">Penghentian</p>
+                                <p className="text-[10px] text-gray-400 font-medium">Proses pengunduran diri</p>
+                              </div>
+                            </DropdownMenuItem>
+
+                            {!emp.email_verified_at && (
+                              <DropdownMenuItem 
+                                onClick={() => onResendVerification(emp.id)}
+                                className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                              >
+                                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
+                                  <Mail size={18} />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-black text-gray-900">Kirim Undangan</p>
+                                  <p className="text-[10px] text-gray-400 font-medium">Kirim ulang link verifikasi</p>
+                                </div>
+                              </DropdownMenuItem>
+                            )}
+
+                            <DropdownMenuSeparator className="my-1 border-gray-100" />
+
+                            <DropdownMenuItem 
+                              onClick={() => onDiscipline(emp)}
+                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                            >
+                              <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
+                                <ShieldAlert size={18} />
+                              </div>
+                              <div>
+                                <p className="text-sm font-black text-gray-900">Tindakan Disiplin</p>
+                                <p className="text-[10px] text-gray-400 font-medium">Catat pelanggaran atau SP</p>
+                              </div>
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem 
+                              onClick={() => onResetPassword(emp.id, emp.name)}
+                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                            >
+                              <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
+                                <Key size={18} />
+                              </div>
+                              <div>
+                                <p className="text-sm font-black text-orange-600">Reset Password</p>
+                                <p className="text-[10px] text-gray-400 font-medium">Ubah sandi menjadi &apos;password&apos;</p>
+                              </div>
+                            </DropdownMenuItem>
+
+                            {emp.device_id && (
+                              <DropdownMenuItem 
+                                onClick={() => onResetDevice(emp.id)}
+                                className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                              >
+                                <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
+                                  <Camera size={18} />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-black text-orange-600">Reset Device ID</p>
+                                  <p className="text-[10px] text-gray-400 font-medium">Izinkan login di HP baru</p>
+                                </div>
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {!loading && pagination && pagination.total > 0 && (
+        <Pagination 
+          currentPage={pagination.current_page} 
+          lastPage={pagination.last_page} 
+          total={pagination.total} 
+          onPageChange={onPageChange} 
+        />
+      )}
+    </>
+  );
+}
+
+interface EmployeeAddEditModalProps {
+  readonly isOpen: boolean;
+  readonly modalMode: "add" | "edit";
+  readonly formData: EmployeeFormData;
+  readonly setFormData: React.Dispatch<React.SetStateAction<EmployeeFormData>>;
+  readonly photoPreview: string | null;
+  readonly availableRoles: Role[];
+  readonly availableOffices: { id: number; name: string }[];
+  readonly potentialSupervisors: { id: number; name: string; role?: { id: number; name: string } }[];
+  readonly isSubmitting: boolean;
+  readonly onClose: () => void;
+  readonly onSubmit: (e: React.FormEvent) => void;
+  readonly onPhotoChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+function EmployeeAddEditModal({
+  isOpen,
+  modalMode,
+  formData,
+  setFormData,
+  photoPreview,
+  availableRoles,
+  availableOffices,
+  potentialSupervisors,
+  isSubmitting,
+  onClose,
+  onSubmit,
+  onPhotoChange,
+}: EmployeeAddEditModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-gray-50/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+              <UserCog size={20} />
+            </div>
+            <div>
+              <h3 className="font-bold text-lg text-gray-900 leading-tight">
+                {modalMode === "add" ? "Tambah Karyawan Baru" : "Edit Profil & Data Karyawan"}
+              </h3>
+              <p className="text-xs text-gray-400">
+                {modalMode === "add" ? "Lengkapi data karyawan untuk mengirim undangan akun." : `Perbarui data profil dan kepegawaian untuk ${formData.name || ''}`}
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        
+        <form onSubmit={onSubmit}>
+          <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+            {/* Photo Profile Section */}
+            <div className="flex flex-col items-center gap-3 mb-4 p-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+              <div className="relative group">
+                <Avatar className="size-20 border-2 border-white shadow-md">
+                  <AvatarImage src={photoPreview || undefined} />
+                  <AvatarFallback className="bg-white text-gray-300">
+                    <UserIcon size={32} />
+                  </AvatarFallback>
+                </Avatar>
+                <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                  <Camera size={18} />
+                  <input type="file" className="hidden" accept="image/*" onChange={onPhotoChange} />
+                </label>
+              </div>
+              <div className="text-center">
+                <span className="text-xs font-semibold text-gray-600">Foto Profil</span>
+                <p className="text-[10px] text-gray-400 mt-0.5">Klik pada avatar untuk ganti foto (JPG/PNG, Max 2MB)</p>
+              </div>
+            </div>
+
+            {/* Form Sections */}
+            <div className="space-y-6">
+              {/* Akun & Kontak */}
+              <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                <h4 className="font-bold border-b border-gray-200 pb-2 mb-4 text-orange-600 text-sm uppercase tracking-wider">Info Akun & Kontak</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Nama Lengkap*</label>
+                    <input 
+                      type="text" 
+                      required
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.name || ""}
+                      onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Email Utama*</label>
+                    <input 
+                      type="email" 
+                      required
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.email || ""}
+                      onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">No Telepon/WA</label>
+                    <input 
+                      type="tel" 
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.phone || ""}
+                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Peran Akun*</label>
+                    <select 
+                      required
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.role_id || ""}
+                      onChange={(e) => setFormData({...formData, role_id: parseInt(e.target.value)})}
+                    >
+                      <option value="" disabled>Pilih Peran Akun</option>
+                      {availableRoles.map(role => (
+                        <option key={role.id} value={role.id}>{role.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {modalMode === "add" ? (
+                    <div className="space-y-1.5">
+                      <label htmlFor="employee-temp-password-input" className="text-sm font-medium text-gray-700">Password Sementara*</label>
+                      <input 
+                        id="employee-temp-password-input"
+                        type="password" 
+                        required
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                        value={formData.password || ""}
+                        placeholder="Min 6 karakter"
+                        onChange={(e) => setFormData({...formData, password: e.target.value})}
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <label htmlFor="employee-edit-password-input" className="text-sm font-medium text-gray-700">Ubah Kata Sandi (Opsional)</label>
+                      <input 
+                        id="employee-edit-password-input"
+                        type="password" 
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                        value={formData.password || ""}
+                        placeholder="Kosongkan jika tidak ingin mengubah password"
+                        onChange={(e) => setFormData({...formData, password: e.target.value})}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Data Demografis */}
+              <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                <h4 className="font-bold border-b border-gray-200 pb-2 mb-4 text-orange-600 text-sm uppercase tracking-wider">Data Demografis</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">NIK (Karyawan)</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.nik || ""}
+                      onChange={(e) => setFormData({...formData, nik: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">No. KTP</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.ktp_no || ""}
+                      onChange={(e) => setFormData({...formData, ktp_no: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Tempat Lahir</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.place_of_birth || ""}
+                      onChange={(e) => setFormData({...formData, place_of_birth: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Tanggal Lahir</label>
+                    <input 
+                      type="date" 
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.date_of_birth || ""}
+                      onChange={(e) => setFormData({...formData, date_of_birth: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Gender</label>
+                    <select 
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.gender || ""}
+                      onChange={(e) => setFormData({...formData, gender: e.target.value})}
+                    >
+                      <option value="">Pilih</option>
+                      <option value="Laki-laki">Laki-laki</option>
+                      <option value="Perempuan">Perempuan</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Agama</label>
+                    <select 
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.religion || ""}
+                      onChange={(e) => setFormData({...formData, religion: e.target.value})}
+                    >
+                      <option value="">Pilih</option>
+                      <option value="Islam">Islam</option>
+                      <option value="Kristen">Kristen</option>
+                      <option value="Katolik">Katolik</option>
+                      <option value="Hindu">Hindu</option>
+                      <option value="Buddha">Buddha</option>
+                      <option value="Konghucu">Konghucu</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Status Nikah</label>
+                    <select 
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.marital_status || ""}
+                      onChange={(e) => setFormData({...formData, marital_status: e.target.value})}
+                    >
+                      <option value="">Pilih</option>
+                      <option value="Single">Single</option>
+                      <option value="Menikah">Menikah</option>
+                      <option value="Janda/Duda">Janda/Duda</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Gol. Darah</label>
+                    <select 
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.blood_type || ""}
+                      onChange={(e) => setFormData({...formData, blood_type: e.target.value})}
+                    >
+                      <option value="">Pilih</option>
+                      <option value="A">A</option>
+                      <option value="B">B</option>
+                      <option value="AB">AB</option>
+                      <option value="O">O</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700">Alamat</label>
+                  <textarea 
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                    rows={2}
+                    value={formData.address || ""}
+                    onChange={(e) => setFormData({...formData, address: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              {/* Pekerjaan & Darurat */}
+              <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                <h4 className="font-bold border-b border-gray-200 pb-2 mb-4 text-orange-600 text-sm uppercase tracking-wider">Pekerjaan & Darurat</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Status Karyawan*</label>
+                    <select 
+                      required
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.employment_status || ""}
+                      onChange={(e) => setFormData({...formData, employment_status: e.target.value})}
+                    >
+                      <option value="Permanent">Permanent</option>
+                      <option value="Contract">Contract</option>
+                      <option value="Probation">Probation</option>
+                      <option value="Intern">Intern</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Penempatan Cabang</label>
+                    <select 
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.office_id || ""}
+                      onChange={(e) => setFormData({...formData, office_id: e.target.value ? parseInt(e.target.value) : null})}
+                    >
+                      <option value="">Default (Kantor Pusat)</option>
+                      {availableOffices.map(office => (
+                        <option key={office.id} value={office.id}>{office.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Ket. Lokasi</label>
+                    <input 
+                      type="text" 
+                      placeholder="Kantor Pusat"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.work_location || ""}
+                      onChange={(e) => setFormData({...formData, work_location: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Tanggal Gabung*</label>
+                    <input 
+                      type="date" 
+                      required
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.join_date || ""}
+                      onChange={(e) => setFormData({...formData, join_date: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Pola Kehadiran*</label>
+                    <select 
+                      required
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.attendance_type || "office_hour"}
+                      onChange={(e) => setFormData({...formData, attendance_type: e.target.value})}
+                    >
+                      <option value="office_hour">Office Hour</option>
+                      <option value="shift">Shift / Jadwal Khusus</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Cost Center</label>
+                    <select 
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.cost_center || ""}
+                      onChange={(e) => setFormData({...formData, cost_center: e.target.value})}
+                    >
+                      <option value="">Pilih Cost Center</option>
+                      <option value="PT. Artacomindotama">PT. Artacomindotama</option>
+                      <option value="PT. Narwastu">PT. Narwastu</option>
+                      <option value="AJNusa">AJNusa</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="employee-leave-balance-input" className="text-sm font-medium text-gray-700">Sisa Jatah Cuti (Hari)</label>
+                    <input 
+                      id="employee-leave-balance-input"
+                      type="number" 
+                      min="0" 
+                      max="365"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.leave_balance ?? 12}
+                      onChange={(e) => setFormData({...formData, leave_balance: Number.parseInt(e.target.value, 10) || 0})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Atasan Langsung</label>
+                    <SearchableSupervisorSelect
+                      value={formData.supervisor_id}
+                      onChange={(id) => setFormData({...formData, supervisor_id: id})}
+                      supervisors={potentialSupervisors}
+                    />
+                    <p className="text-[11px] text-gray-500 italic mt-0.5">* Ketik untuk mencari jabatan/nama</p>
+                  </div>
+
+                  <div className="space-y-1.5 md:col-span-2 bg-gray-50/80 p-3.5 rounded-xl border border-gray-200">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <label htmlFor="employee-manager-portal-select" className="text-sm font-semibold text-gray-800">Akses Portal Manager</label>
+                        <p className="text-xs text-gray-500">Izin akun ini untuk melihat Tab & Fitur Manager (Approval Cuti, Lembur, Klaim, Izin, Fleet Log, dll.)</p>
+                      </div>
+                      <select
+                        id="employee-manager-portal-select"
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e] bg-white font-medium cursor-pointer"
+                        value={getPortalAccessValue(formData.can_access_manager_portal)}
+                        onChange={(e) => {
+                          setFormData({
+                            ...formData,
+                            can_access_manager_portal: parsePortalAccessValue(e.target.value),
+                          });
+                        }}
+                      >
+                        <option value="default">Ikuti Hak Akses Role (Default)</option>
+                        <option value="enabled">Diaktifkan (Enabled)</option>
+                        <option value="disabled">Dinonaktifkan (Disabled)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200/60">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Nama Kontak Darurat</label>
+                    <input 
+                      type="text" 
+                      placeholder="Contoh: Budi (Suami/Orangtua)"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-200"
+                      value={formData.emergency_contact_name || ""}
+                      onChange={(e) => setFormData({...formData, emergency_contact_name: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">No Hp Darurat</label>
+                    <input 
+                      type="tel" 
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-200"
+                      value={formData.emergency_contact_phone || ""}
+                      onChange={(e) => setFormData({...formData, emergency_contact_phone: e.target.value})}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Data Rekening & Payroll */}
+              <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                <h4 className="font-bold border-b border-gray-200 pb-2 mb-4 text-emerald-600 text-sm uppercase tracking-wider">Informasi Rekening & Payroll</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label htmlFor="employee-bank-name-input" className="text-sm font-medium text-gray-700">Nama Bank</label>
+                    <input 
+                      id="employee-bank-name-input"
+                      type="text" 
+                      placeholder="Contoh: BCA, Mandiri, BRI, BNI"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      value={formData.bank_name || ""}
+                      onChange={(e) => setFormData({...formData, bank_name: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="employee-bank-account-no-input" className="text-sm font-medium text-gray-700">Nomor Rekening</label>
+                    <input 
+                      id="employee-bank-account-no-input"
+                      type="text" 
+                      placeholder="Contoh: 1234567890"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      value={formData.bank_account_no || ""}
+                      onChange={(e) => setFormData({...formData, bank_account_no: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="employee-bank-account-name-input" className="text-sm font-medium text-gray-700">Atas Nama Rekening</label>
+                    <input 
+                      id="employee-bank-account-name-input"
+                      type="text" 
+                      placeholder="Nama pemilik rekening..."
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      value={formData.bank_account_name || ""}
+                      onChange={(e) => setFormData({...formData, bank_account_name: e.target.value})}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
+            <button 
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 transition-colors"
+            >
+              Batal
+            </button>
+            <button 
+              type="submit"
+              disabled={isSubmitting}
+              className="px-6 py-2 text-sm font-black text-white bg-[#1a1a2e] rounded-md hover:bg-[#1a1a2e]/90 disabled:opacity-50 shadow-lg shadow-[#1a1a2e]/20"
+            >
+              {isSubmitting ? "Menyimpan..." : (modalMode === "add" ? "Tambah & Kirim Undangan" : "Simpan Perubahan")}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+interface EmployeeViewModalProps {
+  readonly isOpen: boolean;
+  readonly employee: Employee | null;
+  readonly isHRorAdmin: boolean;
+  readonly onClose: () => void;
+  readonly onEdit: (emp: Employee) => void;
+  readonly formatDate: (date?: string) => string;
+}
+
+function EmployeeViewModal({
+  isOpen,
+  employee,
+  isHRorAdmin,
+  onClose,
+  onEdit,
+  formatDate,
+}: EmployeeViewModalProps) {
+  if (!isOpen || !employee) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-gray-50/50">
+          <div className="flex items-center gap-3">
+            <Avatar className="size-11 border-2 border-white shadow-md">
+              <AvatarImage src={employee.profile_photo_url} alt={employee.name} />
+              <AvatarFallback className="bg-blue-100 text-blue-600 font-bold">{employee.name.substring(0,2).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <div>
+              <h3 className="font-extrabold text-lg text-gray-900 leading-none">{employee.name}</h3>
+              <span className="text-xs font-semibold uppercase tracking-widest text-[#1a1a2e]">EMP-{employee.id.toString().padStart(4, '0')}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {isHRorAdmin && (
+              <button
+                onClick={() => onEdit(employee)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#8B0000] text-white rounded-xl text-xs font-bold hover:bg-[#700000] transition-all shadow-md shadow-red-900/10"
+              >
+                <UserCog size={14} />
+                <span>Edit Profil Karyawan</span>
+              </button>
+            )}
+            <button 
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+        
+        <div className="p-6 space-y-8 max-h-[75vh] overflow-y-auto bg-white">
+          <section>
+            <h4 className="font-bold border-b pb-2 mb-4 text-blue-500 text-sm uppercase tracking-wider">Info Akun & Kontak</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div><p className="text-xs text-gray-400">Email Utama</p><p className="text-sm font-semibold">{employee.email}</p></div>
+              <div><p className="text-xs text-gray-400">No Telepon</p><p className="text-sm font-semibold">{employee.phone || '-'}</p></div>
+              <div><p className="text-xs text-gray-400">Peran Akun</p><p className="text-sm font-semibold">{employee.role?.name || '-'}</p></div>
+              <div><p className="text-xs text-gray-400">Status Verifikasi</p><p className="text-sm font-semibold">{employee.email_verified_at ? 'Terverifikasi' : 'Pending'}</p></div>
+            </div>
+          </section>
+
+          <section>
+            <h4 className="font-bold border-b pb-2 mb-4 text-blue-500 text-sm uppercase tracking-wider">Data Demografis</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div><p className="text-xs text-gray-400">NIK (Karyawan)</p><p className="text-sm font-semibold">{employee.nik || '-'}</p></div>
+              <div><p className="text-xs text-gray-400">No. KTP</p><p className="text-sm font-semibold">{employee.ktp_no || '-'}</p></div>
+              <div><p className="text-xs text-gray-400">Tempat Lahir</p><p className="text-sm font-semibold">{employee.place_of_birth || '-'}</p></div>
+              <div><p className="text-xs text-gray-400">Tanggal Lahir</p><p className="text-sm font-semibold">{formatDate(employee.date_of_birth)}</p></div>
+              <div><p className="text-xs text-gray-400">Gender</p><p className="text-sm font-semibold">{employee.gender || '-'}</p></div>
+              <div><p className="text-xs text-gray-400">Agama</p><p className="text-sm font-semibold">{employee.religion || '-'}</p></div>
+              <div><p className="text-xs text-gray-400">Status Nikah</p><p className="text-sm font-semibold">{employee.marital_status || '-'}</p></div>
+              <div><p className="text-xs text-gray-400">Golongan Darah</p><p className="text-sm font-semibold">{employee.blood_type || '-'}</p></div>
+            </div>
+            <div className="mt-4">
+              <p className="text-xs text-gray-400">Alamat Lengkap</p>
+              <p className="text-sm font-semibold">{employee.address || '-'}</p>
+            </div>
+          </section>
+
+          <section>
+            <h4 className="font-bold border-b pb-2 mb-4 text-blue-500 text-sm uppercase tracking-wider">Pekerjaan & Darurat</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div><p className="text-xs text-gray-400">Status Karyawan</p><p className="text-sm font-semibold">{employee.employment_status || 'Permanent'}</p></div>
+              <div><p className="text-xs text-gray-400">Penempatan Cabang</p><p className="text-sm font-semibold text-blue-600">{employee.office?.name || employee.work_location || 'Kantor Pusat'}</p></div>
+              <div><p className="text-xs text-gray-400">Tanggal Gabung</p><p className="text-sm font-semibold">{formatDate(employee.join_date)}</p></div>
+              <div><p className="text-xs text-gray-400">Sisa Cuti</p><p className="text-sm font-semibold">{employee.leave_balance ?? 0} Hari</p></div>
+              <div><p className="text-xs text-gray-400">Atasan Lgsg.</p><p className="text-sm font-semibold">{employee.supervisor?.name || '-'}</p></div>
+              <div><p className="text-xs text-gray-400">Pola Kehadiran</p><p className="text-sm font-semibold">{employee.attendance_type === "shift" ? "Shift" : "Office Hour"}</p></div>
+              <div className="col-span-2 border-l pl-4 border-gray-100">
+                <p className="text-xs text-red-400">Kontak Darurat</p>
+                <p className="text-sm font-semibold">{employee.emergency_contact_name || '-'} ({employee.emergency_contact_phone || '-'})</p>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h4 className="font-bold border-b pb-2 mb-4 text-emerald-600 text-sm uppercase tracking-wider">Rekening & Payroll</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div><p className="text-xs text-gray-400">Nama Bank</p><p className="text-sm font-semibold">{employee.bank_name || '-'}</p></div>
+              <div><p className="text-xs text-gray-400">Nomor Rekening</p><p className="text-sm font-semibold">{employee.bank_account_no || '-'}</p></div>
+              <div><p className="text-xs text-gray-400">Atas Nama Rekening</p><p className="text-sm font-semibold">{employee.bank_account_name || '-'}</p></div>
+            </div>
+          </section>
+        </div>
+        <div className="p-5 border-t border-gray-100 flex justify-between items-center bg-gray-50/50">
+          <div className="text-xs text-gray-400">
+            ID Karyawan: <span className="font-bold text-gray-700">EMP-{employee.id.toString().padStart(4, '0')}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={onClose} 
+              className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold text-xs hover:bg-gray-200 transition-colors"
+            >
+              Tutup
+            </button>
+            {isHRorAdmin && (
+              <button 
+                onClick={() => onEdit(employee)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-[#8B0000] text-white rounded-xl font-bold text-xs hover:bg-[#700000] transition-all shadow-lg shadow-red-900/20"
+              >
+                <UserCog size={14} />
+                Edit Profil Karyawan
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface EmployeeDisciplineModalProps {
+  readonly isOpen: boolean;
+  readonly employee: Employee | null;
+  readonly disciplineNote: string;
+  readonly setDisciplineNote: (note: string) => void;
+  readonly isSubmitting: boolean;
+  readonly onClose: () => void;
+  readonly onSubmit: (e: React.FormEvent) => void;
+}
+
+function EmployeeDisciplineModal({
+  isOpen,
+  employee,
+  disciplineNote,
+  setDisciplineNote,
+  isSubmitting,
+  onClose,
+  onSubmit,
+}: EmployeeDisciplineModalProps) {
+  if (!isOpen || !employee) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-red-50/20">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+              <ShieldAlert size={20} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg text-gray-900 leading-tight">Tindakan Disiplin</h3>
+              <p className="text-xs text-gray-500">Karyawan: {employee.name}</p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <form onSubmit={onSubmit}>
+          <div className="p-6">
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-gray-700">Catatan Pelanggaran / SP *</label>
+              <textarea
+                required
+                rows={4}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                placeholder="Tuliskan alasan tindakan disiplin secara mendetail..."
+                value={disciplineNote}
+                onChange={(e) => setDisciplineNote(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="p-5 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
+            <button 
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 transition-colors"
+            >
+              Batal
+            </button>
+            <button 
+              type="submit"
+              disabled={isSubmitting || !disciplineNote.trim()}
+              className="px-6 py-2 text-sm font-black text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 shadow-lg shadow-red-600/20"
+            >
+              {isSubmitting ? "Menyimpan..." : "Catat & Simpan"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function EmployeesContent() {
   const { hasPermission, permissions, user: currentUser } = useAuth();
   const isSuperAdmin = currentUser?.role_id === 1 || currentUser?.role?.name === 'Super Admin';
@@ -872,1048 +2075,100 @@ function EmployeesContent() {
 
   return (
     <div className="animate-in fade-in duration-700">
-      <div className="dash-page-header">
-        <div className="flex items-center gap-4">
-           <div className="w-14 h-14 rounded-2xl bg-[#1a1a2e] text-white flex items-center justify-center shadow-xl shadow-gray-200 group transition-transform hover:rotate-3">
-              <UserIcon size={32} />
-           </div>
-           <div>
-              <h1 className="dash-page-title text-gray-900 font-black tracking-tight">Daftar Karyawan</h1>
-              <p className="dash-page-desc font-medium">Manajemen profil, penugasan, dan status verifikasi seluruh anggota tim.</p>
-           </div>
-        </div>
-        <div className="dash-page-actions flex flex-wrap gap-2">
-          <PermissionGuard slug="create-employees">
-            <button 
-              onClick={handleDownloadTemplate}
-              className="dash-btn dash-btn-outline border-gray-200 hover:border-gray-300 text-gray-600 font-bold"
-            >
-              <FileDown size={14} className="mr-1" />
-              Template Karyawan
-            </button>
-            <button 
-              onClick={handleDownloadPayrollTemplate}
-              className="dash-btn dash-btn-outline border-blue-200 hover:border-blue-300 text-blue-600 font-bold"
-            >
-              <FileDown size={14} className="mr-1" />
-              Template Payroll
-            </button>
-            <label className="dash-btn dash-btn-outline border-blue-200 hover:border-blue-300 text-blue-600 font-bold cursor-pointer">
-              <FileUp size={14} className="mr-1" />
-              Import Data
-              <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={handleFileUpload} />
-            </label>
-            <label className="dash-btn dash-btn-outline border-blue-200 hover:border-blue-300 text-blue-600 font-bold cursor-pointer">
-              <CreditCard size={14} className="mr-1" />
-              Import Rekening/Gaji
-              <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={handlePayrollImport} />
-            </label>
-            <button 
-              onClick={handleOpenAddModal}
-              className="dash-btn dash-btn-primary shadow-lg shadow-orange-500/20 bg-[#f97316] hover:bg-[#ea580c] border-none font-black text-white"
-            >
-              <Plus size={16} />
-              Tambah Karyawan
-            </button>
-          </PermissionGuard>
-        </div>
-      </div>
+      <EmployeePageHeader
+        onDownloadTemplate={handleDownloadTemplate}
+        onDownloadPayrollTemplate={handleDownloadPayrollTemplate}
+        onFileUpload={handleFileUpload}
+        onPayrollImport={handlePayrollImport}
+        onOpenAddModal={handleOpenAddModal}
+      />
 
-      {/* Verification Notice Banner */}
-      {unverifiedCount > 0 && isHRorAdmin && (
-         <div className="mb-6 bg-blue-50 border border-blue-100 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in slide-in-from-top-4 duration-500">
-            <div className="flex items-center gap-3">
-               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 shrink-0">
-                  <UserIcon size={16} />
-               </div>
-               <p className="text-sm text-blue-900 font-bold">
-                  Kamu punya <span className="text-blue-600 underline font-black">{unverifiedCount} karyawan</span> yang belum diverifikasi, silakan kirim undangan segera.
-               </p>
-            </div>
-            <button 
-              onClick={() => handleResendVerification()}
-              className="text-xs font-black text-blue-700 hover:text-blue-800 tracking-tight flex items-center gap-1 uppercase shrink-0"
-            >
-               Kirim Ulang Semua Undangan <Plus size={14} className="rotate-45" />
-            </button>
-         </div>
-      )}
+      <EmployeeVerificationBanner
+        unverifiedCount={unverifiedCount}
+        isHRorAdmin={isHRorAdmin}
+        onResendVerification={() => handleResendVerification()}
+      />
 
-      {/* Toolbar & Filters */}
-      <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
-        <div className="flex items-center gap-1 p-1 bg-gray-100/50 rounded-xl w-full md:w-fit border border-gray-200/50">
-           <button 
-             onClick={() => setActiveFilter('all')}
-             className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${activeFilter === 'all' ? 'bg-white text-orange-600 shadow-sm border border-orange-100' : 'text-gray-400 hover:text-gray-600'}`}
-           >
-              Semua Karyawan
-           </button>
-           <button 
-             onClick={() => setActiveFilter('team')}
-             className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${activeFilter === 'team' ? 'bg-white text-orange-600 shadow-sm border border-orange-100' : 'text-gray-400 hover:text-gray-600'}`}
-           >
-              Tim Saya
-           </button>
-           <button 
-             onClick={() => setActiveFilter('unverified')}
-             className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${activeFilter === 'unverified' ? 'bg-white text-orange-600 shadow-sm border border-orange-100' : 'text-gray-400 hover:text-gray-600'}`}
-           >
-              Belum diverifikasi ({unverifiedCount})
-           </button>
-        </div>
+      <EmployeeToolbar
+        activeFilter={activeFilter}
+        setActiveFilter={setActiveFilter}
+        unverifiedCount={unverifiedCount}
+        isSuperAdmin={isSuperAdmin}
+        selectedRole={selectedRole}
+        onRoleChange={(role) => {
+          setSelectedRole(role);
+          setPage(1);
+        }}
+        availableRoles={availableRoles}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        selectedIdsCount={selectedIds.length}
+        isSubmitting={isSubmitting}
+        onResendVerification={() => handleResendVerification()}
+        onBulkDelete={handleBulkDelete}
+      />
 
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-          {/* Filter Posisi / Peran (Disembunyikan untuk Super Admin) */}
-          {!isSuperAdmin && (
-            <div className="relative group w-full sm:w-56">
-              <Briefcase className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-orange-500 pointer-events-none transition-colors" size={15} />
-              <select
-                value={selectedRole}
-                onChange={(e) => {
-                  setSelectedRole(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full h-11 pl-10 pr-9 text-xs font-bold bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-orange-200 focus:ring-4 focus:ring-orange-50/50 transition-all shadow-sm appearance-none cursor-pointer text-gray-700 hover:border-gray-300"
-              >
-                <option value="all">Semua Posisi / Peran</option>
-                {availableRoles.map((role) => (
-                  <option key={role.id} value={role.id.toString()}>
-                    {role.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
-            </div>
-          )}
+      <EmployeeTable
+        loading={loading}
+        isHRorAdmin={isHRorAdmin}
+        employees={filteredEmployees}
+        selectedIds={selectedIds}
+        onSelectAll={handleSelectAll}
+        onSelectRow={handleSelectRow}
+        onView={(emp) => {
+          setViewedEmployee(emp);
+          setViewModalOpen(true);
+        }}
+        onEdit={handleOpenEditModal}
+        onDelete={handleConfirmDelete}
+        onResendVerification={handleResendVerification}
+        onDiscipline={(emp) => {
+          setDisciplinedEmployee(emp);
+          setDisciplineModalOpen(true);
+        }}
+        onResetPassword={handleResetPassword}
+        onResetDevice={handleResetDevice}
+        formatDate={formatDate}
+        pagination={pagination}
+        onPageChange={setPage}
+      />
 
-          {/* Search Input (Dibuat lebih besar) */}
-          <div className={`relative flex-1 w-full ${isSuperAdmin ? 'sm:w-80 md:w-[420px]' : 'sm:w-72'} group`}>
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-orange-500 transition-colors" size={16} />
-            <input
-              type="text"
-              placeholder="Cari Nama / Posisi / NIK / Email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-11 pl-10 pr-4 text-xs font-bold bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-orange-200 focus:ring-4 focus:ring-orange-50/50 transition-all shadow-sm"
-            />
-          </div>
-          {selectedIds.length > 0 && (
-            <div className="flex items-center gap-2 animate-in slide-in-from-right-4 duration-200">
-               <button 
-                 onClick={() => handleResendVerification()}
-                 disabled={isSubmitting}
-                 className="flex items-center gap-2 px-6 py-2 bg-blue-50 text-blue-600 rounded-full text-xs font-black hover:bg-blue-100 transition-all border border-blue-100 shadow-sm"
-               >
-                 <Mail size={14} className={isSubmitting ? "animate-spin" : ""} />
-                 Kirim Verifikasi ({selectedIds.length})
-               </button>
+      <EmployeeAddEditModal
+        isOpen={isModalOpen}
+        modalMode={modalMode}
+        formData={formData}
+        setFormData={setFormData}
+        photoPreview={photoPreview}
+        availableRoles={availableRoles}
+        availableOffices={availableOffices}
+        potentialSupervisors={potentialSupervisors}
+        isSubmitting={isSubmitting}
+        onClose={handleCloseModal}
+        onSubmit={handleSubmit}
+        onPhotoChange={handlePhotoChange}
+      />
 
-               <button 
-                 onClick={handleBulkDelete}
-                 className="flex items-center gap-2 px-6 py-2 bg-red-50 text-red-600 rounded-full text-xs font-black hover:bg-red-100 transition-all border border-red-100 shadow-sm"
-               >
-                 <Trash2 size={14} />
-                 Hapus Karyawan ({selectedIds.length})
-               </button>
-            </div>
-          )}
-        </div>
-      </div>
+      <EmployeeViewModal
+        isOpen={viewModalOpen}
+        employee={viewedEmployee}
+        isHRorAdmin={isHRorAdmin}
+        onClose={() => setViewModalOpen(false)}
+        onEdit={(emp) => {
+          setViewModalOpen(false);
+          handleOpenEditModal(emp);
+        }}
+        formatDate={formatDate}
+      />
 
-      {/* Modern Premium Table */}
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 overflow-hidden relative">
-        <div className="overflow-x-auto custom-scrollbar scroll-smooth min-h-[360px]">
-          {loading ? (
-             <div className="p-12"><TableSkeleton rows={8} cols={8} /></div>
-          ) : (
-            <table className="w-full text-left border-collapse min-w-[960px]">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  {isHRorAdmin && (
-                    <th className="px-3 py-3 w-10 sticky left-0 bg-gray-50 z-20 text-center">
-                      <input 
-                        type="checkbox" 
-                        onChange={handleSelectAll}
-                        checked={selectedIds.length === filteredEmployees.length && filteredEmployees.length > 0}
-                        className="rounded-md border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
-                      />
-                    </th>
-                  )}
-                  <th className={`px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky bg-gray-50 z-20 min-w-[200px] whitespace-nowrap ${isHRorAdmin ? "left-10" : "left-0"}`}>
-                    Karyawan
-                  </th>
-                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest min-w-[170px] whitespace-nowrap">
-                    Detail Kontak
-                  </th>
-                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest min-w-[150px] whitespace-nowrap">
-                    Posisi / Peran
-                  </th>
-                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[110px] whitespace-nowrap">
-                    Bergabung
-                  </th>
-                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[100px] whitespace-nowrap">
-                    Status
-                  </th>
-                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap">
-                    Lokasi
-                  </th>
-                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap">
-                    Email Verification
-                  </th>
-                  {isHRorAdmin && (
-                    <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right sticky right-0 bg-gray-50 z-20 w-14 min-w-[60px] whitespace-nowrap">
-                      Opsi
-                    </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredEmployees.map((emp) => (
-                  <tr key={emp.id} className="group hover:bg-orange-50/20 transition-all">
-                    {isHRorAdmin && (
-                      <td className="px-3 py-3 w-10 sticky left-0 bg-white group-hover:bg-orange-50/20 z-10 text-center">
-                        <input 
-                          type="checkbox" 
-                          checked={selectedIds.includes(emp.id)}
-                          onChange={() => handleSelectRow(emp.id)}
-                          className="rounded-md border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
-                        />
-                      </td>
-                    )}
-                    <td className={`px-3.5 py-3 sticky bg-white group-hover:bg-orange-50/20 z-10 min-w-[200px] ${isHRorAdmin ? "left-10" : "left-0"}`}>
-                       <div className="flex items-center gap-3">
-                          <div className="relative">
-                             <Avatar className="size-9 border-2 border-white shadow-md transition-transform group-hover:scale-105">
-                                <AvatarImage src={emp.profile_photo_url} alt={emp.name} />
-                                <AvatarFallback className="bg-orange-100 text-orange-600 font-black text-xs">
-                                   {emp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
-                                </AvatarFallback>
-                             </Avatar>
-                             <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white shadow-sm ${emp.email_verified_at ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                          </div>
-                          <div className="flex flex-col min-w-0">
-                             <span className="font-black text-gray-900 text-xs tracking-tight truncate">{emp.name}</span>
-                             <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">EMP-{emp.id.toString().padStart(4, '0')}</span>
-                          </div>
-                       </div>
-                    </td>
-                    <td className="px-3.5 py-3 whitespace-nowrap">
-                       <div className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-1.5 text-xs text-gray-600">
-                             <Mail size={12} className="text-gray-400" />
-                             {emp.email}
-                          </div>
-                          {emp.phone && (
-                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400">
-                               <Phone size={10} />
-                               {emp.phone}
-                            </div>
-                          )}
-                       </div>
-                    </td>
-                    <td className="px-3.5 py-3">
-                       <div className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-1.5 bg-gray-100 px-2 py-0.5 rounded-lg w-fit border border-gray-200">
-                             <Building2 size={10} className="text-gray-400" />
-                             <span className="text-[10px] font-black text-gray-700 uppercase">{emp.role?.name || "Member"}</span>
-                          </div>
-                          {emp.cost_center && (
-                            <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md w-fit uppercase tracking-wider">
-                               CC: {emp.cost_center.includes("Artacomindo") ? "Artacomindo" : emp.cost_center.includes("Narwastu") ? "Narwastu" : emp.cost_center}
-                            </span>
-                          )}
-                          {emp.supervisor && (
-                            <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-md w-fit">
-                               Atasan: {emp.supervisor.name}
-                            </span>
-                          )}
-                       </div>
-                    </td>
-                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
-                       <div className="flex flex-col items-center gap-0.5">
-                          <span className="text-xs font-black text-gray-700">{formatDate(emp.join_date)}</span>
-                          <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1">
-                             <Clock size={8} /> {emp.join_date ? Math.floor((Date.now() - new Date(emp.join_date).getTime()) / (1000 * 60 * 60 * 24 * 365)) : 0} Thn
-                          </span>
-                       </div>
-                    </td>
-                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
-                       <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border border-gray-100 ${emp.employment_status === 'Permanent' ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-50 text-gray-500'}`}>
-                          {emp.employment_status || 'Permanent'}
-                       </span>
-                    </td>
-                    <td className="px-3.5 py-3 text-center text-xs font-bold text-gray-500 whitespace-nowrap">
-                       <div className="flex items-center justify-center gap-1">
-                          <MapPin size={12} className="text-red-400" />
-                          {emp.office?.name || emp.work_location || 'Kantor Pusat'}
-                       </div>
-                    </td>
-                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
-                       {emp.email_verified_at ? (
-                          <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-emerald-100 uppercase tracking-tighter">
-                             <BadgeCheck size={13} className="text-emerald-500" />
-                             Verified
-                          </div>
-                       ) : (
-                          <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-amber-100 uppercase tracking-tighter shadow-sm">
-                             <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                             Pending
-                          </div>
-                       )}
-                    </td>
-                    {isHRorAdmin && (
-                      <td className="px-3.5 py-3 text-right sticky right-0 bg-white group-hover:bg-orange-50/20 z-10 w-14 min-w-[60px]">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors cursor-pointer outline-none ml-auto">
-                            <MoreVertical size={16} />
-                          </DropdownMenuTrigger>
-                          
-                          <DropdownMenuContent 
-                            side="left" 
-                            align="start" 
-                            sideOffset={8}
-                            className="w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 space-y-1 z-50 text-left"
-                          >
-                            <DropdownMenuItem 
-                              onClick={() => { setViewedEmployee(emp); setViewModalOpen(true); }}
-                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                            >
-                                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-blue-100 group-hover/item:text-blue-600 transition-colors">
-                                  <Eye size={18} />
-                                </div>
-                                <div>
-                                  <p className="text-sm font-black text-gray-900 group-hover/item:text-blue-600 transition-colors">Lihat Profil</p>
-                                  <p className="text-[10px] text-gray-400 font-medium">Lihat detail lengkap karyawan</p>
-                                </div>
-                            </DropdownMenuItem>
-
-                            <DropdownMenuItem 
-                              onClick={() => handleOpenEditModal(emp)}
-                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                            >
-                                <div className="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-100 group-hover/item:text-orange-700 transition-colors">
-                                  <UserCog size={18} />
-                                </div>
-                                <div>
-                                  <p className="text-sm font-black text-gray-900 group-hover/item:text-orange-600 transition-colors">Edit Profil Karyawan</p>
-                                  <p className="text-[10px] text-gray-400 font-medium">Ubah profil lengkap, jabatan, & akses</p>
-                                </div>
-                            </DropdownMenuItem>
-                            
-                            <DropdownMenuItem 
-                              onClick={() => handleConfirmDelete(emp.id)}
-                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-red-50/50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                            >
-                                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-red-100 group-hover/item:text-red-600 transition-colors">
-                                  <UserX size={18} />
-                                </div>
-                                <div>
-                                  <p className="text-sm font-black text-gray-900 group-hover/item:text-red-600 transition-colors">Penghentian</p>
-                                  <p className="text-[10px] text-gray-400 font-medium">Proses pengunduran diri</p>
-                                </div>
-                            </DropdownMenuItem>
-
-                            {!emp.email_verified_at && (
-                              <DropdownMenuItem 
-                                onClick={() => handleResendVerification(emp.id)}
-                                className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                              >
-                                  <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
-                                    <Mail size={18} />
-                                  </div>
-                                  <div>
-                                    <p className="text-sm font-black text-gray-900">Kirim Undangan</p>
-                                    <p className="text-[10px] text-gray-400 font-medium">Kirim ulang link verifikasi</p>
-                                  </div>
-                              </DropdownMenuItem>
-                            )}
-
-                            <DropdownMenuSeparator className="my-1 border-gray-100" />
-
-                            <DropdownMenuItem 
-                              onClick={() => { setDisciplinedEmployee(emp); setDisciplineModalOpen(true); }}
-                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                            >
-                                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
-                                  <ShieldAlert size={18} />
-                                </div>
-                                <div>
-                                  <p className="text-sm font-black text-gray-900">Tindakan Disiplin</p>
-                                  <p className="text-[10px] text-gray-400 font-medium">Catat pelanggaran atau SP</p>
-                                </div>
-                            </DropdownMenuItem>
-
-                            <DropdownMenuItem 
-                              onClick={() => handleResetPassword(emp.id, emp.name)}
-                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                            >
-                                <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
-                                  <Key size={18} />
-                                </div>
-                                <div>
-                                  <p className="text-sm font-black text-orange-600">Reset Password</p>
-                                  <p className="text-[10px] text-gray-400 font-medium">Ubah sandi menjadi &apos;password&apos;</p>
-                                </div>
-                            </DropdownMenuItem>
-
-                            {emp.device_id && (
-                              <DropdownMenuItem 
-                                onClick={() => handleResetDevice(emp.id)}
-                                className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                              >
-                                  <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
-                                    <Camera size={18} />
-                                  </div>
-                                  <div>
-                                    <p className="text-sm font-black text-orange-600">Reset Device ID</p>
-                                    <p className="text-[10px] text-gray-400 font-medium">Izinkan login di HP baru</p>
-                                  </div>
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      {/* Pagination Info */}
-      {!loading && pagination && pagination.total > 0 && (
-        <Pagination 
-          currentPage={pagination.current_page} 
-          lastPage={pagination.last_page} 
-          total={pagination.total} 
-          onPageChange={setPage} 
-        />
-      )}
-
-      {/* CRUD Modal for Add & Edit */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-gray-50/50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
-                  <UserCog size={20} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg text-gray-900 leading-tight">
-                    {modalMode === "add" ? "Tambah Karyawan Baru" : `Edit Profil & Data Karyawan`}
-                  </h3>
-                  <p className="text-xs text-gray-400">
-                    {modalMode === "add" ? "Lengkapi data karyawan untuk mengirim undangan akun." : `Perbarui data profil dan kepegawaian untuk ${formData.name || ''}`}
-                  </p>
-                </div>
-              </div>
-              <button 
-                onClick={handleCloseModal}
-                className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
-            <form onSubmit={handleSubmit}>
-              <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-                
-                {/* Photo Profile Section */}
-                <div className="flex flex-col items-center gap-3 mb-4 p-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                  <div className="relative group">
-                    <Avatar className="size-20 border-2 border-white shadow-md">
-                      <AvatarImage src={photoPreview || undefined} />
-                      <AvatarFallback className="bg-white text-gray-300">
-                        <UserIcon size={32} />
-                      </AvatarFallback>
-                    </Avatar>
-                    <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                      <Camera size={18} />
-                      <input type="file" className="hidden" accept="image/*" onChange={handlePhotoChange} />
-                    </label>
-                  </div>
-                  <div className="text-center">
-                    <span className="text-xs font-semibold text-gray-600">Foto Profil</span>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Klik pada avatar untuk ganti foto (JPG/PNG, Max 2MB)</p>
-                  </div>
-                </div>
-
-                {/* Form Sections */}
-                <div className="space-y-6">
-                  
-                  {/* Akun & Kontak */}
-                  <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
-                    <h4 className="font-bold border-b border-gray-200 pb-2 mb-4 text-orange-600 text-sm uppercase tracking-wider">Info Akun & Kontak</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Nama Lengkap*</label>
-                        <input 
-                          type="text" 
-                          required
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                          value={formData.name || ""}
-                          onChange={(e) => setFormData({...formData, name: e.target.value})}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Email Utama*</label>
-                        <input 
-                          type="email" 
-                          required
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                          value={formData.email || ""}
-                          onChange={(e) => setFormData({...formData, email: e.target.value})}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">No Telepon/WA</label>
-                        <input 
-                          type="tel" 
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                          value={formData.phone || ""}
-                          onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Peran Akun*</label>
-                        <select 
-                          required
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                          value={formData.role_id || ""}
-                          onChange={(e) => setFormData({...formData, role_id: parseInt(e.target.value)})}
-                        >
-                          <option value="" disabled>Pilih Peran Akun</option>
-                          {availableRoles.map(role => (
-                            <option key={role.id} value={role.id}>{role.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      {modalMode === "add" ? (
-                        <div className="space-y-1.5">
-                          <label htmlFor="employee-temp-password-input" className="text-sm font-medium text-gray-700">Password Sementara*</label>
-                          <input 
-                            id="employee-temp-password-input"
-                            type="password" 
-                            required
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                            value={formData.password || ""}
-                            placeholder="Min 6 karakter"
-                            onChange={(e) => setFormData({...formData, password: e.target.value})}
-                          />
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          <label htmlFor="employee-edit-password-input" className="text-sm font-medium text-gray-700">Ubah Kata Sandi (Opsional)</label>
-                          <input 
-                            id="employee-edit-password-input"
-                            type="password" 
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                            value={formData.password || ""}
-                            placeholder="Kosongkan jika tidak ingin mengubah password"
-                            onChange={(e) => setFormData({...formData, password: e.target.value})}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Data Demografis */}
-                  <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
-                    <h4 className="font-bold border-b border-gray-200 pb-2 mb-4 text-orange-600 text-sm uppercase tracking-wider">Data Demografis</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div className="space-y-1.5">
-                         <label className="text-sm font-medium text-gray-700">NIK (Karyawan)</label>
-                         <input 
-                           type="text" 
-                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                           value={formData.nik || ""}
-                           onChange={(e) => setFormData({...formData, nik: e.target.value})}
-                         />
-                      </div>
-                      <div className="space-y-1.5">
-                         <label className="text-sm font-medium text-gray-700">No. KTP</label>
-                         <input 
-                           type="text" 
-                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                           value={formData.ktp_no || ""}
-                           onChange={(e) => setFormData({...formData, ktp_no: e.target.value})}
-                         />
-                      </div>
-                      <div className="space-y-1.5">
-                         <label className="text-sm font-medium text-gray-700">Tempat Lahir</label>
-                         <input 
-                           type="text" 
-                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                           value={formData.place_of_birth || ""}
-                           onChange={(e) => setFormData({...formData, place_of_birth: e.target.value})}
-                         />
-                      </div>
-                      <div className="space-y-1.5">
-                         <label className="text-sm font-medium text-gray-700">Tanggal Lahir</label>
-                         <input 
-                           type="date" 
-                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                           value={formData.date_of_birth || ""}
-                           onChange={(e) => setFormData({...formData, date_of_birth: e.target.value})}
-                         />
-                      </div>
-                      <div className="space-y-1.5">
-                         <label className="text-sm font-medium text-gray-700">Gender</label>
-                         <select 
-                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                           value={formData.gender || ""}
-                           onChange={(e) => setFormData({...formData, gender: e.target.value})}
-                         >
-                           <option value="">Pilih</option>
-                           <option value="Laki-laki">Laki-laki</option>
-                           <option value="Perempuan">Perempuan</option>
-                         </select>
-                      </div>
-                      <div className="space-y-1.5">
-                         <label className="text-sm font-medium text-gray-700">Agama</label>
-                         <select 
-                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                           value={formData.religion || ""}
-                           onChange={(e) => setFormData({...formData, religion: e.target.value})}
-                         >
-                           <option value="">Pilih</option>
-                           <option value="Islam">Islam</option>
-                           <option value="Kristen">Kristen</option>
-                           <option value="Katolik">Katolik</option>
-                           <option value="Hindu">Hindu</option>
-                           <option value="Buddha">Buddha</option>
-                           <option value="Konghucu">Konghucu</option>
-                         </select>
-                      </div>
-                      <div className="space-y-1.5">
-                         <label className="text-sm font-medium text-gray-700">Status Nikah</label>
-                         <select 
-                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                           value={formData.marital_status || ""}
-                           onChange={(e) => setFormData({...formData, marital_status: e.target.value})}
-                         >
-                           <option value="">Pilih</option>
-                           <option value="Single">Single</option>
-                           <option value="Menikah">Menikah</option>
-                           <option value="Janda/Duda">Janda/Duda</option>
-                         </select>
-                      </div>
-                      <div className="space-y-1.5">
-                         <label className="text-sm font-medium text-gray-700">Gol. Darah</label>
-                         <select 
-                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                           value={formData.blood_type || ""}
-                           onChange={(e) => setFormData({...formData, blood_type: e.target.value})}
-                         >
-                           <option value="">Pilih</option>
-                           <option value="A">A</option>
-                           <option value="B">B</option>
-                           <option value="AB">AB</option>
-                           <option value="O">O</option>
-                         </select>
-                      </div>
-                    </div>
-                    <div className="mt-4 space-y-1.5">
-                      <label className="text-sm font-medium text-gray-700">Alamat</label>
-                      <textarea 
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                        rows={2}
-                        value={formData.address || ""}
-                        onChange={(e) => setFormData({...formData, address: e.target.value})}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Pekerjaan & Darurat */}
-                  <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
-                    <h4 className="font-bold border-b border-gray-200 pb-2 mb-4 text-orange-600 text-sm uppercase tracking-wider">Pekerjaan & Darurat</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Status Karyawan*</label>
-                        <select 
-                          required
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                          value={formData.employment_status || ""}
-                          onChange={(e) => setFormData({...formData, employment_status: e.target.value})}
-                        >
-                          <option value="Permanent">Permanent</option>
-                          <option value="Contract">Contract</option>
-                          <option value="Probation">Probation</option>
-                          <option value="Intern">Intern</option>
-                        </select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Penempatan Cabang</label>
-                        <select 
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                          value={formData.office_id || ""}
-                          onChange={(e) => setFormData({...formData, office_id: e.target.value ? parseInt(e.target.value) : null})}
-                        >
-                          <option value="">Default (Kantor Pusat)</option>
-                          {availableOffices.map(office => (
-                            <option key={office.id} value={office.id}>{office.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Ket. Lokasi</label>
-                        <input 
-                          type="text" 
-                          placeholder="Kantor Pusat"
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                          value={formData.work_location || ""}
-                          onChange={(e) => setFormData({...formData, work_location: e.target.value})}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Tanggal Gabung*</label>
-                        <input 
-                          type="date" 
-                          required
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                          value={formData.join_date || ""}
-                          onChange={(e) => setFormData({...formData, join_date: e.target.value})}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Pola Kehadiran*</label>
-                        <select 
-                          required
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                          value={formData.attendance_type || "office_hour"}
-                          onChange={(e) => setFormData({...formData, attendance_type: e.target.value})}
-                        >
-                          <option value="office_hour">Office Hour</option>
-                          <option value="shift">Shift / Jadwal Khusus</option>
-                        </select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Cost Center</label>
-                        <select 
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                          value={formData.cost_center || ""}
-                          onChange={(e) => setFormData({...formData, cost_center: e.target.value})}
-                        >
-                          <option value="">Pilih Cost Center</option>
-                          <option value="PT. Artacomindotama">PT. Artacomindotama</option>
-                          <option value="PT. Narwastu">PT. Narwastu</option>
-                          <option value="AJNusa">AJNusa</option>
-                        </select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label htmlFor="employee-leave-balance-input" className="text-sm font-medium text-gray-700">Sisa Jatah Cuti (Hari)</label>
-                        <input 
-                          id="employee-leave-balance-input"
-                          type="number" 
-                          min="0" 
-                          max="365"
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
-                          value={formData.leave_balance ?? 12}
-                          onChange={(e) => setFormData({...formData, leave_balance: Number.parseInt(e.target.value, 10) || 0})}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Atasan Langsung</label>
-                        <SearchableSupervisorSelect
-                          value={formData.supervisor_id}
-                          onChange={(id) => setFormData({...formData, supervisor_id: id})}
-                          supervisors={potentialSupervisors}
-                        />
-                        <p className="text-[11px] text-gray-500 italic mt-0.5">* Ketik untuk mencari jabatan/nama</p>
-                      </div>
-
-                      <div className="space-y-1.5 md:col-span-2 bg-gray-50/80 p-3.5 rounded-xl border border-gray-200">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div>
-                            <label htmlFor="employee-manager-portal-select" className="text-sm font-semibold text-gray-800">Akses Portal Manager</label>
-                            <p className="text-xs text-gray-500">Izin akun ini untuk melihat Tab & Fitur Manager (Approval Cuti, Lembur, Klaim, Izin, Fleet Log, dll.)</p>
-                          </div>
-                          <select
-                            id="employee-manager-portal-select"
-                            className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e] bg-white font-medium cursor-pointer"
-                            value={getPortalAccessValue(formData.can_access_manager_portal)}
-                            onChange={(e) => {
-                              setFormData({
-                                ...formData,
-                                can_access_manager_portal: parsePortalAccessValue(e.target.value),
-                              });
-                            }}
-                          >
-                            <option value="default">Ikuti Hak Akses Role (Default)</option>
-                            <option value="enabled">Diaktifkan (Enabled)</option>
-                            <option value="disabled">Dinonaktifkan (Disabled)</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200/60">
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">Nama Kontak Darurat</label>
-                        <input 
-                          type="text" 
-                          placeholder="Contoh: Budi (Suami/Orangtua)"
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-200"
-                          value={formData.emergency_contact_name || ""}
-                          onChange={(e) => setFormData({...formData, emergency_contact_name: e.target.value})}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700">No Hp Darurat</label>
-                        <input 
-                          type="tel" 
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-200"
-                          value={formData.emergency_contact_phone || ""}
-                          onChange={(e) => setFormData({...formData, emergency_contact_phone: e.target.value})}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Data Rekening & Payroll */}
-                  <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
-                    <h4 className="font-bold border-b border-gray-200 pb-2 mb-4 text-emerald-600 text-sm uppercase tracking-wider">Informasi Rekening & Payroll</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-1.5">
-                        <label htmlFor="employee-bank-name-input" className="text-sm font-medium text-gray-700">Nama Bank</label>
-                        <input 
-                          id="employee-bank-name-input"
-                          type="text" 
-                          placeholder="Contoh: BCA, Mandiri, BRI, BNI"
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          value={formData.bank_name || ""}
-                          onChange={(e) => setFormData({...formData, bank_name: e.target.value})}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label htmlFor="employee-bank-account-no-input" className="text-sm font-medium text-gray-700">Nomor Rekening</label>
-                        <input 
-                          id="employee-bank-account-no-input"
-                          type="text" 
-                          placeholder="Contoh: 1234567890"
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          value={formData.bank_account_no || ""}
-                          onChange={(e) => setFormData({...formData, bank_account_no: e.target.value})}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label htmlFor="employee-bank-account-name-input" className="text-sm font-medium text-gray-700">Atas Nama Rekening</label>
-                        <input 
-                          id="employee-bank-account-name-input"
-                          type="text" 
-                          placeholder="Nama pemilik rekening..."
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          value={formData.bank_account_name || ""}
-                          onChange={(e) => setFormData({...formData, bank_account_name: e.target.value})}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-5 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
-                <button 
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 transition-colors"
-                >
-                  Batal
-                </button>
-                <button 
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-6 py-2 text-sm font-black text-white bg-[#1a1a2e] rounded-md hover:bg-[#1a1a2e]/90 disabled:opacity-50 shadow-lg shadow-[#1a1a2e]/20"
-                >
-                  {isSubmitting ? "Menyimpan..." : (modalMode === "add" ? "Tambah & Kirim Undangan" : "Simpan Perubahan")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-
-      {/* View Data Modal */}
-      {viewModalOpen && viewedEmployee && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-gray-50/50">
-              <div className="flex items-center gap-3">
-                 <Avatar className="size-11 border-2 border-white shadow-md">
-                   <AvatarImage src={viewedEmployee.profile_photo_url} alt={viewedEmployee.name} />
-                   <AvatarFallback className="bg-blue-100 text-blue-600 font-bold">{viewedEmployee.name.substring(0,2).toUpperCase()}</AvatarFallback>
-                 </Avatar>
-                 <div>
-                   <h3 className="font-extrabold text-lg text-gray-900 leading-none">{viewedEmployee.name}</h3>
-                   <span className="text-xs font-semibold uppercase tracking-widest text-[#1a1a2e]">EMP-{viewedEmployee.id.toString().padStart(4, '0')}</span>
-                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {isHRorAdmin && (
-                  <button
-                    onClick={() => {
-                      const empToEdit = viewedEmployee;
-                      setViewModalOpen(false);
-                      handleOpenEditModal(empToEdit);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#8B0000] text-white rounded-xl text-xs font-bold hover:bg-[#700000] transition-all shadow-md shadow-red-900/10"
-                  >
-                    <UserCog size={14} />
-                    <span>Edit Profil Karyawan</span>
-                  </button>
-                )}
-                <button 
-                  onClick={() => setViewModalOpen(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-6 space-y-8 max-h-[75vh] overflow-y-auto bg-white">
-              <section>
-                 <h4 className="font-bold border-b pb-2 mb-4 text-blue-500 text-sm uppercase tracking-wider">Info Akun & Kontak</h4>
-                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div><p className="text-xs text-gray-400">Email Utama</p><p className="text-sm font-semibold">{viewedEmployee.email}</p></div>
-                    <div><p className="text-xs text-gray-400">No Telepon</p><p className="text-sm font-semibold">{viewedEmployee.phone || '-'}</p></div>
-                    <div><p className="text-xs text-gray-400">Peran Akun</p><p className="text-sm font-semibold">{viewedEmployee.role?.name || '-'}</p></div>
-                    <div><p className="text-xs text-gray-400">Status Verifikasi</p><p className="text-sm font-semibold">{viewedEmployee.email_verified_at ? 'Terverifikasi' : 'Pending'}</p></div>
-                 </div>
-              </section>
-
-              <section>
-                 <h4 className="font-bold border-b pb-2 mb-4 text-blue-500 text-sm uppercase tracking-wider">Data Demografis</h4>
-                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div><p className="text-xs text-gray-400">NIK (Karyawan)</p><p className="text-sm font-semibold">{viewedEmployee.nik || '-'}</p></div>
-                    <div><p className="text-xs text-gray-400">No. KTP</p><p className="text-sm font-semibold">{viewedEmployee.ktp_no || '-'}</p></div>
-                    <div><p className="text-xs text-gray-400">Tempat Lahir</p><p className="text-sm font-semibold">{viewedEmployee.place_of_birth || '-'}</p></div>
-                    <div><p className="text-xs text-gray-400">Tanggal Lahir</p><p className="text-sm font-semibold">{formatDate(viewedEmployee.date_of_birth)}</p></div>
-                    <div><p className="text-xs text-gray-400">Gender</p><p className="text-sm font-semibold">{viewedEmployee.gender || '-'}</p></div>
-                    <div><p className="text-xs text-gray-400">Agama</p><p className="text-sm font-semibold">{viewedEmployee.religion || '-'}</p></div>
-                    <div><p className="text-xs text-gray-400">Status Nikah</p><p className="text-sm font-semibold">{viewedEmployee.marital_status || '-'}</p></div>
-                    <div><p className="text-xs text-gray-400">Golongan Darah</p><p className="text-sm font-semibold">{viewedEmployee.blood_type || '-'}</p></div>
-                 </div>
-                 <div className="mt-4">
-                    <p className="text-xs text-gray-400">Alamat Lengkap</p>
-                    <p className="text-sm font-semibold">{viewedEmployee.address || '-'}</p>
-                 </div>
-              </section>
-
-              <section>
-                 <h4 className="font-bold border-b pb-2 mb-4 text-blue-500 text-sm uppercase tracking-wider">Pekerjaan & Darurat</h4>
-                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div><p className="text-xs text-gray-400">Status Karyawan</p><p className="text-sm font-semibold">{viewedEmployee.employment_status || 'Permanent'}</p></div>
-                    <div><p className="text-xs text-gray-400">Penempatan Cabang</p><p className="text-sm font-semibold text-blue-600">{viewedEmployee.office?.name || viewedEmployee.work_location || 'Kantor Pusat'}</p></div>
-                    <div><p className="text-xs text-gray-400">Tanggal Gabung</p><p className="text-sm font-semibold">{formatDate(viewedEmployee.join_date)}</p></div>
-                    <div><p className="text-xs text-gray-400">Sisa Cuti</p><p className="text-sm font-semibold">{viewedEmployee.leave_balance ?? 0} Hari</p></div>
-                    <div><p className="text-xs text-gray-400">Atasan Lgsg.</p><p className="text-sm font-semibold">{viewedEmployee.supervisor?.name || '-'}</p></div>
-                    <div><p className="text-xs text-gray-400">Pola Kehadiran</p><p className="text-sm font-semibold">{viewedEmployee.attendance_type === "shift" ? "Shift" : "Office Hour"}</p></div>
-                    <div className="col-span-2 border-l pl-4 border-gray-100">
-                      <p className="text-xs text-red-400">Kontak Darurat</p>
-                      <p className="text-sm font-semibold">{viewedEmployee.emergency_contact_name || '-'} ({viewedEmployee.emergency_contact_phone || '-'})</p>
-                    </div>
-                 </div>
-              </section>
-
-              <section>
-                 <h4 className="font-bold border-b pb-2 mb-4 text-emerald-600 text-sm uppercase tracking-wider">Rekening & Payroll</h4>
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div><p className="text-xs text-gray-400">Nama Bank</p><p className="text-sm font-semibold">{viewedEmployee.bank_name || '-'}</p></div>
-                    <div><p className="text-xs text-gray-400">Nomor Rekening</p><p className="text-sm font-semibold">{viewedEmployee.bank_account_no || '-'}</p></div>
-                    <div><p className="text-xs text-gray-400">Atas Nama Rekening</p><p className="text-sm font-semibold">{viewedEmployee.bank_account_name || '-'}</p></div>
-                 </div>
-              </section>
-            </div>
-            <div className="p-5 border-t border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <div className="text-xs text-gray-400">
-                ID Karyawan: <span className="font-bold text-gray-700">EMP-{viewedEmployee.id.toString().padStart(4, '0')}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => setViewModalOpen(false)} 
-                  className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold text-xs hover:bg-gray-200 transition-colors"
-                >
-                  Tutup
-                </button>
-                {isHRorAdmin && (
-                  <button 
-                    onClick={() => {
-                      const empToEdit = viewedEmployee;
-                      setViewModalOpen(false);
-                      handleOpenEditModal(empToEdit);
-                    }}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-[#8B0000] text-white rounded-xl font-bold text-xs hover:bg-[#700000] transition-all shadow-lg shadow-red-900/20"
-                  >
-                    <UserCog size={14} />
-                    Edit Profil Karyawan
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Disciplinary Action Modal */}
-      {disciplineModalOpen && disciplinedEmployee && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-             <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-red-50/20">
-               <div className="flex items-center gap-3">
-                   <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0">
-                     <ShieldAlert size={20} />
-                   </div>
-                   <div>
-                     <h3 className="font-semibold text-lg text-gray-900 leading-tight">Tindakan Disiplin</h3>
-                     <p className="text-xs text-gray-500">Karyawan: {disciplinedEmployee.name}</p>
-                   </div>
-               </div>
-               <button 
-                 onClick={() => setDisciplineModalOpen(false)}
-                 className="text-gray-400 hover:text-gray-600 transition-colors"
-               >
-                 <X size={20} />
-               </button>
-             </div>
-             <form onSubmit={handleDisciplineSubmit}>
-               <div className="p-6">
-                 <div className="space-y-3">
-                   <label className="text-sm font-medium text-gray-700">Catatan Pelanggaran / SP *</label>
-                   <textarea
-                     required
-                     rows={4}
-                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                     placeholder="Tuliskan alasan tindakan disiplin secara mendetail..."
-                     value={disciplineNote}
-                     onChange={(e) => setDisciplineNote(e.target.value)}
-                   />
-                 </div>
-               </div>
-               <div className="p-5 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
-                 <button 
-                   type="button"
-                   onClick={() => setDisciplineModalOpen(false)}
-                   className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 transition-colors"
-                 >
-                   Batal
-                 </button>
-                 <button 
-                   type="submit"
-                   disabled={isSubmitting || !disciplineNote.trim()}
-                   className="px-6 py-2 text-sm font-black text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 shadow-lg shadow-red-600/20"
-                 >
-                   {isSubmitting ? "Menyimpan..." : "Catat & Simpan"}
-                 </button>
-               </div>
-             </form>
-          </div>
-        </div>
-      )}
+      <EmployeeDisciplineModal
+        isOpen={disciplineModalOpen}
+        employee={disciplinedEmployee}
+        disciplineNote={disciplineNote}
+        setDisciplineNote={setDisciplineNote}
+        isSubmitting={isSubmitting}
+        onClose={() => setDisciplineModalOpen(false)}
+        onSubmit={handleDisciplineSubmit}
+      />
 
       {/* Global Error Modal */}
       <ErrorModal 
@@ -1923,7 +2178,6 @@ function EmployeesContent() {
         title={modalType === "success" ? "Berhasil!" : "Terjadi Kesalahan"}
         type={modalType}
       />
-
     </div>
   );
 }

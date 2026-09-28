@@ -511,6 +511,888 @@ async function executeRemoveAdhocItemAction(
   }
 }
 
+interface PayrollUnifiedHeaderProps {
+  readonly onRefresh: () => void;
+  readonly onExportExcelAll: () => void;
+  readonly exporting: boolean;
+  readonly onOpenGenerate: () => void;
+}
+
+function PayrollUnifiedHeader({
+  onRefresh,
+  onExportExcelAll,
+  exporting,
+  onOpenGenerate,
+}: PayrollUnifiedHeaderProps) {
+  return (
+    <div className="dash-page-header flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div>
+        <div className="flex items-center gap-2">
+          <h1 className="dash-page-title">Kelola & Riwayat Payroll</h1>
+          <span className="bg-[#8B0000]/10 text-[#8B0000] text-xs font-black uppercase px-3 py-0.5 rounded-full tracking-wider">
+            Unified Hub
+          </span>
+        </div>
+        <p className="dash-page-desc mt-1">
+          Pusat pemrosesan gaji bulanan, verifikasi rincian draft, alur persetujuan, dan pengunduhan slip gaji.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+        <button
+          onClick={onRefresh}
+          className="p-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl transition-all"
+          title="Segarkan Data"
+        >
+          <RefreshCw size={18} />
+        </button>
+        <button
+          onClick={onExportExcelAll}
+          disabled={exporting}
+          className="flex items-center gap-2 px-5 h-12 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-2xl font-bold text-xs border border-emerald-200 transition-all"
+        >
+          {exporting ? <Loader2 className="animate-spin" size={16} /> : <FileSpreadsheet size={16} />}
+          <span>Export Excel</span>
+        </button>
+        <button
+          onClick={onOpenGenerate}
+          className="flex items-center gap-2 px-6 h-12 bg-[#8B0000] hover:bg-[#720000] text-white rounded-2xl font-bold text-xs shadow-lg shadow-red-950/20 transition-all active:scale-95"
+        >
+          <Plus size={18} />
+          <span>Proses Payroll Baru</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface PayrollBatchDetailViewProps {
+  readonly selectedBatch: PayrollBatch;
+  readonly filteredSalaries: SalaryRecord[];
+  readonly employeeSearch: string;
+  readonly setEmployeeSearch: (val: string) => void;
+  readonly actionSubmitting: boolean;
+  readonly onBack: () => void;
+  readonly onDeleteBatch: (id: number) => void;
+  readonly onStatusChange: (action: PayrollAction, note?: string) => void;
+  readonly onExportBatchRekap: (batchId: number, month: string, year: number) => void;
+  readonly onEditSalary: (salary: SalaryRecord) => void;
+  readonly onPreviewSlip: (salary: SalaryRecord) => void;
+  readonly onDownloadPDF: (id: number, name: string) => void;
+}
+
+function PayrollBatchDetailView({
+  selectedBatch,
+  filteredSalaries,
+  employeeSearch,
+  setEmployeeSearch,
+  actionSubmitting,
+  onBack,
+  onDeleteBatch,
+  onStatusChange,
+  onExportBatchRekap,
+  onEditSalary,
+  onPreviewSlip,
+  onDownloadPDF,
+}: PayrollBatchDetailViewProps) {
+  return (
+    <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+      {/* Back Button & Batch Header Banner */}
+      <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onBack}
+            className="w-11 h-11 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl flex items-center justify-center transition-all shrink-0"
+            title="Kembali ke Daftar Batch"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-black text-gray-900">
+                Periode {selectedBatch.period_month} {selectedBatch.period_year}
+              </h2>
+              {getStatusBadge(selectedBatch.status)}
+            </div>
+            <p className="text-xs text-gray-400 font-medium mt-0.5">
+              Diproses pada: {new Date(selectedBatch.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} • {selectedBatch.total_employees} Karyawan
+            </p>
+          </div>
+        </div>
+
+        {/* Lifecycle Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Draft actions */}
+          {['draft', 'rejected'].includes(selectedBatch.status) && (
+            <>
+              <button
+                onClick={() => onDeleteBatch(selectedBatch.id)}
+                className="h-11 px-4 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all"
+              >
+                Hapus Draft
+              </button>
+              <button
+                onClick={() => onStatusChange('submit')}
+                disabled={actionSubmitting}
+                className="h-11 px-5 text-xs font-bold text-white bg-gray-900 hover:bg-black rounded-xl transition-all shadow-sm flex items-center gap-2"
+              >
+                <Play size={14} /> Submit ke Approver
+              </button>
+            </>
+          )}
+
+          {/* Pending Approval actions */}
+          {selectedBatch.status === 'pending_approval' && (
+            <>
+              <button
+                onClick={() => {
+                  const note = globalThis.prompt("Alasan penolakan untuk revisi:");
+                  if (note) onStatusChange('reject', note);
+                }}
+                disabled={actionSubmitting}
+                className="h-11 px-4 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all"
+              >
+                Tolak (Revisi)
+              </button>
+              <button
+                onClick={() => onStatusChange('approve')}
+                disabled={actionSubmitting}
+                className="h-11 px-5 text-xs font-bold text-white bg-[#8B0000] hover:bg-[#700000] rounded-xl transition-all shadow-md flex items-center gap-2"
+              >
+                <Check size={16} /> Setujui Payroll
+              </button>
+            </>
+          )}
+
+          {/* Approved actions */}
+          {selectedBatch.status === 'approved' && (
+            <button
+              onClick={() => onStatusChange('paid')}
+              disabled={actionSubmitting}
+              className="h-11 px-5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-md flex items-center gap-2"
+            >
+              <CheckCircle2 size={16} /> Tandai Sudah Dibayar (Transfer Selesai)
+            </button>
+          )}
+
+          {/* Rekap Excel button */}
+          <button
+            onClick={() => onExportBatchRekap(selectedBatch.id, selectedBatch.period_month, selectedBatch.period_year)}
+            className="h-11 px-4 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-200 transition-all flex items-center gap-2"
+          >
+            <FileSpreadsheet size={15} /> Unduh Rekap
+          </button>
+        </div>
+      </div>
+
+      {/* 3 Metric Cards for this batch */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+          <span className="text-xs font-black text-gray-400 uppercase tracking-wider block mb-1">
+            Total Pendapatan (Gross)
+          </span>
+          <span className="text-2xl font-black text-gray-900">
+            Rp {formatRupiah(selectedBatch.total_gross)}
+          </span>
+        </div>
+
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+          <span className="text-xs font-black text-gray-400 uppercase tracking-wider block mb-1">
+            Total Potongan (Pajak + BPJS + Disiplin)
+          </span>
+          <span className="text-2xl font-black text-rose-600">
+            -Rp {formatRupiah(selectedBatch.total_deductions)}
+          </span>
+        </div>
+
+        <div className="bg-[#8B0000] p-6 rounded-3xl shadow-lg shadow-red-950/20 text-white">
+          <span className="text-xs font-black text-red-200 uppercase tracking-wider block mb-1">
+            Total Transfer Bersih (Net THP)
+          </span>
+          <span className="text-2xl font-black text-white">
+            Rp {formatRupiah(selectedBatch.total_net)}
+          </span>
+        </div>
+      </div>
+
+      {/* Search inside batch */}
+      <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex items-center justify-between gap-4">
+        <div className="relative w-full max-w-md">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <input
+            type="text"
+            value={employeeSearch}
+            onChange={(e) => setEmployeeSearch(e.target.value)}
+            placeholder="Cari nama karyawan, jabatan, atau bank..."
+            className="w-full h-11 pl-11 pr-4 bg-gray-50 border-none rounded-2xl text-xs font-medium focus:ring-2 focus:ring-[#8B0000]/20 outline-none"
+          />
+        </div>
+        <span className="text-xs font-bold text-gray-400">
+          Menampilkan {filteredSalaries.length} dari {selectedBatch.salaries?.length || 0} Karyawan
+        </span>
+      </div>
+
+      {/* Salaries Table */}
+      <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-gray-50/70 border-b border-gray-100">
+              <tr>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest pl-8">Karyawan</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Gaji Pokok</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Tunjangan & Variabel</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Pot. Disiplin</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Pajak & BPJS</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Net THP</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filteredSalaries.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-12 text-gray-400 italic text-sm">
+                    Tidak ada data karyawan yang cocok dengan pencarian.
+                  </td>
+                </tr>
+              ) : (
+                filteredSalaries.map((salary: SalaryRecord) => {
+                  const discDeduction = (parseAmount(salary.deduction_late)) + (parseAmount(salary.deduction_absence));
+                  const taxAndBpjs = (parseAmount(salary.deduction_tax)) + 
+                                     (parseAmount(salary.deduction_bpjs_jht)) + 
+                                     (parseAmount(salary.deduction_bpjs_jp)) + 
+                                     (parseAmount(salary.deduction_bpjs_kes));
+                  const allowances = parseAmount(salary.total_earnings) - parseAmount(salary.basic_salary);
+
+                  return (
+                    <tr key={salary.id} className="hover:bg-gray-50/60 transition-colors">
+                      <td className="px-6 py-4 pl-8">
+                        <span className="font-bold text-gray-900 block text-sm">{salary.user?.name}</span>
+                        <span className="text-[11px] text-gray-400 font-medium block mt-0.5">
+                          {salary.department} • {salary.bank_name} {salary.bank_account_no}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 font-semibold text-gray-700 text-sm">
+                        Rp {formatRupiah(salary.basic_salary)}
+                      </td>
+                      <td className="px-6 py-4 font-bold text-emerald-600 text-sm">
+                        +Rp {formatRupiah(allowances)}
+                      </td>
+                      <td className="px-6 py-4 font-semibold text-rose-600 text-sm">
+                        {discDeduction > 0 ? `-Rp ${formatRupiah(discDeduction)}` : 'Rp 0'}
+                      </td>
+                      <td className="px-6 py-4 font-semibold text-orange-600 text-sm">
+                        -Rp {formatRupiah(taxAndBpjs)}
+                      </td>
+                      <td className="px-6 py-4 font-black text-[#8B0000] text-sm">
+                        Rp {formatRupiah(salary.net_salary)}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {['draft', 'rejected'].includes(selectedBatch.status) && (
+                            <button
+                              onClick={() => onEditSalary({ ...salary })}
+                              className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
+                              title="Edit Rincian / Tambah Variabel"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => onPreviewSlip(salary)}
+                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                            title="Lihat Slip Gaji"
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button
+                            onClick={() => onDownloadPDF(salary.id, salary.user?.name || "Karyawan")}
+                            className="p-2 text-gray-400 hover:text-[#8B0000] hover:bg-red-50 rounded-xl transition-all"
+                            title="Unduh Slip PDF"
+                          >
+                            <Download size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface PayrollBatchListViewProps {
+  readonly statusTab: PayrollStatusTab;
+  readonly setStatusTab: (tab: PayrollStatusTab) => void;
+  readonly batches: PayrollBatch[];
+  readonly yearFilter: number | string;
+  readonly setYearFilter: (year: number | string) => void;
+  readonly availableYears: number[];
+  readonly filteredBatches: PayrollBatch[];
+  readonly detailLoading: boolean;
+  readonly onOpenGenerate: () => void;
+  readonly onViewBatchDetails: (batchId: number) => void;
+  readonly onExportBatchRekap: (batchId: number, month: string, year: number) => void;
+}
+
+function PayrollBatchListView({
+  statusTab,
+  setStatusTab,
+  batches,
+  yearFilter,
+  setYearFilter,
+  availableYears,
+  filteredBatches,
+  detailLoading,
+  onOpenGenerate,
+  onViewBatchDetails,
+  onExportBatchRekap,
+}: PayrollBatchListViewProps) {
+  return (
+    <div className="space-y-6">
+      {/* Status Filter Tabs & Year Selection */}
+      <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex bg-gray-100 p-1 rounded-2xl w-full md:w-auto">
+          <button
+            onClick={() => setStatusTab('all')}
+            className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              statusTab === 'all' ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900"
+            }`}
+          >
+            Semua Periode ({batches.length})
+          </button>
+          <button
+            onClick={() => setStatusTab('pending')}
+            className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              statusTab === 'pending' ? "bg-[#8B0000] text-white shadow-sm" : "text-gray-500 hover:text-[#8B0000]"
+            }`}
+          >
+            Perlu Persetujuan ({batches.filter(b => ['draft', 'pending_approval', 'rejected'].includes(b.status)).length})
+          </button>
+          <button
+            onClick={() => setStatusTab('completed')}
+            className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              statusTab === 'completed' ? "bg-emerald-600 text-white shadow-sm" : "text-gray-500 hover:text-emerald-700"
+            }`}
+          >
+            Selesai / Terbayar ({batches.filter(b => ['approved', 'paid'].includes(b.status)).length})
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+          <span className="text-xs font-bold text-gray-400">Tahun:</span>
+          <select
+            value={yearFilter}
+            onChange={(e) => setYearFilter(e.target.value)}
+            className="h-10 bg-gray-50 border-none rounded-xl px-4 text-xs font-bold text-gray-700 focus:ring-2 focus:ring-[#8B0000]/20 outline-none cursor-pointer"
+          >
+            <option value="all">Semua Tahun</option>
+            {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Batches Table */}
+      <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+        <BatchTableContent
+          detailLoading={detailLoading}
+          filteredBatches={filteredBatches}
+          onOpenGenerate={onOpenGenerate}
+          onViewBatchDetails={onViewBatchDetails}
+          onExportBatchRekap={onExportBatchRekap}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface PayrollGenerateModalProps {
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
+  readonly genMonth: string;
+  readonly setGenMonth: (month: string) => void;
+  readonly genYear: number;
+  readonly setGenYear: (year: number) => void;
+  readonly months: readonly string[];
+  readonly availableYears: number[];
+  readonly genStats: { total_employees: number; unsaved_profiles: number };
+  readonly genLoading: boolean;
+  readonly onExecuteGenerate: () => void;
+}
+
+function PayrollGenerateModal({
+  isOpen,
+  onClose,
+  genMonth,
+  setGenMonth,
+  genYear,
+  setGenYear,
+  months,
+  availableYears,
+  genStats,
+  genLoading,
+  onExecuteGenerate,
+}: PayrollGenerateModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+    >
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-red-50 text-[#8B0000] rounded-xl flex items-center justify-center font-bold">
+              <Play size={20} />
+            </div>
+            <div>
+              <h3 className="font-black text-gray-900 text-lg">Proses Payroll Baru</h3>
+              <p className="text-xs text-gray-400 font-medium">Buat draft kalkulasi gaji bulanan</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-gray-400 hover:text-gray-700 rounded-xl"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label htmlFor="gen-month-select" className="text-[11px] font-black text-gray-500 uppercase">Bulan</label>
+              <select
+                id="gen-month-select"
+                value={genMonth}
+                onChange={(e) => setGenMonth(e.target.value)}
+                className="w-full h-11 bg-gray-50 border-none rounded-xl px-3 font-bold text-xs"
+              >
+                {months.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="gen-year-select" className="text-[11px] font-black text-gray-500 uppercase">Tahun</label>
+              <select
+                id="gen-year-select"
+                value={genYear}
+                onChange={(e) => setGenYear(Number(e.target.value))}
+                className="w-full h-11 bg-gray-50 border-none rounded-xl px-3 font-bold text-xs"
+              >
+                {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500">Total Karyawan Terdaftar:</span>
+              <span className="font-bold text-gray-900">{genStats.total_employees} Orang</span>
+            </div>
+            {genStats.unsaved_profiles > 0 && (
+              <div className="flex items-center gap-1.5 text-amber-700 text-xs font-medium pt-1">
+                <AlertCircle size={14} />
+                <span>{genStats.unsaved_profiles} karyawan belum melengkapi profil gaji pokok.</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 h-11 text-xs font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            disabled={genLoading}
+            onClick={onExecuteGenerate}
+            className="px-6 h-11 text-xs font-bold text-white bg-[#8B0000] hover:bg-[#720000] rounded-xl flex items-center gap-2 shadow-md disabled:opacity-50"
+          >
+            {genLoading ? <Loader2 className="animate-spin" size={16} /> : <Play size={16} />}
+            Generate Draft Sekarang
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface PayrollSalaryEditModalProps {
+  readonly editingSalary: SalaryRecord | null;
+  readonly setEditingSalary: React.Dispatch<React.SetStateAction<SalaryRecord | null>>;
+  readonly savingSalary: boolean;
+  readonly onSaveSalary: (e: React.FormEvent) => void;
+  readonly adhocName: string;
+  readonly setAdhocName: (name: string) => void;
+  readonly adhocType: "earning" | "deduction";
+  readonly setAdhocType: (type: "earning" | "deduction") => void;
+  readonly adhocAmount: string;
+  readonly setAdhocAmount: (amount: string) => void;
+  readonly submittingAdhoc: boolean;
+  readonly onAddAdhocItem: (e: React.FormEvent | React.MouseEvent) => void;
+  readonly onRemoveAdhocItem: (detailId: number) => void;
+}
+
+function PayrollSalaryEditModal({
+  editingSalary,
+  setEditingSalary,
+  savingSalary,
+  onSaveSalary,
+  adhocName,
+  setAdhocName,
+  adhocType,
+  setAdhocType,
+  adhocAmount,
+  setAdhocAmount,
+  submittingAdhoc,
+  onAddAdhocItem,
+  onRemoveAdhocItem,
+}: PayrollSalaryEditModalProps) {
+  if (!editingSalary) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+    >
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-8 py-5 border-b border-gray-100 bg-white shrink-0">
+          <div>
+            <h3 className="text-xl font-black text-gray-900">Penyesuaian Gaji & Variabel</h3>
+            <p className="text-xs text-gray-400 font-medium mt-0.5">
+              {editingSalary.user?.name} — {editingSalary.department} ({editingSalary.month} {editingSalary.year})
+            </p>
+          </div>
+          <button
+            onClick={() => setEditingSalary(null)}
+            className="p-2 text-gray-400 hover:text-gray-700 rounded-xl"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <form onSubmit={onSaveSalary} className="flex-1 overflow-y-auto p-8 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left Column: Basic Salary & Payment Info */}
+            <div className="space-y-4">
+              <h4 className="font-bold text-sm text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
+                <DollarSign size={16} className="text-[#8B0000]" />
+                Gaji Pokok & Informasi Rekening
+              </h4>
+
+              <div className="space-y-1.5">
+                <label htmlFor="edit-basic-salary-input" className="text-xs font-bold text-gray-600">Gaji Pokok (Rp)</label>
+                <input
+                  id="edit-basic-salary-input"
+                  type="number"
+                  value={editingSalary.basic_salary}
+                  onChange={(e) => setEditingSalary({ ...editingSalary, basic_salary: e.target.value })}
+                  className="w-full h-12 bg-gray-50 border-none rounded-2xl px-4 font-black text-gray-900 focus:ring-2 focus:ring-[#8B0000]/20"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label htmlFor="edit-bank-name-input" className="text-xs font-bold text-gray-600">Nama Bank</label>
+                  <input
+                    id="edit-bank-name-input"
+                    type="text"
+                    value={editingSalary.bank_name || ''}
+                    onChange={(e) => setEditingSalary({ ...editingSalary, bank_name: e.target.value })}
+                    className="w-full h-11 bg-gray-50 border-none rounded-xl px-4 text-xs font-bold"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="edit-bank-account-no-input" className="text-xs font-bold text-gray-600">No. Rekening</label>
+                  <input
+                    id="edit-bank-account-no-input"
+                    type="text"
+                    value={editingSalary.bank_account_no || ''}
+                    onChange={(e) => setEditingSalary({ ...editingSalary, bank_account_no: e.target.value })}
+                    className="w-full h-11 bg-gray-50 border-none rounded-xl px-4 text-xs font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="edit-cost-center-input" className="text-xs font-bold text-gray-600">Cost Center</label>
+                <input
+                  id="edit-cost-center-input"
+                  type="text"
+                  value={editingSalary.cost_center || ''}
+                  onChange={(e) => setEditingSalary({ ...editingSalary, cost_center: e.target.value })}
+                  className="w-full h-11 bg-gray-50 border-none rounded-xl px-4 text-xs font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Right Column: Disciplinary Deductions */}
+            <div className="space-y-4">
+              <h4 className="font-bold text-sm text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
+                <Clock size={16} className="text-rose-600" />
+                Potongan Disiplin Kehadiran
+              </h4>
+
+              <div className="space-y-1.5">
+                <label htmlFor="edit-deduction-late-input" className="text-xs font-bold text-gray-600">Potongan Keterlambatan (Rp)</label>
+                <input
+                  id="edit-deduction-late-input"
+                  type="number"
+                  value={editingSalary.deduction_late || 0}
+                  onChange={(e) => setEditingSalary({ ...editingSalary, deduction_late: e.target.value })}
+                  className="w-full h-12 bg-rose-50/50 text-rose-700 border-none rounded-2xl px-4 font-bold"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="edit-deduction-absence-input" className="text-xs font-bold text-gray-600">Potongan Absensi / Alfa (Rp)</label>
+                <input
+                  id="edit-deduction-absence-input"
+                  type="number"
+                  value={editingSalary.deduction_absence || 0}
+                  onChange={(e) => setEditingSalary({ ...editingSalary, deduction_absence: e.target.value })}
+                  className="w-full h-12 bg-rose-50/50 text-rose-700 border-none rounded-2xl px-4 font-bold"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Snapshot Detail Items & Ad-Hoc Management */}
+          <div className="pt-6 border-t border-gray-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-bold text-sm text-gray-900 flex items-center gap-2">
+                  <Sparkles size={16} className="text-[#8B0000]" />
+                  Rincian Snapshot Komponen Gaji ({((editingSalary.details_records || editingSalary.detailsRecords || []).length)} Item)
+                </h4>
+                <p className="text-xs text-gray-400 font-medium">
+                  Rincian tunjangan dan potongan otomatis yang terkalkulasi untuk periode ini.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50/70 rounded-2xl p-4 border border-gray-100 space-y-2 max-h-56 overflow-y-auto">
+              {(editingSalary.details_records || editingSalary.detailsRecords || []).length === 0 ? (
+                <div className="text-xs text-gray-400 italic py-3 text-center">
+                  Belum ada rincian snapshot komponen tercatat.
+                </div>
+              ) : (
+                (editingSalary.details_records || editingSalary.detailsRecords || []).map((detail: any) => {
+                  const isEarning = detail.type === 'earning';
+                  return (
+                    <div key={detail.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 shadow-xs">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs ${
+                          isEarning ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
+                        }`}>
+                          {isEarning ? "+" : "-"}
+                        </span>
+                        <div>
+                          <span className="text-xs font-bold text-gray-800">{detail.component_name}</span>
+                          {detail.note && <span className="text-[11px] text-gray-400 ml-2 italic">({detail.note})</span>}
+                          {detail.is_adhoc && (
+                            <span className="ml-2 text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                              Ad-Hoc
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-black ${isEarning ? "text-emerald-600" : "text-rose-600"}`}>
+                          {isEarning ? "+" : "-"}Rp {formatRupiah(detail.amount)}
+                        </span>
+                        {detail.is_adhoc && (
+                          <button
+                            type="button"
+                            onClick={() => onRemoveAdhocItem(detail.id)}
+                            className="p-1 text-gray-400 hover:text-rose-600 rounded"
+                            title="Hapus variabel ad-hoc"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Add Ad-Hoc Item Form */}
+            <div className="p-4 bg-amber-50/40 rounded-2xl border border-amber-200/60 space-y-3">
+              <div className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                <Plus size={14} /> Tambah Variabel / Komponen Ad-Hoc Khusus Karyawan Ini
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <label htmlFor="adhoc-type-select" className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Tipe</label>
+                  <select
+                    id="adhoc-type-select"
+                    value={adhocType}
+                    onChange={(e) => setAdhocType(e.target.value as "earning" | "deduction")}
+                    className="w-full h-10 bg-white border border-gray-200 rounded-xl px-3 text-xs font-bold"
+                  >
+                    <option value="earning">Pendapatan (+)</option>
+                    <option value="deduction">Potongan (-)</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="adhoc-name-input" className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nama Variabel</label>
+                  <input
+                    id="adhoc-name-input"
+                    type="text"
+                    value={adhocName}
+                    onChange={(e) => setAdhocName(e.target.value)}
+                    placeholder="Misal: Bonus Project / Denda"
+                    className="w-full h-10 bg-white border border-gray-200 rounded-xl px-3 text-xs font-medium"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="adhoc-amount-input" className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nominal (Rp)</label>
+                  <input
+                    id="adhoc-amount-input"
+                    type="number"
+                    min={0}
+                    value={adhocAmount}
+                    onChange={(e) => setAdhocAmount(e.target.value)}
+                    placeholder="Rp 0"
+                    className="w-full h-10 bg-white border border-gray-200 rounded-xl px-3 text-xs font-bold"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    disabled={submittingAdhoc || !adhocName.trim() || !adhocAmount}
+                    onClick={onAddAdhocItem}
+                    className="w-full h-10 bg-[#8B0000] hover:bg-[#720000] text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    {submittingAdhoc ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                    Tambahkan
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => setEditingSalary(null)}
+              className="px-6 h-11 text-xs font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
+            >
+              Tutup
+            </button>
+            <button
+              type="submit"
+              disabled={savingSalary}
+              className="px-8 h-11 text-xs font-bold text-white bg-[#8B0000] hover:bg-[#720000] rounded-xl flex items-center gap-2 shadow-md disabled:opacity-50"
+            >
+              {savingSalary ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} />}
+              Simpan Perubahan
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+interface PayrollSlipPreviewModalProps {
+  readonly isOpen: boolean;
+  readonly previewSalary: SalaryRecord | null;
+  readonly previewLoading: boolean;
+  readonly previewHtml: string;
+  readonly onClose: () => void;
+  readonly onPrintSlip: () => void;
+  readonly onDownloadPDF: (id: number, name: string) => void;
+}
+
+function PayrollSlipPreviewModal({
+  isOpen,
+  previewSalary,
+  previewLoading,
+  previewHtml,
+  onClose,
+  onPrintSlip,
+  onDownloadPDF,
+}: PayrollSlipPreviewModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+    >
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[900px] max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between px-8 py-4 border-b border-gray-100 bg-white shrink-0">
+          <div>
+            <h3 className="text-lg font-black text-gray-900">Slip Gaji</h3>
+            <p className="text-xs text-gray-400 font-medium">
+              {previewSalary?.user?.name} — {previewSalary?.month} {previewSalary?.year}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onPrintSlip}
+              disabled={previewLoading}
+              className="flex items-center gap-2 px-4 h-10 bg-blue-50 text-blue-700 rounded-xl font-bold text-xs hover:bg-blue-100"
+            >
+              <Printer size={15} /> Print
+            </button>
+            <button
+              onClick={() => {
+                if (previewSalary) {
+                  onDownloadPDF(previewSalary.id, previewSalary.user?.name || "Karyawan");
+                }
+              }}
+              disabled={previewLoading}
+              className="flex items-center gap-2 px-4 h-10 bg-[#8B0000] text-white rounded-xl font-bold text-xs shadow-sm hover:bg-[#6d0000]"
+            >
+              <Download size={15} /> Download PDF
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-400 hover:text-gray-700 rounded-xl ml-1"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto bg-gray-100 p-8">
+          {previewLoading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <Loader2 className="animate-spin text-[#8B0000]" size={36} />
+              <p className="text-gray-400 font-medium text-sm">Memuat slip gaji...</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow-md mx-auto border border-gray-200 max-w-[750px]">
+              <iframe
+                srcDoc={previewHtml}
+                title="Payslip Preview"
+                className="w-full border-0 rounded-xl"
+                style={{ height: '1000px', minHeight: '600px' }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PayrollManagementPage() {
   const [loading, setLoading] = useState(true);
   const [batches, setBatches] = useState<PayrollBatch[]>([]);
@@ -718,756 +1600,83 @@ export default function PayrollManagementPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-      {/* ═══ TOP BREADCRUMB & HEADER ═══ */}
-      <div className="dash-page-header flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="dash-page-title">Kelola & Riwayat Payroll</h1>
-            <span className="bg-[#8B0000]/10 text-[#8B0000] text-xs font-black uppercase px-3 py-0.5 rounded-full tracking-wider">
-              Unified Hub
-            </span>
-          </div>
-          <p className="dash-page-desc mt-1">
-            Pusat pemrosesan gaji bulanan, verifikasi rincian draft, alur persetujuan, dan pengunduhan slip gaji.
-          </p>
-        </div>
+      <PayrollUnifiedHeader
+        onRefresh={fetchBatches}
+        onExportExcelAll={handleExportExcelAll}
+        exporting={exporting}
+        onOpenGenerate={handleOpenGenerate}
+      />
 
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <button
-            onClick={fetchBatches}
-            className="p-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl transition-all"
-            title="Segarkan Data"
-          >
-            <RefreshCw size={18} />
-          </button>
-          <button
-            onClick={handleExportExcelAll}
-            disabled={exporting}
-            className="flex items-center gap-2 px-5 h-12 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-2xl font-bold text-xs border border-emerald-200 transition-all"
-          >
-            {exporting ? <Loader2 className="animate-spin" size={16} /> : <FileSpreadsheet size={16} />}
-            <span>Export Excel</span>
-          </button>
-          <button
-            onClick={handleOpenGenerate}
-            className="flex items-center gap-2 px-6 h-12 bg-[#8B0000] hover:bg-[#720000] text-white rounded-2xl font-bold text-xs shadow-lg shadow-red-950/20 transition-all active:scale-95"
-          >
-            <Plus size={18} />
-            <span>Proses Payroll Baru</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ══════════════════════════════════════════════════════════
-          VIEW 1: DETAIL INSPECTION OF A SELECTED BATCH
-         ══════════════════════════════════════════════════════════ */}
       {selectedBatch ? (
-        <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-          {/* Back Button & Batch Header Banner */}
-          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setSelectedBatch(null)}
-                className="w-11 h-11 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl flex items-center justify-center transition-all shrink-0"
-                title="Kembali ke Daftar Batch"
-              >
-                <ArrowLeft size={20} />
-              </button>
-              <div>
-                <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-black text-gray-900">
-                    Periode {selectedBatch.period_month} {selectedBatch.period_year}
-                  </h2>
-                  {getStatusBadge(selectedBatch.status)}
-                </div>
-                <p className="text-xs text-gray-400 font-medium mt-0.5">
-                  Diproses pada: {new Date(selectedBatch.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} • {selectedBatch.total_employees} Karyawan
-                </p>
-              </div>
-            </div>
-
-            {/* Lifecycle Action Buttons */}
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Draft actions */}
-              {['draft', 'rejected'].includes(selectedBatch.status) && (
-                <>
-                  <button
-                    onClick={() => handleDeleteBatch(selectedBatch.id)}
-                    className="h-11 px-4 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all"
-                  >
-                    Hapus Draft
-                  </button>
-                  <button
-                    onClick={() => handleStatusChange('submit')}
-                    disabled={actionSubmitting}
-                    className="h-11 px-5 text-xs font-bold text-white bg-gray-900 hover:bg-black rounded-xl transition-all shadow-sm flex items-center gap-2"
-                  >
-                    <Play size={14} /> Submit ke Approver
-                  </button>
-                </>
-              )}
-
-              {/* Pending Approval actions */}
-              {selectedBatch.status === 'pending_approval' && (
-                <>
-                  <button
-                    onClick={() => {
-                      const note = globalThis.prompt("Alasan penolakan untuk revisi:");
-                      if (note) handleStatusChange('reject', note);
-                    }}
-                    disabled={actionSubmitting}
-                    className="h-11 px-4 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all"
-                  >
-                    Tolak (Revisi)
-                  </button>
-                  <button
-                    onClick={() => handleStatusChange('approve')}
-                    disabled={actionSubmitting}
-                    className="h-11 px-5 text-xs font-bold text-white bg-[#8B0000] hover:bg-[#700000] rounded-xl transition-all shadow-md flex items-center gap-2"
-                  >
-                    <Check size={16} /> Setujui Payroll
-                  </button>
-                </>
-              )}
-
-              {/* Approved actions */}
-              {selectedBatch.status === 'approved' && (
-                <button
-                  onClick={() => handleStatusChange('paid')}
-                  disabled={actionSubmitting}
-                  className="h-11 px-5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-md flex items-center gap-2"
-                >
-                  <CheckCircle2 size={16} /> Tandai Sudah Dibayar (Transfer Selesai)
-                </button>
-              )}
-
-              {/* Rekap Excel button */}
-              <button
-                onClick={() => handleExportBatchRekap(selectedBatch.id, selectedBatch.period_month, selectedBatch.period_year)}
-                className="h-11 px-4 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-200 transition-all flex items-center gap-2"
-              >
-                <FileSpreadsheet size={15} /> Unduh Rekap
-              </button>
-            </div>
-          </div>
-
-          {/* 3 Metric Cards for this batch */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-              <span className="text-xs font-black text-gray-400 uppercase tracking-wider block mb-1">
-                Total Pendapatan (Gross)
-              </span>
-              <span className="text-2xl font-black text-gray-900">
-                Rp {formatRupiah(selectedBatch.total_gross)}
-              </span>
-            </div>
-
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-              <span className="text-xs font-black text-gray-400 uppercase tracking-wider block mb-1">
-                Total Potongan (Pajak + BPJS + Disiplin)
-              </span>
-              <span className="text-2xl font-black text-rose-600">
-                -Rp {formatRupiah(selectedBatch.total_deductions)}
-              </span>
-            </div>
-
-            <div className="bg-[#8B0000] p-6 rounded-3xl shadow-lg shadow-red-950/20 text-white">
-              <span className="text-xs font-black text-red-200 uppercase tracking-wider block mb-1">
-                Total Transfer Bersih (Net THP)
-              </span>
-              <span className="text-2xl font-black text-white">
-                Rp {formatRupiah(selectedBatch.total_net)}
-              </span>
-            </div>
-          </div>
-
-          {/* Search inside batch */}
-          <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex items-center justify-between gap-4">
-            <div className="relative w-full max-w-md">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                type="text"
-                value={employeeSearch}
-                onChange={(e) => setEmployeeSearch(e.target.value)}
-                placeholder="Cari nama karyawan, jabatan, atau bank..."
-                className="w-full h-11 pl-11 pr-4 bg-gray-50 border-none rounded-2xl text-xs font-medium focus:ring-2 focus:ring-[#8B0000]/20 outline-none"
-              />
-            </div>
-            <span className="text-xs font-bold text-gray-400">
-              Menampilkan {filteredSalaries.length} dari {selectedBatch.salaries?.length || 0} Karyawan
-            </span>
-          </div>
-
-          {/* Salaries Table */}
-          <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-gray-50/70 border-b border-gray-100">
-                  <tr>
-                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest pl-8">Karyawan</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Gaji Pokok</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Tunjangan & Variabel</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Pot. Disiplin</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Pajak & BPJS</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Net THP</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {filteredSalaries.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="text-center py-12 text-gray-400 italic text-sm">
-                        Tidak ada data karyawan yang cocok dengan pencarian.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredSalaries.map((salary: SalaryRecord) => {
-                      const discDeduction = (parseAmount(salary.deduction_late)) + (parseAmount(salary.deduction_absence));
-                      const taxAndBpjs = (parseAmount(salary.deduction_tax)) + 
-                                         (parseAmount(salary.deduction_bpjs_jht)) + 
-                                         (parseAmount(salary.deduction_bpjs_jp)) + 
-                                         (parseAmount(salary.deduction_bpjs_kes));
-                      const allowances = parseAmount(salary.total_earnings) - parseAmount(salary.basic_salary);
-
-                      return (
-                        <tr key={salary.id} className="hover:bg-gray-50/60 transition-colors">
-                          <td className="px-6 py-4 pl-8">
-                            <span className="font-bold text-gray-900 block text-sm">{salary.user?.name}</span>
-                            <span className="text-[11px] text-gray-400 font-medium block mt-0.5">
-                              {salary.department} • {salary.bank_name} {salary.bank_account_no}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 font-semibold text-gray-700 text-sm">
-                            Rp {formatRupiah(salary.basic_salary)}
-                          </td>
-                          <td className="px-6 py-4 font-bold text-emerald-600 text-sm">
-                            +Rp {formatRupiah(allowances)}
-                          </td>
-                          <td className="px-6 py-4 font-semibold text-rose-600 text-sm">
-                            {discDeduction > 0 ? `-Rp ${formatRupiah(discDeduction)}` : 'Rp 0'}
-                          </td>
-                          <td className="px-6 py-4 font-semibold text-orange-600 text-sm">
-                            -Rp {formatRupiah(taxAndBpjs)}
-                          </td>
-                          <td className="px-6 py-4 font-black text-[#8B0000] text-sm">
-                            Rp {formatRupiah(salary.net_salary)}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              {['draft', 'rejected'].includes(selectedBatch.status) && (
-                                <button
-                                  onClick={() => setEditingSalary({ ...salary })}
-                                  className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
-                                  title="Edit Rincian / Tambah Variabel"
-                                >
-                                  <Edit2 size={16} />
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handlePreviewSlip(salary)}
-                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                                title="Lihat Slip Gaji"
-                              >
-                                <Eye size={16} />
-                              </button>
-                              <button
-                                onClick={() => handleDownloadPDF(salary.id, salary.user?.name || "Karyawan")}
-                                className="p-2 text-gray-400 hover:text-[#8B0000] hover:bg-red-50 rounded-xl transition-all"
-                                title="Unduh Slip PDF"
-                              >
-                                <Download size={16} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        <PayrollBatchDetailView
+          selectedBatch={selectedBatch}
+          filteredSalaries={filteredSalaries}
+          employeeSearch={employeeSearch}
+          setEmployeeSearch={setEmployeeSearch}
+          actionSubmitting={actionSubmitting}
+          onBack={() => setSelectedBatch(null)}
+          onDeleteBatch={handleDeleteBatch}
+          onStatusChange={handleStatusChange}
+          onExportBatchRekap={handleExportBatchRekap}
+          onEditSalary={(s) => setEditingSalary(s)}
+          onPreviewSlip={handlePreviewSlip}
+          onDownloadPDF={handleDownloadPDF}
+        />
       ) : (
-
-        /* ══════════════════════════════════════════════════════════
-           VIEW 2: MASTER BATCHES LIST
-           ══════════════════════════════════════════════════════════ */
-        <div className="space-y-6">
-          {/* Status Filter Tabs & Year Filter */}
-          <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex bg-gray-100 p-1 rounded-2xl w-full md:w-auto">
-              <button
-                onClick={() => setStatusTab('all')}
-                className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                  statusTab === 'all' ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900"
-                }`}
-              >
-                Semua Periode ({batches.length})
-              </button>
-              <button
-                onClick={() => setStatusTab('pending')}
-                className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                  statusTab === 'pending' ? "bg-[#8B0000] text-white shadow-sm" : "text-gray-500 hover:text-[#8B0000]"
-                }`}
-              >
-                Perlu Persetujuan ({batches.filter(b => ['draft', 'pending_approval', 'rejected'].includes(b.status)).length})
-              </button>
-              <button
-                onClick={() => setStatusTab('completed')}
-                className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                  statusTab === 'completed' ? "bg-emerald-600 text-white shadow-sm" : "text-gray-500 hover:text-emerald-700"
-                }`}
-              >
-                Selesai / Terbayar ({batches.filter(b => ['approved', 'paid'].includes(b.status)).length})
-              </button>
-            </div>
-
-            <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-              <span className="text-xs font-bold text-gray-400">Tahun:</span>
-              <select
-                value={yearFilter}
-                onChange={(e) => setYearFilter(e.target.value)}
-                className="h-10 bg-gray-50 border-none rounded-xl px-4 text-xs font-bold text-gray-700 focus:ring-2 focus:ring-[#8B0000]/20 outline-none cursor-pointer"
-              >
-                <option value="all">Semua Tahun</option>
-                {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Batches Table */}
-          <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
-            <BatchTableContent
-              detailLoading={detailLoading}
-              filteredBatches={filteredBatches}
-              onOpenGenerate={handleOpenGenerate}
-              onViewBatchDetails={handleViewBatchDetails}
-              onExportBatchRekap={handleExportBatchRekap}
-            />
-          </div>
-        </div>
+        <PayrollBatchListView
+          statusTab={statusTab}
+          setStatusTab={setStatusTab}
+          batches={batches}
+          yearFilter={yearFilter}
+          setYearFilter={setYearFilter}
+          availableYears={availableYears}
+          filteredBatches={filteredBatches}
+          detailLoading={detailLoading}
+          onOpenGenerate={handleOpenGenerate}
+          onViewBatchDetails={handleViewBatchDetails}
+          onExportBatchRekap={handleExportBatchRekap}
+        />
       )}
 
-      {/* ══════════════════════════════════════════════════════════
-          MODAL 1: PROSES PAYROLL BARU (DIRECT 1-CLICK DIALOG)
-         ══════════════════════════════════════════════════════════ */}
-      {generateModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
-        >
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-red-50 text-[#8B0000] rounded-xl flex items-center justify-center font-bold">
-                  <Play size={20} />
-                </div>
-                <div>
-                  <h3 className="font-black text-gray-900 text-lg">Proses Payroll Baru</h3>
-                  <p className="text-xs text-gray-400 font-medium">Buat draft kalkulasi gaji bulanan</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setGenerateModalOpen(false)}
-                className="p-2 text-gray-400 hover:text-gray-700 rounded-xl"
-              >
-                <X size={18} />
-              </button>
-            </div>
+      <PayrollGenerateModal
+        isOpen={generateModalOpen}
+        onClose={() => setGenerateModalOpen(false)}
+        genMonth={genMonth}
+        setGenMonth={setGenMonth}
+        genYear={genYear}
+        setGenYear={setGenYear}
+        months={months}
+        availableYears={availableYears}
+        genStats={genStats}
+        genLoading={genLoading}
+        onExecuteGenerate={handleExecuteGenerate}
+      />
 
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label htmlFor="gen-month-select" className="text-[11px] font-black text-gray-500 uppercase">Bulan</label>
-                  <select
-                    id="gen-month-select"
-                    value={genMonth}
-                    onChange={(e) => setGenMonth(e.target.value)}
-                    className="w-full h-11 bg-gray-50 border-none rounded-xl px-3 font-bold text-xs"
-                  >
-                    {months.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label htmlFor="gen-year-select" className="text-[11px] font-black text-gray-500 uppercase">Tahun</label>
-                  <select
-                    id="gen-year-select"
-                    value={genYear}
-                    onChange={(e) => setGenYear(Number(e.target.value))}
-                    className="w-full h-11 bg-gray-50 border-none rounded-xl px-3 font-bold text-xs"
-                  >
-                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                </div>
-              </div>
+      <PayrollSalaryEditModal
+        editingSalary={editingSalary}
+        setEditingSalary={setEditingSalary}
+        savingSalary={savingSalary}
+        onSaveSalary={handleSaveSalary}
+        adhocName={adhocName}
+        setAdhocName={setAdhocName}
+        adhocType={adhocType}
+        setAdhocType={setAdhocType}
+        adhocAmount={adhocAmount}
+        setAdhocAmount={setAdhocAmount}
+        submittingAdhoc={submittingAdhoc}
+        onAddAdhocItem={handleAddAdhocItem}
+        onRemoveAdhocItem={handleRemoveAdhocItem}
+      />
 
-              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Total Karyawan Terdaftar:</span>
-                  <span className="font-bold text-gray-900">{genStats.total_employees} Orang</span>
-                </div>
-                {genStats.unsaved_profiles > 0 && (
-                  <div className="flex items-center gap-1.5 text-amber-700 text-xs font-medium pt-1">
-                    <AlertCircle size={14} />
-                    <span>{genStats.unsaved_profiles} karyawan belum melengkapi profil gaji pokok.</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setGenerateModalOpen(false)}
-                className="px-5 h-11 text-xs font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                disabled={genLoading}
-                onClick={handleExecuteGenerate}
-                className="px-6 h-11 text-xs font-bold text-white bg-[#8B0000] hover:bg-[#720000] rounded-xl flex items-center gap-2 shadow-md disabled:opacity-50"
-              >
-                {genLoading ? <Loader2 className="animate-spin" size={16} /> : <Play size={16} />}
-                Generate Draft Sekarang
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════
-          MODAL 2: SALARY DRAFT ADJUSTMENT (FREE OF OBSOLETE STATIC FIELDS)
-         ══════════════════════════════════════════════════════════ */}
-      {editingSalary && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
-        >
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-8 py-5 border-b border-gray-100 bg-white shrink-0">
-              <div>
-                <h3 className="text-xl font-black text-gray-900">Penyesuaian Gaji & Variabel</h3>
-                <p className="text-xs text-gray-400 font-medium mt-0.5">
-                  {editingSalary.user?.name} — {editingSalary.department} ({editingSalary.month} {editingSalary.year})
-                </p>
-              </div>
-              <button
-                onClick={() => setEditingSalary(null)}
-                className="p-2 text-gray-400 hover:text-gray-700 rounded-xl"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <form onSubmit={handleSaveSalary} className="flex-1 overflow-y-auto p-8 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Left Column: Basic Salary & Payment Info */}
-                <div className="space-y-4">
-                  <h4 className="font-bold text-sm text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
-                    <DollarSign size={16} className="text-[#8B0000]" />
-                    Gaji Pokok & Informasi Rekening
-                  </h4>
-
-                  <div className="space-y-1.5">
-                    <label htmlFor="edit-basic-salary-input" className="text-xs font-bold text-gray-600">Gaji Pokok (Rp)</label>
-                    <input
-                      id="edit-basic-salary-input"
-                      type="number"
-                      value={editingSalary.basic_salary}
-                      onChange={(e) => setEditingSalary({ ...editingSalary, basic_salary: e.target.value })}
-                      className="w-full h-12 bg-gray-50 border-none rounded-2xl px-4 font-black text-gray-900 focus:ring-2 focus:ring-[#8B0000]/20"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <label htmlFor="edit-bank-name-input" className="text-xs font-bold text-gray-600">Nama Bank</label>
-                      <input
-                        id="edit-bank-name-input"
-                        type="text"
-                        value={editingSalary.bank_name || ''}
-                        onChange={(e) => setEditingSalary({ ...editingSalary, bank_name: e.target.value })}
-                        className="w-full h-11 bg-gray-50 border-none rounded-xl px-4 text-xs font-bold"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="edit-bank-account-no-input" className="text-xs font-bold text-gray-600">No. Rekening</label>
-                      <input
-                        id="edit-bank-account-no-input"
-                        type="text"
-                        value={editingSalary.bank_account_no || ''}
-                        onChange={(e) => setEditingSalary({ ...editingSalary, bank_account_no: e.target.value })}
-                        className="w-full h-11 bg-gray-50 border-none rounded-xl px-4 text-xs font-bold"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label htmlFor="edit-cost-center-input" className="text-xs font-bold text-gray-600">Cost Center</label>
-                    <input
-                      id="edit-cost-center-input"
-                      type="text"
-                      value={editingSalary.cost_center || ''}
-                      onChange={(e) => setEditingSalary({ ...editingSalary, cost_center: e.target.value })}
-                      className="w-full h-11 bg-gray-50 border-none rounded-xl px-4 text-xs font-medium"
-                    />
-                  </div>
-                </div>
-
-                {/* Right Column: Disciplinary Deductions */}
-                <div className="space-y-4">
-                  <h4 className="font-bold text-sm text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
-                    <Clock size={16} className="text-rose-600" />
-                    Potongan Disiplin Kehadiran
-                  </h4>
-
-                  <div className="space-y-1.5">
-                    <label htmlFor="edit-deduction-late-input" className="text-xs font-bold text-gray-600">Potongan Keterlambatan (Rp)</label>
-                    <input
-                      id="edit-deduction-late-input"
-                      type="number"
-                      value={editingSalary.deduction_late || 0}
-                      onChange={(e) => setEditingSalary({ ...editingSalary, deduction_late: e.target.value })}
-                      className="w-full h-12 bg-rose-50/50 text-rose-700 border-none rounded-2xl px-4 font-bold"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label htmlFor="edit-deduction-absence-input" className="text-xs font-bold text-gray-600">Potongan Absensi / Alfa (Rp)</label>
-                    <input
-                      id="edit-deduction-absence-input"
-                      type="number"
-                      value={editingSalary.deduction_absence || 0}
-                      onChange={(e) => setEditingSalary({ ...editingSalary, deduction_absence: e.target.value })}
-                      className="w-full h-12 bg-rose-50/50 text-rose-700 border-none rounded-2xl px-4 font-bold"
-                    />
-                  </div>
-
-                  {/* Summary Box */}
-                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-1.5">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">Pajak PPh 21 (TER):</span>
-                      <span className="font-bold">Rp {formatRupiah(editingSalary.deduction_tax)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">Iuran BPJS Karyawan:</span>
-                      <span className="font-bold">
-                        Rp {formatRupiah(parseAmount(editingSalary.deduction_bpjs_jht) + parseAmount(editingSalary.deduction_bpjs_jp) + parseAmount(editingSalary.deduction_bpjs_kes))}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Dynamic Snapshot Details & Ad-Hoc Items */}
-              <div className="pt-6 border-t border-gray-100 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-bold text-sm text-gray-900 flex items-center gap-2">
-                      <Sparkles size={16} className="text-[#8B0000]" />
-                      Rincian Snapshot Komponen Gaji ({((editingSalary.details_records || editingSalary.detailsRecords || []).length)} Item)
-                    </h4>
-                    <p className="text-xs text-gray-400 font-medium">
-                      Rincian tunjangan dan potongan otomatis yang terkalkulasi untuk periode ini.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50/70 rounded-2xl p-4 border border-gray-100 space-y-2 max-h-56 overflow-y-auto">
-                  {(editingSalary.details_records || editingSalary.detailsRecords || []).length === 0 ? (
-                    <div className="text-xs text-gray-400 italic py-3 text-center">
-                      Belum ada rincian snapshot komponen tercatat.
-                    </div>
-                  ) : (
-                    (editingSalary.details_records || editingSalary.detailsRecords || []).map((detail: any) => {
-                      const isEarning = detail.type === 'earning';
-                      return (
-                        <div key={detail.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 shadow-xs">
-                          <div className="flex items-center gap-2.5">
-                            <span className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs ${
-                              isEarning ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
-                            }`}>
-                              {isEarning ? "+" : "-"}
-                            </span>
-                            <div>
-                              <span className="text-xs font-bold text-gray-800">{detail.component_name}</span>
-                              {detail.note && <span className="text-[11px] text-gray-400 ml-2 italic">({detail.note})</span>}
-                              {detail.is_adhoc && (
-                                <span className="ml-2 text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
-                                  Ad-Hoc
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className={`text-xs font-black ${isEarning ? "text-emerald-600" : "text-rose-600"}`}>
-                              {isEarning ? "+" : "-"}Rp {formatRupiah(detail.amount)}
-                            </span>
-                            {detail.is_adhoc && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveAdhocItem(detail.id)}
-                                className="p-1 text-gray-400 hover:text-rose-600 rounded"
-                                title="Hapus variabel ad-hoc"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {/* Add Ad-Hoc Item Form */}
-                <div className="p-4 bg-amber-50/40 rounded-2xl border border-amber-200/60 space-y-3">
-                  <div className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                    <Plus size={14} /> Tambah Variabel / Komponen Ad-Hoc Khusus Karyawan Ini
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-                    <div>
-                      <label htmlFor="adhoc-type-select" className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Tipe</label>
-                      <select
-                        id="adhoc-type-select"
-                        value={adhocType}
-                        onChange={(e) => setAdhocType(e.target.value as "earning" | "deduction")}
-                        className="w-full h-10 bg-white border border-gray-200 rounded-xl px-3 text-xs font-bold"
-                      >
-                        <option value="earning">Pendapatan (+)</option>
-                        <option value="deduction">Potongan (-)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor="adhoc-name-input" className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nama Variabel</label>
-                      <input
-                        id="adhoc-name-input"
-                        type="text"
-                        value={adhocName}
-                        onChange={(e) => setAdhocName(e.target.value)}
-                        placeholder="Misal: Bonus Project / Denda"
-                        className="w-full h-10 bg-white border border-gray-200 rounded-xl px-3 text-xs font-medium"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="adhoc-amount-input" className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nominal (Rp)</label>
-                      <input
-                        id="adhoc-amount-input"
-                        type="number"
-                        min={0}
-                        value={adhocAmount}
-                        onChange={(e) => setAdhocAmount(e.target.value)}
-                        placeholder="Rp 0"
-                        className="w-full h-10 bg-white border border-gray-200 rounded-xl px-3 text-xs font-bold"
-                      />
-                    </div>
-                    <div className="flex items-end">
-                      <button
-                        type="button"
-                        disabled={submittingAdhoc || !adhocName.trim() || !adhocAmount}
-                        onClick={handleAddAdhocItem}
-                        className="w-full h-10 bg-[#8B0000] hover:bg-[#720000] text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
-                      >
-                        {submittingAdhoc ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                        Tambahkan
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => setEditingSalary(null)}
-                  className="px-6 h-11 text-xs font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
-                >
-                  Tutup
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingSalary}
-                  className="px-8 h-11 text-xs font-bold text-white bg-[#8B0000] hover:bg-[#720000] rounded-xl flex items-center gap-2 shadow-md disabled:opacity-50"
-                >
-                  {savingSalary ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} />}
-                  Simpan Perubahan
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════
-          MODAL 3: SLIP PREVIEW MODAL
-         ══════════════════════════════════════════════════════════ */}
-      {previewOpen && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
-        >
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[900px] max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between px-8 py-4 border-b border-gray-100 bg-white shrink-0">
-              <div>
-                <h3 className="text-lg font-black text-gray-900">Slip Gaji</h3>
-                <p className="text-xs text-gray-400 font-medium">
-                  {previewSalary?.user?.name} — {previewSalary?.month} {previewSalary?.year}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handlePrintSlip}
-                  disabled={previewLoading}
-                  className="flex items-center gap-2 px-4 h-10 bg-blue-50 text-blue-700 rounded-xl font-bold text-xs hover:bg-blue-100"
-                >
-                  <Printer size={15} /> Print
-                </button>
-                <button
-                  onClick={() => {
-                    if (previewSalary) {
-                      handleDownloadPDF(previewSalary.id, previewSalary.user?.name || "Karyawan");
-                    }
-                  }}
-                  disabled={previewLoading}
-                  className="flex items-center gap-2 px-4 h-10 bg-[#8B0000] text-white rounded-xl font-bold text-xs shadow-sm hover:bg-[#6d0000]"
-                >
-                  <Download size={15} /> Download PDF
-                </button>
-                <button
-                  onClick={() => { setPreviewOpen(false); setPreviewHtml(""); setPreviewSalary(null); }}
-                  className="p-2 text-gray-400 hover:text-gray-700 rounded-xl ml-1"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto bg-gray-100 p-8">
-              {previewLoading ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-3">
-                  <Loader2 className="animate-spin text-[#8B0000]" size={36} />
-                  <p className="text-gray-400 font-medium text-sm">Memuat slip gaji...</p>
-                </div>
-              ) : (
-                <div className="bg-white rounded-xl shadow-md mx-auto border border-gray-200 max-w-[750px]">
-                  <iframe
-                    srcDoc={previewHtml}
-                    title="Payslip Preview"
-                    className="w-full border-0 rounded-xl"
-                    style={{ height: '1000px', minHeight: '600px' }}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <PayrollSlipPreviewModal
+        isOpen={previewOpen}
+        previewSalary={previewSalary}
+        previewLoading={previewLoading}
+        previewHtml={previewHtml}
+        onClose={() => { setPreviewOpen(false); setPreviewHtml(""); setPreviewSalary(null); }}
+        onPrintSlip={handlePrintSlip}
+        onDownloadPDF={handleDownloadPDF}
+      />
     </div>
   );
 }
