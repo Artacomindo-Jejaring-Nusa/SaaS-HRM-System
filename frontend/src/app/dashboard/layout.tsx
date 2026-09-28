@@ -39,9 +39,10 @@ import {
   CheckSquare,
   ShieldCheck,
   Wallet,
+  HelpCircle,
 } from "lucide-react";
 import Cookies from "js-cookie";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
 import echo from '@/lib/echo';
 
@@ -111,9 +112,9 @@ const sidebarLinks: SidebarLink[] = [
   {
     name: "permit_management",
     icon: ClipboardList,
-    permission: 'view-leaves',
+    permission: 'view-permits',
     submenus: [
-      { name: "permit_requests", href: "/dashboard/permits", permission: 'view-leaves' },
+      { name: "permit_requests", href: "/dashboard/permits", permission: 'view-permits' },
     ]
   },
   {
@@ -210,6 +211,12 @@ const sidebarLinks: SidebarLink[] = [
       { name: "activity_logs", href: "/dashboard/activity-logs", permission: 'view-activity-logs' },
       { name: "api_tokens", href: "/dashboard/api-tokens", permission: 'manage-roles' },
     ]
+  },
+  { name: "help_center", isHeading: true },
+  {
+    name: "Pusat Bantuan",
+    href: "/dashboard/help-center",
+    icon: HelpCircle,
   }
 ];
 
@@ -233,7 +240,7 @@ export default function DashboardLayout({
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, permissions, hasPermission, refreshUser, logout, loading: authLoading } = useAuth();
+  const { user, permissions, hasPermission, refreshUser, logout, loading: authLoading, isManager } = useAuth();
   const { language, setLanguage, t, mounted } = useLanguage();
   
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -241,17 +248,26 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [activeHeaderDropdown, setActiveHeaderDropdown] = useState<'mail' | 'notif' | 'settings' | 'search' | null>(null);
+  const [managerPendingTotal, setManagerPendingTotal] = useState<number>(0);
 
-  // Strict Super Admin Access Guard
-  useEffect(() => {
-    if (!authLoading && user) {
-      if (!isSuperAdminUser(user)) {
-        Cookies.remove("token");
-        Cookies.remove("refresh_token");
-        router.replace("/login?unauthorized=1");
+  // Fetch manager pending approvals count if user is a manager
+  const fetchManagerPendingCount = useCallback(async () => {
+    if (!isManager) return;
+    try {
+      const res = await axiosInstance.get('/manager/pending-count');
+      if (res.data?.status === 'success' && res.data.data) {
+        setManagerPendingTotal(res.data.data.total || 0);
       }
+    } catch {
+      // ignore
     }
-  }, [authLoading, user, router]);
+  }, [isManager]);
+
+  useEffect(() => {
+    fetchManagerPendingCount();
+    const interval = setInterval(fetchManagerPendingCount, 45000);
+    return () => clearInterval(interval);
+  }, [fetchManagerPendingCount]);
 
   // Search Logic
   const [searchQuery, setSearchQuery] = useState("");
@@ -534,14 +550,19 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       // 1. Dashboard is always visible
       if (link.name === "dashboard") return true;
 
-      // 2. Filter submenus based on permissions without mutating original array
+      // 2. Approvals / Manager Portal is visible if user has managerial/approval permissions
+      if (link.href === "/dashboard/approvals") {
+        return isManager;
+      }
+
+      // 3. Filter submenus based on permissions without mutating original array
       if (link.submenus) {
         const allowedSubmenus = link.submenus.filter(sub => hasPermission(sub.permission));
         // If no submenus left after filtering, don't show the group
         return allowedSubmenus.length > 0;
       }
 
-      // 3. Standalone link or heading validation
+      // 4. Standalone link or heading validation
       if (link.href) {
         return hasPermission(link.permission);
       }
@@ -553,16 +574,19 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       <ul className="dash-nav-list">
         {filteredLinks.map((link, index) => {
           if (link.isHeading) {
-            // Check for visible content
             const idx = sidebarLinks.indexOf(link);
-            const hasVisibleContent = sidebarLinks.slice(idx + 1).some(l => {
-              if (l.isHeading) return false; // Stop at next heading
-
-              if (l.submenus) {
-                return l.submenus.some(s => hasPermission(s.permission));
+            const remaining = sidebarLinks.slice(idx + 1);
+            let hasVisibleContent = false;
+            for (const l of remaining) {
+              if (l.isHeading) break; // Stop at next section heading
+              if (l.href === "/dashboard/approvals") {
+                if (isManager) { hasVisibleContent = true; break; }
+              } else if (l.submenus) {
+                if (l.submenus.some(s => hasPermission(s.permission))) { hasVisibleContent = true; break; }
+              } else if (l.href) {
+                if (hasPermission(l.permission)) { hasVisibleContent = true; break; }
               }
-              return hasPermission(l.permission);
-            });
+            }
             if (!hasVisibleContent) return null;
 
             return (
@@ -637,11 +661,18 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
               <Link
                 href={link.href!}
                 onClick={onNavigate}
-                className={`dash-nav-link ${isActive ? "dash-nav-link-active" : ""}`}
+                className={`dash-nav-link flex items-center justify-between ${isActive ? "dash-nav-link-active" : ""}`}
                 title={!isSidebarOpen ? t(link.name) : undefined}
               >
-                <Icon className="dash-nav-icon shrink-0" />
-                <span className="truncate">{t(link.name)}</span>
+                <div className="flex items-center gap-[10px] min-w-0">
+                  <Icon className="dash-nav-icon shrink-0" />
+                  <span className="truncate">{t(link.name)}</span>
+                </div>
+                {link.href === "/dashboard/approvals" && managerPendingTotal > 0 && isSidebarOpen && (
+                  <span className="px-2 py-0.5 text-[10px] font-black rounded-full bg-amber-500 text-white shadow-sm shrink-0 ml-1">
+                    {managerPendingTotal}
+                  </span>
+                )}
               </Link>
             </li>
           );

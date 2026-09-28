@@ -55,9 +55,10 @@ class FacePipeline:
         else:
             raise FileNotFoundError(f"File model embedder {embedder_path} tidak ditemukan.")
 
-    def detect_and_crop_face(self, image_path_or_array, target_size=(160, 160)):
+    def detect_and_crop_face(self, image_path_or_array, target_size=(160, 160), min_conf=0.45):
         """
         Mendeteksi wajah pada gambar & melakukan crop dengan penyesuaian skala target_size.
+        Hanya mengembalikan face_found=True jika bounding box wajah valid terdeteksi.
         """
         if isinstance(image_path_or_array, str):
             img = cv2.imread(image_path_or_array)
@@ -70,19 +71,27 @@ class FacePipeline:
         boxes = results[0].boxes
 
         if len(boxes) == 0:
-            # Fallback jika YOLO belum mendeteksi: gunakan proporsi gambar tengah
-            h, w, _ = img.shape
-            cropped_face = cv2.resize(img, target_size)
-            return cropped_face, (0, 0, w, h), False
+            return None, (0, 0, 0, 0), False
 
         # Ambil bounding box dengan tingkat kepercayaan (confidence) tertinggi
         best_box = max(boxes, key=lambda b: float(b.conf[0]))
+        confidence = float(best_box.conf[0])
+
+        if confidence < min_conf:
+            return None, (0, 0, 0, 0), False
+
         x1, y1, x2, y2 = map(int, best_box.xyxy[0].tolist())
+        box_w = x2 - x1
+        box_h = y2 - y1
+
+        # Pastikan ukuran bounding box tidak terlalu kecil (minimal 30x30 px)
+        if box_w < 30 or box_h < 30:
+            return None, (0, 0, 0, 0), False
 
         # Padding 10% agar dahi, telinga, dan dagu ikut ter-crop dengan proporsional
         h, w, _ = img.shape
-        margin_x = int((x2 - x1) * 0.1)
-        margin_y = int((y2 - y1) * 0.1)
+        margin_x = int(box_w * 0.1)
+        margin_y = int(box_h * 0.1)
         
         crop_x1 = max(0, x1 - margin_x)
         crop_y1 = max(0, y1 - margin_y)
@@ -91,7 +100,7 @@ class FacePipeline:
 
         cropped = img[crop_y1:crop_y2, crop_x1:crop_x2]
         if cropped.size == 0:
-            cropped = img
+            return None, (0, 0, 0, 0), False
             
         resized_face = cv2.resize(cropped, target_size)
         return resized_face, (x1, y1, x2, y2), True
@@ -116,8 +125,11 @@ class FacePipeline:
         Fungsi shortcut: Input Gambar -> Output (Vektor 128 angka, face_crop, bbox, face_found)
         """
         face_crop, bbox, face_found = self.detect_and_crop_face(image_input)
+        if not face_found or face_crop is None:
+            return None, None, bbox, False
+
         embedding = self.extract_embedding(face_crop)
-        return embedding, face_crop, bbox, face_found
+        return embedding, face_crop, bbox, True
 
 
 def compute_similarity(vector1, vector2):

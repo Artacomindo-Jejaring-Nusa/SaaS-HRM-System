@@ -5,15 +5,16 @@ import axiosInstance from "@/lib/axios";
 import { 
   Users, UserCheck, UserX, Calendar as CalendarIcon, 
   MoreVertical, Eye, Plus, Search, Filter, X, Clock, AlertCircle, CheckCircle,
-  TrendingUp, TrendingDown, Briefcase, Activity, Coffee, FileText, Cake
+  TrendingUp, TrendingDown, Briefcase, Activity, Coffee, FileText, Cake, Laptop
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, CartesianGrid } from 'recharts';
 import Image from "next/image";
 
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
 import { DashboardSkeleton } from "@/components/Skeleton";
 import { useRouter } from "next/navigation";
 import AttendanceMap from "@/components/AttendanceMap";
+import EmployeeDashboardHome from "@/components/EmployeeDashboardHome";
 
 interface DashboardData {
   summary: {
@@ -143,6 +144,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewEmployeeId, setViewEmployeeId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'auto' | 'admin' | 'employee'>('auto');
 
   useEffect(() => {
     // Normal dashboard behavior - no special redirect for admin
@@ -173,6 +175,22 @@ export default function DashboardPage() {
     }
     fetchData();
   }, [user, authLoading]);
+
+  // Determine if we should show Employee View
+  const isSuperAdmin = isSuperAdminUser(user);
+  const isManagerOrAdmin = isSuperAdmin || Boolean(user?.can_access_manager_portal);
+  const shouldShowEmployeeView = viewMode === 'employee' || (viewMode === 'auto' && !isManagerOrAdmin);
+
+  if (shouldShowEmployeeView) {
+    return (
+      <div className="w-full">
+        <EmployeeDashboardHome
+          canSwitchToAdmin={isManagerOrAdmin}
+          onSwitchToAdmin={() => setViewMode('admin')}
+        />
+      </div>
+    );
+  }
 
   if (authLoading || (loading && !data)) {
     return <DashboardSkeleton />;
@@ -215,138 +233,24 @@ export default function DashboardPage() {
     { name: 'Klaim', count: pendingApprovals.reimbursements, color: '#10b981' }
   ];
 
-  if (user?.role?.name === "Karyawan" || user?.role?.name === "Staff Karyawan") {
-    return (
-      <div className="w-full pb-8 animate-in fade-in duration-500 px-4 md:px-8">
-        {/* Header Pegawai */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-          <div>
-            <h1 className="text-3xl font-black text-gray-900 tracking-tight">Personal Hub</h1>
-            <p className="text-gray-500 font-medium">Selamat datang kembali, <span className="text-[#8B0000]">{user?.name}</span>. Apa rencana hebat hari ini?</p>
-          </div>
-          <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-gray-100">
-            <div className="bg-[#fef2f2] p-2 rounded-xl text-[#8B0000]">
-              <CalendarIcon size={20} />
-            </div>
-            <div className="pr-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">Hari Ini</p>
-              <p className="text-sm font-bold text-gray-900">{new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column: Personal Focus */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Quick Actions & Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div 
-                onClick={() => router.push('/dashboard/live-attendance')}
-                className="bg-linear-to-br from-[#8B0000] to-[#5a0000] rounded-[2rem] p-6 text-white shadow-xl shadow-red-900/20 relative overflow-hidden group cursor-pointer hover:-translate-y-1 transition-transform"
-              >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16 blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
-                <p className="text-xs font-bold text-white/70 uppercase mb-2 tracking-widest">Live Attendance</p>
-                <div className="text-4xl font-black mb-1">Face Recog</div>
-                <p className="text-[10px] bg-white/20 inline-block px-2 py-1 mt-2 rounded-lg font-bold group-hover:bg-white group-hover:text-[#8B0000] transition-colors">ABSEN SEKARANG →</p>
-              </div>
-              
-              <div className="bg-white rounded-[2rem] p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
-                <div>
-                  <p className="text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Sisa Jatah Cuti</p>
-                  <div className="text-3xl font-black text-gray-900">{user?.leave_balance ?? 0} <span className="text-sm font-medium text-gray-400">Hari</span></div>
-                </div>
-                <button className="text-xs font-bold text-[#8B0000] flex items-center gap-1 mt-4 hover:gap-2 transition-all">
-                  AJUKAN CUTI <Plus size={14} />
-                </button>
-              </div>
-
-              <div className="bg-white rounded-[2rem] p-6 border border-gray-100 shadow-sm flex flex-col justify-between" onClick={() => router.push('/dashboard/reimbursements')}>
-                <div>
-                  <p className="text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Reimbursements</p>
-                  <div className="text-3xl font-black text-gray-900">{pendingApprovals.reimbursements} <span className="text-sm font-medium text-gray-400">Klaim</span></div>
-                </div>
-                <button className="text-xs font-bold text-[#8B0000] flex items-center gap-1 mt-4 hover:gap-2 transition-all">
-                  DAFTAR KLAIM <Plus size={14} />
-                </button>
-              </div>
-            </div>
-
-            {/* My Activity Chart */}
-            <div className="bg-white rounded-[2rem] p-8 border border-gray-100 shadow-sm shadow-gray-200/50">
-              <div className="flex justify-between items-center mb-8">
-                <h3 className="text-xl font-black text-gray-900 tracking-tight">Statistik Jam Kerja</h3>
-                <div className="bg-gray-50 px-3 py-1.5 rounded-xl text-xs font-bold text-gray-500">7 HARI TERAKHIR</div>
-              </div>
-              <div className="h-[250px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={attendanceTrends}>
-                    <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                    <Line type="monotone" dataKey="count" stroke="#8B0000" strokeWidth={4} dot={{ r: 4, fill: '#8B0000', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 8, fill: '#8B0000', stroke: '#fff', strokeWidth: 2 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Information */}
-          <div className="space-y-8">
-            {/* Announcements */}
-            <div className="bg-white rounded-[2rem] p-6 border border-gray-100 shadow-sm">
-              <h3 className="font-black text-gray-900 mb-6 flex items-center gap-2">
-                <div className="w-1.5 h-6 bg-[#8B0000] rounded-full"></div>
-                Pengumuman Terbaru
-              </h3>
-              <div className="space-y-4">
-                {recentAnnouncements.length > 0 ? (
-                  recentAnnouncements.map((ann, i) => (
-                    <div key={ann.id} className="p-4 bg-gray-50 rounded-2xl border border-transparent hover:border-red-100 hover:bg-red-50/30 transition-all cursor-pointer group" onClick={() => router.push('/dashboard/announcements')}>
-                      <p className="text-[10px] font-bold text-[#8B0000] uppercase tracking-widest mb-1">{ann.user.name}</p>
-                      <h4 className="font-bold text-gray-900 group-hover:text-[#8B0000] transition-colors">{ann.title}</h4>
-                      <p className="text-[10px] text-gray-400 mt-2 font-medium">
-                        {new Date(ann.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-xs text-gray-400 uppercase font-bold">Tidak ada pengumuman</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* My Department Info */}
-            <div className="bg-[#fef2f2] rounded-[2rem] p-8 border border-[#fee2e2] relative overflow-hidden">
-               <div className="relative z-10">
-                 <h3 className="font-black text-[#8B0000] text-2xl leading-none mb-1">Company Insight</h3>
-                 <p className="text-red-700/60 font-medium text-sm">Team Activity Metrics</p>
-                 <div className="mt-8 flex flex-col gap-2">
-                    <div className="flex justify-between items-center bg-white/40 p-2 rounded-xl backdrop-blur-sm">
-                       <span className="text-xs font-bold text-[#8B0000]">Kehadiran Tim Hari Ini</span>
-                       <span className="text-sm font-black text-[#8B0000]">{Math.round((summary.present_today / summary.total_employees) * 100) || 0}%</span>
-                    </div>
-                    <div className="flex justify-between items-center bg-white/40 p-2 rounded-xl backdrop-blur-sm">
-                       <span className="text-xs font-bold text-[#8B0000]">Total Karyawan</span>
-                       <span className="text-sm font-black text-[#8B0000]">{summary.total_employees}</span>
-                    </div>
-                 </div>
-                 <p className="text-[11px] text-red-700/50 mt-4 font-bold tracking-tight uppercase">Satu Tim, Satu Tujuan.</p>
-               </div>
-               <div className="absolute bottom-0 right-0 opacity-10 -mr-8 -mb-8 scale-150">
-                 <Users size={120} />
-               </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="w-full pb-8 px-4 md:px-8">
       {/* Page Header */}
-      <div className="mb-6">
-        <h1 className="text-[22px] font-bold text-gray-900">Dashboard Admin</h1>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-[22px] font-bold text-gray-900">Dashboard Admin & Manajemen</h1>
+          <p className="text-xs text-gray-500">Ringkasan analitik kehadiran, approval, dan aktivitas perusahaan.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setViewMode('employee')}
+            className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-[#8B0000] border border-rose-200 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2"
+          >
+            <Laptop size={14} />
+            <span>Lihat Tampilan Karyawan</span>
+          </button>
+        </div>
       </div>
 
       {/* SUMMARY STAT CARDS */}

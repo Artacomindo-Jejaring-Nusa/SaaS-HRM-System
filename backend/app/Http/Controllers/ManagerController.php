@@ -60,63 +60,74 @@ class ManagerController extends Controller
         $isGlobalAdmin = $user->role_id === 1;
         $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
 
-        $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
+        $permMap = [
+            'leave' => 'approve-leaves',
+            'overtime' => 'approve-overtimes',
+            'reimbursement' => 'approve-reimbursements',
+            'permit' => 'approve-permits',
+            'vehicle_log' => 'approve-vehicle-logs',
+            'fund_request' => 'approve-fund-requests',
+        ];
 
-        $buildScope = function ($modelClass, $type, $pendingStatus = 'pending') use ($user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) {
+        $canApproveType = function ($type) use ($user, $isGlobalAdmin, $permMap) {
+            if ($isGlobalAdmin || $user->hasPermission('manage-approvals')) {
+                return true;
+            }
+            if (isset($permMap[$type])) {
+                return $user->hasPermission($permMap[$type]);
+            }
+            return false;
+        };
+
+        $buildScope = function ($modelClass, $type, $pendingStatus = 'pending') use ($user, $isGlobalAdmin, $canApproveType) {
+            if (!$canApproveType($type)) {
+                return 0;
+            }
+
             $query = is_array($pendingStatus)
                 ? $modelClass::whereIn('status', $pendingStatus)
                 : $modelClass::where('status', $pendingStatus);
-            if ($isGlobalAdmin) {
-                // Global Admin sees all
-            } elseif ($isCompanyAdmin) {
-                $query->where(function ($q) use ($user, $subordinateIds) {
-                    $q->where('company_id', $user->company_id);
-                    if ($subordinateIds->isNotEmpty()) {
-                        $q->orWhereIn('user_id', $subordinateIds);
-                    }
-                });
-            } else {
-                $query->whereIn('user_id', $subordinateIds);
+
+            if (!$isGlobalAdmin) {
+                $query->where('company_id', $user->company_id);
             }
 
-            if (! $isGlobalAdmin && $type !== 'vehicle_log') {
-                $items = $query->with('user')->get();
-                return $items->filter(function ($item) use ($type, $user) {
-                    if (!empty($item->current_approval_step) && $item->user) {
-                        return \App\Services\ApprovalService::canApprove(
-                            $type,
-                            $item->company_id ?? $user->company_id,
-                            $user,
-                            $item->user,
-                            $item->current_approval_step
-                        );
-                    }
-                    return true;
-                })->count();
-            }
+            $items = $query->with(['user.supervisor', 'user.role'])->get();
 
-            return $query->count();
+            return $items->filter(function ($item) use ($type, $user) {
+                if (!empty($item->current_approval_step) && $item->user) {
+                    return \App\Services\ApprovalService::canApprove(
+                        $type,
+                        $item->company_id ?? $user->company_id,
+                        $user,
+                        $item->user,
+                        $item->current_approval_step
+                    );
+                }
+
+                // Fallback for non-dynamic workflow items
+                if ($item->status === 'pending_supervisor') {
+                    return $item->user?->supervisor_id === $user->id;
+                }
+
+                if ($item->status === 'pending_hr') {
+                    return $user->hasPermission('approve-leaves') || $user->hasPermission('approve-permits') || $user->role_id === 1;
+                }
+
+                if ($user->supervisor_id && $item->user_id) {
+                    return $item->user?->supervisor_id === $user->id;
+                }
+
+                return false;
+            })->count();
         };
 
-        $canApprove = function ($t) use ($user, $isGlobalAdmin) {
-            if ($isGlobalAdmin) return true;
-            $map = [
-                'leave' => 'approve-leaves',
-                'overtime' => 'approve-overtimes',
-                'reimbursement' => 'approve-reimbursements',
-                'permit' => 'approve-permits',
-                'vehicle_log' => 'approve-vehicle-logs',
-                'fund_request' => 'approve-fund-requests',
-            ];
-            return isset($map[$t]) && $user->hasPermission($map[$t]);
-        };
-
-        $leaveCount = $canApprove('leave') ? $buildScope(Leave::class, 'leave', 'pending') : 0;
-        $overtimeCount = $canApprove('overtime') ? $buildScope(Overtime::class, 'overtime', 'pending') : 0;
-        $reimbursementCount = $canApprove('reimbursement') ? $buildScope(Reimbursement::class, 'reimbursement', 'pending') : 0;
-        $permitCount = $canApprove('permit') ? $buildScope(Permit::class, 'permit', 'pending') : 0;
-        $vehicleCount = $canApprove('vehicle_log') ? $buildScope(VehicleLog::class, 'vehicle_log', ['pending', 'completed']) : 0;
-        $fundRequestCount = $canApprove('fund_request') ? $buildScope(FundRequest::class, 'fund_request', ($isGlobalAdmin || $isCompanyAdmin) ? ['pending', 'approved_by_supervisor'] : 'pending') : 0;
+        $leaveCount = $buildScope(Leave::class, 'leave', 'pending');
+        $overtimeCount = $buildScope(Overtime::class, 'overtime', 'pending');
+        $reimbursementCount = $buildScope(Reimbursement::class, 'reimbursement', 'pending');
+        $permitCount = $buildScope(Permit::class, 'permit', 'pending');
+        $vehicleCount = $buildScope(VehicleLog::class, 'vehicle_log', ['pending', 'completed']);
+        $fundRequestCount = $buildScope(FundRequest::class, 'fund_request', ['pending', 'approved_by_supervisor']);
 
         return response()->json([
             'status' => 'success',
@@ -152,28 +163,23 @@ class ManagerController extends Controller
             'fund_request' => 'approve-fund-requests',
         ];
 
-        if (! $isGlobalAdmin && isset($permMap[$type]) && ! $user->hasPermission($permMap[$type])) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Anda tidak memiliki hak akses persetujuan untuk kategori ini.'
-            ], 403);
+        // If category permission is disabled by Super Admin for this role, return empty list
+        if (!$isGlobalAdmin && !$user->hasPermission('manage-approvals')) {
+            if (isset($permMap[$type]) && !$user->hasPermission($permMap[$type])) {
+                return response()->json([
+                    'status' => 'success',
+                    'data' => [],
+                ]);
+            }
         }
 
-        $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
-
         $query = match ($type) {
-            'leave' => Leave::with(['user.role', 'user.office'])->where('status', 'pending'),
-            'overtime' => Overtime::with(['user.role', 'user.office'])->where('status', 'pending'),
-            'reimbursement' => Reimbursement::with(['user.role', 'user.office'])->where('status', 'pending'),
-            'permit' => Permit::with(['user.role', 'user.office'])->where('status', 'pending'),
-            'vehicle_log' => VehicleLog::with(['user.role', 'user.office', 'vehicle'])->whereIn('status', ['pending', 'completed']),
-            'fund_request' => FundRequest::with(['user.role', 'user.office', 'supervisor', 'hrd'])->where(function ($q) use ($isGlobalAdmin, $isCompanyAdmin) {
-                if ($isGlobalAdmin || $isCompanyAdmin) {
-                    $q->whereIn('status', ['pending', 'approved_by_supervisor']);
-                } else {
-                    $q->where('status', 'pending');
-                }
-            }),
+            'leave' => Leave::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
+            'overtime' => Overtime::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
+            'reimbursement' => Reimbursement::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
+            'permit' => Permit::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
+            'vehicle_log' => VehicleLog::with(['user.role', 'user.office', 'user.supervisor', 'vehicle'])->whereIn('status', ['pending', 'completed']),
+            'fund_request' => FundRequest::with(['user.role', 'user.office', 'user.supervisor', 'supervisor', 'hrd'])->whereIn('status', ['pending', 'approved_by_supervisor']),
             default => null
         };
 
@@ -181,36 +187,38 @@ class ManagerController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Invalid request type'], 400);
         }
 
-        if ($isGlobalAdmin) {
-            // Global Admin sees all
-        } elseif ($isCompanyAdmin) {
-            $query->where(function ($q) use ($user, $subordinateIds) {
-                $q->where('company_id', $user->company_id);
-                if ($subordinateIds->isNotEmpty()) {
-                    $q->orWhereIn('user_id', $subordinateIds);
-                }
-            });
-        } else {
-            $query->whereIn('user_id', $subordinateIds);
+        if (!$isGlobalAdmin) {
+            $query->where('company_id', $user->company_id);
         }
 
         $items = $query->orderBy('created_at', 'desc')->get();
 
-        // Filter out items where user has already approved their step and cannot act on the current step
-        if (! $isGlobalAdmin && $type !== 'vehicle_log') {
-            $items = $items->filter(function ($item) use ($type, $user) {
-                if (!empty($item->current_approval_step) && $item->user) {
-                    return \App\Services\ApprovalService::canApprove(
-                        $type,
-                        $item->company_id ?? $user->company_id,
-                        $user,
-                        $item->user,
-                        $item->current_approval_step
-                    );
-                }
-                return true;
-            })->values();
-        }
+        // Strictly filter items: only include items where the current user is authorized to act on the current step
+        $items = $items->filter(function ($item) use ($type, $user) {
+            if (!empty($item->current_approval_step) && $item->user) {
+                return \App\Services\ApprovalService::canApprove(
+                    $type,
+                    $item->company_id ?? $user->company_id,
+                    $user,
+                    $item->user,
+                    $item->current_approval_step
+                );
+            }
+
+            if ($item->status === 'pending_supervisor') {
+                return $item->user?->supervisor_id === $user->id;
+            }
+
+            if ($item->status === 'pending_hr') {
+                return $user->hasPermission('approve-leaves') || $user->hasPermission('approve-permits') || $user->role_id === 1;
+            }
+
+            if ($user->supervisor_id && $item->user_id) {
+                return $item->user?->supervisor_id === $user->id;
+            }
+
+            return false;
+        })->values();
 
         // Attach current_step_info for each item if using dynamic workflow
         $items->each(function ($item) use ($type, $user) {
@@ -254,14 +262,15 @@ class ManagerController extends Controller
             'fund_request' => 'approve-fund-requests',
         ];
 
-        if (! $isGlobalAdmin && isset($permMap[$request->type]) && ! $user->hasPermission($permMap[$request->type])) {
+        $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
+
+        // Only block users who have no manager/executive status, no subordinates, and no permission
+        if (! $isGlobalAdmin && ! $isCompanyAdmin && $subordinateIds->isEmpty() && isset($permMap[$request->type]) && ! $user->hasPermission($permMap[$request->type])) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Anda tidak memiliki hak akses untuk menyetujui pengajuan ini.'
             ], 403);
         }
-
-        $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
 
         $model = match ($request->type) {
             'leave' => Leave::class,
@@ -273,17 +282,8 @@ class ManagerController extends Controller
         };
 
         $query = $model::where('id', $request->id);
-        if ($isGlobalAdmin) {
-            // Global Admin can approve all
-        } elseif ($isCompanyAdmin) {
-            $query->where(function ($q) use ($user, $subordinateIds) {
-                $q->where('company_id', $user->company_id);
-                if ($subordinateIds->isNotEmpty()) {
-                    $q->orWhereIn('user_id', $subordinateIds);
-                }
-            });
-        } else {
-            $query->whereIn('user_id', $subordinateIds);
+        if (! $isGlobalAdmin) {
+            $query->where('company_id', $user->company_id);
         }
 
         $item = $query->first();

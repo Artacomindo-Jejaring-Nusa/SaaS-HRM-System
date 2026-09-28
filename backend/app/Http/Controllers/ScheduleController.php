@@ -44,15 +44,18 @@ class ScheduleController extends Controller
 
     public function store(Request $request)
     {
+        $authUser = $request->user();
+        abort_if(! $authUser->hasPermission('manage-schedules') && ! $authUser->canAccessAllCompanies(), 403, 'Akses ditolak.');
+
         $request->validate([
             'user_id' => 'required|exists:users,id',
             'shift_id' => 'required|exists:shifts,id',
             'date' => 'required|date',
         ]);
 
-        // Cek apakah user ada di perusahaan yang sama
-        $user = User::findOrFail($request->user_id);
-        if ($user->company_id !== $request->user()->company_id) {
+        // Cek apakah user ada di perusahaan yang sama (bila bukan Super Admin)
+        $targetUser = User::findOrFail($request->user_id);
+        if ($authUser->company_id && ! $authUser->canAccessAllCompanies() && $targetUser->company_id !== $authUser->company_id) {
             return $this->errorResponse('Anda tidak bisa membuat jadwal untuk karyawan luar perusahaan.', 403);
         }
 
@@ -61,12 +64,21 @@ class ScheduleController extends Controller
             ['shift_id' => $request->shift_id]
         );
 
+        $schedule->load(['user', 'shift']);
+
         return $this->successResponse($schedule, 'Jadwal berhasil diperbarui.', 201);
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $schedule = Schedule::findOrFail($id);
+        $authUser = $request->user();
+        abort_if(! $authUser->hasPermission('manage-schedules') && ! $authUser->canAccessAllCompanies(), 403, 'Akses ditolak.');
+
+        $schedule = Schedule::with('user')->findOrFail($id);
+        if ($authUser->company_id && ! $authUser->canAccessAllCompanies() && $schedule->user?->company_id !== $authUser->company_id) {
+            return $this->errorResponse('Akses ditolak.', 403);
+        }
+
         $schedule->delete();
 
         return $this->successResponse(null, 'Jadwal berhasil dihapus.');

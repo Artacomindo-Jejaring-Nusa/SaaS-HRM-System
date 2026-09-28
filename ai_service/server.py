@@ -89,13 +89,21 @@ async def extract_face(
             raise HTTPException(status_code=400, detail="Wajib menyertakan file foto atau image_base64.")
 
         embedding, _, bbox, face_found = pipeline.process_image(img)
+        if not face_found or embedding is None:
+            return {
+                "success": False,
+                "face_detected": False,
+                "bbox": [],
+                "embedding": [],
+                "message": "Wajah tidak terdeteksi pada foto. Harap pastikan seluruh wajah Anda terlihat jelas dan terang di dalam kamera."
+            }
         
         return {
             "success": True,
-            "face_detected": face_found,
+            "face_detected": True,
             "bbox": [int(x) for x in bbox],
             "embedding": embedding.tolist(),
-            "message": "Wajah terdeteksi dan vektor 128-d berhasil diekstrak." if face_found else "Wajah tidak terdeteksi jelas, menggunakan fallback crop."
+            "message": "Wajah terdeteksi dan vektor 128-d berhasil diekstrak."
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gagal memproses gambar: {str(e)}")
@@ -134,15 +142,25 @@ async def verify_face_endpoint(
             raise HTTPException(status_code=400, detail="Wajib menyertakan file foto selfie atau image_base64.")
 
         current_embedding, _, bbox, face_found = pipeline.process_image(img)
+        if not face_found or current_embedding is None:
+            return {
+                "success": True,
+                "face_detected": False,
+                "is_match": False,
+                "similarity": 0.0,
+                "threshold": threshold,
+                "message": "Wajah tidak terdeteksi pada foto selfie. Harap posisikan seluruh wajah Anda di depan kamera (bukan benda / tidak terpotong)."
+            }
+
         is_match, similarity = verify_face(reg_vector, current_embedding, threshold=threshold)
 
         return {
             "success": True,
-            "face_detected": face_found,
+            "face_detected": True,
             "is_match": bool(is_match),
             "similarity": round(float(similarity), 4),
             "threshold": threshold,
-            "message": "Verifikasi wajah berhasil cocok." if is_match else "Wajah tidak cocok dengan data terdaftar."
+            "message": "Verifikasi wajah berhasil cocok." if is_match else "Wajah tidak cocok dengan data pendaftaran Anda."
         }
     except HTTPException:
         raise

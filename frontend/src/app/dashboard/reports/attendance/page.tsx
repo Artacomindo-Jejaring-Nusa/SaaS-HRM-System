@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { ReportSkeleton } from "@/components/Skeleton";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { getStorageUrl } from "@/lib/utils";
 
 const getCheckInOutStrings = (record: any) => {
   if (!record) return { checkInStr: "", checkOutStr: "" };
@@ -628,7 +629,7 @@ const SuspiciousView = ({ startDate, endDate, selectedUser }: any) => {
                         <td className="px-6 py-4 text-center">
                            {row.image_in ? (
                              <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-white shadow-sm inline-block bg-gray-50 grayscale group-hover:grayscale-0 transition-all hover:scale-150 relative z-10">
-                                <img src={`/storage/${row.image_in}`} alt="Evidence" className="w-full h-full object-cover" />
+                                <img src={getStorageUrl(row.image_in_url || row.image_in)} alt="Evidence" className="w-full h-full object-cover" />
                              </div>
                            ) : <Camera size={16} className="text-gray-200 mx-auto" />}
                         </td>

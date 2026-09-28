@@ -29,9 +29,19 @@ def main():
                 sys.exit(1)
 
             embedding, _, bbox, face_found = pipeline.process_image(args.image)
+            if not face_found or embedding is None:
+                print(json.dumps({
+                    "success": False,
+                    "face_detected": False,
+                    "bbox": [],
+                    "embedding": [],
+                    "message": "Wajah tidak terdeteksi pada foto."
+                }))
+                sys.exit(0)
+
             result = {
                 "success": True,
-                "face_detected": face_found,
+                "face_detected": True,
                 "bbox": [int(x) for x in bbox],
                 "embedding": embedding.tolist()
             }
@@ -51,14 +61,26 @@ def main():
                 reg_vector = json.loads(reg_input)
 
             current_embedding, _, bbox, face_found = pipeline.process_image(args.image)
+            if not face_found or current_embedding is None:
+                print(json.dumps({
+                    "success": True,
+                    "face_detected": False,
+                    "is_match": False,
+                    "similarity": 0.0,
+                    "threshold": args.threshold,
+                    "message": "Wajah tidak terdeteksi pada foto selfie."
+                }))
+                sys.exit(0)
+
             is_match, similarity = verify_face(reg_vector, current_embedding, threshold=args.threshold)
 
             result = {
                 "success": True,
-                "face_detected": face_found,
+                "face_detected": True,
                 "is_match": bool(is_match),
                 "similarity": round(float(similarity), 4),
-                "threshold": args.threshold
+                "threshold": args.threshold,
+                "message": "Verifikasi wajah berhasil cocok." if is_match else "Wajah tidak cocok dengan data terdaftar."
             }
             print(json.dumps(result))
 

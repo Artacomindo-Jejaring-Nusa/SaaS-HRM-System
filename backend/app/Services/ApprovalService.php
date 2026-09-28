@@ -217,7 +217,7 @@ class ApprovalService
             return null; // Fallback to default logic
         }
 
-        $workflow = self::getWorkflow($moduleKey, $companyId);
+        $workflow = self::getWorkflow($moduleKey, $companyId, $submitter);
 
         if (! $workflow) {
             return null; // Fallback
@@ -288,7 +288,7 @@ class ApprovalService
             return false; // Not using dynamic workflow
         }
 
-        $workflow = self::getWorkflow($moduleKey, $companyId);
+        $workflow = self::getWorkflow($moduleKey, $companyId, $submitter);
         if (! $workflow) {
             return false;
         }
@@ -312,6 +312,16 @@ class ApprovalService
                 if ($submitter->supervisor_id) {
                     $supervisor = User::find($submitter->supervisor_id);
                     return $supervisor ? collect([$supervisor]) : collect();
+                }
+                // Fallback when submitter has no supervisor: find users with module approval permission
+                $moduleKey = $step->workflow->module_key ?? '';
+                $permission = self::getApprovalPermissionForModule($moduleKey);
+                if ($permission) {
+                    return User::where('company_id', $companyId)
+                        ->where('id', '!=', $submitter->id)
+                        ->get()
+                        ->filter(fn ($u) => $u->hasPermission($permission))
+                        ->values();
                 }
                 return collect();
 
@@ -366,13 +376,13 @@ class ApprovalService
     /**
      * Get the current step info for display purposes (e.g., in API response).
      */
-    public static function getCurrentStepInfo(string $moduleKey, int $companyId, ?int $currentStep): ?array
+    public static function getCurrentStepInfo(string $moduleKey, int $companyId, ?int $currentStep, ?User $submitter = null): ?array
     {
         if ($currentStep === null) {
             return null;
         }
 
-        $workflow = self::getWorkflow($moduleKey, $companyId);
+        $workflow = self::getWorkflow($moduleKey, $companyId, $submitter);
         if (! $workflow) {
             return null;
         }
@@ -421,53 +431,34 @@ class ApprovalService
      */
     private static function canUserApproveStep(WorkflowStep $step, User $approver, User $submitter, int $companyId, ?string $moduleKey = null): bool
     {
-        // Master Admin (role_id 1) bypasses all checks
-        if ($approver->role_id === 1) {
-            return true;
+        // Approver cannot approve their own submission
+        if ($approver->id === $submitter->id) {
+            return false;
         }
 
-        // Must belong to the same company (or can access all)
+        // Must belong to the same company (or can access all companies)
         if ($approver->company_id !== $companyId && ! (method_exists($approver, 'canAccessAllCompanies') && $approver->canAccessAllCompanies())) {
             return false;
         }
 
-        $moduleKey = $moduleKey ?: ($step->workflow->module_key ?? '');
-        $permission = self::getApprovalPermissionForModule($moduleKey);
-        $hasModulePermission = $permission ? $approver->hasPermission($permission) : false;
-
         switch ($step->approver_type) {
             case 'supervisor':
-                // Direct supervisor of the submitter, or someone granted explicit approval permission for this module
-                return $submitter->supervisor_id === $approver->id || $hasModulePermission;
+                // Direct supervisor of the submitter
+                if ($submitter->supervisor_id) {
+                    return $submitter->supervisor_id === $approver->id;
+                }
+                // Fallback when submitter has no direct supervisor: users with module approval permission or admin
+                $moduleKey = $moduleKey ?: ($step->workflow->module_key ?? '');
+                $permission = self::getApprovalPermissionForModule($moduleKey);
+                return $approver->role_id === 1 || ($permission && $approver->hasPermission($permission));
 
             case 'role':
-                // Exact role match
-                if ($approver->role_id === $step->approver_role_id) {
-                    return true;
-                }
-
-                // If user has the explicit module approval permission (e.g. approve-overtimes)
-                if ($hasModulePermission) {
-                    // For multi-tiered financial workflows (fund_request, reimbursement), keep strict tier isolation
-                    if (in_array($moduleKey, ['fund_request', 'reimbursement'])) {
-                        $roleName = strtolower($approver->role?->name ?? '');
-                        $stepRoleName = strtolower($step->role?->name ?? '');
-                        if (str_contains($roleName, 'admin') || str_contains($roleName, 'direktur') || str_contains($roleName, 'ceo') || str_contains($roleName, 'boc')) {
-                            return true;
-                        }
-                        return str_contains($stepRoleName, 'hr') || str_contains($stepRoleName, 'admin');
-                    }
-
-                    // For overtime, leave, permit, shift_swap, attendance_correction:
-                    // Any supervisor or manager explicitly granted approval permission can approve
-                    return true;
-                }
-
-                return false;
+                // Exact role match only
+                return $approver->role_id === $step->approver_role_id;
 
             case 'user':
-                return $approver->id === $step->approver_user_id
-                    || ($hasModulePermission && ($approver->role_id === 1 || str_contains(strtolower($approver->role?->name ?? ''), 'admin')));
+                // Exact user match only
+                return $approver->id === $step->approver_user_id;
 
             default:
                 return false;

@@ -4,8 +4,8 @@
     <meta charset="utf-8">
     <style>
         @page {
-            size: a5 landscape;
-            margin: 10px 15px;
+            size: A4 portrait;
+            margin: 12mm 15mm;
         }
         * { 
             margin: 0; 
@@ -14,9 +14,9 @@
             -webkit-print-color-adjust: exact !important; 
             print-color-adjust: exact !important; 
         }
-        body { font-family: 'Helvetica', 'Arial', sans-serif; color: #222; font-size: 9px; line-height: 1.25; background: #fff; }
+        body { font-family: 'Helvetica', 'Arial', sans-serif; color: #222; font-size: 10px; line-height: 1.35; background: #fff; }
 
-        .slip-container { max-width: 100%; margin: 0; padding: 0; }
+        .slip-container { max-width: 100%; margin: 0 auto; padding: 4px; }
 
         /* Confidential Banner */
         .confidential-banner {

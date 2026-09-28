@@ -326,19 +326,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _permissions = perms;
 
         // Determine Manager Portal access:
-        // 1. If explicitly true on account (can_access_manager_portal true)
-        // 2. Or has approval / manager portal permissions
-        _isManager = userData['can_access_manager_portal'] == true ||
-            userData['is_manager'] == true ||
-            _hasPermission('view-manager-portal') ||
-            _hasPermission('approve-leaves') ||
-            _hasPermission('approve-permits') ||
-            _hasPermission('approve-overtimes') ||
-            _hasPermission('approve-reimbursements') ||
-            _hasPermission('approve-fund-requests') ||
-            _hasPermission('approve-vehicle-logs') ||
-            _hasPermission('approve-shift-swaps') ||
-            _hasPermission('approve-project-costs');
+        if (userData['can_access_manager_portal'] == true || userData['is_manager'] == true) {
+          _isManager = true;
+        } else if (userData['role_id'] == 1 ||
+            (userData['role'] != null && userData['role']['id'] == 1) ||
+            (userData['role'] != null && userData['role']['name'] == 'Super Admin')) {
+          _isManager = true;
+        } else {
+          _isManager = _hasPermission('view-manager-portal') ||
+              _hasPermission('manage-approvals') ||
+              _hasPermission('view-approvals') ||
+              _hasPermission('approve-leaves') ||
+              _hasPermission('approve-permits') ||
+              _hasPermission('approve-overtimes') ||
+              _hasPermission('approve-reimbursements') ||
+              _hasPermission('approve-fund-requests') ||
+              _hasPermission('approve-vehicle-logs') ||
+              _hasPermission('approve-shift-swaps') ||
+              _hasPermission('approve-project-costs') ||
+              _hasPermission('manage-attendance-corrections');
+        }
 
         _attendanceType = userData['attendance_type'];
       });
@@ -949,6 +956,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     if (!_hasPermission('view-projects')) {
       items.remove('proyek');
+    }
+    if (!_hasPermission('view-organization', 'view-directory')) {
+      items.remove('organisasi');
+    }
+    if (!_hasPermission('manage-holidays', 'view-attendances')) {
+      items.remove('libur');
+    }
+    if (!_hasPermission('view-attendances')) {
+      items.remove('riwayat');
     }
 
     return items;
