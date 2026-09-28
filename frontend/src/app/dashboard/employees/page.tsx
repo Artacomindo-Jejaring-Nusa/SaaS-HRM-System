@@ -103,6 +103,9 @@ interface PaginationData {
   per_page: number;
 }
 
+type EmployeeFilterTab = 'all' | 'unverified' | 'team';
+type EmployeeModalMode = "add" | "edit";
+
 function buildEmployeeFormData(formData: EmployeeFormData, isEdit: boolean): FormData {
   const data = new FormData();
   Object.keys(formData).forEach((key) => {
@@ -255,7 +258,7 @@ function buildEmployeeDatatablesParams(
   p: number,
   perPage: number,
   search: string,
-  activeFilter: 'all' | 'unverified' | 'team',
+  activeFilter: EmployeeFilterTab,
   selectedRole: string,
   urlId: string | null
 ): URLSearchParams {
@@ -373,7 +376,7 @@ async function sendBulkOrSingleVerification(
 
 async function executeEmployeeSave(
   formData: EmployeeFormData,
-  modalMode: "add" | "edit"
+  modalMode: EmployeeModalMode
 ) {
   const isEdit = modalMode !== "add";
   const data = buildEmployeeFormData(formData, isEdit);
@@ -711,8 +714,8 @@ function EmployeeVerificationBanner({
 }
 
 interface EmployeeToolbarProps {
-  readonly activeFilter: 'all' | 'unverified' | 'team';
-  readonly setActiveFilter: (filter: 'all' | 'unverified' | 'team') => void;
+  readonly activeFilter: EmployeeFilterTab;
+  readonly setActiveFilter: (filter: EmployeeFilterTab) => void;
   readonly unverifiedCount: number;
   readonly isSuperAdmin: boolean;
   readonly selectedRole: string;
@@ -1134,7 +1137,7 @@ function EmployeeTable({
 
 interface EmployeeAddEditModalProps {
   readonly isOpen: boolean;
-  readonly modalMode: "add" | "edit";
+  readonly modalMode: EmployeeModalMode;
   readonly formData: EmployeeFormData;
   readonly setFormData: React.Dispatch<React.SetStateAction<EmployeeFormData>>;
   readonly photoPreview: string | null;
@@ -1831,12 +1834,12 @@ function EmployeesContent() {
   const [selectedRole, setSelectedRole] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'unverified' | 'team'>('all');
+  const [activeFilter, setActiveFilter] = useState<EmployeeFilterTab>('all');
   const [totalUnverified, setTotalUnverified] = useState(0);
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<"add" | "edit">("add");
+  const [modalMode, setModalMode] = useState<EmployeeModalMode>("add");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<EmployeeFormData>({
     role_id: 3, // Default Employee
