@@ -51,11 +51,6 @@ trait HasUserRelations
         return $this->hasMany(Attendance::class);
     }
 
-    public function notifications()
-    {
-        return $this->hasMany(Notification::class);
-    }
-
     public function salaries()
     {
         return $this->hasMany(Salary::class);

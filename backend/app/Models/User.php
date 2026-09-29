@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Traits\Auditable;
 use App\Traits\EncryptsSensitiveFields;
+use App\Models\Notification;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -13,10 +14,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable, Auditable, EncryptsSensitiveFields, \App\Traits\HasKemnakerLeave, \App\Traits\HasUserRelations {
-        \App\Traits\HasUserRelations::notifications insteadof Notifiable;
-        Notifiable::notifications as rawNotifications;
-    }
+    use HasApiTokens, HasFactory, Notifiable, Auditable, EncryptsSensitiveFields, \App\Traits\HasKemnakerLeave, \App\Traits\HasUserRelations;
 
     protected array $encryptedFields = ['ktp_no', 'bank_account_no', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no'];
 
@@ -54,6 +52,11 @@ class User extends Authenticatable
     ];
 
     protected $appends = ['profile_photo_url', 'face_registered_photo_url', 'is_face_approved', 'is_manager', 'can_access_manager_portal', 'permission_slugs', 'kemnaker_leave_balance', 'is_eligible_for_leave'];
+
+    public function notifications()
+    {
+        return $this->hasMany(Notification::class);
+    }
 
     public function getFaceRegisteredPhotoUrlAttribute()
     {
