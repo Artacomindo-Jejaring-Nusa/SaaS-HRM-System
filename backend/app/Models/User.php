@@ -83,7 +83,7 @@ class User extends Authenticatable
             return (bool) $this->attributes['can_access_manager_portal'];
         }
 
-        $roleName = strtolower($this->role?->name ?? '');
+        $roleName = $this->relationLoaded('role') ? strtolower($this->role?->name ?? '') : '';
         return $this->hasPermission('view-manager-portal')
             || $this->hasPermission('approve-leaves')
             || $this->hasPermission('approve-permits')

@@ -60,7 +60,7 @@ class EmployeeController extends Controller
             ->when($request->id, function ($q) use ($request) {
                 $q->where('id', $request->id);
             })
-            ->with(['role', 'supervisor', 'office'])
+            ->with(['role.permissions', 'supervisor', 'office'])
             ->orderBy('name', 'asc')
             ->paginate($request->per_page ?? 10);
 
@@ -76,7 +76,7 @@ class EmployeeController extends Controller
         abort_if(! $request->user()->hasPermission('view-employees'), 403, self::MSG_FORBIDDEN);
 
         $user = $request->user();
-        $query = User::with(['role', 'supervisor', 'office']);
+        $query = User::with(['role.permissions', 'supervisor', 'office']);
 
         if ($user->company_id && ! $user->canAccessAllCompanies()) {
             $query->where('company_id', $user->company_id);
