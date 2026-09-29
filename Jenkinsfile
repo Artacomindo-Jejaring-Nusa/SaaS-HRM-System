@@ -161,8 +161,8 @@ pipeline {
                                         docker compose -p hrms-staging -f docker-compose.staging.yml pull
                                         docker compose -p hrms-staging --env-file .env.staging -f docker-compose.staging.yml up -d
                                         echo "Menunggu MySQL Staging siap..."
-                                        sleep 15
                                         docker exec -i hrms-backend-staging php artisan migrate --force || true
+                                        docker exec -i hrms-backend-staging php artisan db:seed --class=RealCompanySeeder --force || true
                                         echo "Deployment Staging Sukses! Akses via: https://staging-dev.jelantik.com (Port lokal: http://${TARGET_VM_IP}:8088)"
                                     '
                                 """
