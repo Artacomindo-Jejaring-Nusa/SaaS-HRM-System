@@ -13,8 +13,10 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable, Auditable, EncryptsSensitiveFields, \App\Traits\HasKemnakerLeave, \App\Traits\HasUserRelations;
+    use HasApiTokens, HasFactory, Notifiable, Auditable, EncryptsSensitiveFields, \App\Traits\HasKemnakerLeave, \App\Traits\HasUserRelations {
+        \App\Traits\HasUserRelations::notifications insteadof Notifiable;
+        Notifiable::notifications as rawNotifications;
+    }
 
     protected array $encryptedFields = ['ktp_no', 'bank_account_no', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no'];
 
