@@ -14,12 +14,20 @@ export function getStorageUrl(path: string | null | undefined) {
     return path;
   }
   
-  // Clean leading slashes and redundant storage/ prefix
-  let cleanPath = path.replace(/^\/+/, "");
-  if (cleanPath.startsWith("storage/")) {
-    cleanPath = cleanPath.replace(/^storage\//, "");
+  // Clean leading slashes and redundant storage/ prefix without regex (eliminates ReDoS risk)
+  let cleanPath = path;
+  while (cleanPath.startsWith("/")) {
+    cleanPath = cleanPath.slice(1);
   }
 
-  const baseUrl = (process.env.NEXT_PUBLIC_STORAGE_URL || "http://127.0.0.1:8000/storage").replace(/\/+$/, "");
+  if (cleanPath.startsWith("storage/")) {
+    cleanPath = cleanPath.slice("storage/".length);
+  }
+
+  let baseUrl = process.env.NEXT_PUBLIC_STORAGE_URL || "http://127.0.0.1:8000/storage";
+  while (baseUrl.endsWith("/")) {
+    baseUrl = baseUrl.slice(0, -1);
+  }
+
   return `${baseUrl}/${cleanPath}`;
 }

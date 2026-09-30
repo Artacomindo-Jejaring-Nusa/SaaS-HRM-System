@@ -69,11 +69,11 @@ export default function WebAttendanceModal({
     return () => clearInterval(interval);
   }, []);
 
-  // Geolocation detection
+  // Geolocation detection - Strictly necessary for employee attendance geofencing validation
   useEffect(() => {
     if (!isOpen) return;
 
-    if (navigator.geolocation) {
+    if (typeof window !== "undefined" && "geolocation" in navigator) {
       setLocationStatus("loading");
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -88,7 +88,7 @@ export default function WebAttendanceModal({
           console.warn("Geolocation warning:", err.message);
           setLocationStatus("error");
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     } else {
       setLocationStatus("error");
