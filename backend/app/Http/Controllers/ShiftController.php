@@ -54,7 +54,7 @@ class ShiftController extends Controller
 
         $shift = Shift::findOrFail($id);
         if ($authUser->company_id && ! $authUser->canAccessAllCompanies() && $shift->company_id !== $authUser->company_id) {
-            return $this->errorResponse('Akses ditolak.', 403);
+            return $this->errorResponse(self::MSG_FORBIDDEN, 403);
         }
 
         $shift->update($request->only(['name', 'start_time', 'end_time']));
@@ -69,7 +69,7 @@ class ShiftController extends Controller
 
         $shift = Shift::findOrFail($id);
         if ($authUser->company_id && ! $authUser->canAccessAllCompanies() && $shift->company_id !== $authUser->company_id) {
-            return $this->errorResponse('Akses ditolak.', 403);
+            return $this->errorResponse(self::MSG_FORBIDDEN, 403);
         }
 
         $shift->delete();

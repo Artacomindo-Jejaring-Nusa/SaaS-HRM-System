@@ -10,6 +10,7 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class ScheduleController extends Controller
 {
+    private const MSG_FORBIDDEN = 'Akses ditolak.';
     public function index(Request $request)
     {
         $query = Schedule::with(['user', 'shift']);
@@ -45,7 +46,7 @@ class ScheduleController extends Controller
     public function store(Request $request)
     {
         $authUser = $request->user();
-        abort_if(! $authUser->hasPermission('manage-schedules') && ! $authUser->canAccessAllCompanies(), 403, 'Akses ditolak.');
+        abort_if(! $authUser->hasPermission('manage-schedules') && ! $authUser->canAccessAllCompanies(), 403, self::MSG_FORBIDDEN);
 
         $request->validate([
             'user_id' => 'required|exists:users,id',
@@ -72,11 +73,11 @@ class ScheduleController extends Controller
     public function destroy(Request $request, $id)
     {
         $authUser = $request->user();
-        abort_if(! $authUser->hasPermission('manage-schedules') && ! $authUser->canAccessAllCompanies(), 403, 'Akses ditolak.');
+        abort_if(! $authUser->hasPermission('manage-schedules') && ! $authUser->canAccessAllCompanies(), 403, self::MSG_FORBIDDEN);
 
         $schedule = Schedule::with('user')->findOrFail($id);
         if ($authUser->company_id && ! $authUser->canAccessAllCompanies() && $schedule->user?->company_id !== $authUser->company_id) {
-            return $this->errorResponse('Akses ditolak.', 403);
+            return $this->errorResponse(self::MSG_FORBIDDEN, 403);
         }
 
         $schedule->delete();

@@ -171,7 +171,7 @@ export default function SchedulesPage() {
   const [viewMode, setViewMode] = useState<"table" | "calendar" | "roster">("roster");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState("");
-  const { user, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
 
   // Modals
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);

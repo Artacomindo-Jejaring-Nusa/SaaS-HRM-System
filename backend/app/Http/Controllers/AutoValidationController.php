@@ -50,7 +50,7 @@ class AutoValidationController extends Controller
             'previous_expires_at' => $prevExpiry,
             'new_expires_at' => $newExpiry,
             'changed_by' => $admin->id,
-            'notes' => $request->notes ?? ($newStatus ? ($newExpiry ? "Diaktifkan hingga {$newExpiry->format('d M Y')}" : "Diaktifkan permanen") : "Dinonaktifkan"),
+            'notes' => $request->notes ?? $this->buildAutoValidateNote($newStatus, $newExpiry),
             'ip_address' => $request->ip(),
         ]);
 
@@ -105,7 +105,7 @@ class AutoValidationController extends Controller
                 'previous_expires_at' => $prevExpiry,
                 'new_expires_at' => $newExpiry,
                 'changed_by' => $admin->id,
-                'notes' => $request->notes ?? "Aksi Massal: " . ($newStatus ? ($newExpiry ? "Diaktifkan hingga {$newExpiry->format('d M Y')}" : "Diaktifkan permanen") : "Dinonaktifkan"),
+                'notes' => $request->notes ?? ("Aksi Massal: " . $this->buildAutoValidateNote($newStatus, $newExpiry)),
                 'ip_address' => $request->ip(),
             ]);
 
@@ -152,12 +152,21 @@ class AutoValidationController extends Controller
 
     private function isAuthorizedAdmin(User $user): bool
     {
-        return $user->role_id === 1 
+        return $user->role_id === 1
             || $user->canAccessAllCompanies()
             || $user->hasPermission('manage-roles')
             || $user->hasPermission('manage-company')
             || $user->hasPermission('edit-employees')
             || str_contains(strtolower($user->role?->name ?? ''), 'super admin')
             || str_contains(strtolower($user->role?->name ?? ''), 'hrd');
+    }
+
+    private function buildAutoValidateNote(bool $status, ?\Carbon\Carbon $expiry): string
+    {
+        if (!$status) {
+            return 'Dinonaktifkan';
+        }
+
+        return $expiry ? "Diaktifkan hingga {$expiry->format('d M Y')}" : 'Diaktifkan permanen';
     }
 }

@@ -88,7 +88,7 @@ class ManagerController extends Controller
         };
     }
 
-    private function countScopedPending($modelClass, string $type, string|array $pendingStatus, $user, bool $isGlobalAdmin, bool $isCompanyAdmin, $subordinateIds): int
+    private function countScopedPending($modelClass, string $type, string|array $pendingStatus, $user, bool $isGlobalAdmin): int
     {
         $query = is_array($pendingStatus)
             ? $modelClass::whereIn('status', $pendingStatus)
@@ -125,12 +125,12 @@ class ManagerController extends Controller
 
         $fundRequestStatus = ($isGlobalAdmin || $isCompanyAdmin) ? ['pending', 'approved_by_supervisor'] : 'pending';
 
-        $leaveCount = $canApprove('leave') ? $this->countScopedPending(Leave::class, 'leave', 'pending', $user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) : 0;
-        $overtimeCount = $canApprove('overtime') ? $this->countScopedPending(Overtime::class, 'overtime', 'pending', $user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) : 0;
-        $reimbursementCount = $canApprove('reimbursement') ? $this->countScopedPending(Reimbursement::class, 'reimbursement', 'pending', $user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) : 0;
-        $permitCount = $canApprove('permit') ? $this->countScopedPending(Permit::class, 'permit', 'pending', $user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) : 0;
-        $vehicleCount = $canApprove('vehicle_log') ? $this->countScopedPending(VehicleLog::class, 'vehicle_log', ['pending', 'completed'], $user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) : 0;
-        $fundRequestCount = $canApprove('fund_request') ? $this->countScopedPending(FundRequest::class, 'fund_request', $fundRequestStatus, $user, $isGlobalAdmin, $isCompanyAdmin, $subordinateIds) : 0;
+        $leaveCount = $canApprove('leave') ? $this->countScopedPending(Leave::class, 'leave', 'pending', $user, $isGlobalAdmin) : 0;
+        $overtimeCount = $canApprove('overtime') ? $this->countScopedPending(Overtime::class, 'overtime', 'pending', $user, $isGlobalAdmin) : 0;
+        $reimbursementCount = $canApprove('reimbursement') ? $this->countScopedPending(Reimbursement::class, 'reimbursement', 'pending', $user, $isGlobalAdmin) : 0;
+        $permitCount = $canApprove('permit') ? $this->countScopedPending(Permit::class, 'permit', 'pending', $user, $isGlobalAdmin) : 0;
+        $vehicleCount = $canApprove('vehicle_log') ? $this->countScopedPending(VehicleLog::class, 'vehicle_log', ['pending', 'completed'], $user, $isGlobalAdmin) : 0;
+        $fundRequestCount = $canApprove('fund_request') ? $this->countScopedPending(FundRequest::class, 'fund_request', $fundRequestStatus, $user, $isGlobalAdmin) : 0;
 
         return response()->json([
             'status' => 'success',
@@ -178,20 +178,25 @@ class ManagerController extends Controller
                 );
             }
 
-            if ($item->status === 'pending_supervisor') {
-                return $item->user?->supervisor_id === $user->id;
-            }
-
-            if ($item->status === 'pending_hr') {
-                return $user->hasPermission('approve-leaves') || $user->hasPermission('approve-permits') || $user->role_id === 1;
-            }
-
-            if ($user->supervisor_id && $item->user_id) {
-                return $item->user?->supervisor_id === $user->id;
-            }
-
-            return false;
+            return $this->canHandlePendingItem($item, $user);
         })->values();
+    }
+
+    private function canHandlePendingItem($item, $user): bool
+    {
+        if ($item->status === 'pending_supervisor') {
+            return $item->user?->supervisor_id === $user->id;
+        }
+
+        if ($item->status === 'pending_hr') {
+            return $user->hasPermission('approve-leaves') || $user->hasPermission('approve-permits') || $user->role_id === 1;
+        }
+
+        if ($user->supervisor_id && $item->user_id) {
+            return $item->user?->supervisor_id === $user->id;
+        }
+
+        return false;
     }
 
     /**
@@ -204,13 +209,11 @@ class ManagerController extends Controller
         $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
         $type = $request->type;
 
-        if (!$isGlobalAdmin && !$user->hasPermission('manage-approvals')) {
-            if (isset(self::PERM_MAP[$type]) && !$user->hasPermission(self::PERM_MAP[$type])) {
-                return response()->json([
-                    'status' => 'success',
-                    'data' => [],
-                ]);
-            }
+        if (!$isGlobalAdmin && !$user->hasPermission('manage-approvals') && isset(self::PERM_MAP[$type]) && !$user->hasPermission(self::PERM_MAP[$type])) {
+            return response()->json([
+                'status' => 'success',
+                'data' => [],
+            ]);
         }
 
         $query = $this->resolvePendingBaseQuery((string)$type, $isGlobalAdmin, $isCompanyAdmin);

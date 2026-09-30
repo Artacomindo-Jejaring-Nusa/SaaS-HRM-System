@@ -101,43 +101,46 @@ class User extends Authenticatable
             return true;
         }
 
-        // 1. If explicitly enabled on this specific user record
-        if (isset($this->attributes['can_access_manager_portal']) && $this->attributes['can_access_manager_portal'] == 1) {
-            return true;
+        return $this->hasExplicitManagerAccess()
+            || $this->hasApprovalPermissions()
+            || $this->subordinates()->exists()
+            || $this->hasManagerRoleKeyword();
+    }
+
+    private function hasExplicitManagerAccess(): bool
+    {
+        return isset($this->attributes['can_access_manager_portal']) && $this->attributes['can_access_manager_portal'] == 1;
+    }
+
+    private function hasApprovalPermissions(): bool
+    {
+        $permissions = [
+            'view-manager-portal', 'manage-approvals', 'approve-leaves', 'approve-permits',
+            'approve-overtimes', 'approve-reimbursements', 'approve-fund-requests',
+            'approve-vehicle-logs', 'approve-shift-swaps', 'approve-project-costs',
+            'manage-attendance-corrections', 'approve-attendance-corrections',
+        ];
+
+        foreach ($permissions as $perm) {
+            if ($this->hasPermission($perm)) {
+                return true;
+            }
         }
 
+        return false;
+    }
+
+    private function hasManagerRoleKeyword(): bool
+    {
         $roleName = $this->relationLoaded('role') ? strtolower($this->role?->name ?? '') : '';
-
-        // 2. Dynamic permissions assigned to user's role (Super Admin configured)
-        if (
-            $this->hasPermission('view-manager-portal')
-            || $this->hasPermission('manage-approvals')
-            || $this->hasPermission('approve-leaves')
-            || $this->hasPermission('approve-permits')
-            || $this->hasPermission('approve-overtimes')
-            || $this->hasPermission('approve-reimbursements')
-            || $this->hasPermission('approve-fund-requests')
-            || $this->hasPermission('approve-vehicle-logs')
-            || $this->hasPermission('approve-shift-swaps')
-            || $this->hasPermission('approve-project-costs')
-            || $this->hasPermission('manage-attendance-corrections')
-            || $this->hasPermission('approve-attendance-corrections')
-        ) {
-            return true;
+        if (!$roleName) {
+            return false;
         }
 
-        // 3. If user has subordinates assigned
-        if ($this->subordinates()->exists()) {
-            return true;
-        }
-
-        // 4. Fallback to role name keywords
-        if ($roleName) {
-            $keywords = ['manager', 'supervisor', 'admin', 'hrd', 'hr', 'lead', 'kadiv', 'head', 'atasan', 'spv', 'direktur', 'director', 'coo', 'ceo', 'boc', 'management'];
-            foreach ($keywords as $keyword) {
-                if (str_contains($roleName, $keyword)) {
-                    return true;
-                }
+        $keywords = ['manager', 'supervisor', 'admin', 'hrd', 'hr', 'lead', 'kadiv', 'head', 'atasan', 'spv', 'direktur', 'director', 'coo', 'ceo', 'boc', 'management'];
+        foreach ($keywords as $keyword) {
+            if (str_contains($roleName, $keyword)) {
+                return true;
             }
         }
 

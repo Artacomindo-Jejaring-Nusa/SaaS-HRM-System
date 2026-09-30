@@ -3,20 +3,16 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
-import { 
-  CheckCircle2, 
-  XCircle, 
-  Clock, 
-  ExternalLink, 
-  ChevronLeft, 
-  ChevronRight, 
-  AlertTriangle, 
-  Eye, 
-  FileText, 
-  MapPin, 
-  Phone, 
-  Calendar,
-  Building2,
+import {
+  CheckCircle2,
+  XCircle,
+  Clock,
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+  Eye,
+  FileText,
   Users,
   ShieldCheck,
   Search,
@@ -26,11 +22,7 @@ import {
   Wallet,
   CalendarCheck,
   ClipboardList,
-  Sparkles,
-  ArrowRight,
   UserCheck,
-  UserX,
-  Briefcase,
   AlertCircle
 } from "lucide-react";
 import { ListPageSkeleton } from "@/components/Skeleton";
@@ -122,7 +114,7 @@ interface TeamMemberAttendance {
   name: string;
   role: string;
   photo_url?: string;
-  status: "Hadir" | "Selesai" | "Belum Masuk" | string;
+  status: string;
   check_in?: string | null;
   check_out?: string | null;
 }
@@ -232,7 +224,7 @@ export default function ApprovalsPage() {
 
   // Team attendance state
   const [teamMembers, setTeamMembers] = useState<TeamMemberAttendance[]>([]);
-  const [loadingTeam, setLoadingTeam] = useState(false);
+  const [_loadingTeam, setLoadingTeam] = useState(false);
   const [teamSearchQuery, setTeamSearchQuery] = useState("");
 
   // Modals state

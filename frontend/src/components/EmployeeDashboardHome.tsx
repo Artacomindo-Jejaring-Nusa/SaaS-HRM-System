@@ -1,36 +1,30 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { 
-  Clock, 
-  Calendar, 
-  CheckCircle2, 
-  AlertCircle, 
-  Laptop, 
-  CreditCard, 
-  CalendarCheck, 
-  ClipboardList, 
-  Wallet, 
-  ArrowRight, 
-  ShieldCheck, 
-  HelpCircle, 
-  Car, 
-  Repeat, 
-  FileText, 
-  Bell, 
-  MapPin, 
+import {
+  Clock,
+  CheckCircle2,
+  Laptop,
+  CreditCard,
+  Check,
+  ClipboardList,
+  Wallet,
+  ArrowRight,
+  ShieldCheck,
+  HelpCircle,
+  Car,
+  Repeat,
+  FileText,
+  Bell,
   User as UserIcon,
-  Download,
   Building2,
-  RefreshCw,
-  Sparkles
+  Sparkles,
+  CalendarCheck
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import axiosInstance from "@/lib/axios";
 import WebAttendanceModal from "@/components/WebAttendanceModal";
-import { toast } from "sonner";
-
 interface EmployeeDashboardHomeProps {
   onSwitchToAdmin?: () => void;
   canSwitchToAdmin?: boolean;

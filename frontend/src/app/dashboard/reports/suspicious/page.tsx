@@ -19,8 +19,6 @@ import {
 import Pagination from "@/components/Pagination";
 import { ReportSkeleton } from "@/components/Skeleton";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { getStorageUrl } from "@/lib/utils";
-
 export default function SuspiciousAttendanceReportPage() {
   const { t } = useLanguage();
   const [loading, setLoading] = useState(true);

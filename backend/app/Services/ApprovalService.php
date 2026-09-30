@@ -385,12 +385,8 @@ class ApprovalService
         }
 
         $workflow = self::getWorkflow($moduleKey, $companyId, $submitter);
-        if (! $workflow) {
-            return null;
-        }
-
-        $step = $workflow->steps()->where('step_number', $currentStep)->first();
-        if (! $step) {
+        $step = $workflow?->steps()->where('step_number', $currentStep)->first();
+        if (!$step) {
             return null;
         }
 

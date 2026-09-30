@@ -254,7 +254,7 @@ export default function DashboardLayout({
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, permissions, hasPermission, refreshUser, logout, loading: authLoading, isManager } = useAuth();
+  const { user, hasPermission, refreshUser, loading: authLoading, isManager } = useAuth();
   const { language, setLanguage, t, mounted } = useLanguage();
   
   const [isLoggingOut, setIsLoggingOut] = useState(false);

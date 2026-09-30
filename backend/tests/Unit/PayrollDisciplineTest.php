@@ -9,7 +9,7 @@ use App\Models\Shift;
 use App\Services\PayrollService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 
 class PayrollDisciplineTest extends TestCase
 {
@@ -47,7 +47,14 @@ class PayrollDisciplineTest extends TestCase
         $att3 = new Attendance(['check_in' => '2026-09-03 09:20:00']);
 
         $attendances = new Collection([$att1, $att2, $att3]);
-        $schedulesMap = []; // default 09:00:00
+        $shift = new Shift(['start_time' => '09:00:00']);
+        $schedule = new Schedule();
+        $schedule->setRelation('shift', $shift);
+        $schedulesMap = [
+            '2026-09-01' => $schedule,
+            '2026-09-02' => $schedule,
+            '2026-09-03' => $schedule,
+        ];
 
         $result = $this->service->calculateLateDeduction(
             $attendances,

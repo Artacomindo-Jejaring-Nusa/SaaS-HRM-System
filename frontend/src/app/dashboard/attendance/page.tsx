@@ -28,7 +28,7 @@ import Pagination from "@/components/Pagination";
 import { getStorageUrl } from "@/lib/utils";
 
 export default function AttendancePage() {
-  const { hasPermission, user } = useAuth();
+  const { hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<'all' | 'web_pending'>('all');
 
   // History State

@@ -13,8 +13,6 @@ import {
   MessageSquare, 
   Mail, 
   ExternalLink,
-  ShieldCheck,
-  Clock,
   Laptop
 } from "lucide-react";
 import Link from "next/link";

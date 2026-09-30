@@ -5,13 +5,10 @@ import axiosInstance from "@/lib/axios";
 import * as XLSX from "xlsx";
 import { 
   Search, Download, Eye, FileSpreadsheet, 
-  DollarSign, Loader2, X, Printer, ArrowLeft,
-  Calendar, Users, CheckCircle2, Clock, AlertTriangle,
-  ChevronRight, TrendingUp, Edit2, Trash2,
-  Sparkles, Plus, Check, Play, Filter, RefreshCw,
-  FileText, ShieldCheck, XCircle, AlertCircle,
-  FileDown, FileUp, CreditCard
-} from "lucide-react";
+  DollarSign, Loader2, X, Printer, ArrowLeft, CheckCircle2, Clock, AlertTriangle,
+  ChevronRight, Edit2, Trash2,
+  Sparkles, Plus, Check, Play, RefreshCw, AlertCircle,
+  FileDown, FileUp } from "lucide-react";
 import { PayrollSkeleton } from "@/components/Skeleton";
 import { toast } from "sonner";
 
@@ -1668,7 +1665,7 @@ export default function PayrollManagementPage() {
         const empRes = await axiosInstance.get('/employees?per_page=1000');
         const emps = empRes.data.data?.data || empRes.data.data || [];
         const total = empRes.data.data?.total ?? emps.length;
-        const unsaved = emps.filter((emp: any) => !emp.basic_salary || parseInt(emp.basic_salary) === 0).length;
+        const unsaved = emps.filter((emp: any) => !emp.basic_salary || Number.parseInt(emp.basic_salary) === 0).length;
         setGenStats({ total_employees: total, unsaved_profiles: unsaved });
       } catch {
         // silent catch
