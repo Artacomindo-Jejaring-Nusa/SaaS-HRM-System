@@ -150,6 +150,234 @@ const extractStoragePath = (url?: string): string | undefined => {
   return url;
 };
 
+const normalizeLeaves = (rawLeaves: any[]): ApprovalItem[] =>
+  rawLeaves.map((l: any) => ({
+    id: l.id,
+    type: "leave",
+    user_name: l.user?.name || "Karyawan",
+    user_email: l.user?.email,
+    user_role: l.user?.role?.name || l.user?.role,
+    description: l.reason || l.type || "Pengajuan Cuti",
+    category: l.type || "Cuti Tahunan",
+    start_date: l.start_date,
+    end_date: l.end_date,
+    status: l.status,
+    current_approval_step: l.current_approval_step || null,
+    current_step_info: l.current_step_info,
+    signature: l.signature,
+    leave_address: l.leave_address,
+    emergency_phone: l.emergency_phone,
+    created_at: l.created_at,
+    target_supervisor_id: l.user?.supervisor_id
+  }));
+
+const normalizeReims = (rawReims: any[]): ApprovalItem[] =>
+  rawReims.map((r: any) => ({
+    id: r.id,
+    type: "reimbursement",
+    user_name: r.employee_name || r.user?.name || "Karyawan",
+    user_email: r.user?.email,
+    user_role: r.user?.role?.name || r.user?.role,
+    description: r.description || r.title || "Pengajuan Klaim Biaya",
+    category: r.title || "Reimbursement",
+    amount: r.amount ? String(r.amount) : undefined,
+    status: r.status,
+    current_approval_step: r.current_approval_step || null,
+    current_step_info: r.current_step_info,
+    attachment: extractStoragePath(typeof r.attachment === "string" ? r.attachment : r.attachment?.[0]),
+    signature: r.signature,
+    reimbursement_items: Array.isArray(r.items) ? r.items : [],
+    reimbursement_divisi: r.divisi,
+    reimbursement_tujuan: r.tujuan,
+    created_at: r.created_at,
+    target_supervisor_id: r.user?.supervisor_id
+  }));
+
+const normalizeOvertimes = (rawOvertimes: any[]): ApprovalItem[] =>
+  rawOvertimes.map((o: any) => {
+    const items = Array.isArray(o.items) ? o.items : [];
+    const first = items[0];
+    const dateVal = o.date || first?.date;
+    const startVal = o.start_time || first?.start_time;
+    const endVal = o.end_time || first?.end_time;
+    const reasonVal = o.reason || first?.reason || o.title || "Pengajuan Lembur";
+    const formattedDate = dateVal && startVal && endVal ? `${dateVal} (${startVal} - ${endVal})` : (dateVal || "");
+
+    return {
+      id: o.id,
+      type: "overtime",
+      user_name: o.user?.name || "Karyawan",
+      user_email: o.user?.email,
+      user_role: o.user?.role?.name || o.user?.role,
+      description: reasonVal,
+      category: o.title ? `Lembur: ${o.title}` : "Lembur",
+      start_date: formattedDate,
+      end_date: items.length > 1 ? `+${items.length - 1} jadwal tambahan` : undefined,
+      status: o.status,
+      current_approval_step: o.current_approval_step || null,
+      current_step_info: o.current_step_info,
+      signature: o.signature,
+      created_at: o.created_at,
+      overtime_items: items,
+      target_supervisor_id: o.user?.supervisor_id
+    };
+  });
+
+const normalizePermits = (rawPermits: any[]): ApprovalItem[] =>
+  rawPermits.map((pe: any) => ({
+    id: pe.id,
+    type: "permit",
+    user_name: pe.user?.name || "Karyawan",
+    user_email: pe.user?.email,
+    user_role: pe.user?.role?.name || pe.user?.role,
+    description: pe.reason || pe.type || "Pengajuan Izin",
+    category: `[${pe.category || "I"}] ${pe.type || "Izin"}`,
+    start_date: pe.start_date,
+    end_date: pe.end_date,
+    status: pe.status,
+    current_approval_step: pe.current_approval_step || null,
+    current_step_info: pe.current_step_info,
+    attachment: extractStoragePath(pe.attachment),
+    signature: pe.signature,
+    created_at: pe.created_at,
+    permit_category: pe.category || "I",
+    permit_has_doctor_note: pe.has_doctor_note || false,
+    permit_is_deducted: pe.is_deducted || false,
+    target_supervisor_id: pe.user?.supervisor_id
+  }));
+
+const normalizeFunds = (rawFunds: any[]): ApprovalItem[] =>
+  rawFunds.map((f: any) => ({
+    id: f.id,
+    type: "fund_request",
+    user_name: f.employee_name || f.user?.name || "Karyawan",
+    user_email: f.user?.email,
+    user_role: f.user?.role?.name || f.user?.role,
+    description: f.title || f.reason || "Pengajuan Kasbon/Dana",
+    category: "Pengajuan Dana",
+    amount: f.amount ? String(f.amount) : undefined,
+    status: f.status,
+    current_approval_step: f.current_approval_step || null,
+    current_step_info: f.current_step_info,
+    attachment: extractStoragePath(f.attachment),
+    signature: f.signature,
+    created_at: f.created_at,
+    target_supervisor_id: f.user?.supervisor_id
+  }));
+
+const normalizeVehicles = (rawVehicles: any[]): ApprovalItem[] =>
+  rawVehicles.map((v: any) => ({
+    id: v.id,
+    type: "vehicle_log",
+    user_name: v.user?.name || "Karyawan",
+    user_email: v.user?.email,
+    user_role: v.user?.role?.name || v.user?.role,
+    description: `Tujuan: ${v.destination || '-'}. Keperluan: ${v.purpose || '-'}`,
+    category: `Armada: ${v.vehicle_name || 'Kendaraan'} (${v.plate_number || '-'})`,
+    amount: v.total_cost ? String(v.total_cost) : undefined,
+    start_date: v.departure_date ? `${v.departure_date} ${v.departure_time || ''}` : undefined,
+    end_date: v.return_date ? `${v.return_date} ${v.return_time || ''}` : undefined,
+    status: v.status,
+    current_approval_step: v.current_approval_step || null,
+    created_at: v.created_at,
+    vehicle_name: v.vehicle_name,
+    plate_number: v.plate_number,
+    odometer_start: v.odometer_start,
+    odometer_end: v.odometer_end,
+    distance: v.distance,
+    purpose: v.purpose,
+    destination: v.destination,
+    target_supervisor_id: v.user?.supervisor_id
+  }));
+
+const normalizeDinas = (rawDinas: any[]): ApprovalItem[] =>
+  rawDinas.map((d: any) => ({
+    id: d.id,
+    type: "dinas_luar",
+    user_name: d.user?.name || "Karyawan",
+    user_email: d.user?.email,
+    user_role: d.user?.role?.name || d.user?.role,
+    description: `Tujuan: ${d.dinas_luar_destination || '-'}. Catatan: ${d.dinas_luar_notes || '-'}`,
+    category: "Dinas Luar",
+    start_date: d.check_in ? new Date(d.check_in).toLocaleString('id-ID') : (d.date || undefined),
+    end_date: d.check_out ? new Date(d.check_out).toLocaleString('id-ID') : undefined,
+    status: d.dinas_luar_status || "pending",
+    attachment: extractStoragePath(d.image_in_url || d.image_in),
+    created_at: d.created_at,
+    dinas_luar_destination: d.dinas_luar_destination,
+    dinas_luar_notes: d.dinas_luar_notes,
+    target_supervisor_id: d.user?.supervisor_id
+  }));
+
+const normalizeProfiles = (rawProfiles: any[]): ApprovalItem[] =>
+  rawProfiles.map((p: any) => ({
+    id: p.id,
+    type: "profile",
+    user_name: p.user?.name || "Karyawan",
+    user_email: p.user?.email,
+    user_role: p.user?.role?.name || p.user?.role,
+    description: p.new_data ? `Perubahan: ${Object.keys(p.new_data).join(", ")}` : "Perubahan Profil",
+    category: "Perubahan Profil",
+    status: p.status,
+    profile_new_data: p.new_data,
+    created_at: p.created_at
+  }));
+
+const dispatchApprovalRequest = async (
+  item: ApprovalItem,
+  action: ActionType,
+  remarkInput: string,
+  permitOverrideCategory: string,
+  permitOverrideDoctorNote: boolean,
+  isHR: boolean
+) => {
+  if (item.type === "dinas_luar") {
+    let actionSuffix = "reject";
+    if (action === "approve") {
+      actionSuffix = (isHR && item.status === "waiting_approval") ? "approve-hr" : "approve-spv";
+    }
+    return axiosInstance.post(`/attendance/dinas-luar/${item.id}/${actionSuffix}`, { reason: remarkInput });
+  }
+  if (item.type === "profile") {
+    return axiosInstance.post(`/profile-requests/${item.id}/${action}`, { remark: remarkInput });
+  }
+  const payload: Record<string, any> = { 
+    remark: remarkInput,
+    type: item.type,
+    id: item.id,
+    status: action === "approve" ? "approved" : "rejected"
+  };
+  if (item.type === "permit" && action === "approve") {
+    payload.category = permitOverrideCategory;
+    payload.has_doctor_note = permitOverrideDoctorNote;
+  }
+  return axiosInstance.post("/manager/update-status", payload);
+};
+
+const renderMemberStatusBadge = (status: string) => {
+  if (status === "Hadir") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        <span>Hadir</span>
+      </span>
+    );
+  }
+  if (status === "Selesai") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+        <CheckCircle2 size={11} />
+        <span>Selesai</span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+      <span>Belum Masuk</span>
+    </span>
+  );
+};
+
 export default function ApprovalsPage() {
   const { user: currentUser, hasPermission } = useAuth();
   
@@ -224,7 +452,7 @@ export default function ApprovalsPage() {
 
   // Team attendance state
   const [teamMembers, setTeamMembers] = useState<TeamMemberAttendance[]>([]);
-  const [_loadingTeam, setLoadingTeam] = useState(false);
+  const [loadingTeam, setLoadingTeam] = useState(false);
   const [teamSearchQuery, setTeamSearchQuery] = useState("");
 
   // Modals state
@@ -307,199 +535,15 @@ export default function ApprovalsPage() {
         canApprove("profile") ? axiosInstance.get("/profile-requests?status=pending").catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
       ]);
 
-      // Normalize Leaves
-      const rawLeaves = Array.isArray(leaveRes.data?.data) ? leaveRes.data.data : [];
-      const normalizedLeaves: ApprovalItem[] = rawLeaves.map((l: any) => ({
-        id: l.id,
-        type: "leave",
-        user_name: l.user?.name || "Karyawan",
-        user_email: l.user?.email,
-        user_role: l.user?.role?.name || l.user?.role,
-        description: l.reason || l.type || "Pengajuan Cuti",
-        category: l.type || "Cuti Tahunan",
-        start_date: l.start_date,
-        end_date: l.end_date,
-        status: l.status,
-        current_approval_step: l.current_approval_step || null,
-        current_step_info: l.current_step_info,
-        signature: l.signature,
-        leave_address: l.leave_address,
-        emergency_phone: l.emergency_phone,
-        created_at: l.created_at,
-        target_supervisor_id: l.user?.supervisor_id
-      }));
-
-      // Normalize Reimbursements
-      const rawReims = Array.isArray(reimRes.data?.data) ? reimRes.data.data : [];
-      const normalizedReims: ApprovalItem[] = rawReims.map((r: any) => {
-        let attPath = extractStoragePath(typeof r.attachment === "string" ? r.attachment : r.attachment?.[0]);
-        return {
-          id: r.id,
-          type: "reimbursement",
-          user_name: r.employee_name || r.user?.name || "Karyawan",
-          user_email: r.user?.email,
-          user_role: r.user?.role?.name || r.user?.role,
-          description: r.description || r.title || "Pengajuan Klaim Biaya",
-          category: r.title || "Reimbursement",
-          amount: r.amount ? String(r.amount) : undefined,
-          status: r.status,
-          current_approval_step: r.current_approval_step || null,
-          current_step_info: r.current_step_info,
-          attachment: attPath,
-          signature: r.signature,
-          reimbursement_items: Array.isArray(r.items) ? r.items : [],
-          reimbursement_divisi: r.divisi,
-          reimbursement_tujuan: r.tujuan,
-          created_at: r.created_at,
-          target_supervisor_id: r.user?.supervisor_id
-        };
-      });
-
-      // Normalize Overtimes
-      const rawOvertimes = Array.isArray(overtimeRes.data?.data) ? overtimeRes.data.data : [];
-      const normalizedOvertimes: ApprovalItem[] = rawOvertimes.map((o: any) => {
-        const items = Array.isArray(o.items) ? o.items : [];
-        const first = items[0];
-        const dateVal = o.date || first?.date;
-        const startVal = o.start_time || first?.start_time;
-        const endVal = o.end_time || first?.end_time;
-        const reasonVal = o.reason || first?.reason || o.title || "Pengajuan Lembur";
-        const formattedDate = dateVal && startVal && endVal ? `${dateVal} (${startVal} - ${endVal})` : (dateVal || "");
-
-        return {
-          id: o.id,
-          type: "overtime",
-          user_name: o.user?.name || "Karyawan",
-          user_email: o.user?.email,
-          user_role: o.user?.role?.name || o.user?.role,
-          description: reasonVal,
-          category: o.title ? `Lembur: ${o.title}` : "Lembur",
-          start_date: formattedDate,
-          end_date: items.length > 1 ? `+${items.length - 1} jadwal tambahan` : undefined,
-          status: o.status,
-          current_approval_step: o.current_approval_step || null,
-          current_step_info: o.current_step_info,
-          signature: o.signature,
-          created_at: o.created_at,
-          overtime_items: items,
-          target_supervisor_id: o.user?.supervisor_id
-        };
-      });
-
-      // Normalize Permits
-      const rawPermits = Array.isArray(permitRes.data?.data) ? permitRes.data.data : [];
-      const normalizedPermits: ApprovalItem[] = rawPermits.map((pe: any) => ({
-        id: pe.id,
-        type: "permit",
-        user_name: pe.user?.name || "Karyawan",
-        user_email: pe.user?.email,
-        user_role: pe.user?.role?.name || pe.user?.role,
-        description: pe.reason || pe.type || "Pengajuan Izin",
-        category: `[${pe.category || "I"}] ${pe.type || "Izin"}`,
-        start_date: pe.start_date,
-        end_date: pe.end_date,
-        status: pe.status,
-        current_approval_step: pe.current_approval_step || null,
-        current_step_info: pe.current_step_info,
-        attachment: extractStoragePath(pe.attachment),
-        signature: pe.signature,
-        created_at: pe.created_at,
-        permit_category: pe.category || "I",
-        permit_has_doctor_note: pe.has_doctor_note || false,
-        permit_is_deducted: pe.is_deducted || false,
-        target_supervisor_id: pe.user?.supervisor_id
-      }));
-
-      // Normalize Fund Requests
-      const rawFunds = Array.isArray(fundRes.data?.data) ? fundRes.data.data : [];
-      const normalizedFunds: ApprovalItem[] = rawFunds.map((f: any) => ({
-        id: f.id,
-        type: "fund_request",
-        user_name: f.employee_name || f.user?.name || "Karyawan",
-        user_email: f.user?.email,
-        user_role: f.user?.role?.name || f.user?.role,
-        description: f.title || f.reason || "Pengajuan Kasbon/Dana",
-        category: "Pengajuan Dana",
-        amount: f.amount ? String(f.amount) : undefined,
-        status: f.status,
-        current_approval_step: f.current_approval_step || null,
-        current_step_info: f.current_step_info,
-        attachment: extractStoragePath(f.attachment),
-        signature: f.signature,
-        created_at: f.created_at,
-        target_supervisor_id: f.user?.supervisor_id
-      }));
-
-      // Normalize Vehicle Logs
-      const rawVehicles = Array.isArray(vehicleRes.data?.data) ? vehicleRes.data.data : [];
-      const normalizedVehicles: ApprovalItem[] = rawVehicles.map((v: any) => ({
-        id: v.id,
-        type: "vehicle_log",
-        user_name: v.user?.name || "Karyawan",
-        user_email: v.user?.email,
-        user_role: v.user?.role?.name || v.user?.role,
-        description: `Tujuan: ${v.destination || '-'}. Keperluan: ${v.purpose || '-'}`,
-        category: `Armada: ${v.vehicle_name || 'Kendaraan'} (${v.plate_number || '-'})`,
-        amount: v.total_cost ? String(v.total_cost) : undefined,
-        start_date: v.departure_date ? `${v.departure_date} ${v.departure_time || ''}` : undefined,
-        end_date: v.return_date ? `${v.return_date} ${v.return_time || ''}` : undefined,
-        status: v.status,
-        current_approval_step: v.current_approval_step || null,
-        created_at: v.created_at,
-        vehicle_name: v.vehicle_name,
-        plate_number: v.plate_number,
-        odometer_start: v.odometer_start,
-        odometer_end: v.odometer_end,
-        distance: v.distance,
-        purpose: v.purpose,
-        destination: v.destination,
-        target_supervisor_id: v.user?.supervisor_id
-      }));
-
-      // Normalize Dinas Luar
-      const rawDinas = Array.isArray(dinasRes.data?.data) ? dinasRes.data.data : [];
-      const normalizedDinas: ApprovalItem[] = rawDinas.map((d: any) => ({
-        id: d.id,
-        type: "dinas_luar",
-        user_name: d.user?.name || "Karyawan",
-        user_email: d.user?.email,
-        user_role: d.user?.role?.name || d.user?.role,
-        description: `Tujuan: ${d.dinas_luar_destination || '-'}. Catatan: ${d.dinas_luar_notes || '-'}`,
-        category: "Dinas Luar",
-        start_date: d.check_in ? new Date(d.check_in).toLocaleString('id-ID') : (d.date || undefined),
-        end_date: d.check_out ? new Date(d.check_out).toLocaleString('id-ID') : undefined,
-        status: d.dinas_luar_status || "pending",
-        attachment: extractStoragePath(d.image_in_url || d.image_in),
-        created_at: d.created_at,
-        dinas_luar_destination: d.dinas_luar_destination,
-        dinas_luar_notes: d.dinas_luar_notes,
-        target_supervisor_id: d.user?.supervisor_id
-      }));
-
-      // Normalize Profile Updates
-      const rawProfiles = Array.isArray(profileRes.data?.data) ? profileRes.data.data : [];
-      const normalizedProfiles: ApprovalItem[] = rawProfiles.map((p: any) => ({
-        id: p.id,
-        type: "profile",
-        user_name: p.user?.name || "Karyawan",
-        user_email: p.user?.email,
-        user_role: p.user?.role?.name || p.user?.role,
-        description: p.new_data ? `Perubahan: ${Object.keys(p.new_data).join(", ")}` : "Perubahan Profil",
-        category: "Perubahan Profil",
-        status: p.status,
-        profile_new_data: p.new_data,
-        created_at: p.created_at
-      }));
-
       const allMerged = [
-        ...normalizedLeaves,
-        ...normalizedReims,
-        ...normalizedOvertimes,
-        ...normalizedPermits,
-        ...normalizedFunds,
-        ...normalizedVehicles,
-        ...normalizedDinas,
-        ...normalizedProfiles
+        ...normalizeLeaves(Array.isArray(leaveRes.data?.data) ? leaveRes.data.data : []),
+        ...normalizeReims(Array.isArray(reimRes.data?.data) ? reimRes.data.data : []),
+        ...normalizeOvertimes(Array.isArray(overtimeRes.data?.data) ? overtimeRes.data.data : []),
+        ...normalizePermits(Array.isArray(permitRes.data?.data) ? permitRes.data.data : []),
+        ...normalizeFunds(Array.isArray(fundRes.data?.data) ? fundRes.data.data : []),
+        ...normalizeVehicles(Array.isArray(vehicleRes.data?.data) ? vehicleRes.data.data : []),
+        ...normalizeDinas(Array.isArray(dinasRes.data?.data) ? dinasRes.data.data : []),
+        ...normalizeProfiles(Array.isArray(profileRes.data?.data) ? profileRes.data.data : [])
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setItems(allMerged);
@@ -510,7 +554,7 @@ export default function ApprovalsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [fetchCounts]);
+  }, [canApprove, fetchCounts]);
 
   useEffect(() => {
     fetchApprovals();
@@ -549,13 +593,6 @@ export default function ApprovalsPage() {
     setProcessingId(`${item.type}-${item.id}`);
 
     try {
-      const payload: Record<string, any> = { 
-        remark: remarkInput,
-        type: item.type,
-        id: item.id,
-        status: action === "approve" ? "approved" : "rejected"
-      };
-
       const roleName = currentUser?.role?.name?.toLowerCase() || "";
       const isHR = currentUser?.role_id === 1 || 
                    roleName.includes("hr") || 
@@ -565,25 +602,18 @@ export default function ApprovalsPage() {
                    roleName.includes("director") ||
                    roleName.includes("ceo");
 
-      if (item.type === "dinas_luar") {
-        let actionSuffix = "reject";
-        if (action === "approve") {
-          actionSuffix = (isHR && item.status === "waiting_approval") ? "approve-hr" : "approve-spv";
-        }
-        await axiosInstance.post(`/attendance/dinas-luar/${item.id}/${actionSuffix}`, { reason: remarkInput });
-      } else if (item.type === "profile") {
-        await axiosInstance.post(`/profile-requests/${item.id}/${action}`, { remark: remarkInput });
-      } else {
-        if (item.type === "permit" && action === "approve") {
-          payload.category = permitOverrideCategory;
-          payload.has_doctor_note = permitOverrideDoctorNote;
-        }
-        await axiosInstance.post("/manager/update-status", payload);
-      }
+      await dispatchApprovalRequest(
+        item,
+        action,
+        remarkInput,
+        permitOverrideCategory,
+        permitOverrideDoctorNote,
+        isHR
+      );
 
       // Play subtle confirmation sound
       try {
-        const audio = new window.Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+        const audio = new globalThis.Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
         audio.volume = 0.6;
         audio.play().catch(() => {});
       } catch {}
@@ -618,8 +648,8 @@ export default function ApprovalsPage() {
       const q = searchQuery.toLowerCase();
       return (
         item.user_name.toLowerCase().includes(q) ||
-        (item.user_email && item.user_email.toLowerCase().includes(q)) ||
-        (item.user_role && item.user_role.toLowerCase().includes(q)) ||
+        Boolean(item.user_email?.toLowerCase().includes(q)) ||
+        Boolean(item.user_role?.toLowerCase().includes(q)) ||
         item.category.toLowerCase().includes(q) ||
         item.description.toLowerCase().includes(q)
       );
@@ -734,18 +764,7 @@ export default function ApprovalsPage() {
 
       {/* TAB 1: PERMOHONAN PERSETUJUAN */}
       {activeTab === "approvals" && (
-        !hasAnyApprovalPermission ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-lg mx-auto shadow-sm my-8">
-            <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertCircle size={32} />
-            </div>
-            <h3 className="text-lg font-bold text-slate-800 mb-2">Tidak Ada Akses Persetujuan</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Role / Akun Anda saat ini belum memiliki izin untuk menyetujui kategori pengajuan apapun.
-              Jika Anda memerlukan akses, silakan hubungi Super Admin untuk mengaktifkan izin persetujuan di kelola role.
-            </p>
-          </div>
-        ) : (
+        hasAnyApprovalPermission ? (
         <div className="space-y-6">
           {/* Quick Metrics Category Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
@@ -1216,6 +1235,17 @@ export default function ApprovalsPage() {
             )}
           </div>
         </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-lg mx-auto shadow-sm my-8">
+            <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertCircle size={32} />
+            </div>
+            <h3 className="text-lg font-bold text-slate-800 mb-2">Tidak Ada Akses Persetujuan</h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Role / Akun Anda saat ini belum memiliki izin untuk menyetujui kategori pengajuan apapun.
+              Jika Anda memerlukan akses, silakan hubungi Super Admin untuk mengaktifkan izin persetujuan di kelola role.
+            </p>
+          </div>
         )
       )}
 
@@ -1288,7 +1318,12 @@ export default function ApprovalsPage() {
 
           {/* Subordinate Attendance Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredTeam.length === 0 ? (
+            {loadingTeam ? (
+              <div className="col-span-full py-16 bg-white rounded-2xl border border-slate-200 text-center">
+                <div className="w-8 h-8 border-2 border-[#8B0000] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                <p className="text-sm font-medium text-slate-500">Memuat data tim...</p>
+              </div>
+            ) : filteredTeam.length === 0 ? (
               <div className="col-span-full py-16 bg-white rounded-2xl border border-slate-200 text-center">
                 <Users size={32} className="mx-auto text-slate-300 mb-2" />
                 <p className="text-sm font-bold text-slate-700">Tidak ada data anggota tim ditemukan</p>
@@ -1320,21 +1355,7 @@ export default function ApprovalsPage() {
                     </div>
 
                     {/* Status Badge */}
-                    {member.status === "Hadir" ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Hadir
-                      </span>
-                    ) : member.status === "Selesai" ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                        <CheckCircle2 size={11} />
-                        Selesai
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                        Belum Masuk
-                      </span>
-                    )}
+                    {renderMemberStatusBadge(member.status)}
                   </div>
 
                   {/* Attendance Times */}

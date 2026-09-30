@@ -115,7 +115,10 @@ const faqData: FaqItem[] = [
 export default function HelpCenterPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
-  const [expandedIndices, setExpandedIndices] = useState<number[]>([0, 1]);
+  const [expandedQuestions, setExpandedQuestions] = useState<string[]>([
+    faqData[0]?.question ?? "",
+    faqData[1]?.question ?? "",
+  ]);
 
   const categories = [
     { id: "all", label: "Semua Kategori", icon: HelpCircle },
@@ -136,9 +139,9 @@ export default function HelpCenterPage() {
     return matchesCategory && matchesSearch;
   });
 
-  const toggleExpand = (index: number) => {
-    setExpandedIndices((prev) =>
-      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+  const toggleExpand = (question: string) => {
+    setExpandedQuestions((prev) =>
+      prev.includes(question) ? prev.filter((q) => q !== question) : [...prev, question]
     );
   };
 
@@ -240,16 +243,16 @@ export default function HelpCenterPage() {
               </button>
             </div>
           ) : (
-            filteredFaqs.map((faq, index) => {
-              const isExpanded = expandedIndices.includes(index);
+            filteredFaqs.map((faq) => {
+              const isExpanded = expandedQuestions.includes(faq.question);
               return (
                 <div
-                  key={index}
+                  key={faq.question}
                   className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden transition-all hover:border-slate-300"
                 >
                   <button
                     type="button"
-                    onClick={() => toggleExpand(index)}
+                    onClick={() => toggleExpand(faq.question)}
                     className="w-full text-left px-5 py-4 flex items-center justify-between gap-4 focus:outline-none"
                   >
                     <span className="text-sm font-bold text-slate-900 leading-snug">
@@ -267,9 +270,9 @@ export default function HelpCenterPage() {
                       {/* Tag badges */}
                       <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-2 border-t border-slate-200/60">
                         <span className="text-[10px] text-slate-400 font-medium">Topik terkait:</span>
-                        {faq.tags.map((tag, tIdx) => (
+                        {faq.tags.map((tag) => (
                           <span
-                            key={tIdx}
+                            key={`${faq.question}-${tag}`}
                             className="px-2 py-0.5 rounded-md bg-slate-200/70 text-slate-700 text-[10px] font-medium"
                           >
                             #{tag}

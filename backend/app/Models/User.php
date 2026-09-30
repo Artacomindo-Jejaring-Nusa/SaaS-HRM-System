@@ -14,7 +14,9 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable, Auditable, EncryptsSensitiveFields, \App\Traits\HasKemnakerLeave, \App\Traits\HasUserRelations;
+    use HasApiTokens, HasFactory, Notifiable, Auditable, EncryptsSensitiveFields, \App\Traits\HasKemnakerLeave, \App\Traits\HasUserRelations {
+        \App\Traits\HasUserRelations::notifications insteadof Notifiable;
+    }
 
     protected array $encryptedFields = ['ktp_no', 'bank_account_no', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no'];
 
@@ -73,11 +75,6 @@ class User extends Authenticatable
     public function isWebAttendanceAutoValidated(): bool
     {
         return $this->is_web_auto_validated;
-    }
-
-    public function notifications()
-    {
-        return $this->hasMany(Notification::class);
     }
 
     public function getFaceRegisteredPhotoUrlAttribute()
@@ -223,39 +220,5 @@ class User extends Authenticatable
                 $p->where('slug', $permissionSlug);
             });
         });
-    }
-    public function salaries()
-    {
-        return $this->hasMany(Salary::class);
-    }
-
-    public function overtimes()
-    {
-        return $this->hasMany(Overtime::class);
-    }
-
-    public function leaves()
-    {
-        return $this->hasMany(Leave::class);
-    }
-
-    public function permits()
-    {
-        return $this->hasMany(Permit::class);
-    }
-
-    public function faceApprover()
-    {
-        return $this->belongsTo(User::class, 'face_approved_by');
-    }
-
-    public function autoValidateUpdatedBy()
-    {
-        return $this->belongsTo(User::class, 'auto_validate_updated_by');
-    }
-
-    public function webAttendanceAuditLogs()
-    {
-        return $this->hasMany(WebAttendanceAuditLog::class);
     }
 }

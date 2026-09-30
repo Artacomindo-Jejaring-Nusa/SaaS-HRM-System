@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Laptop,
   CreditCard,
-  Check,
   ClipboardList,
   Wallet,
   ArrowRight,
@@ -25,9 +24,187 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import axiosInstance from "@/lib/axios";
 import WebAttendanceModal from "@/components/WebAttendanceModal";
+
 interface EmployeeDashboardHomeProps {
-  onSwitchToAdmin?: () => void;
-  canSwitchToAdmin?: boolean;
+  readonly onSwitchToAdmin?: () => void;
+  readonly canSwitchToAdmin?: boolean;
+}
+
+const formatRupiah = (val: number | string) => {
+  const num = Number(val) || 0;
+  return "Rp " + num.toLocaleString("id-ID");
+};
+
+function renderAttendanceStatusBadge(loadingAttendance: boolean, isCheckedIn: boolean, isCheckedOut: boolean) {
+  if (loadingAttendance) {
+    return <span className="text-slate-400">Memeriksa...</span>;
+  }
+  if (!isCheckedIn) {
+    return (
+      <span className="px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold text-[11px]">
+        Belum Absen
+      </span>
+    );
+  }
+  if (isCheckedOut) {
+    return (
+      <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px] flex items-center gap-1">
+        <CheckCircle2 size={12} />
+        Selesai Kerja
+      </span>
+    );
+  }
+  return (
+    <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold text-[11px] flex items-center gap-1">
+      <Clock size={12} />
+      Sedang Bekerja
+    </span>
+  );
+}
+
+function renderWebApprovalStatusBadge(webApprovalStatus?: string) {
+  if (webApprovalStatus === "valid") {
+    return (
+      <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-0.5">
+        <CheckCircle2 size={10} /> Valid (Otomatis)
+      </span>
+    );
+  }
+  if (webApprovalStatus === "pending") {
+    return (
+      <span className="text-[10px] text-amber-600 font-medium flex items-center gap-0.5">
+        <Clock size={10} /> Menunggu Review
+      </span>
+    );
+  }
+  return null;
+}
+
+function renderAttendanceActionButton(
+  isCheckedIn: boolean,
+  isCheckedOut: boolean,
+  onOpenAttendance: (type: "in" | "out") => void
+) {
+  if (!isCheckedIn) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenAttendance("in")}
+        className="w-full py-3 bg-gradient-to-r from-[#8B0000] to-[#6a0000] hover:from-[#a10000] hover:to-[#7a0000] text-white rounded-xl text-xs font-bold shadow-md shadow-rose-900/20 transition-all flex items-center justify-center gap-2 active:scale-98"
+      >
+        <Laptop size={15} />
+        <span>Absen Masuk via Web</span>
+      </button>
+    );
+  }
+  if (!isCheckedOut) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenAttendance("out")}
+        className="w-full py-3 bg-gradient-to-r from-emerald-700 to-emerald-800 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-900/20 transition-all flex items-center justify-center gap-2 active:scale-98"
+      >
+        <CheckCircle2 size={15} />
+        <span>Absen Pulang via Web</span>
+      </button>
+    );
+  }
+  return (
+    <div className="text-center py-2.5 bg-emerald-50 text-emerald-800 rounded-xl text-xs font-semibold border border-emerald-200 flex items-center justify-center gap-1.5">
+      <CheckCircle2 size={15} className="text-emerald-600" />
+      <span>Kehadiran Hari Ini Lengkap</span>
+    </div>
+  );
+}
+
+interface EmployeeWebAttendanceCardProps {
+  readonly user: any;
+  readonly todayAttendance: any;
+  readonly loadingAttendance: boolean;
+  readonly onOpenAttendance: (type: "in" | "out") => void;
+}
+
+function EmployeeWebAttendanceCard({
+  user,
+  todayAttendance,
+  loadingAttendance,
+  onOpenAttendance,
+}: EmployeeWebAttendanceCardProps) {
+  const isCheckedIn = Boolean(todayAttendance?.check_in || todayAttendance?.checkIn);
+  const isCheckedOut = Boolean(todayAttendance?.check_out || todayAttendance?.checkOut);
+  const checkInTime = todayAttendance?.check_in_time || todayAttendance?.checkIn;
+  const checkOutTime = todayAttendance?.check_out_time || todayAttendance?.checkOut;
+  const webApprovalStatus = todayAttendance?.web_approval_status;
+  const isWebRecord = todayAttendance?.channel === "web" || todayAttendance?.is_web_attendance;
+
+  return (
+    <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between space-y-5">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-rose-50 text-[#8B0000] flex items-center justify-center border border-rose-100">
+              <Laptop size={18} />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">
+                Absensi via Web
+              </h2>
+              <p className="text-[11px] text-slate-500">
+                Pencatatan Kehadiran Browser
+              </p>
+            </div>
+          </div>
+
+          {user?.is_web_auto_validated ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <ShieldCheck size={12} className="text-emerald-600" />
+              Auto-Valid
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+              <Clock size={12} className="text-amber-600" />
+              Approval Manual
+            </span>
+          )}
+        </div>
+
+        <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500 font-medium">Status Hari Ini:</span>
+            {renderAttendanceStatusBadge(loadingAttendance, isCheckedIn, isCheckedOut)}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <div className="bg-white p-2.5 rounded-lg border border-slate-200/80">
+              <div className="text-[10px] text-slate-400 font-semibold uppercase">Masuk</div>
+              <div className="text-sm font-bold text-slate-800 mt-0.5">
+                {checkInTime ? checkInTime.substring(0, 5) + " WIB" : "-- : --"}
+              </div>
+              {isWebRecord && checkInTime && (
+                <div className="mt-1">
+                  {renderWebApprovalStatusBadge(webApprovalStatus)}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white p-2.5 rounded-lg border border-slate-200/80">
+              <div className="text-[10px] text-slate-400 font-semibold uppercase">Pulang</div>
+              <div className="text-sm font-bold text-slate-800 mt-0.5">
+                {checkOutTime ? checkOutTime.substring(0, 5) + " WIB" : "-- : --"}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2 pt-1">
+        {renderAttendanceActionButton(isCheckedIn, isCheckedOut, onOpenAttendance)}
+        <p className="text-[11px] text-center text-slate-400">
+          Absen web memerlukan satu foto selfie via kamera browser/file.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export default function EmployeeDashboardHome({
@@ -94,7 +271,9 @@ export default function EmployeeDashboardHome({
       const annRes = await axiosInstance.get("/announcements");
       const annData = annRes.data?.data?.data || annRes.data?.data || [];
       setAnnouncements(annData.slice(0, 3));
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Failed to fetch announcements:", e);
+    }
 
     try {
       // Tasks
@@ -102,7 +281,9 @@ export default function EmployeeDashboardHome({
       const tasks = taskRes.data?.data?.data || taskRes.data?.data || [];
       const pendingTasks = tasks.filter((t: any) => t.status !== "completed");
       setActiveTasksCount(pendingTasks.length);
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Failed to fetch tasks:", e);
+    }
 
     try {
       // Latest Salary
@@ -111,7 +292,9 @@ export default function EmployeeDashboardHome({
       if (salaries.length > 0) {
         setLatestSalary(salaries[0]);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Failed to fetch salaries:", e);
+    }
 
     try {
       // Reimbursements
@@ -123,7 +306,9 @@ export default function EmployeeDashboardHome({
         pendingCount: pendings.length,
         totalPending: totalAmount,
       });
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Failed to fetch reimbursements:", e);
+    }
 
     // Manager Pending Count
     if (isManager) {
@@ -132,7 +317,9 @@ export default function EmployeeDashboardHome({
         if (mgrRes.data?.data) {
           setManagerPendingTotal(Number(mgrRes.data.data.total) || 0);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn("Failed to fetch manager pending count:", e);
+      }
     }
   }, [isManager]);
 
@@ -149,18 +336,6 @@ export default function EmployeeDashboardHome({
   const handleAttendanceSuccess = () => {
     fetchTodayAttendance();
   };
-
-  const formatRupiah = (val: number | string) => {
-    const num = Number(val) || 0;
-    return "Rp " + num.toLocaleString("id-ID");
-  };
-
-  const isCheckedIn = Boolean(todayAttendance?.check_in || todayAttendance?.checkIn);
-  const isCheckedOut = Boolean(todayAttendance?.check_out || todayAttendance?.checkOut);
-  const checkInTime = todayAttendance?.check_in_time || todayAttendance?.checkIn;
-  const checkOutTime = todayAttendance?.check_out_time || todayAttendance?.checkOut;
-  const webApprovalStatus = todayAttendance?.web_approval_status;
-  const isWebRecord = todayAttendance?.channel === "web" || todayAttendance?.is_web_attendance;
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-300">
@@ -273,124 +448,12 @@ export default function EmployeeDashboardHome({
       {/* Main Grid Layout: Attendance Card (Left) & Key Summary Metrics (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Web Attendance Card (5 Cols) */}
-        <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between space-y-5">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-rose-50 text-[#8B0000] flex items-center justify-center border border-rose-100">
-                  <Laptop size={18} />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900">
-                    Absensi via Web
-                  </h2>
-                  <p className="text-[11px] text-slate-500">
-                    Pencatatan Kehadiran Browser
-                  </p>
-                </div>
-              </div>
-
-              {/* Auto validation indicator */}
-              {user?.is_web_auto_validated ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <ShieldCheck size={12} className="text-emerald-600" />
-                  Auto-Valid
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                  <Clock size={12} className="text-amber-600" />
-                  Approval Manual
-                </span>
-              )}
-            </div>
-
-            {/* Attendance Status Box */}
-            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-500 font-medium">Status Hari Ini:</span>
-                {loadingAttendance ? (
-                  <span className="text-slate-400">Memeriksa...</span>
-                ) : !isCheckedIn ? (
-                  <span className="px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold text-[11px]">
-                    Belum Absen
-                  </span>
-                ) : isCheckedOut ? (
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px] flex items-center gap-1">
-                    <CheckCircle2 size={12} />
-                    Selesai Kerja
-                  </span>
-                ) : (
-                  <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold text-[11px] flex items-center gap-1">
-                    <Clock size={12} />
-                    Sedang Bekerja
-                  </span>
-                )}
-              </div>
-
-              {/* Time display */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200/80">
-                  <div className="text-[10px] text-slate-400 font-semibold uppercase">Masuk</div>
-                  <div className="text-sm font-bold text-slate-800 mt-0.5">
-                    {checkInTime ? checkInTime.substring(0, 5) + " WIB" : "-- : --"}
-                  </div>
-                  {isWebRecord && checkInTime && (
-                    <div className="mt-1">
-                      {webApprovalStatus === "valid" ? (
-                        <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-0.5">
-                          <CheckCircle2 size={10} /> Valid (Otomatis)
-                        </span>
-                      ) : webApprovalStatus === "pending" ? (
-                        <span className="text-[10px] text-amber-600 font-medium flex items-center gap-0.5">
-                          <Clock size={10} /> Menunggu Review
-                        </span>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200/80">
-                  <div className="text-[10px] text-slate-400 font-semibold uppercase">Pulang</div>
-                  <div className="text-sm font-bold text-slate-800 mt-0.5">
-                    {checkOutTime ? checkOutTime.substring(0, 5) + " WIB" : "-- : --"}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="space-y-2 pt-1">
-            {!isCheckedIn ? (
-              <button
-                type="button"
-                onClick={() => handleOpenAttendance("in")}
-                className="w-full py-3 bg-gradient-to-r from-[#8B0000] to-[#6a0000] hover:from-[#a10000] hover:to-[#7a0000] text-white rounded-xl text-xs font-bold shadow-md shadow-rose-900/20 transition-all flex items-center justify-center gap-2 active:scale-98"
-              >
-                <Laptop size={15} />
-                <span>Absen Masuk via Web</span>
-              </button>
-            ) : !isCheckedOut ? (
-              <button
-                type="button"
-                onClick={() => handleOpenAttendance("out")}
-                className="w-full py-3 bg-gradient-to-r from-emerald-700 to-emerald-800 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-900/20 transition-all flex items-center justify-center gap-2 active:scale-98"
-              >
-                <CheckCircle2 size={15} />
-                <span>Absen Pulang via Web</span>
-              </button>
-            ) : (
-              <div className="text-center py-2.5 bg-emerald-50 text-emerald-800 rounded-xl text-xs font-semibold border border-emerald-200 flex items-center justify-center gap-1.5">
-                <CheckCircle2 size={15} className="text-emerald-600" />
-                <span>Kehadiran Hari Ini Lengkap</span>
-              </div>
-            )}
-
-            <p className="text-[11px] text-center text-slate-400">
-              Absen web memerlukan satu foto selfie via kamera browser/file.
-            </p>
-          </div>
-        </div>
+        <EmployeeWebAttendanceCard
+          user={user}
+          todayAttendance={todayAttendance}
+          loadingAttendance={loadingAttendance}
+          onOpenAttendance={handleOpenAttendance}
+        />
 
         {/* Summary Metrics Cards (7 Cols) */}
         <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -617,12 +680,12 @@ export default function EmployeeDashboardHome({
               hoverText: "group-hover:text-[#8B0000]",
             },
           ]
-            .filter((action) => !action.permission || hasPermission(action.permission))
-            .map((action, idx) => {
+            .filter((action) => action.permission ? hasPermission(action.permission) : true)
+            .map((action) => {
               const ActionIcon = action.icon;
               return (
                 <Link
-                  key={idx}
+                  key={action.name}
                   href={action.href}
                   className={`flex flex-col items-center justify-center p-3.5 rounded-xl bg-slate-50 ${action.hoverBg} border border-slate-200 ${action.hoverBorder} transition-all group text-center`}
                 >

@@ -71,7 +71,7 @@ export const isManagerUser = (u: any, permissions: string[] = []): boolean => {
   }
 
   // 2. Dynamic permissions assigned to role/user (Super Admin configured)
-  const approvalPerms = [
+  const approvalPerms = new Set([
     'view-manager-portal',
     'manage-approvals',
     'view-approvals',
@@ -85,8 +85,8 @@ export const isManagerUser = (u: any, permissions: string[] = []): boolean => {
     'approve-attendance-corrections',
     'approve-project-costs',
     'manage-attendance-corrections'
-  ];
-  if (permissions.some(p => approvalPerms.includes(p))) return true;
+  ]);
+  if (permissions.some(p => approvalPerms.has(p))) return true;
   
   // 3. Fallback to role name keyword
   const roleName = (u.role?.name || '').toLowerCase();

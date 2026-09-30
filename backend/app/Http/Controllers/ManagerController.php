@@ -114,7 +114,6 @@ class ManagerController extends Controller
         $user = Auth::user();
         $isGlobalAdmin = $user->role_id === 1;
         $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
-        $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
 
         $canApprove = function ($t) use ($user, $isGlobalAdmin) {
             if ($isGlobalAdmin || $user->hasPermission('manage-approvals')) {
@@ -184,19 +183,12 @@ class ManagerController extends Controller
 
     private function canHandlePendingItem($item, $user): bool
     {
-        if ($item->status === 'pending_supervisor') {
-            return $item->user?->supervisor_id === $user->id;
-        }
-
         if ($item->status === 'pending_hr') {
             return $user->hasPermission('approve-leaves') || $user->hasPermission('approve-permits') || $user->role_id === 1;
         }
 
-        if ($user->supervisor_id && $item->user_id) {
-            return $item->user?->supervisor_id === $user->id;
-        }
-
-        return false;
+        $isSupervisor = $item->status === 'pending_supervisor' || ($user->supervisor_id && $item->user_id);
+        return $isSupervisor && $item->user?->supervisor_id === $user->id;
     }
 
     /**

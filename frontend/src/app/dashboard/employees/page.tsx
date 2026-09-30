@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
-import { Plus, Search, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, UserX, ShieldAlert, CreditCard, Mail, MapPin, Phone, Building2, BadgeCheck, Clock, Eye, Key, Briefcase, ChevronDown, UserCog, ShieldCheck, History, Calendar as CalendarIcon } from "lucide-react";
+import { Plus, Search, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, UserX, ShieldAlert, CreditCard, Mail, MapPin, Phone, Building2, BadgeCheck, Clock, Eye, Key, Briefcase, ChevronDown, UserCog, ShieldCheck, History } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
 import { PermissionGuard } from "@/components/PermissionGuard";
@@ -872,6 +872,291 @@ interface EmployeeTableProps {
   readonly onAutoValidation?: (emp: Employee) => void;
 }
 
+interface EmployeeTableRowProps {
+  readonly emp: Employee;
+  readonly isHRorAdmin: boolean;
+  readonly isSelected: boolean;
+  readonly onSelectRow: (id: number) => void;
+  readonly onView: (emp: Employee) => void;
+  readonly onEdit: (emp: Employee) => void;
+  readonly onDelete: (id: number) => void;
+  readonly onResendVerification: (id?: number) => void;
+  readonly onDiscipline: (emp: Employee) => void;
+  readonly onResetPassword: (id: number, name: string) => void;
+  readonly onResetDevice: (id: number) => void;
+  readonly formatDate: (date?: string) => string;
+  readonly onAutoValidation?: (emp: Employee) => void;
+}
+
+function EmployeeTableRow({
+  emp,
+  isHRorAdmin,
+  isSelected,
+  onSelectRow,
+  onView,
+  onEdit,
+  onDelete,
+  onResendVerification,
+  onDiscipline,
+  onResetPassword,
+  onResetDevice,
+  formatDate,
+  onAutoValidation,
+}: EmployeeTableRowProps) {
+  return (
+    <tr className="group hover:bg-orange-50/20 transition-all">
+      {isHRorAdmin && (
+        <td className="px-3 py-3 w-10 sticky left-0 bg-white group-hover:bg-orange-50/20 z-10 text-center">
+          <input 
+            type="checkbox" 
+            checked={isSelected}
+            onChange={() => onSelectRow(emp.id)}
+            className="rounded-md border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+          />
+        </td>
+      )}
+      <td className={`px-3.5 py-3 sticky bg-white group-hover:bg-orange-50/20 z-10 min-w-[200px] ${isHRorAdmin ? "left-10" : "left-0"}`}>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Avatar className="size-9 border-2 border-white shadow-md transition-transform group-hover:scale-105">
+              <AvatarImage src={emp.profile_photo_url} alt={emp.name} />
+              <AvatarFallback className="bg-orange-100 text-orange-600 font-black text-xs">
+                {emp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white shadow-sm ${emp.email_verified_at ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="font-black text-gray-900 text-xs tracking-tight truncate">{emp.name}</span>
+            <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">EMP-{emp.id.toString().padStart(4, '0')}</span>
+          </div>
+        </div>
+      </td>
+      <td className="px-3.5 py-3 whitespace-nowrap">
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-1.5 text-xs text-gray-600">
+            <Mail size={12} className="text-gray-400" />
+            {emp.email}
+          </div>
+          {emp.phone && (
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400">
+              <Phone size={10} />
+              {emp.phone}
+            </div>
+          )}
+        </div>
+      </td>
+      <td className="px-3.5 py-3">
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-1.5 bg-gray-100 px-2 py-0.5 rounded-lg w-fit border border-gray-200">
+            <Building2 size={10} className="text-gray-400" />
+            <span className="text-[10px] font-black text-gray-700 uppercase">{emp.role?.name || "Member"}</span>
+          </div>
+          {emp.cost_center && (
+            <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md w-fit uppercase tracking-wider">
+              CC: {emp.cost_center.includes("Artacomindo") ? "Artacomindo" : emp.cost_center.includes("Narwastu") ? "Narwastu" : emp.cost_center}
+            </span>
+          )}
+          {emp.supervisor && (
+            <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-md w-fit">
+              Atasan: {emp.supervisor.name}
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="px-3.5 py-3 text-center whitespace-nowrap">
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-xs font-black text-gray-700">{formatDate(emp.join_date)}</span>
+          <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1">
+            <Clock size={8} /> {emp.join_date ? Math.floor((Date.now() - new Date(emp.join_date).getTime()) / (1000 * 60 * 60 * 24 * 365)) : 0} Thn
+          </span>
+        </div>
+      </td>
+      <td className="px-3.5 py-3 text-center whitespace-nowrap">
+        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border border-gray-100 ${emp.employment_status === 'Permanent' ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-50 text-gray-500'}`}>
+          {emp.employment_status || 'Permanent'}
+        </span>
+      </td>
+      <td className="px-3.5 py-3 text-center text-xs font-bold text-gray-500 whitespace-nowrap">
+        <div className="flex items-center justify-center gap-1">
+          <MapPin size={12} className="text-red-400" />
+          {emp.office?.name || emp.work_location || 'Kantor Pusat'}
+        </div>
+      </td>
+      <td className="px-3.5 py-3 text-center whitespace-nowrap">
+        {emp.email_verified_at ? (
+          <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-emerald-100 uppercase tracking-tighter">
+            <BadgeCheck size={13} className="text-emerald-500" />
+            Verified
+          </div>
+        ) : (
+          <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-amber-100 uppercase tracking-tighter shadow-sm">
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            Pending
+          </div>
+        )}
+      </td>
+      <td className="px-3.5 py-3 text-center whitespace-nowrap">
+        {isHRorAdmin ? (
+          <button
+            type="button"
+            onClick={() => onAutoValidation?.(emp)}
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black border transition-all ${
+              emp.auto_validate_web_attendance
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 shadow-sm'
+                : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+            }`}
+            title="Klik untuk konfigurasi validasi web"
+          >
+            <ShieldCheck size={12} className={emp.auto_validate_web_attendance ? 'text-emerald-600' : 'text-slate-400'} />
+            {emp.auto_validate_web_attendance ? 'Otomatis' : 'Manual Review'}
+            {emp.auto_validate_until && (
+              <span className="text-[8px] opacity-80 font-normal">
+                ({new Date(emp.auto_validate_until).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })})
+              </span>
+            )}
+          </button>
+        ) : (
+          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black border ${
+            emp.auto_validate_web_attendance
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : 'bg-slate-50 text-slate-500 border-slate-200'
+          }`}>
+            <ShieldCheck size={12} className={emp.auto_validate_web_attendance ? 'text-emerald-600' : 'text-slate-400'} />
+            {emp.auto_validate_web_attendance ? 'Otomatis' : 'Manual'}
+          </span>
+        )}
+      </td>
+      {isHRorAdmin && (
+        <td className="px-3.5 py-3 text-right sticky right-0 bg-white group-hover:bg-orange-50/20 z-10 w-14 min-w-[60px]">
+          <DropdownMenu>
+            <DropdownMenuTrigger className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors cursor-pointer outline-none ml-auto">
+              <MoreVertical size={16} />
+            </DropdownMenuTrigger>
+            
+            <DropdownMenuContent 
+              side="left" 
+              align="start" 
+              sideOffset={8}
+              className="w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 space-y-1 z-50 text-left"
+            >
+              <DropdownMenuItem 
+                onClick={() => onView(emp)}
+                className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+              >
+                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-blue-100 group-hover/item:text-blue-600 transition-colors">
+                  <Eye size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-gray-900 group-hover/item:text-blue-600 transition-colors">Lihat Profil</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Lihat detail lengkap karyawan</p>
+                </div>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem 
+                onClick={() => onEdit(emp)}
+                className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
+              >
+                <div className="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-100 group-hover/item:text-orange-700 transition-colors">
+                  <UserCog size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-gray-900 group-hover/item:text-orange-600 transition-colors">Edit Profil Karyawan</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Ubah profil lengkap, jabatan, & akses</p>
+                </div>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem 
+                onClick={() => onAutoValidation?.(emp)}
+                className="w-full flex items-center gap-3 p-3 text-left hover:bg-emerald-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
+              >
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover/item:bg-emerald-100 group-hover/item:text-emerald-700 transition-colors">
+                  <ShieldCheck size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-gray-900 group-hover/item:text-emerald-600 transition-colors">Validasi Absen Web</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Pengaturan auto-validate & masa berlaku</p>
+                </div>
+              </DropdownMenuItem>
+              
+              <DropdownMenuItem 
+                onClick={() => onDelete(emp.id)}
+                className="w-full flex items-center gap-3 p-3 text-left hover:bg-red-50/50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+              >
+                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-red-100 group-hover/item:text-red-600 transition-colors">
+                  <UserX size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-gray-900 group-hover/item:text-red-600 transition-colors">Penghentian</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Proses pengunduran diri</p>
+                </div>
+              </DropdownMenuItem>
+
+              {!emp.email_verified_at && (
+                <DropdownMenuItem 
+                  onClick={() => onResendVerification(emp.id)}
+                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
+                    <Mail size={18} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-gray-900">Kirim Undangan</p>
+                    <p className="text-[10px] text-gray-400 font-medium">Kirim ulang link verifikasi</p>
+                  </div>
+                </DropdownMenuItem>
+              )}
+
+              <DropdownMenuSeparator className="my-1 border-gray-100" />
+
+              <DropdownMenuItem 
+                onClick={() => onDiscipline(emp)}
+                className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+              >
+                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
+                  <ShieldAlert size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-gray-900">Tindakan Disiplin</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Catat pelanggaran atau SP</p>
+                </div>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem 
+                onClick={() => onResetPassword(emp.id, emp.name)}
+                className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+              >
+                <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
+                  <Key size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-orange-600">Reset Password</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Ubah sandi menjadi &apos;password&apos;</p>
+                </div>
+              </DropdownMenuItem>
+
+              {emp.device_id && (
+                <DropdownMenuItem 
+                  onClick={() => onResetDevice(emp.id)}
+                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
+                    <Camera size={18} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-orange-600">Reset Device ID</p>
+                    <p className="text-[10px] text-gray-400 font-medium">Izinkan login di HP baru</p>
+                  </div>
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </td>
+      )}
+    </tr>
+  );
+}
+
 function EmployeeTable({
   loading,
   isHRorAdmin,
@@ -944,256 +1229,22 @@ function EmployeeTable({
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {employees.map((emp) => (
-                  <tr key={emp.id} className="group hover:bg-orange-50/20 transition-all">
-                    {isHRorAdmin && (
-                      <td className="px-3 py-3 w-10 sticky left-0 bg-white group-hover:bg-orange-50/20 z-10 text-center">
-                        <input 
-                          type="checkbox" 
-                          checked={selectedIds.includes(emp.id)}
-                          onChange={() => onSelectRow(emp.id)}
-                          className="rounded-md border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
-                        />
-                      </td>
-                    )}
-                    <td className={`px-3.5 py-3 sticky bg-white group-hover:bg-orange-50/20 z-10 min-w-[200px] ${isHRorAdmin ? "left-10" : "left-0"}`}>
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <Avatar className="size-9 border-2 border-white shadow-md transition-transform group-hover:scale-105">
-                            <AvatarImage src={emp.profile_photo_url} alt={emp.name} />
-                            <AvatarFallback className="bg-orange-100 text-orange-600 font-black text-xs">
-                              {emp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white shadow-sm ${emp.email_verified_at ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-black text-gray-900 text-xs tracking-tight truncate">{emp.name}</span>
-                          <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">EMP-{emp.id.toString().padStart(4, '0')}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3.5 py-3 whitespace-nowrap">
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1.5 text-xs text-gray-600">
-                          <Mail size={12} className="text-gray-400" />
-                          {emp.email}
-                        </div>
-                        {emp.phone && (
-                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400">
-                            <Phone size={10} />
-                            {emp.phone}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3.5 py-3">
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1.5 bg-gray-100 px-2 py-0.5 rounded-lg w-fit border border-gray-200">
-                          <Building2 size={10} className="text-gray-400" />
-                          <span className="text-[10px] font-black text-gray-700 uppercase">{emp.role?.name || "Member"}</span>
-                        </div>
-                        {emp.cost_center && (
-                          <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md w-fit uppercase tracking-wider">
-                            CC: {emp.cost_center.includes("Artacomindo") ? "Artacomindo" : emp.cost_center.includes("Narwastu") ? "Narwastu" : emp.cost_center}
-                          </span>
-                        )}
-                        {emp.supervisor && (
-                          <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-md w-fit">
-                            Atasan: {emp.supervisor.name}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span className="text-xs font-black text-gray-700">{formatDate(emp.join_date)}</span>
-                        <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1">
-                          <Clock size={8} /> {emp.join_date ? Math.floor((Date.now() - new Date(emp.join_date).getTime()) / (1000 * 60 * 60 * 24 * 365)) : 0} Thn
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
-                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border border-gray-100 ${emp.employment_status === 'Permanent' ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-50 text-gray-500'}`}>
-                        {emp.employment_status || 'Permanent'}
-                      </span>
-                    </td>
-                    <td className="px-3.5 py-3 text-center text-xs font-bold text-gray-500 whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1">
-                        <MapPin size={12} className="text-red-400" />
-                        {emp.office?.name || emp.work_location || 'Kantor Pusat'}
-                      </div>
-                    </td>
-                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
-                      {emp.email_verified_at ? (
-                        <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-emerald-100 uppercase tracking-tighter">
-                          <BadgeCheck size={13} className="text-emerald-500" />
-                          Verified
-                        </div>
-                      ) : (
-                        <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-amber-100 uppercase tracking-tighter shadow-sm">
-                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                          Pending
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
-                      {isHRorAdmin ? (
-                        <button
-                          type="button"
-                          onClick={() => onAutoValidation?.(emp)}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black border transition-all ${
-                            emp.auto_validate_web_attendance
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 shadow-sm'
-                              : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
-                          }`}
-                          title="Klik untuk konfigurasi validasi web"
-                        >
-                          <ShieldCheck size={12} className={emp.auto_validate_web_attendance ? 'text-emerald-600' : 'text-slate-400'} />
-                          {emp.auto_validate_web_attendance ? 'Otomatis' : 'Manual Review'}
-                          {emp.auto_validate_until && (
-                            <span className="text-[8px] opacity-80 font-normal">
-                              ({new Date(emp.auto_validate_until).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })})
-                            </span>
-                          )}
-                        </button>
-                      ) : (
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black border ${
-                          emp.auto_validate_web_attendance
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-slate-50 text-slate-500 border-slate-200'
-                        }`}>
-                          <ShieldCheck size={12} className={emp.auto_validate_web_attendance ? 'text-emerald-600' : 'text-slate-400'} />
-                          {emp.auto_validate_web_attendance ? 'Otomatis' : 'Manual'}
-                        </span>
-                      )}
-                    </td>
-                    {isHRorAdmin && (
-                      <td className="px-3.5 py-3 text-right sticky right-0 bg-white group-hover:bg-orange-50/20 z-10 w-14 min-w-[60px]">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors cursor-pointer outline-none ml-auto">
-                            <MoreVertical size={16} />
-                          </DropdownMenuTrigger>
-                          
-                          <DropdownMenuContent 
-                            side="left" 
-                            align="start" 
-                            sideOffset={8}
-                            className="w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 space-y-1 z-50 text-left"
-                          >
-                            <DropdownMenuItem 
-                              onClick={() => onView(emp)}
-                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                            >
-                              <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-blue-100 group-hover/item:text-blue-600 transition-colors">
-                                <Eye size={18} />
-                              </div>
-                              <div>
-                                <p className="text-sm font-black text-gray-900 group-hover/item:text-blue-600 transition-colors">Lihat Profil</p>
-                                <p className="text-[10px] text-gray-400 font-medium">Lihat detail lengkap karyawan</p>
-                              </div>
-                            </DropdownMenuItem>
-
-                            <DropdownMenuItem 
-                              onClick={() => onEdit(emp)}
-                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                            >
-                              <div className="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-100 group-hover/item:text-orange-700 transition-colors">
-                                <UserCog size={18} />
-                              </div>
-                              <div>
-                                <p className="text-sm font-black text-gray-900 group-hover/item:text-orange-600 transition-colors">Edit Profil Karyawan</p>
-                                <p className="text-[10px] text-gray-400 font-medium">Ubah profil lengkap, jabatan, & akses</p>
-                              </div>
-                            </DropdownMenuItem>
-
-                            <DropdownMenuItem 
-                              onClick={() => onAutoValidation?.(emp)}
-                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-emerald-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                            >
-                              <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover/item:bg-emerald-100 group-hover/item:text-emerald-700 transition-colors">
-                                <ShieldCheck size={18} />
-                              </div>
-                              <div>
-                                <p className="text-sm font-black text-gray-900 group-hover/item:text-emerald-600 transition-colors">Validasi Absen Web</p>
-                                <p className="text-[10px] text-gray-400 font-medium">Pengaturan auto-validate & masa berlaku</p>
-                              </div>
-                            </DropdownMenuItem>
-                            
-                            <DropdownMenuItem 
-                              onClick={() => onDelete(emp.id)}
-                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-red-50/50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                            >
-                              <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-red-100 group-hover/item:text-red-600 transition-colors">
-                                <UserX size={18} />
-                              </div>
-                              <div>
-                                <p className="text-sm font-black text-gray-900 group-hover/item:text-red-600 transition-colors">Penghentian</p>
-                                <p className="text-[10px] text-gray-400 font-medium">Proses pengunduran diri</p>
-                              </div>
-                            </DropdownMenuItem>
-
-                            {!emp.email_verified_at && (
-                              <DropdownMenuItem 
-                                onClick={() => onResendVerification(emp.id)}
-                                className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                              >
-                                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
-                                  <Mail size={18} />
-                                </div>
-                                <div>
-                                  <p className="text-sm font-black text-gray-900">Kirim Undangan</p>
-                                  <p className="text-[10px] text-gray-400 font-medium">Kirim ulang link verifikasi</p>
-                                </div>
-                              </DropdownMenuItem>
-                            )}
-
-                            <DropdownMenuSeparator className="my-1 border-gray-100" />
-
-                            <DropdownMenuItem 
-                              onClick={() => onDiscipline(emp)}
-                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                            >
-                              <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
-                                <ShieldAlert size={18} />
-                              </div>
-                              <div>
-                                <p className="text-sm font-black text-gray-900">Tindakan Disiplin</p>
-                                <p className="text-[10px] text-gray-400 font-medium">Catat pelanggaran atau SP</p>
-                              </div>
-                            </DropdownMenuItem>
-
-                            <DropdownMenuItem 
-                              onClick={() => onResetPassword(emp.id, emp.name)}
-                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                            >
-                              <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
-                                <Key size={18} />
-                              </div>
-                              <div>
-                                <p className="text-sm font-black text-orange-600">Reset Password</p>
-                                <p className="text-[10px] text-gray-400 font-medium">Ubah sandi menjadi &apos;password&apos;</p>
-                              </div>
-                            </DropdownMenuItem>
-
-                            {emp.device_id && (
-                              <DropdownMenuItem 
-                                onClick={() => onResetDevice(emp.id)}
-                                className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                              >
-                                <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
-                                  <Camera size={18} />
-                                </div>
-                                <div>
-                                  <p className="text-sm font-black text-orange-600">Reset Device ID</p>
-                                  <p className="text-[10px] text-gray-400 font-medium">Izinkan login di HP baru</p>
-                                </div>
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    )}
-                  </tr>
+                  <EmployeeTableRow
+                    key={emp.id}
+                    emp={emp}
+                    isHRorAdmin={isHRorAdmin}
+                    isSelected={selectedIds.includes(emp.id)}
+                    onSelectRow={onSelectRow}
+                    onView={onView}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    onResendVerification={onResendVerification}
+                    onDiscipline={onDiscipline}
+                    onResetPassword={onResetPassword}
+                    onResetDevice={onResetDevice}
+                    formatDate={formatDate}
+                    onAutoValidation={onAutoValidation}
+                  />
                 ))}
               </tbody>
             </table>
@@ -1896,6 +1947,28 @@ function EmployeeDisciplineModal({
   );
 }
 
+const renderAuditLogActionBadge = (action: string) => {
+  if (action === 'enabled') {
+    return (
+      <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+        Aktivasi Auto-Valid
+      </span>
+    );
+  }
+  if (action === 'disabled') {
+    return (
+      <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200">
+        Deaktivasi (Manual)
+      </span>
+    );
+  }
+  return (
+    <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
+      {action}
+    </span>
+  );
+};
+
 function EmployeesContent() {
   const { hasPermission, permissions, user: currentUser } = useAuth();
   const isSuperAdmin = currentUser?.role_id === 1 || currentUser?.role?.name === 'Super Admin';
@@ -2064,6 +2137,72 @@ function EmployeesContent() {
   const handleOpenAuditLogModal = () => {
     setAuditLogModalOpen(true);
     fetchAuditLogs();
+  };
+
+  const renderAuditLogsContent = () => {
+    if (loadingAuditLogs) {
+      return <div className="py-12 text-center text-xs text-slate-500 font-bold">Memuat data jejak audit...</div>;
+    }
+    if (auditLogs.length === 0) {
+      return (
+        <div className="py-16 text-center text-slate-400">
+          <ShieldCheck size={36} className="mx-auto mb-2 opacity-40 text-slate-400" />
+          <p className="text-sm font-black text-slate-600">Belum Ada Riwayat Audit</p>
+          <p className="text-xs font-medium mt-0.5">Semua perubahan status validasi otomatis akan tercatat secara detail di sini.</p>
+        </div>
+      );
+    }
+    return (
+      <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+        <table className="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-100">
+              <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Waktu</th>
+              <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Pelaku (Admin)</th>
+              <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Karyawan Target</th>
+              <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Aksi</th>
+              <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Masa Berlaku</th>
+              <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Catatan / IP</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {auditLogs.map((log: any) => (
+              <tr key={log.id} className="hover:bg-slate-50/50">
+                <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-600">
+                  {new Date(log.created_at).toLocaleString('id-ID', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </td>
+                <td className="px-4 py-3 font-bold text-slate-800">
+                  {log.actor?.name || 'Superadmin'}
+                </td>
+                <td className="px-4 py-3 font-bold text-slate-900">
+                  {log.target_user?.name || `ID #${log.target_user_id}`}
+                </td>
+                <td className="px-4 py-3">
+                  {renderAuditLogActionBadge(log.action)}
+                </td>
+                <td className="px-4 py-3 text-slate-600 font-medium">
+                  {log.new_state?.auto_validate_until
+                    ? new Date(log.new_state.auto_validate_until).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : 'Permanen'}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="text-slate-700 font-medium">{log.notes || '-'}</div>
+                  {log.ip_address && (
+                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">{log.ip_address}</div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
   };
 
   const handleDisciplineSubmit = (e: React.FormEvent) => {
@@ -2426,9 +2565,9 @@ function EmployeesContent() {
               {/* Expiry presets (shown only if active) */}
               {autoValidationStatus && (
                 <div className="space-y-3 animate-in fade-in duration-200">
-                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                  <span className="text-xs font-black text-slate-700 uppercase tracking-wider block">
                     Masa Berlaku Otomatis
-                  </label>
+                  </span>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {[
                       { id: '7_days', label: '7 Hari' },
@@ -2454,8 +2593,9 @@ function EmployeesContent() {
 
                   {autoValidationExpiryPreset === 'custom' && (
                     <div className="pt-2 animate-in fade-in duration-200">
-                      <label className="text-[11px] font-bold text-slate-500 block mb-1">Berlaku Sampai Tanggal:</label>
+                      <label htmlFor="autoValidationCustomDateInput" className="text-[11px] font-bold text-slate-500 block mb-1">Berlaku Sampai Tanggal:</label>
                       <input
+                        id="autoValidationCustomDateInput"
                         type="date"
                         value={autoValidationCustomDate}
                         min={new Date().toISOString().split('T')[0]}
@@ -2469,10 +2609,11 @@ function EmployeesContent() {
 
               {/* Notes textarea */}
               <div className="space-y-2">
-                <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                <label htmlFor="autoValidationNotesTextarea" className="text-xs font-black text-slate-700 uppercase tracking-wider block">
                   Catatan / Alasan (Audit Log)
                 </label>
                 <textarea
+                  id="autoValidationNotesTextarea"
                   rows={3}
                   value={autoValidationNotes}
                   onChange={(e) => setAutoValidationNotes(e.target.value)}
@@ -2484,7 +2625,7 @@ function EmployeesContent() {
               {/* Anomaly Notice info */}
               <div className="p-3 bg-amber-50/70 border border-amber-100 rounded-2xl text-[11px] text-amber-800 leading-relaxed font-medium">
                 <span className="font-black text-amber-900 block mb-0.5">Catatan Keamanan & Anomali:</span>
-                Sistem tetap memverifikasi deteksi jam kerja aneh (luar shift) atau GPS di luar radius wajar. Absen anomali akan tetap ditandai untuk peninjauan admin.
+                <span>Sistem tetap memverifikasi deteksi jam kerja aneh (luar shift) atau GPS di luar radius wajar. Absen anomali akan tetap ditandai untuk peninjauan admin.</span>
               </div>
             </div>
 
@@ -2556,9 +2697,9 @@ function EmployeesContent() {
 
               {bulkAutoValidationStatus && (
                 <div className="space-y-3 animate-in fade-in duration-200">
-                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                  <span className="text-xs font-black text-slate-700 uppercase tracking-wider block">
                     Masa Berlaku Otomatis
-                  </label>
+                  </span>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {[
                       { id: '7_days', label: '7 Hari' },
@@ -2584,8 +2725,9 @@ function EmployeesContent() {
 
                   {bulkAutoValidationExpiryPreset === 'custom' && (
                     <div className="pt-2">
-                      <label className="text-[11px] font-bold text-slate-500 block mb-1">Berlaku Sampai Tanggal:</label>
+                      <label htmlFor="bulkAutoValidationCustomDateInput" className="text-[11px] font-bold text-slate-500 block mb-1">Berlaku Sampai Tanggal:</label>
                       <input
+                        id="bulkAutoValidationCustomDateInput"
                         type="date"
                         value={bulkAutoValidationCustomDate}
                         min={new Date().toISOString().split('T')[0]}
@@ -2598,10 +2740,11 @@ function EmployeesContent() {
               )}
 
               <div className="space-y-2">
-                <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                <label htmlFor="bulkAutoValidationNotesTextarea" className="text-xs font-black text-slate-700 uppercase tracking-wider block">
                   Catatan Audit Massal
                 </label>
                 <textarea
+                  id="bulkAutoValidationNotesTextarea"
                   rows={3}
                   value={bulkAutoValidationNotes}
                   onChange={(e) => setBulkAutoValidationNotes(e.target.value)}
@@ -2664,73 +2807,7 @@ function EmployeesContent() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-              {loadingAuditLogs ? (
-                <div className="py-12 text-center text-xs text-slate-500 font-bold">Memuat data jejak audit...</div>
-              ) : auditLogs.length === 0 ? (
-                <div className="py-16 text-center text-slate-400">
-                  <ShieldCheck size={36} className="mx-auto mb-2 opacity-40 text-slate-400" />
-                  <p className="text-sm font-black text-slate-600">Belum Ada Riwayat Audit</p>
-                  <p className="text-xs font-medium mt-0.5">Semua perubahan status validasi otomatis akan tercatat secara detail di sini.</p>
-                </div>
-              ) : (
-                <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-100">
-                        <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Waktu</th>
-                        <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Pelaku (Admin)</th>
-                        <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Karyawan Target</th>
-                        <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Aksi</th>
-                        <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Masa Berlaku</th>
-                        <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Catatan / IP</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {auditLogs.map((log: any) => (
-                        <tr key={log.id} className="hover:bg-slate-50/50">
-                          <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-600">
-                            {new Date(log.created_at).toLocaleString('id-ID', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </td>
-                          <td className="px-4 py-3 font-bold text-slate-800">
-                            {log.actor?.name || 'Superadmin'}
-                          </td>
-                          <td className="px-4 py-3 font-bold text-slate-900">
-                            {log.target_user?.name || `ID #${log.target_user_id}`}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                              log.action === 'enabled'
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : log.action === 'disabled'
-                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                : 'bg-blue-50 text-blue-700 border border-blue-200'
-                            }`}>
-                              {log.action === 'enabled' ? 'Aktivasi Auto-Valid' : log.action === 'disabled' ? 'Deaktivasi (Manual)' : log.action}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-slate-600 font-medium">
-                            {log.new_state?.auto_validate_until
-                              ? new Date(log.new_state.auto_validate_until).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-                              : 'Permanen'}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="text-slate-700 font-medium">{log.notes || '-'}</div>
-                            {log.ip_address && (
-                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">{log.ip_address}</div>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              {renderAuditLogsContent()}
             </div>
 
             <div className="p-4 border-t border-slate-100 flex justify-end bg-slate-50/50">

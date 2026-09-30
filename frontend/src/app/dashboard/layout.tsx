@@ -537,6 +537,18 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const checkHeadingVisible = (link: SidebarLink, allLinks: SidebarLink[], isMgr: boolean, checkPerm: (perm?: string) => boolean): boolean => {
+    const idx = allLinks.indexOf(link);
+    const remaining = allLinks.slice(idx + 1);
+    for (const l of remaining) {
+      if (l.isHeading) return false;
+      if (l.href === "/dashboard/approvals" && isMgr) return true;
+      if (l.submenus && l.submenus.some(s => checkPerm(s.permission))) return true;
+      if (l.href && checkPerm(l.permission)) return true;
+    }
+    return false;
+  };
+
   const NavLinks = ({ onNavigate }: { onNavigate?: () => void }) => {
     const [openGroup, setOpenGroup] = useState<string | null>(() => {
       // Auto-open group if one of its children is active
@@ -584,101 +596,96 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       return true;
     });
 
+    const renderHeadingItem = (link: SidebarLink, index: number) => {
+      if (!checkHeadingVisible(link, sidebarLinks, isManager, hasPermission)) return null;
+      return (
+        <li key={`heading-${index}`} className="dash-nav-heading">
+          {t(link.name)}
+        </li>
+      );
+    };
+
+    const renderSubmenuItem = (link: SidebarLink) => {
+      const filteredSubmenus = link.submenus?.filter(sub => hasPermission(sub.permission)) ?? [];
+      if (filteredSubmenus.length === 0) return null;
+
+      const hasActiveChild = filteredSubmenus.some(sub => pathname === sub.href || pathname.startsWith(`${sub.href}/`));
+      const isOpen = openGroup === link.name;
+      const Icon = link.icon;
+
+      return (
+        <li key={link.name}>
+          <button
+            type="button"
+            className={`dash-nav-link w-full dash-nav-group-btn text-left ${hasActiveChild ? "dash-nav-group-active" : ""}`}
+            onClick={() => toggleGroup(link.name)}
+            title={!isSidebarOpen ? t(link.name) : undefined}
+          >
+            <div className="flex items-center gap-[10px] min-w-0 text-left">
+              <Icon className="dash-nav-icon shrink-0" />
+              <span className="truncate">{t(link.name)}</span>
+            </div>
+            {isOpen ? <ChevronDown size={14} className="text-gray-400 group-chevron shrink-0" /> : <ChevronRight size={14} className="text-gray-400 group-chevron shrink-0" />}
+          </button>
+          {isOpen && (
+            <ul className="dash-submenu-list">
+              {filteredSubmenus.map((sub) => {
+                const isActive = isSubmenuActive(pathname, sub.href, filteredSubmenus);
+
+                return (
+                  <li key={sub.href}>
+                    <Link
+                      href={sub.href}
+                      onClick={onNavigate}
+                      className={`dash-submenu-link ${isActive ? "dash-submenu-active" : ""}`}
+                    >
+                      <span className="dash-submenu-dot shrink-0" />
+                      <span className="truncate">{t(sub.name)}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </li>
+      );
+    };
+
+    const renderStandaloneLink = (link: SidebarLink) => {
+      const Icon = link.icon;
+      const isActive = pathname === link.href || (link.href !== "/dashboard" && pathname.startsWith(`${link.href}/`));
+      return (
+        <li key={link.href}>
+          <Link
+            href={link.href!}
+            onClick={onNavigate}
+            className={`dash-nav-link flex items-center justify-between ${isActive ? "dash-nav-link-active" : ""}`}
+            title={!isSidebarOpen ? t(link.name) : undefined}
+          >
+            <div className="flex items-center gap-[10px] min-w-0">
+              <Icon className="dash-nav-icon shrink-0" />
+              <span className="truncate">{t(link.name)}</span>
+            </div>
+            {link.href === "/dashboard/approvals" && managerPendingTotal > 0 && isSidebarOpen && (
+              <span className="px-2 py-0.5 text-[10px] font-black rounded-full bg-amber-500 text-white shadow-sm shrink-0 ml-1">
+                {managerPendingTotal}
+              </span>
+            )}
+          </Link>
+        </li>
+      );
+    };
+
     return (
       <ul className="dash-nav-list">
         {filteredLinks.map((link, index) => {
           if (link.isHeading) {
-            const idx = sidebarLinks.indexOf(link);
-            const remaining = sidebarLinks.slice(idx + 1);
-            let hasVisibleContent = false;
-            for (const l of remaining) {
-              if (l.isHeading) break; // Stop at next section heading
-              if (l.href === "/dashboard/approvals") {
-                if (isManager) { hasVisibleContent = true; break; }
-              } else if (l.submenus) {
-                if (l.submenus.some(s => hasPermission(s.permission))) { hasVisibleContent = true; break; }
-              } else if (l.href) {
-                if (hasPermission(l.permission)) { hasVisibleContent = true; break; }
-              }
-            }
-            if (!hasVisibleContent) return null;
-
-            return (
-              <li key={`heading-${index}`} className="dash-nav-heading">
-                {t(link.name)}
-              </li>
-            );
+            return renderHeadingItem(link, index);
           }
-
-          const Icon = link.icon;
-          
           if (link.submenus) {
-            const filteredSubmenus = link.submenus.filter(sub => hasPermission(sub.permission));
-            if (filteredSubmenus.length === 0) return null;
-
-            const hasActiveChild = filteredSubmenus.some(sub => pathname === sub.href || pathname.startsWith(`${sub.href}/`));
-            const isOpen = openGroup === link.name;
-            
-            return (
-              <li key={link.name}>
-                <button
-                  type="button"
-                  className={`dash-nav-link w-full dash-nav-group-btn text-left ${hasActiveChild ? "dash-nav-group-active" : ""}`}
-                  onClick={() => toggleGroup(link.name)}
-                  title={!isSidebarOpen ? t(link.name) : undefined}
-                >
-                  <div className="flex items-center gap-[10px] min-w-0 text-left">
-                    <Icon className="dash-nav-icon shrink-0" />
-                    <span className="truncate">{t(link.name)}</span>
-                  </div>
-                  {isOpen ? <ChevronDown size={14} className="text-gray-400 group-chevron shrink-0" /> : <ChevronRight size={14} className="text-gray-400 group-chevron shrink-0" />}
-                </button>
-                {isOpen && (
-                  <ul className="dash-submenu-list">
-                    {filteredSubmenus.map((sub) => {
-                      const isActive = isSubmenuActive(pathname, sub.href, filteredSubmenus);
-
-                      return (
-                        <li key={sub.href}>
-                          <Link
-                            href={sub.href}
-                            onClick={onNavigate}
-                            className={`dash-submenu-link ${isActive ? "dash-submenu-active" : ""}`}
-                          >
-                            <span className="dash-submenu-dot shrink-0" />
-                            <span className="truncate">{t(sub.name)}</span>
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </li>
-            );
+            return renderSubmenuItem(link);
           }
-
-          // Regular standalone links
-          const isActive = pathname === link.href || (link.href !== "/dashboard" && pathname.startsWith(`${link.href}/`));
-          return (
-            <li key={link.href}>
-              <Link
-                href={link.href!}
-                onClick={onNavigate}
-                className={`dash-nav-link flex items-center justify-between ${isActive ? "dash-nav-link-active" : ""}`}
-                title={!isSidebarOpen ? t(link.name) : undefined}
-              >
-                <div className="flex items-center gap-[10px] min-w-0">
-                  <Icon className="dash-nav-icon shrink-0" />
-                  <span className="truncate">{t(link.name)}</span>
-                </div>
-                {link.href === "/dashboard/approvals" && managerPendingTotal > 0 && isSidebarOpen && (
-                  <span className="px-2 py-0.5 text-[10px] font-black rounded-full bg-amber-500 text-white shadow-sm shrink-0 ml-1">
-                    {managerPendingTotal}
-                  </span>
-                )}
-              </Link>
-            </li>
-          );
+          return renderStandaloneLink(link);
         })}
       </ul>
     );

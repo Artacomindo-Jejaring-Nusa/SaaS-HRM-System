@@ -19,11 +19,11 @@ import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
 
 interface WebAttendanceModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: (record?: any) => void;
-  defaultType?: "in" | "out";
-  isAutoValidated?: boolean;
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
+  readonly onSuccess: (record?: any) => void;
+  readonly defaultType?: "in" | "out";
+  readonly isAutoValidated?: boolean;
 }
 
 export default function WebAttendanceModal({
@@ -73,7 +73,7 @@ export default function WebAttendanceModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    if (typeof window !== "undefined" && "geolocation" in navigator) {
+    if (typeof globalThis.window !== "undefined" && "geolocation" in navigator) {
       setLocationStatus("loading");
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -236,6 +236,99 @@ export default function WebAttendanceModal({
     }
   };
 
+  const renderMediaContent = () => {
+    if (capturedImage) {
+      return (
+        <div className="relative w-full h-full">
+          <img
+            src={capturedImage}
+            alt="Selfie Preview"
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-medium text-white flex items-center gap-1.5 border border-white/20">
+            <CheckCircle2 size={12} className="text-emerald-400" />
+            Foto Siap Dikirim
+          </div>
+          <button
+            type="button"
+            onClick={handleRetake}
+            className="absolute bottom-3 right-3 bg-white/90 hover:bg-white text-slate-800 text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg backdrop-blur-sm flex items-center gap-1.5 transition-all"
+          >
+            <RefreshCw size={13} />
+            Ambil Ulang
+          </button>
+        </div>
+      );
+    }
+
+    if (useCamera) {
+      return (
+        <div className="relative w-full h-full flex items-center justify-center">
+          {cameraError ? (
+            <div className="p-6 text-center text-slate-300 text-xs max-w-xs space-y-2">
+              <AlertCircle size={28} className="mx-auto text-rose-400" />
+              <p>{cameraError}</p>
+              <button
+                type="button"
+                onClick={() => setUseCamera(false)}
+                className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-md text-white font-semibold mt-2"
+              >
+                Beralih ke Unggah File
+              </button>
+            </div>
+          ) : (
+            <>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-36 h-48 border-2 border-dashed border-white/50 rounded-full shadow-sm" />
+              </div>
+              <button
+                type="button"
+                onClick={handleCapture}
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-[#8B0000] hover:bg-[#a10000] text-white text-xs font-bold px-5 py-2.5 rounded-full shadow-xl flex items-center gap-2 transition-all transform active:scale-95 border-2 border-white/40"
+              >
+                <Camera size={15} />
+                Ambil Foto Selfie
+              </button>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center text-slate-300 space-y-3">
+        <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white">
+          <Upload size={22} />
+        </div>
+        <div>
+          <p className="text-xs font-bold text-white">Pilih Foto Diri / Selfie</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Mendukung format JPG, JPEG, PNG (Maks 5MB)</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="px-4 py-2 bg-white text-slate-900 hover:bg-slate-100 rounded-lg text-xs font-bold transition-colors shadow-md"
+        >
+          Pilih dari Komputer / HP
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+      </div>
+    );
+  };
+
   const handleClose = () => {
     stopCamera();
     setCapturedImage(null);
@@ -351,9 +444,9 @@ export default function WebAttendanceModal({
                   stopCamera();
                 }}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-colors ${
-                  !useCamera
-                    ? "bg-slate-900 text-white font-semibold"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  useCamera
+                    ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    : "bg-slate-900 text-white font-semibold"
                 }`}
               >
                 <Upload size={13} />
@@ -364,94 +457,7 @@ export default function WebAttendanceModal({
 
           {/* Camera / Preview Box */}
           <div className="relative w-full aspect-video bg-slate-950 rounded-xl overflow-hidden border border-slate-300 shadow-inner flex items-center justify-center">
-            {capturedImage ? (
-              // Captured preview
-              <div className="relative w-full h-full">
-                <img
-                  src={capturedImage}
-                  alt="Selfie Preview"
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-medium text-white flex items-center gap-1.5 border border-white/20">
-                  <CheckCircle2 size={12} className="text-emerald-400" />
-                  Foto Siap Dikirim
-                </div>
-                <button
-                  type="button"
-                  onClick={handleRetake}
-                  className="absolute bottom-3 right-3 bg-white/90 hover:bg-white text-slate-800 text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg backdrop-blur-sm flex items-center gap-1.5 transition-all"
-                >
-                  <RefreshCw size={13} />
-                  Ambil Ulang
-                </button>
-              </div>
-            ) : useCamera ? (
-              // Webcam feed
-              <div className="relative w-full h-full flex items-center justify-center">
-                {cameraError ? (
-                  <div className="p-6 text-center text-slate-300 text-xs max-w-xs space-y-2">
-                    <AlertCircle size={28} className="mx-auto text-rose-400" />
-                    <p>{cameraError}</p>
-                    <button
-                      type="button"
-                      onClick={() => setUseCamera(false)}
-                      className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-md text-white font-semibold mt-2"
-                    >
-                      Beralih ke Unggah File
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover"
-                    />
-                    {/* Face Guide Oval */}
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="w-36 h-48 border-2 border-dashed border-white/50 rounded-full shadow-sm" />
-                    </div>
-
-                    {/* Snap Button */}
-                    <button
-                      type="button"
-                      onClick={handleCapture}
-                      className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-[#8B0000] hover:bg-[#a10000] text-white text-xs font-bold px-5 py-2.5 rounded-full shadow-xl flex items-center gap-2 transition-all transform active:scale-95 border-2 border-white/40"
-                    >
-                      <Camera size={15} />
-                      Ambil Foto Selfie
-                    </button>
-                  </>
-                )}
-              </div>
-            ) : (
-              // File upload dropzone
-              <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center text-slate-300 space-y-3">
-                <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white">
-                  <Upload size={22} />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-white">Pilih Foto Diri / Selfie</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Mendukung format JPG, JPEG, PNG (Maks 5MB)</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-4 py-2 bg-white text-slate-900 hover:bg-slate-100 rounded-lg text-xs font-bold transition-colors shadow-md"
-                >
-                  Pilih dari Komputer / HP
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </div>
-            )}
+            {renderMediaContent()}
             <canvas ref={canvasRef} className="hidden" />
           </div>
 

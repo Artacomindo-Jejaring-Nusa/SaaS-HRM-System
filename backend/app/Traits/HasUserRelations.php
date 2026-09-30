@@ -75,4 +75,19 @@ trait HasUserRelations
     {
         return $this->belongsTo(User::class, 'face_approved_by');
     }
+
+    public function notifications()
+    {
+        return $this->hasMany(Notification::class);
+    }
+
+    public function autoValidateUpdatedBy()
+    {
+        return $this->belongsTo(User::class, 'auto_validate_updated_by');
+    }
+
+    public function webAttendanceAuditLogs()
+    {
+        return $this->hasMany(\App\Models\WebAttendanceAuditLog::class);
+    }
 }

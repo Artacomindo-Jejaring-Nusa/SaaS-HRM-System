@@ -101,7 +101,7 @@ export default function LoginPage() {
         company_name: companyName,
       });
       if (response.data.data && response.data.data.access_token) {
-        const { access_token, refresh_token, expires_in, user: loggedUser } = response.data.data;
+        const { access_token, refresh_token, expires_in } = response.data.data;
         
         const isSecure = window.location.protocol === "https:";
         
