@@ -543,7 +543,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     for (const l of remaining) {
       if (l.isHeading) return false;
       if (l.href === "/dashboard/approvals" && isMgr) return true;
-      if (l.submenus && l.submenus.some(s => checkPerm(s.permission))) return true;
+      if (l.submenus?.some(s => checkPerm(s.permission))) return true;
       if (l.href && checkPerm(l.permission)) return true;
     }
     return false;

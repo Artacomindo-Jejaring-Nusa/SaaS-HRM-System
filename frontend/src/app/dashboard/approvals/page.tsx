@@ -508,6 +508,17 @@ export default function ApprovalsPage() {
     }
   }, []);
 
+const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> => {
+  if (!allowed) return [];
+  try {
+    const res = await axiosInstance.get(url);
+    const data = res.data?.data;
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
+
   // 3. Fetch All Pending Approvals (filtered dynamically by allowed categories)
   const fetchApprovals = useCallback(async (isSilent = false) => {
     try {
@@ -516,34 +527,34 @@ export default function ApprovalsPage() {
 
       // Fetch from manager endpoints and specialized routes conditionally based on permissions
       const [
-        leaveRes,
-        reimRes,
-        overtimeRes,
-        permitRes,
-        fundRes,
-        vehicleRes,
-        dinasRes,
-        profileRes
+        leaveData,
+        reimData,
+        overtimeData,
+        permitData,
+        fundData,
+        vehicleData,
+        dinasData,
+        profileData
       ] = await Promise.all([
-        canApprove("leave") ? axiosInstance.get("/manager/pending-requests?type=leave").catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
-        canApprove("reimbursement") ? axiosInstance.get("/manager/pending-requests?type=reimbursement").catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
-        canApprove("overtime") ? axiosInstance.get("/manager/pending-requests?type=overtime").catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
-        canApprove("permit") ? axiosInstance.get("/manager/pending-requests?type=permit").catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
-        canApprove("fund_request") ? axiosInstance.get("/manager/pending-requests?type=fund_request").catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
-        canApprove("vehicle_log") ? axiosInstance.get("/manager/pending-requests?type=vehicle_log").catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
-        canApprove("dinas_luar") ? axiosInstance.get("/attendance/dinas-luar/pending").catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
-        canApprove("profile") ? axiosInstance.get("/profile-requests?status=pending").catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
+        fetchCategoryData(canApprove("leave"), "/manager/pending-requests?type=leave"),
+        fetchCategoryData(canApprove("reimbursement"), "/manager/pending-requests?type=reimbursement"),
+        fetchCategoryData(canApprove("overtime"), "/manager/pending-requests?type=overtime"),
+        fetchCategoryData(canApprove("permit"), "/manager/pending-requests?type=permit"),
+        fetchCategoryData(canApprove("fund_request"), "/manager/pending-requests?type=fund_request"),
+        fetchCategoryData(canApprove("vehicle_log"), "/manager/pending-requests?type=vehicle_log"),
+        fetchCategoryData(canApprove("dinas_luar"), "/attendance/dinas-luar/pending"),
+        fetchCategoryData(canApprove("profile"), "/profile-requests?status=pending"),
       ]);
 
       const allMerged = [
-        ...normalizeLeaves(Array.isArray(leaveRes.data?.data) ? leaveRes.data.data : []),
-        ...normalizeReims(Array.isArray(reimRes.data?.data) ? reimRes.data.data : []),
-        ...normalizeOvertimes(Array.isArray(overtimeRes.data?.data) ? overtimeRes.data.data : []),
-        ...normalizePermits(Array.isArray(permitRes.data?.data) ? permitRes.data.data : []),
-        ...normalizeFunds(Array.isArray(fundRes.data?.data) ? fundRes.data.data : []),
-        ...normalizeVehicles(Array.isArray(vehicleRes.data?.data) ? vehicleRes.data.data : []),
-        ...normalizeDinas(Array.isArray(dinasRes.data?.data) ? dinasRes.data.data : []),
-        ...normalizeProfiles(Array.isArray(profileRes.data?.data) ? profileRes.data.data : [])
+        ...normalizeLeaves(leaveData),
+        ...normalizeReims(reimData),
+        ...normalizeOvertimes(overtimeData),
+        ...normalizePermits(permitData),
+        ...normalizeFunds(fundData),
+        ...normalizeVehicles(vehicleData),
+        ...normalizeDinas(dinasData),
+        ...normalizeProfiles(profileData)
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setItems(allMerged);
@@ -683,6 +694,73 @@ export default function ApprovalsPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [filter, searchQuery]);
+
+  const renderTeamAttendanceContent = () => {
+    if (loadingTeam) {
+      return (
+        <div className="col-span-full py-16 bg-white rounded-2xl border border-slate-200 text-center">
+          <div className="w-8 h-8 border-2 border-[#8B0000] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+          <p className="text-sm font-medium text-slate-500">Memuat data tim...</p>
+        </div>
+      );
+    }
+
+    if (filteredTeam.length === 0) {
+      return (
+        <div className="col-span-full py-16 bg-white rounded-2xl border border-slate-200 text-center">
+          <Users size={32} className="mx-auto text-slate-300 mb-2" />
+          <p className="text-sm font-bold text-slate-700">Tidak ada data anggota tim ditemukan</p>
+          <p className="text-xs text-slate-400">Pastikan bawahan telah diset pada struktur organisasi</p>
+        </div>
+      );
+    }
+
+    return filteredTeam.map((member) => (
+      <div
+        key={member.id}
+        className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-4"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-rose-50 text-[#8B0000] border border-rose-100 flex items-center justify-center text-sm font-black overflow-hidden shrink-0">
+              {member.photo_url ? (
+                <img
+                  src={getStorageUrl(member.photo_url)}
+                  alt={member.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                member.name.charAt(0).toUpperCase()
+              )}
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 leading-snug">{member.name}</h3>
+              <p className="text-xs text-slate-500">{member.role}</p>
+            </div>
+          </div>
+
+          {/* Status Badge */}
+          {renderMemberStatusBadge(member.status)}
+        </div>
+
+        {/* Attendance Times */}
+        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
+          <div className="bg-slate-50 p-2 rounded-xl">
+            <div className="text-[10px] text-slate-400 font-bold uppercase">Jam Masuk</div>
+            <div className="text-xs font-bold text-slate-800 mt-0.5">
+              {member.check_in ? member.check_in + " WIB" : "-- : --"}
+            </div>
+          </div>
+          <div className="bg-slate-50 p-2 rounded-xl">
+            <div className="text-[10px] text-slate-400 font-bold uppercase">Jam Pulang</div>
+            <div className="text-xs font-bold text-slate-800 mt-0.5">
+              {member.check_out ? member.check_out + " WIB" : "-- : --"}
+            </div>
+          </div>
+        </div>
+      </div>
+    ));
+  };
 
   if (loading && items.length === 0) {
     return <ListPageSkeleton />;
@@ -1318,64 +1396,7 @@ export default function ApprovalsPage() {
 
           {/* Subordinate Attendance Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {loadingTeam ? (
-              <div className="col-span-full py-16 bg-white rounded-2xl border border-slate-200 text-center">
-                <div className="w-8 h-8 border-2 border-[#8B0000] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                <p className="text-sm font-medium text-slate-500">Memuat data tim...</p>
-              </div>
-            ) : filteredTeam.length === 0 ? (
-              <div className="col-span-full py-16 bg-white rounded-2xl border border-slate-200 text-center">
-                <Users size={32} className="mx-auto text-slate-300 mb-2" />
-                <p className="text-sm font-bold text-slate-700">Tidak ada data anggota tim ditemukan</p>
-                <p className="text-xs text-slate-400">Pastikan bawahan telah diset pada struktur organisasi</p>
-              </div>
-            ) : (
-              filteredTeam.map((member) => (
-                <div
-                  key={member.id}
-                  className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-2xl bg-rose-50 text-[#8B0000] border border-rose-100 flex items-center justify-center text-sm font-black overflow-hidden shrink-0">
-                        {member.photo_url ? (
-                          <img
-                            src={getStorageUrl(member.photo_url)}
-                            alt={member.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          member.name.charAt(0).toUpperCase()
-                        )}
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-900 leading-snug">{member.name}</h3>
-                        <p className="text-xs text-slate-500">{member.role}</p>
-                      </div>
-                    </div>
-
-                    {/* Status Badge */}
-                    {renderMemberStatusBadge(member.status)}
-                  </div>
-
-                  {/* Attendance Times */}
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
-                    <div className="bg-slate-50 p-2 rounded-xl">
-                      <div className="text-[10px] text-slate-400 font-bold uppercase">Jam Masuk</div>
-                      <div className="text-xs font-bold text-slate-800 mt-0.5">
-                        {member.check_in ? member.check_in + " WIB" : "-- : --"}
-                      </div>
-                    </div>
-                    <div className="bg-slate-50 p-2 rounded-xl">
-                      <div className="text-[10px] text-slate-400 font-bold uppercase">Jam Pulang</div>
-                      <div className="text-xs font-bold text-slate-800 mt-0.5">
-                        {member.check_out ? member.check_out + " WIB" : "-- : --"}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
+            {renderTeamAttendanceContent()}
           </div>
         </div>
       )}

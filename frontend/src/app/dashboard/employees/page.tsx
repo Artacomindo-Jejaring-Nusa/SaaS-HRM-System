@@ -888,6 +888,208 @@ interface EmployeeTableRowProps {
   readonly onAutoValidation?: (emp: Employee) => void;
 }
 
+const getCostCenterDisplay = (costCenter?: string) => {
+  if (!costCenter) return null;
+  if (costCenter.includes("Artacomindo")) return "Artacomindo";
+  if (costCenter.includes("Narwastu")) return "Narwastu";
+  return costCenter;
+};
+
+interface EmployeeAutoValidationCellProps {
+  readonly emp: Employee;
+  readonly isHRorAdmin: boolean;
+  readonly onAutoValidation?: (emp: Employee) => void;
+}
+
+function EmployeeAutoValidationCell({
+  emp,
+  isHRorAdmin,
+  onAutoValidation,
+}: EmployeeAutoValidationCellProps) {
+  if (isHRorAdmin) {
+    return (
+      <button
+        type="button"
+        onClick={() => onAutoValidation?.(emp)}
+        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black border transition-all ${
+          emp.auto_validate_web_attendance
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 shadow-sm'
+            : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+        }`}
+        title="Klik untuk konfigurasi validasi web"
+      >
+        <ShieldCheck size={12} className={emp.auto_validate_web_attendance ? 'text-emerald-600' : 'text-slate-400'} />
+        {emp.auto_validate_web_attendance ? 'Otomatis' : 'Manual Review'}
+        {emp.auto_validate_until && (
+          <span className="text-[8px] opacity-80 font-normal">
+            ({new Date(emp.auto_validate_until).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })})
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black border ${
+      emp.auto_validate_web_attendance
+        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        : 'bg-slate-50 text-slate-500 border-slate-200'
+    }`}>
+      <ShieldCheck size={12} className={emp.auto_validate_web_attendance ? 'text-emerald-600' : 'text-slate-400'} />
+      {emp.auto_validate_web_attendance ? 'Otomatis' : 'Manual'}
+    </span>
+  );
+}
+
+interface EmployeeActionsDropdownProps {
+  readonly emp: Employee;
+  readonly onView: (emp: Employee) => void;
+  readonly onEdit: (emp: Employee) => void;
+  readonly onDelete: (id: number) => void;
+  readonly onResendVerification: (id?: number) => void;
+  readonly onDiscipline: (emp: Employee) => void;
+  readonly onResetPassword: (id: number, name: string) => void;
+  readonly onResetDevice: (id: number) => void;
+  readonly onAutoValidation?: (emp: Employee) => void;
+}
+
+function EmployeeActionsDropdown({
+  emp,
+  onView,
+  onEdit,
+  onDelete,
+  onResendVerification,
+  onDiscipline,
+  onResetPassword,
+  onResetDevice,
+  onAutoValidation,
+}: EmployeeActionsDropdownProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors cursor-pointer outline-none ml-auto">
+        <MoreVertical size={16} />
+      </DropdownMenuTrigger>
+      
+      <DropdownMenuContent 
+        side="left" 
+        align="start" 
+        sideOffset={8}
+        className="w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 space-y-1 z-50 text-left"
+      >
+        <DropdownMenuItem 
+          onClick={() => onView(emp)}
+          className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+        >
+          <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-blue-100 group-hover/item:text-blue-600 transition-colors">
+            <Eye size={18} />
+          </div>
+          <div>
+            <p className="text-sm font-black text-gray-900 group-hover/item:text-blue-600 transition-colors">Lihat Profil</p>
+            <p className="text-[10px] text-gray-400 font-medium">Lihat detail lengkap karyawan</p>
+          </div>
+        </DropdownMenuItem>
+
+        <DropdownMenuItem 
+          onClick={() => onEdit(emp)}
+          className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
+        >
+          <div className="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-100 group-hover/item:text-orange-700 transition-colors">
+            <UserCog size={18} />
+          </div>
+          <div>
+            <p className="text-sm font-black text-gray-900 group-hover/item:text-orange-600 transition-colors">Edit Profil Karyawan</p>
+            <p className="text-[10px] text-gray-400 font-medium">Ubah profil lengkap, jabatan, & akses</p>
+          </div>
+        </DropdownMenuItem>
+
+        <DropdownMenuItem 
+          onClick={() => onAutoValidation?.(emp)}
+          className="w-full flex items-center gap-3 p-3 text-left hover:bg-emerald-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
+        >
+          <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover/item:bg-emerald-100 group-hover/item:text-emerald-700 transition-colors">
+            <ShieldCheck size={18} />
+          </div>
+          <div>
+            <p className="text-sm font-black text-gray-900 group-hover/item:text-emerald-600 transition-colors">Validasi Absen Web</p>
+            <p className="text-[10px] text-gray-400 font-medium">Pengaturan auto-validate & masa berlaku</p>
+          </div>
+        </DropdownMenuItem>
+        
+        <DropdownMenuItem 
+          onClick={() => onDelete(emp.id)}
+          className="w-full flex items-center gap-3 p-3 text-left hover:bg-red-50/50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+        >
+          <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-red-100 group-hover/item:text-red-600 transition-colors">
+            <UserX size={18} />
+          </div>
+          <div>
+            <p className="text-sm font-black text-gray-900 group-hover/item:text-red-600 transition-colors">Penghentian</p>
+            <p className="text-[10px] text-gray-400 font-medium">Proses pengunduran diri</p>
+          </div>
+        </DropdownMenuItem>
+
+        {!emp.email_verified_at && (
+          <DropdownMenuItem 
+            onClick={() => onResendVerification(emp.id)}
+            className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+          >
+            <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
+              <Mail size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-black text-gray-900">Kirim Undangan</p>
+              <p className="text-[10px] text-gray-400 font-medium">Kirim ulang link verifikasi</p>
+            </div>
+          </DropdownMenuItem>
+        )}
+
+        <DropdownMenuSeparator className="my-1 border-gray-100" />
+
+        <DropdownMenuItem 
+          onClick={() => onDiscipline(emp)}
+          className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+        >
+          <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
+            <ShieldAlert size={18} />
+          </div>
+          <div>
+            <p className="text-sm font-black text-gray-900">Tindakan Disiplin</p>
+            <p className="text-[10px] text-gray-400 font-medium">Catat pelanggaran atau SP</p>
+          </div>
+        </DropdownMenuItem>
+
+        <DropdownMenuItem 
+          onClick={() => onResetPassword(emp.id, emp.name)}
+          className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+        >
+          <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
+            <Key size={18} />
+          </div>
+          <div>
+            <p className="text-sm font-black text-orange-600">Reset Password</p>
+            <p className="text-[10px] text-gray-400 font-medium">Ubah sandi menjadi &apos;password&apos;</p>
+          </div>
+        </DropdownMenuItem>
+
+        {emp.device_id && (
+          <DropdownMenuItem 
+            onClick={() => onResetDevice(emp.id)}
+            className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+          >
+            <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
+              <Camera size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-black text-orange-600">Reset Device ID</p>
+              <p className="text-[10px] text-gray-400 font-medium">Izinkan login di HP baru</p>
+            </div>
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function EmployeeTableRow({
   emp,
   isHRorAdmin,
@@ -954,7 +1156,7 @@ function EmployeeTableRow({
           </div>
           {emp.cost_center && (
             <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md w-fit uppercase tracking-wider">
-              CC: {emp.cost_center.includes("Artacomindo") ? "Artacomindo" : emp.cost_center.includes("Narwastu") ? "Narwastu" : emp.cost_center}
+              CC: {getCostCenterDisplay(emp.cost_center)}
             </span>
           )}
           {emp.supervisor && (
@@ -997,160 +1199,25 @@ function EmployeeTableRow({
         )}
       </td>
       <td className="px-3.5 py-3 text-center whitespace-nowrap">
-        {isHRorAdmin ? (
-          <button
-            type="button"
-            onClick={() => onAutoValidation?.(emp)}
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black border transition-all ${
-              emp.auto_validate_web_attendance
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 shadow-sm'
-                : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
-            }`}
-            title="Klik untuk konfigurasi validasi web"
-          >
-            <ShieldCheck size={12} className={emp.auto_validate_web_attendance ? 'text-emerald-600' : 'text-slate-400'} />
-            {emp.auto_validate_web_attendance ? 'Otomatis' : 'Manual Review'}
-            {emp.auto_validate_until && (
-              <span className="text-[8px] opacity-80 font-normal">
-                ({new Date(emp.auto_validate_until).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })})
-              </span>
-            )}
-          </button>
-        ) : (
-          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black border ${
-            emp.auto_validate_web_attendance
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              : 'bg-slate-50 text-slate-500 border-slate-200'
-          }`}>
-            <ShieldCheck size={12} className={emp.auto_validate_web_attendance ? 'text-emerald-600' : 'text-slate-400'} />
-            {emp.auto_validate_web_attendance ? 'Otomatis' : 'Manual'}
-          </span>
-        )}
+        <EmployeeAutoValidationCell
+          emp={emp}
+          isHRorAdmin={isHRorAdmin}
+          onAutoValidation={onAutoValidation}
+        />
       </td>
       {isHRorAdmin && (
         <td className="px-3.5 py-3 text-right sticky right-0 bg-white group-hover:bg-orange-50/20 z-10 w-14 min-w-[60px]">
-          <DropdownMenu>
-            <DropdownMenuTrigger className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors cursor-pointer outline-none ml-auto">
-              <MoreVertical size={16} />
-            </DropdownMenuTrigger>
-            
-            <DropdownMenuContent 
-              side="left" 
-              align="start" 
-              sideOffset={8}
-              className="w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 space-y-1 z-50 text-left"
-            >
-              <DropdownMenuItem 
-                onClick={() => onView(emp)}
-                className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-              >
-                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-blue-100 group-hover/item:text-blue-600 transition-colors">
-                  <Eye size={18} />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-gray-900 group-hover/item:text-blue-600 transition-colors">Lihat Profil</p>
-                  <p className="text-[10px] text-gray-400 font-medium">Lihat detail lengkap karyawan</p>
-                </div>
-              </DropdownMenuItem>
-
-              <DropdownMenuItem 
-                onClick={() => onEdit(emp)}
-                className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
-              >
-                <div className="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-100 group-hover/item:text-orange-700 transition-colors">
-                  <UserCog size={18} />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-gray-900 group-hover/item:text-orange-600 transition-colors">Edit Profil Karyawan</p>
-                  <p className="text-[10px] text-gray-400 font-medium">Ubah profil lengkap, jabatan, & akses</p>
-                </div>
-              </DropdownMenuItem>
-
-              <DropdownMenuItem 
-                onClick={() => onAutoValidation?.(emp)}
-                className="w-full flex items-center gap-3 p-3 text-left hover:bg-emerald-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
-              >
-                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover/item:bg-emerald-100 group-hover/item:text-emerald-700 transition-colors">
-                  <ShieldCheck size={18} />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-gray-900 group-hover/item:text-emerald-600 transition-colors">Validasi Absen Web</p>
-                  <p className="text-[10px] text-gray-400 font-medium">Pengaturan auto-validate & masa berlaku</p>
-                </div>
-              </DropdownMenuItem>
-              
-              <DropdownMenuItem 
-                onClick={() => onDelete(emp.id)}
-                className="w-full flex items-center gap-3 p-3 text-left hover:bg-red-50/50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-              >
-                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-red-100 group-hover/item:text-red-600 transition-colors">
-                  <UserX size={18} />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-gray-900 group-hover/item:text-red-600 transition-colors">Penghentian</p>
-                  <p className="text-[10px] text-gray-400 font-medium">Proses pengunduran diri</p>
-                </div>
-              </DropdownMenuItem>
-
-              {!emp.email_verified_at && (
-                <DropdownMenuItem 
-                  onClick={() => onResendVerification(emp.id)}
-                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                >
-                  <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
-                    <Mail size={18} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-black text-gray-900">Kirim Undangan</p>
-                    <p className="text-[10px] text-gray-400 font-medium">Kirim ulang link verifikasi</p>
-                  </div>
-                </DropdownMenuItem>
-              )}
-
-              <DropdownMenuSeparator className="my-1 border-gray-100" />
-
-              <DropdownMenuItem 
-                onClick={() => onDiscipline(emp)}
-                className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-              >
-                <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-gray-200 transition-colors">
-                  <ShieldAlert size={18} />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-gray-900">Tindakan Disiplin</p>
-                  <p className="text-[10px] text-gray-400 font-medium">Catat pelanggaran atau SP</p>
-                </div>
-              </DropdownMenuItem>
-
-              <DropdownMenuItem 
-                onClick={() => onResetPassword(emp.id, emp.name)}
-                className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-              >
-                <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
-                  <Key size={18} />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-orange-600">Reset Password</p>
-                  <p className="text-[10px] text-gray-400 font-medium">Ubah sandi menjadi &apos;password&apos;</p>
-                </div>
-              </DropdownMenuItem>
-
-              {emp.device_id && (
-                <DropdownMenuItem 
-                  onClick={() => onResetDevice(emp.id)}
-                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-                >
-                  <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-200 transition-colors">
-                    <Camera size={18} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-black text-orange-600">Reset Device ID</p>
-                    <p className="text-[10px] text-gray-400 font-medium">Izinkan login di HP baru</p>
-                  </div>
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <EmployeeActionsDropdown
+            emp={emp}
+            onView={onView}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onResendVerification={onResendVerification}
+            onDiscipline={onDiscipline}
+            onResetPassword={onResetPassword}
+            onResetDevice={onResetDevice}
+            onAutoValidation={onAutoValidation}
+          />
         </td>
       )}
     </tr>

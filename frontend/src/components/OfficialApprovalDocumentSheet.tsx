@@ -181,6 +181,354 @@ export const renderApprovalStatusBadge = (status?: string) => {
   );
 };
 
+interface OfficialApprovalFormDetailsProps {
+  readonly item: ApprovalItem;
+  readonly numericAmount: number;
+}
+
+function OfficialApprovalFormDetails({ item, numericAmount }: OfficialApprovalFormDetailsProps) {
+  return (
+    <>
+      {/* A. FORMULIR CUTI */}
+      {item.type === "leave" && (
+        <div className="space-y-3">
+          <div className="border border-slate-300 rounded overflow-hidden">
+            <table className="w-full text-xs border-collapse">
+              <tbody>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-40 border-r border-slate-200 text-left">Jenis Cuti</th>
+                  <td className="p-2.5 font-black text-slate-900">{item.category || "Cuti Tahunan"}</td>
+                </tr>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Periode / Tanggal Cuti</th>
+                  <td className="p-2.5 font-semibold text-slate-900">
+                    {item.start_date || "-"} <span className="text-slate-400 font-normal">s/d</span> {item.end_date || "-"}
+                  </td>
+                </tr>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Alamat Selama Cuti</th>
+                  <td className="p-2.5 text-slate-800">{item.leave_address || "Tidak ada alamat khusus"}</td>
+                </tr>
+                <tr>
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Kontak Darurat</th>
+                  <td className="p-2.5 font-semibold text-slate-800">{item.emergency_phone || "-"}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Alasan Permohonan Cuti:</p>
+            <p className="text-xs text-slate-800 italic leading-relaxed">
+              &ldquo;{item.description || "Tidak ada rincian keterangan cuti tambahan"}&rdquo;
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* B. FORMULIR IZIN */}
+      {item.type === "permit" && (
+        <div className="space-y-3">
+          <div className="border border-slate-300 rounded overflow-hidden">
+            <table className="w-full text-xs border-collapse">
+              <tbody>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Kategori Izin</th>
+                  <td className="p-2.5 font-black text-slate-900">
+                    <span className="px-2 py-0.5 bg-purple-100 text-purple-900 font-bold rounded mr-2 border border-purple-300">
+                      [{item.permit_category || "I"}]
+                    </span>
+                    {item.category || "Izin Kerja"}
+                  </td>
+                </tr>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu / Periode Izin</th>
+                  <td className="p-2.5 font-semibold text-slate-900">
+                    {item.start_date || "-"} {item.end_date ? `s/d ${item.end_date}` : ""}
+                  </td>
+                </tr>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Surat Keterangan Dokter</th>
+                  <td className="p-2.5">
+                    {item.permit_has_doctor_note ? (
+                      <span className="font-bold text-emerald-700">✓ Ada Surat Keterangan Dokter Terlampir</span>
+                    ) : (
+                      <span className="text-slate-600">✗ Tidak Ada Surat Dokter</span>
+                    )}
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Status Pemotongan Gaji</th>
+                  <td className="p-2.5 font-bold">
+                    {item.permit_is_deducted ? (
+                      <span className="text-red-600">Dipotong Gaji Sesuai Regulasi Absensi</span>
+                    ) : (
+                      <span className="text-emerald-700">Tidak Dipotong Gaji (Disetujui Resmi)</span>
+                    )}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Keterangan / Alasan Izin:</p>
+            <p className="text-xs text-slate-800 italic leading-relaxed">
+              &ldquo;{item.description || "Tidak ada keterangan tambahan"}&rdquo;
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* C. FORMULIR LEMBUR (SPKL) */}
+      {item.type === "overtime" && (
+        <div className="space-y-3">
+          <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-xs">
+            <span className="font-bold text-amber-900 uppercase">Tugas Pokok Lembur: </span>
+            <span className="font-semibold text-slate-800">{item.category}</span>
+          </div>
+
+          {/* Tabel Jadwal Lembur */}
+          <div className="border-2 border-black rounded-sm overflow-hidden">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-200 font-bold text-black border-b-2 border-black text-center">
+                  <th className="p-2 border-r border-black w-10">No</th>
+                  <th className="p-2 border-r border-black w-32">Hari / Tanggal</th>
+                  <th className="p-2 border-r border-black w-28">Jam Mulai - Selesai</th>
+                  <th className="p-2 text-left px-3">Uraian Tugas / Output yang Dikerjakan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {item.overtime_items && item.overtime_items.length > 0 ? (
+                  item.overtime_items.map((ot, idx) => (
+                    <tr key={ot.id ? `ot-${ot.id}` : `ot-${ot.date ?? ''}-${ot.start_time ?? ''}-${idx}`} className="border-b border-slate-300">
+                      <td className="p-2 border-r border-black text-center font-bold">{idx + 1}</td>
+                      <td className="p-2 border-r border-black font-semibold text-slate-900 text-center">
+                        {ot.date || item.start_date || "-"}
+                      </td>
+                      <td className="p-2 border-r border-black text-center font-mono font-bold text-slate-800">
+                        {ot.start_time || "-"} s/d {ot.end_time || "-"}
+                      </td>
+                      <td className="p-2 px-3 text-slate-800 font-medium">
+                        {ot.reason || item.description || "-"}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr className="border-b border-slate-300">
+                    <td className="p-2 border-r border-black text-center font-bold">1</td>
+                    <td className="p-2 border-r border-black font-semibold text-center">{item.start_date || "-"}</td>
+                    <td className="p-2 border-r border-black text-center font-mono font-bold">-</td>
+                    <td className="p-2 px-3 text-slate-800 font-medium">{item.description}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Catatan Urgensi Lembur:</p>
+            <p className="text-xs text-slate-800 italic leading-relaxed">
+              &ldquo;{item.description || "Dikerjakan untuk menyelesaikan target operasional perusahaan."}&rdquo;
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* D. FORMULIR REIMBURSEMENT */}
+      {item.type === "reimbursement" && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded text-xs">
+            <div>
+              <span className="font-bold text-slate-500 block uppercase text-[10px]">Divisi Pembebanan:</span>
+              <span className="font-bold text-slate-900">{item.reimbursement_divisi || "Operasional"}</span>
+            </div>
+            <div>
+              <span className="font-bold text-slate-500 block uppercase text-[10px]">Tujuan / Keperluan:</span>
+              <span className="font-bold text-slate-900">{item.reimbursement_tujuan || item.description || "Klaim Biaya"}</span>
+            </div>
+          </div>
+
+          {/* Tabel Item Klaim */}
+          <div className="border-2 border-black rounded-sm overflow-hidden">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-200 font-bold text-black border-b-2 border-black">
+                  <th className="p-2 border-r border-black w-10 text-center">No</th>
+                  <th className="p-2 border-r border-black text-left px-3">Item Pengeluaran / Biaya</th>
+                  <th className="p-2 border-r border-black text-left px-3">Keterangan / Kuitansi</th>
+                  <th className="p-2 text-right px-3 w-36">Nominal (IDR)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {item.reimbursement_items && item.reimbursement_items.length > 0 ? (
+                  item.reimbursement_items.map((r, idx) => (
+                    <tr key={r.id ? `reim-${r.id}` : `reim-${r.item_name ?? ''}-${r.amount ?? ''}-${idx}`} className="border-b border-slate-300">
+                      <td className="p-2 border-r border-black text-center font-bold">{idx + 1}</td>
+                      <td className="p-2 border-r border-black px-3 font-semibold text-slate-900">{r.item_name || "Item Biaya"}</td>
+                      <td className="p-2 border-r border-black px-3 text-slate-600">{r.description || "-"}</td>
+                      <td className="p-2 px-3 text-right font-mono font-bold text-slate-900">
+                        {formatCurrency(r.amount || 0)}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr className="border-b border-slate-300">
+                    <td className="p-2 border-r border-black text-center font-bold">1</td>
+                    <td className="p-2 border-r border-black px-3 font-semibold">{item.category}</td>
+                    <td className="p-2 border-r border-black px-3 text-slate-600">{item.description}</td>
+                    <td className="p-2 px-3 text-right font-mono font-bold text-slate-900">
+                      {formatCurrency(numericAmount)}
+                    </td>
+                  </tr>
+                )}
+                <tr className="bg-emerald-50 font-black text-black border-t-2 border-black">
+                  <td colSpan={3} className="p-2 border-r border-black text-right pr-4 uppercase tracking-wider text-[11px]">
+                    TOTAL KLAIM KESELURUHAN
+                  </td>
+                  <td className="p-2 px-3 text-right font-mono text-sm text-emerald-800">
+                    {formatCurrency(numericAmount)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Terbilang */}
+          {numericAmount > 0 && (
+            <div className="p-2.5 bg-slate-50 border border-slate-300 rounded text-xs flex items-center gap-2">
+              <span className="font-bold text-slate-600 uppercase text-[10px]">Terbilang:</span>
+              <span className="font-bold italic text-slate-900">{terbilang(numericAmount)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* E. FORMULIR FUND REQUEST (KASBON / DANA) */}
+      {item.type === "fund_request" && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded text-xs">
+            <div>
+              <span className="font-bold text-slate-500 block uppercase text-[10px]">Keperluan Dana:</span>
+              <span className="font-bold text-slate-900">{item.category || item.description}</span>
+            </div>
+            <div>
+              <span className="font-bold text-slate-500 block uppercase text-[10px]">Estimasi Total Dana:</span>
+              <span className="font-black text-slate-900 text-sm font-mono">{formatCurrency(numericAmount)}</span>
+            </div>
+          </div>
+
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Rincian & Justifikasi Pengajuan:</p>
+            <p className="text-xs text-slate-800 leading-relaxed italic">
+              &ldquo;{item.description || "Pengajuan dana operasional perusahaan"}&rdquo;
+            </p>
+          </div>
+
+          {numericAmount > 0 && (
+            <div className="p-2.5 bg-slate-50 border border-slate-300 rounded text-xs flex items-center gap-2">
+              <span className="font-bold text-slate-600 uppercase text-[10px]">Terbilang:</span>
+              <span className="font-bold italic text-slate-900">{terbilang(numericAmount)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* F. FORMULIR VEHICLE LOG (LOG ARMADA) */}
+      {item.type === "vehicle_log" && (
+        <div className="space-y-3">
+          <div className="border border-slate-300 rounded overflow-hidden">
+            <table className="w-full text-xs border-collapse">
+              <tbody>
+                <tr className="border-b border-slate-200">
+                  <td className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200">Armada / Kendaraan</td>
+                  <td className="p-2.5 font-black text-slate-900">
+                    {item.vehicle_name || "Mobil Operasional"} 
+                    {item.plate_number && <span className="ml-2 font-mono px-2 py-0.5 bg-slate-200 text-slate-800 rounded font-bold">({item.plate_number})</span>}
+                  </td>
+                </tr>
+                <tr className="border-b border-slate-200">
+                  <td className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200">Lokasi Tujuan</td>
+                  <td className="p-2.5 font-semibold text-slate-900">{item.destination || item.category || "-"}</td>
+                </tr>
+                <tr className="border-b border-slate-200">
+                  <td className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200">Odometer Berangkat</td>
+                  <td className="p-2.5 font-mono font-bold text-slate-800">
+                    {item.odometer_start ? `${item.odometer_start.toLocaleString()} KM` : "-"}
+                  </td>
+                </tr>
+                <tr className="border-b border-slate-200">
+                  <td className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200">Odometer Kembali</td>
+                  <td className="p-2.5 font-mono font-bold text-slate-800">
+                    {item.odometer_end ? `${item.odometer_end.toLocaleString()} KM` : "-"}
+                  </td>
+                </tr>
+                {item.distance && (
+                  <tr className="border-b border-slate-200 bg-indigo-50/50">
+                    <td className="p-2.5 font-bold text-indigo-950 border-r border-slate-200">Total Jarak Tempuh</td>
+                    <td className="p-2.5 font-mono font-black text-indigo-900">{item.distance} KM</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Keperluan Pemakaian Armada:</p>
+            <p className="text-xs text-slate-800 italic leading-relaxed">
+              &ldquo;{item.purpose || item.description || "Operasional dinas kantor"}&rdquo;
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* G. FORMULIR DINAS LUAR */}
+      {item.type === "dinas_luar" && (
+        <div className="space-y-3">
+          <div className="border border-slate-300 rounded overflow-hidden">
+            <table className="w-full text-xs border-collapse">
+              <tbody>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Instansi / Lokasi Tujuan</th>
+                  <td className="p-2.5 font-black text-slate-900">{item.dinas_luar_destination || item.category || "-"}</td>
+                </tr>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Check-In Tugas</th>
+                  <td className="p-2.5 font-semibold text-slate-900">{item.start_date || "-"}</td>
+                </tr>
+                <tr>
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Check-Out Tugas</th>
+                  <td className="p-2.5 font-semibold text-slate-900">{item.end_date || "-"}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Laporan / Catatan Pelaksanaan Tugas:</p>
+            <p className="text-xs text-slate-800 italic leading-relaxed">
+              &ldquo;{item.dinas_luar_notes || item.description || "Melaksanakan kunjungan dan instalasi teknis di lokasi klien."}&rdquo;
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* H. FORMULIR PROFILE UPDATE */}
+      {item.type === "profile" && (
+        <div className="space-y-3">
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Alasan / Rincian Perubahan Data:</p>
+            <p className="text-xs text-slate-800 leading-relaxed">
+              {item.description || "Pembaruan informasi profil karyawan"}
+            </p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function OfficialApprovalDocumentSheet({
   item,
   onApprove,
@@ -331,342 +679,7 @@ export default function OfficialApprovalDocumentSheet({
                 <span className="text-[9px] text-slate-300 font-normal">Detail Formulir Pengajuan</span>
               </div>
 
-              {/* A. FORMULIR CUTI */}
-              {item.type === "leave" && (
-                <div className="space-y-3">
-                  <div className="border border-slate-300 rounded overflow-hidden">
-                    <table className="w-full text-xs border-collapse">
-                      <tbody>
-                        <tr className="border-b border-slate-200">
-                          <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-40 border-r border-slate-200 text-left">Jenis Cuti</th>
-                          <td className="p-2.5 font-black text-slate-900">{item.category || "Cuti Tahunan"}</td>
-                        </tr>
-                        <tr className="border-b border-slate-200">
-                          <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Periode / Tanggal Cuti</th>
-                          <td className="p-2.5 font-semibold text-slate-900">
-                            {item.start_date || "-"} <span className="text-slate-400 font-normal">s/d</span> {item.end_date || "-"}
-                          </td>
-                        </tr>
-                        <tr className="border-b border-slate-200">
-                          <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Alamat Selama Cuti</th>
-                          <td className="p-2.5 text-slate-800">{item.leave_address || "Tidak ada alamat khusus"}</td>
-                        </tr>
-                        <tr>
-                          <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Kontak Darurat</th>
-                          <td className="p-2.5 font-semibold text-slate-800">{item.emergency_phone || "-"}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-                    <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Alasan Permohonan Cuti:</p>
-                    <p className="text-xs text-slate-800 italic leading-relaxed">
-                      &ldquo;{item.description || "Tidak ada rincian keterangan cuti tambahan"}&rdquo;
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* B. FORMULIR IZIN */}
-              {item.type === "permit" && (
-                <div className="space-y-3">
-                  <div className="border border-slate-300 rounded overflow-hidden">
-                    <table className="w-full text-xs border-collapse">
-                      <tbody>
-                        <tr className="border-b border-slate-200">
-                          <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Kategori Izin</th>
-                          <td className="p-2.5 font-black text-slate-900">
-                            <span className="px-2 py-0.5 bg-purple-100 text-purple-900 font-bold rounded mr-2 border border-purple-300">
-                              [{item.permit_category || "I"}]
-                            </span>
-                            {item.category || "Izin Kerja"}
-                          </td>
-                        </tr>
-                        <tr className="border-b border-slate-200">
-                          <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu / Periode Izin</th>
-                          <td className="p-2.5 font-semibold text-slate-900">
-                            {item.start_date || "-"} {item.end_date ? `s/d ${item.end_date}` : ""}
-                          </td>
-                        </tr>
-                        <tr className="border-b border-slate-200">
-                          <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Surat Keterangan Dokter</th>
-                          <td className="p-2.5">
-                            {item.permit_has_doctor_note ? (
-                              <span className="font-bold text-emerald-700">✓ Ada Surat Keterangan Dokter Terlampir</span>
-                            ) : (
-                              <span className="text-slate-600">✗ Tidak Ada Surat Dokter</span>
-                            )}
-                          </td>
-                        </tr>
-                        <tr>
-                          <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Status Pemotongan Gaji</th>
-                          <td className="p-2.5 font-bold">
-                            {item.permit_is_deducted ? (
-                              <span className="text-red-600">Dipotong Gaji Sesuai Regulasi Absensi</span>
-                            ) : (
-                              <span className="text-emerald-700">Tidak Dipotong Gaji (Disetujui Resmi)</span>
-                            )}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-                    <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Keterangan / Alasan Izin:</p>
-                    <p className="text-xs text-slate-800 italic leading-relaxed">
-                      &ldquo;{item.description || "Tidak ada keterangan tambahan"}&rdquo;
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* C. FORMULIR LEMBUR (SPKL) */}
-              {item.type === "overtime" && (
-                <div className="space-y-3">
-                  <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-xs">
-                    <span className="font-bold text-amber-900 uppercase">Tugas Pokok Lembur: </span>
-                    <span className="font-semibold text-slate-800">{item.category}</span>
-                  </div>
-
-                  {/* Tabel Jadwal Lembur */}
-                  <div className="border-2 border-black rounded-sm overflow-hidden">
-                    <table className="w-full text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-slate-200 font-bold text-black border-b-2 border-black text-center">
-                          <th className="p-2 border-r border-black w-10">No</th>
-                          <th className="p-2 border-r border-black w-32">Hari / Tanggal</th>
-                          <th className="p-2 border-r border-black w-28">Jam Mulai - Selesai</th>
-                          <th className="p-2 text-left px-3">Uraian Tugas / Output yang Dikerjakan</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {item.overtime_items && item.overtime_items.length > 0 ? (
-                          item.overtime_items.map((ot, idx) => (
-                            <tr key={ot.id ? `ot-${ot.id}` : `ot-${ot.date ?? ''}-${ot.start_time ?? ''}-${idx}`} className="border-b border-slate-300">
-                              <td className="p-2 border-r border-black text-center font-bold">{idx + 1}</td>
-                              <td className="p-2 border-r border-black font-semibold text-slate-900 text-center">
-                                {ot.date || item.start_date || "-"}
-                              </td>
-                              <td className="p-2 border-r border-black text-center font-mono font-bold text-slate-800">
-                                {ot.start_time || "-"} s/d {ot.end_time || "-"}
-                              </td>
-                              <td className="p-2 px-3 text-slate-800 font-medium">
-                                {ot.reason || item.description || "-"}
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr className="border-b border-slate-300">
-                            <td className="p-2 border-r border-black text-center font-bold">1</td>
-                            <td className="p-2 border-r border-black font-semibold text-center">{item.start_date || "-"}</td>
-                            <td className="p-2 border-r border-black text-center font-mono font-bold">-</td>
-                            <td className="p-2 px-3 text-slate-800 font-medium">{item.description}</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-                    <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Catatan Urgensi Lembur:</p>
-                    <p className="text-xs text-slate-800 italic leading-relaxed">
-                      &ldquo;{item.description || "Dikerjakan untuk menyelesaikan target operasional perusahaan."}&rdquo;
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* D. FORMULIR REIMBURSEMENT */}
-              {item.type === "reimbursement" && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded text-xs">
-                    <div>
-                      <span className="font-bold text-slate-500 block uppercase text-[10px]">Divisi Pembebanan:</span>
-                      <span className="font-bold text-slate-900">{item.reimbursement_divisi || "Operasional"}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-500 block uppercase text-[10px]">Tujuan / Keperluan:</span>
-                      <span className="font-bold text-slate-900">{item.reimbursement_tujuan || item.description || "Klaim Biaya"}</span>
-                    </div>
-                  </div>
-
-                  {/* Tabel Item Klaim */}
-                  <div className="border-2 border-black rounded-sm overflow-hidden">
-                    <table className="w-full text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-slate-200 font-bold text-black border-b-2 border-black">
-                          <th className="p-2 border-r border-black w-10 text-center">No</th>
-                          <th className="p-2 border-r border-black text-left px-3">Item Pengeluaran / Biaya</th>
-                          <th className="p-2 border-r border-black text-left px-3">Keterangan / Kuitansi</th>
-                          <th className="p-2 text-right px-3 w-36">Nominal (IDR)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {item.reimbursement_items && item.reimbursement_items.length > 0 ? (
-                          item.reimbursement_items.map((r, idx) => (
-                            <tr key={r.id ? `reim-${r.id}` : `reim-${r.item_name ?? ''}-${r.amount ?? ''}-${idx}`} className="border-b border-slate-300">
-                              <td className="p-2 border-r border-black text-center font-bold">{idx + 1}</td>
-                              <td className="p-2 border-r border-black px-3 font-semibold text-slate-900">{r.item_name || "Item Biaya"}</td>
-                              <td className="p-2 border-r border-black px-3 text-slate-600">{r.description || "-"}</td>
-                              <td className="p-2 px-3 text-right font-mono font-bold text-slate-900">
-                                {formatCurrency(r.amount || 0)}
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr className="border-b border-slate-300">
-                            <td className="p-2 border-r border-black text-center font-bold">1</td>
-                            <td className="p-2 border-r border-black px-3 font-semibold">{item.category}</td>
-                            <td className="p-2 border-r border-black px-3 text-slate-600">{item.description}</td>
-                            <td className="p-2 px-3 text-right font-mono font-bold text-slate-900">
-                              {formatCurrency(numericAmount)}
-                            </td>
-                          </tr>
-                        )}
-                        <tr className="bg-emerald-50 font-black text-black border-t-2 border-black">
-                          <td colSpan={3} className="p-2 border-r border-black text-right pr-4 uppercase tracking-wider text-[11px]">
-                            TOTAL KLAIM KESELURUHAN
-                          </td>
-                          <td className="p-2 px-3 text-right font-mono text-sm text-emerald-800">
-                            {formatCurrency(numericAmount)}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Terbilang */}
-                  {numericAmount > 0 && (
-                    <div className="p-2.5 bg-slate-50 border border-slate-300 rounded text-xs flex items-center gap-2">
-                      <span className="font-bold text-slate-600 uppercase text-[10px]">Terbilang:</span>
-                      <span className="font-bold italic text-slate-900">{terbilang(numericAmount)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* E. FORMULIR FUND REQUEST (KASBON / DANA) */}
-              {item.type === "fund_request" && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded text-xs">
-                    <div>
-                      <span className="font-bold text-slate-500 block uppercase text-[10px]">Keperluan Dana:</span>
-                      <span className="font-bold text-slate-900">{item.category || item.description}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-500 block uppercase text-[10px]">Estimasi Total Dana:</span>
-                      <span className="font-black text-slate-900 text-sm font-mono">{formatCurrency(numericAmount)}</span>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-                    <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Rincian & Justifikasi Pengajuan:</p>
-                    <p className="text-xs text-slate-800 leading-relaxed italic">
-                      &ldquo;{item.description || "Pengajuan dana operasional perusahaan"}&rdquo;
-                    </p>
-                  </div>
-
-                  {numericAmount > 0 && (
-                    <div className="p-2.5 bg-slate-50 border border-slate-300 rounded text-xs flex items-center gap-2">
-                      <span className="font-bold text-slate-600 uppercase text-[10px]">Terbilang:</span>
-                      <span className="font-bold italic text-slate-900">{terbilang(numericAmount)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* F. FORMULIR VEHICLE LOG (LOG ARMADA) */}
-              {item.type === "vehicle_log" && (
-                <div className="space-y-3">
-                  <div className="border border-slate-300 rounded overflow-hidden">
-                    <table className="w-full text-xs border-collapse">
-                      <tbody>
-                        <tr className="border-b border-slate-200">
-                          <td className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200">Armada / Kendaraan</td>
-                          <td className="p-2.5 font-black text-slate-900">
-                            {item.vehicle_name || "Mobil Operasional"} 
-                            {item.plate_number && <span className="ml-2 font-mono px-2 py-0.5 bg-slate-200 text-slate-800 rounded font-bold">({item.plate_number})</span>}
-                          </td>
-                        </tr>
-                        <tr className="border-b border-slate-200">
-                          <td className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200">Lokasi Tujuan</td>
-                          <td className="p-2.5 font-semibold text-slate-900">{item.destination || item.category || "-"}</td>
-                        </tr>
-                        <tr className="border-b border-slate-200">
-                          <td className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200">Odometer Berangkat</td>
-                          <td className="p-2.5 font-mono font-bold text-slate-800">
-                            {item.odometer_start ? `${item.odometer_start.toLocaleString()} KM` : "-"}
-                          </td>
-                        </tr>
-                        <tr className="border-b border-slate-200">
-                          <td className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200">Odometer Kembali</td>
-                          <td className="p-2.5 font-mono font-bold text-slate-800">
-                            {item.odometer_end ? `${item.odometer_end.toLocaleString()} KM` : "-"}
-                          </td>
-                        </tr>
-                        {item.distance && (
-                          <tr className="border-b border-slate-200 bg-indigo-50/50">
-                            <td className="p-2.5 font-bold text-indigo-950 border-r border-slate-200">Total Jarak Tempuh</td>
-                            <td className="p-2.5 font-mono font-black text-indigo-900">{item.distance} KM</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-                    <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Keperluan Pemakaian Armada:</p>
-                    <p className="text-xs text-slate-800 italic leading-relaxed">
-                      &ldquo;{item.purpose || item.description || "Operasional dinas kantor"}&rdquo;
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* G. FORMULIR DINAS LUAR */}
-              {item.type === "dinas_luar" && (
-                <div className="space-y-3">
-                  <div className="border border-slate-300 rounded overflow-hidden">
-                    <table className="w-full text-xs border-collapse">
-                      <tbody>
-                        <tr className="border-b border-slate-200">
-                          <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Instansi / Lokasi Tujuan</th>
-                          <td className="p-2.5 font-black text-slate-900">{item.dinas_luar_destination || item.category || "-"}</td>
-                        </tr>
-                        <tr className="border-b border-slate-200">
-                          <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Check-In Tugas</th>
-                          <td className="p-2.5 font-semibold text-slate-900">{item.start_date || "-"}</td>
-                        </tr>
-                        <tr>
-                          <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Check-Out Tugas</th>
-                          <td className="p-2.5 font-semibold text-slate-900">{item.end_date || "-"}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-                    <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Laporan / Catatan Pelaksanaan Tugas:</p>
-                    <p className="text-xs text-slate-800 italic leading-relaxed">
-                      &ldquo;{item.dinas_luar_notes || item.description || "Melaksanakan kunjungan dan instalasi teknis di lokasi klien."}&rdquo;
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* H. FORMULIR PROFILE UPDATE */}
-              {item.type === "profile" && (
-                <div className="space-y-3">
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-                    <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Alasan / Rincian Perubahan Data:</p>
-                    <p className="text-xs text-slate-800 leading-relaxed">
-                      {item.description || "Pembaruan informasi profil karyawan"}
-                    </p>
-                  </div>
-                </div>
-              )}
+              <OfficialApprovalFormDetails item={item} numericAmount={numericAmount} />
             </div>
 
             {/* 5. SECTION III: BUKTI LAMPIRAN / DOKUMEN PENDUKUNG (JIKA ADA) */}
@@ -823,24 +836,21 @@ export default function OfficialApprovalDocumentSheet({
 
       {/* IMAGE PREVIEW MODAL */}
       {selectedPreviewImage && (
-        <div 
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " " || e.key === "Escape") {
-              setSelectedPreviewImage(null);
-            }
-          }}
-          onClick={() => setSelectedPreviewImage(null)}
-          className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md cursor-zoom-out"
-        >
-          <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-xl overflow-hidden p-2 shadow-2xl">
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+          <button
+            type="button"
+            aria-label="Tutup preview gambar"
+            onClick={() => setSelectedPreviewImage(null)}
+            className="absolute inset-0 w-full h-full cursor-zoom-out bg-transparent border-0"
+          />
+          <div className="relative z-10 max-w-4xl max-h-[90vh] bg-white rounded-xl overflow-hidden p-2 shadow-2xl">
             <img 
               src={selectedPreviewImage} 
               alt="Preview Lampiran" 
               className="max-h-[85vh] w-auto mx-auto object-contain"
             />
             <button 
+              type="button"
               onClick={() => setSelectedPreviewImage(null)}
               className="absolute top-3 right-3 p-2 bg-black/60 hover:bg-black text-white rounded-full transition"
             >

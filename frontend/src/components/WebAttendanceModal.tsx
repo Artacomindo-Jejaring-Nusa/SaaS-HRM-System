@@ -73,7 +73,7 @@ export default function WebAttendanceModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    if (typeof globalThis.window !== "undefined" && "geolocation" in navigator) {
+    if (globalThis.window !== undefined && "geolocation" in navigator) {
       setLocationStatus("loading");
       navigator.geolocation.getCurrentPosition(
         (pos) => {
