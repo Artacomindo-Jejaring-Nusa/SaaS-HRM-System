@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
-import { Plus, Search, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, UserX, ShieldAlert, CreditCard, Mail, MapPin, Phone, Building2, BadgeCheck, Clock, Eye, Key, Briefcase, ChevronDown, UserCog } from "lucide-react";
+import { Plus, Search, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, ArrowRightLeft, UserX, ShieldAlert, CreditCard, Mail, MapPin, Phone, Building2, BadgeCheck, Clock, Eye, Key, Briefcase, ChevronDown, UserCog, Pencil, ShieldCheck, History, Check, Calendar as CalendarIcon } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
 import { PermissionGuard } from "@/components/PermissionGuard";
@@ -61,6 +61,9 @@ interface Employee {
   bank_account_no?: string;
   bank_account_name?: string;
   can_access_manager_portal?: boolean | null;
+  auto_validate_web_attendance?: boolean;
+  auto_validate_until?: string;
+  is_web_auto_validated?: boolean;
 }
 
 interface EmployeeFormData {
@@ -621,6 +624,7 @@ interface EmployeePageHeaderProps {
   readonly onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   readonly onPayrollImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
   readonly onOpenAddModal: () => void;
+  readonly onOpenAuditLogModal?: () => void;
 }
 
 function EmployeePageHeader({
@@ -629,6 +633,7 @@ function EmployeePageHeader({
   onFileUpload,
   onPayrollImport,
   onOpenAddModal,
+  onOpenAuditLogModal,
 }: EmployeePageHeaderProps) {
   return (
     <div className="dash-page-header">
@@ -642,6 +647,16 @@ function EmployeePageHeader({
         </div>
       </div>
       <div className="dash-page-actions flex flex-wrap gap-2">
+        {onOpenAuditLogModal && (
+          <button 
+            onClick={onOpenAuditLogModal}
+            className="dash-btn dash-btn-outline border-slate-300 hover:border-slate-400 text-slate-700 font-bold"
+            title="Lihat riwayat jejak audit aktivasi validasi otomatis"
+          >
+            <History size={14} className="mr-1 text-slate-600" />
+            Jejak Audit Validasi
+          </button>
+        )}
         <PermissionGuard slug="create-employees">
           <button 
             onClick={onDownloadTemplate}
@@ -727,6 +742,7 @@ interface EmployeeToolbarProps {
   readonly isSubmitting: boolean;
   readonly onResendVerification: () => void;
   readonly onBulkDelete: () => void;
+  readonly onBulkAutoValidation?: () => void;
 }
 
 function EmployeeToolbar({
@@ -743,6 +759,7 @@ function EmployeeToolbar({
   isSubmitting,
   onResendVerification,
   onBulkDelete,
+  onBulkAutoValidation,
 }: EmployeeToolbarProps) {
   return (
     <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
@@ -800,6 +817,18 @@ function EmployeeToolbar({
 
         {selectedIdsCount > 0 && (
           <div className="flex items-center gap-2 animate-in slide-in-from-right-4 duration-200">
+            {onBulkAutoValidation && (
+              <button 
+                onClick={onBulkAutoValidation}
+                disabled={isSubmitting}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-full text-xs font-black hover:bg-emerald-100 transition-all border border-emerald-200 shadow-sm"
+                title="Atur validasi otomatis absen web secara massal"
+              >
+                <ShieldCheck size={14} />
+                Validasi Web ({selectedIdsCount})
+              </button>
+            )}
+
             <button 
               onClick={onResendVerification}
               disabled={isSubmitting}
@@ -840,6 +869,7 @@ interface EmployeeTableProps {
   readonly formatDate: (date?: string) => string;
   readonly pagination: PaginationData | null;
   readonly onPageChange: (page: number) => void;
+  readonly onAutoValidation?: (emp: Employee) => void;
 }
 
 function EmployeeTable({
@@ -859,6 +889,7 @@ function EmployeeTable({
   formatDate,
   pagination,
   onPageChange,
+  onAutoValidation,
 }: EmployeeTableProps) {
   return (
     <>
@@ -900,6 +931,9 @@ function EmployeeTable({
                   </th>
                   <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap">
                     Email Verification
+                  </th>
+                  <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap">
+                    Validasi Web
                   </th>
                   {isHRorAdmin && (
                     <th className="px-3.5 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right sticky right-0 bg-gray-50 z-20 w-14 min-w-[60px] whitespace-nowrap">
@@ -1002,6 +1036,37 @@ function EmployeeTable({
                         </div>
                       )}
                     </td>
+                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
+                      {isHRorAdmin ? (
+                        <button
+                          type="button"
+                          onClick={() => onAutoValidation?.(emp)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black border transition-all ${
+                            emp.auto_validate_web_attendance
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 shadow-sm'
+                              : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                          }`}
+                          title="Klik untuk konfigurasi validasi web"
+                        >
+                          <ShieldCheck size={12} className={emp.auto_validate_web_attendance ? 'text-emerald-600' : 'text-slate-400'} />
+                          {emp.auto_validate_web_attendance ? 'Otomatis' : 'Manual Review'}
+                          {emp.auto_validate_until && (
+                            <span className="text-[8px] opacity-80 font-normal">
+                              ({new Date(emp.auto_validate_until).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })})
+                            </span>
+                          )}
+                        </button>
+                      ) : (
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black border ${
+                          emp.auto_validate_web_attendance
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-slate-50 text-slate-500 border-slate-200'
+                        }`}>
+                          <ShieldCheck size={12} className={emp.auto_validate_web_attendance ? 'text-emerald-600' : 'text-slate-400'} />
+                          {emp.auto_validate_web_attendance ? 'Otomatis' : 'Manual'}
+                        </span>
+                      )}
+                    </td>
                     {isHRorAdmin && (
                       <td className="px-3.5 py-3 text-right sticky right-0 bg-white group-hover:bg-orange-50/20 z-10 w-14 min-w-[60px]">
                         <DropdownMenu>
@@ -1038,6 +1103,19 @@ function EmployeeTable({
                               <div>
                                 <p className="text-sm font-black text-gray-900 group-hover/item:text-orange-600 transition-colors">Edit Profil Karyawan</p>
                                 <p className="text-[10px] text-gray-400 font-medium">Ubah profil lengkap, jabatan, & akses</p>
+                              </div>
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem 
+                              onClick={() => onAutoValidation?.(emp)}
+                              className="w-full flex items-center gap-3 p-3 text-left hover:bg-emerald-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
+                            >
+                              <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover/item:bg-emerald-100 group-hover/item:text-emerald-700 transition-colors">
+                                <ShieldCheck size={18} />
+                              </div>
+                              <div>
+                                <p className="text-sm font-black text-gray-900 group-hover/item:text-emerald-600 transition-colors">Validasi Absen Web</p>
+                                <p className="text-[10px] text-gray-400 font-medium">Pengaturan auto-validate & masa berlaku</p>
                               </div>
                             </DropdownMenuItem>
                             
@@ -1867,6 +1945,127 @@ function EmployeesContent() {
   const [errorMessage, setErrorMessage] = useState("");
   const [modalType, setModalType] = useState<"error" | "success">("error");
 
+  // Auto-Validation State (v2.1 Whitelist Feature)
+  const [autoValidationModalOpen, setAutoValidationModalOpen] = useState(false);
+  const [autoValidationEmp, setAutoValidationEmp] = useState<Employee | null>(null);
+  const [autoValidationStatus, setAutoValidationStatus] = useState<boolean>(true);
+  const [autoValidationExpiryPreset, setAutoValidationExpiryPreset] = useState<'permanent' | '7_days' | '30_days' | '90_days' | 'custom'>('permanent');
+  const [autoValidationCustomDate, setAutoValidationCustomDate] = useState<string>('');
+  const [autoValidationNotes, setAutoValidationNotes] = useState<string>('');
+
+  // Bulk Auto-Validation State
+  const [bulkAutoValidationModalOpen, setBulkAutoValidationModalOpen] = useState(false);
+  const [bulkAutoValidationStatus, setBulkAutoValidationStatus] = useState<boolean>(true);
+  const [bulkAutoValidationExpiryPreset, setBulkAutoValidationExpiryPreset] = useState<'permanent' | '7_days' | '30_days' | '90_days' | 'custom'>('30_days');
+  const [bulkAutoValidationCustomDate, setBulkAutoValidationCustomDate] = useState<string>('');
+  const [bulkAutoValidationNotes, setBulkAutoValidationNotes] = useState<string>('');
+
+  // Audit Logs State
+  const [auditLogModalOpen, setAuditLogModalOpen] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
+
+  const calculateExpiryDate = (preset: string, customDate: string): string | null => {
+    if (preset === 'permanent') return null;
+    if (preset === 'custom') return customDate || null;
+    const now = new Date();
+    if (preset === '7_days') now.setDate(now.getDate() + 7);
+    else if (preset === '30_days') now.setDate(now.getDate() + 30);
+    else if (preset === '90_days') now.setDate(now.getDate() + 90);
+    return now.toISOString().split('T')[0];
+  };
+
+  const handleOpenAutoValidationModal = (emp: Employee) => {
+    setAutoValidationEmp(emp);
+    setAutoValidationStatus(emp.auto_validate_web_attendance ?? false);
+    if (emp.auto_validate_until) {
+      setAutoValidationExpiryPreset('custom');
+      setAutoValidationCustomDate(emp.auto_validate_until.split('T')[0]);
+    } else {
+      setAutoValidationExpiryPreset('permanent');
+      setAutoValidationCustomDate('');
+    }
+    setAutoValidationNotes('');
+    setAutoValidationModalOpen(true);
+  };
+
+  const handleSaveAutoValidation = async () => {
+    if (!autoValidationEmp) return;
+    setIsSubmitting(true);
+    try {
+      const expiresAt = autoValidationStatus ? calculateExpiryDate(autoValidationExpiryPreset, autoValidationCustomDate) : null;
+      await axiosInstance.post('/superadmin/auto-validation/toggle', {
+        user_id: autoValidationEmp.id,
+        auto_validate: autoValidationStatus,
+        expires_at: expiresAt,
+        notes: autoValidationNotes || undefined,
+      });
+
+      toast.success(`Validasi Otomatis untuk ${autoValidationEmp.name} berhasil diperbarui.`);
+      setAutoValidationModalOpen(false);
+      fetchEmployees(pagination?.current_page || 1);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e.response?.data?.message || 'Gagal memperbarui validasi otomatis.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenBulkAutoValidation = () => {
+    if (selectedIds.length === 0) {
+      toast.info("Pilih setidaknya 1 karyawan untuk aksi massal.");
+      return;
+    }
+    setBulkAutoValidationStatus(true);
+    setBulkAutoValidationExpiryPreset('30_days');
+    setBulkAutoValidationCustomDate('');
+    setBulkAutoValidationNotes('');
+    setBulkAutoValidationModalOpen(true);
+  };
+
+  const handleSaveBulkAutoValidation = async () => {
+    if (selectedIds.length === 0) return;
+    setIsSubmitting(true);
+    try {
+      const expiresAt = bulkAutoValidationStatus ? calculateExpiryDate(bulkAutoValidationExpiryPreset, bulkAutoValidationCustomDate) : null;
+      await axiosInstance.post('/superadmin/auto-validation/bulk', {
+        user_ids: selectedIds,
+        auto_validate: bulkAutoValidationStatus,
+        expires_at: expiresAt,
+        notes: bulkAutoValidationNotes || undefined,
+      });
+
+      toast.success(`Berhasil menerapkan Validasi Otomatis untuk ${selectedIds.length} karyawan.`);
+      setBulkAutoValidationModalOpen(false);
+      setSelectedIds([]);
+      fetchEmployees(pagination?.current_page || 1);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e.response?.data?.message || 'Gagal menerapkan aksi massal.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const fetchAuditLogs = async () => {
+    setLoadingAuditLogs(true);
+    try {
+      const res = await axiosInstance.get('/superadmin/auto-validation/audit-logs');
+      setAuditLogs(res.data?.data?.data || res.data?.data || []);
+    } catch (e) {
+      console.error("Gagal mengambil jejak audit", e);
+      toast.error("Gagal mengambil data jejak audit.");
+    } finally {
+      setLoadingAuditLogs(false);
+    }
+  };
+
+  const handleOpenAuditLogModal = () => {
+    setAuditLogModalOpen(true);
+    fetchAuditLogs();
+  };
+
   const handleDisciplineSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     executeEmployeeDisciplineAction(
@@ -2084,6 +2283,7 @@ function EmployeesContent() {
         onFileUpload={handleFileUpload}
         onPayrollImport={handlePayrollImport}
         onOpenAddModal={handleOpenAddModal}
+        onOpenAuditLogModal={handleOpenAuditLogModal}
       />
 
       <EmployeeVerificationBanner
@@ -2109,6 +2309,7 @@ function EmployeesContent() {
         isSubmitting={isSubmitting}
         onResendVerification={() => handleResendVerification()}
         onBulkDelete={handleBulkDelete}
+        onBulkAutoValidation={handleOpenBulkAutoValidation}
       />
 
       <EmployeeTable
@@ -2134,6 +2335,7 @@ function EmployeesContent() {
         formatDate={formatDate}
         pagination={pagination}
         onPageChange={setPage}
+        onAutoValidation={handleOpenAutoValidationModal}
       />
 
       <EmployeeAddEditModal
@@ -2172,6 +2374,377 @@ function EmployeesContent() {
         onClose={() => setDisciplineModalOpen(false)}
         onSubmit={handleDisciplineSubmit}
       />
+
+      {/* Auto Validation Modal (Single Employee) */}
+      {autoValidationModalOpen && autoValidationEmp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-50/50 to-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 shadow-sm shadow-emerald-500/10">
+                  <ShieldCheck size={22} />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900 leading-tight">Validasi Otomatis Absen Web</h3>
+                  <p className="text-xs text-slate-500 font-medium">{autoValidationEmp.name} &bull; {autoValidationEmp.email}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setAutoValidationModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto custom-scrollbar">
+              {/* Toggle Switch */}
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <div>
+                  <p className="text-xs font-black text-slate-900">Status Validasi Otomatis</p>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    {autoValidationStatus 
+                      ? "Absen web langsung berstatus VALID tanpa menunggu approval manual."
+                      : "Absen web memerlukan approval manual oleh Superadmin di tab Persetujuan."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAutoValidationStatus(!autoValidationStatus)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    autoValidationStatus ? 'bg-emerald-500' : 'bg-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      autoValidationStatus ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Expiry presets (shown only if active) */}
+              {autoValidationStatus && (
+                <div className="space-y-3 animate-in fade-in duration-200">
+                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                    Masa Berlaku Otomatis
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {[
+                      { id: '7_days', label: '7 Hari' },
+                      { id: '30_days', label: '30 Hari' },
+                      { id: '90_days', label: '90 Hari' },
+                      { id: 'permanent', label: 'Permanen' },
+                      { id: 'custom', label: 'Kustom Tanggal' },
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setAutoValidationExpiryPreset(item.id as any)}
+                        className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${
+                          autoValidationExpiryPreset === item.id
+                            ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {autoValidationExpiryPreset === 'custom' && (
+                    <div className="pt-2 animate-in fade-in duration-200">
+                      <label className="text-[11px] font-bold text-slate-500 block mb-1">Berlaku Sampai Tanggal:</label>
+                      <input
+                        type="date"
+                        value={autoValidationCustomDate}
+                        min={new Date().toISOString().split('T')[0]}
+                        onChange={(e) => setAutoValidationCustomDate(e.target.value)}
+                        className="w-full px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Notes textarea */}
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                  Catatan / Alasan (Audit Log)
+                </label>
+                <textarea
+                  rows={3}
+                  value={autoValidationNotes}
+                  onChange={(e) => setAutoValidationNotes(e.target.value)}
+                  placeholder="Contoh: Pegawai WFH proyek khusus, disetujui HRD..."
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-medium"
+                />
+              </div>
+
+              {/* Anomaly Notice info */}
+              <div className="p-3 bg-amber-50/70 border border-amber-100 rounded-2xl text-[11px] text-amber-800 leading-relaxed font-medium">
+                <span className="font-black text-amber-900 block mb-0.5">Catatan Keamanan & Anomali:</span>
+                Sistem tetap memverifikasi deteksi jam kerja aneh (luar shift) atau GPS di luar radius wajar. Absen anomali akan tetap ditandai untuk peninjauan admin.
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
+              <button 
+                type="button"
+                onClick={() => setAutoValidationModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 transition-colors"
+              >
+                Batal
+              </button>
+              <button 
+                type="button"
+                onClick={handleSaveAutoValidation}
+                disabled={isSubmitting}
+                className="px-6 py-2 text-xs font-black text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 disabled:opacity-50 shadow-lg shadow-emerald-600/20 transition-all"
+              >
+                {isSubmitting ? "Menyimpan..." : "Simpan Pengaturan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Auto Validation Modal */}
+      {bulkAutoValidationModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-50/50 to-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 shadow-sm shadow-emerald-500/10">
+                  <ShieldCheck size={22} />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900 leading-tight">Validasi Massal Absen Web</h3>
+                  <p className="text-xs text-slate-500 font-medium">Menerapkan ke <span className="font-black text-emerald-600">{selectedIds.length} karyawan terpilih</span></p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setBulkAutoValidationModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto custom-scrollbar">
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <div>
+                  <p className="text-xs font-black text-slate-900">Aksi Validasi Massal</p>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    {bulkAutoValidationStatus ? "Aktifkan Validasi Otomatis" : "Nonaktifkan (Kembalikan ke Manual Review)"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBulkAutoValidationStatus(!bulkAutoValidationStatus)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    bulkAutoValidationStatus ? 'bg-emerald-500' : 'bg-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      bulkAutoValidationStatus ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {bulkAutoValidationStatus && (
+                <div className="space-y-3 animate-in fade-in duration-200">
+                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                    Masa Berlaku Otomatis
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {[
+                      { id: '7_days', label: '7 Hari' },
+                      { id: '30_days', label: '30 Hari' },
+                      { id: '90_days', label: '90 Hari' },
+                      { id: 'permanent', label: 'Permanen' },
+                      { id: 'custom', label: 'Kustom Tanggal' },
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setBulkAutoValidationExpiryPreset(item.id as any)}
+                        className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${
+                          bulkAutoValidationExpiryPreset === item.id
+                            ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {bulkAutoValidationExpiryPreset === 'custom' && (
+                    <div className="pt-2">
+                      <label className="text-[11px] font-bold text-slate-500 block mb-1">Berlaku Sampai Tanggal:</label>
+                      <input
+                        type="date"
+                        value={bulkAutoValidationCustomDate}
+                        min={new Date().toISOString().split('T')[0]}
+                        onChange={(e) => setBulkAutoValidationCustomDate(e.target.value)}
+                        className="w-full px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                  Catatan Audit Massal
+                </label>
+                <textarea
+                  rows={3}
+                  value={bulkAutoValidationNotes}
+                  onChange={(e) => setBulkAutoValidationNotes(e.target.value)}
+                  placeholder="Contoh: Whitelist massal seluruh divisi teknisi..."
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-medium"
+                />
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
+              <button 
+                type="button"
+                onClick={() => setBulkAutoValidationModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 transition-colors"
+              >
+                Batal
+              </button>
+              <button 
+                type="button"
+                onClick={handleSaveBulkAutoValidation}
+                disabled={isSubmitting}
+                className="px-6 py-2 text-xs font-black text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 disabled:opacity-50 shadow-lg shadow-emerald-600/20 transition-all"
+              >
+                {isSubmitting ? "Menerapkan..." : `Terapkan ke ${selectedIds.length} Karyawan`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audit Log Modal */}
+      {auditLogModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 shadow-sm">
+                  <History size={22} />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900 leading-tight">Jejak Audit Validasi Absen Web</h3>
+                  <p className="text-xs text-slate-500 font-medium">Log riwayat perubahan whitelist dan validasi otomatis oleh Superadmin</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={fetchAuditLogs}
+                  disabled={loadingAuditLogs}
+                  className="dash-btn dash-btn-outline border-slate-200 text-slate-700 text-xs py-1.5"
+                >
+                  Refresh
+                </button>
+                <button 
+                  onClick={() => setAuditLogModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+              {loadingAuditLogs ? (
+                <div className="py-12 text-center text-xs text-slate-500 font-bold">Memuat data jejak audit...</div>
+              ) : auditLogs.length === 0 ? (
+                <div className="py-16 text-center text-slate-400">
+                  <ShieldCheck size={36} className="mx-auto mb-2 opacity-40 text-slate-400" />
+                  <p className="text-sm font-black text-slate-600">Belum Ada Riwayat Audit</p>
+                  <p className="text-xs font-medium mt-0.5">Semua perubahan status validasi otomatis akan tercatat secara detail di sini.</p>
+                </div>
+              ) : (
+                <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                        <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Waktu</th>
+                        <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Pelaku (Admin)</th>
+                        <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Karyawan Target</th>
+                        <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Aksi</th>
+                        <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Masa Berlaku</th>
+                        <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-widest text-[10px]">Catatan / IP</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {auditLogs.map((log: any) => (
+                        <tr key={log.id} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-600">
+                            {new Date(log.created_at).toLocaleString('id-ID', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-slate-800">
+                            {log.actor?.name || 'Superadmin'}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-slate-900">
+                            {log.target_user?.name || `ID #${log.target_user_id}`}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                              log.action === 'enabled'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : log.action === 'disabled'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                            }`}>
+                              {log.action === 'enabled' ? 'Aktivasi Auto-Valid' : log.action === 'disabled' ? 'Deaktivasi (Manual)' : log.action}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600 font-medium">
+                            {log.new_state?.auto_validate_until
+                              ? new Date(log.new_state.auto_validate_until).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                              : 'Permanen'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-slate-700 font-medium">{log.notes || '-'}</div>
+                            {log.ip_address && (
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">{log.ip_address}</div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 flex justify-end bg-slate-50/50">
+              <button 
+                type="button"
+                onClick={() => setAuditLogModalOpen(false)}
+                className="px-5 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Global Error Modal */}
       <ErrorModal 

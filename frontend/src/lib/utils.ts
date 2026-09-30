@@ -7,8 +7,19 @@ export function cn(...inputs: ClassValue[]) {
 
 export function getStorageUrl(path: string | null | undefined) {
   if (!path) return "";
-  if (path.startsWith("http")) return path;
+  if (path.startsWith("data:")) return path;
+
+  // If already absolute URL
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
   
-  const baseUrl = process.env.NEXT_PUBLIC_STORAGE_URL || "http://127.0.0.1:8000/storage";
-  return `${baseUrl}/${path}`;
+  // Clean leading slashes and redundant storage/ prefix
+  let cleanPath = path.replace(/^\/+/, "");
+  if (cleanPath.startsWith("storage/")) {
+    cleanPath = cleanPath.replace(/^storage\//, "");
+  }
+
+  const baseUrl = (process.env.NEXT_PUBLIC_STORAGE_URL || "http://127.0.0.1:8000/storage").replace(/\/+$/, "");
+  return `${baseUrl}/${cleanPath}`;
 }

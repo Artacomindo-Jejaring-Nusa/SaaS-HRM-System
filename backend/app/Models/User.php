@@ -37,12 +37,16 @@ class User extends Authenticatable
         'bank_name', 'bank_account_no', 'bank_account_name', 'cost_center', 'basic_salary',
         'fixed_allowance', 'working_days_per_week', 'payroll_type',
         'leave_period_start', 'leave_accrued', 'leave_used', 'leave_expand_used', 'leave_expand_last_month',
+        'auto_validate_web_attendance', 'auto_validate_until', 'auto_validate_updated_by', 'auto_validate_updated_at',
     ];
 
     protected $casts = [
         'face_embedding' => 'array',
         'face_registered_at' => 'datetime',
         'face_approved_at' => 'datetime',
+        'auto_validate_web_attendance' => 'boolean',
+        'auto_validate_until' => 'datetime',
+        'auto_validate_updated_at' => 'datetime',
     ];
 
     protected $hidden = [
@@ -51,7 +55,25 @@ class User extends Authenticatable
         'face_embedding', // Vektor biometrik 128-d tidak boleh terexpose di API response
     ];
 
-    protected $appends = ['profile_photo_url', 'face_registered_photo_url', 'is_face_approved', 'is_manager', 'can_access_manager_portal', 'permission_slugs', 'kemnaker_leave_balance', 'is_eligible_for_leave'];
+    protected $appends = ['profile_photo_url', 'face_registered_photo_url', 'is_face_approved', 'is_manager', 'can_access_manager_portal', 'permission_slugs', 'kemnaker_leave_balance', 'is_eligible_for_leave', 'is_web_auto_validated'];
+
+    public function getIsWebAutoValidatedAttribute(): bool
+    {
+        if (!$this->auto_validate_web_attendance) {
+            return false;
+        }
+
+        if ($this->auto_validate_until) {
+            return \Carbon\Carbon::parse($this->auto_validate_until)->endOfDay()->isFuture();
+        }
+
+        return true;
+    }
+
+    public function isWebAttendanceAutoValidated(): bool
+    {
+        return $this->is_web_auto_validated;
+    }
 
     public function notifications()
     {
@@ -79,12 +101,17 @@ class User extends Authenticatable
             return true;
         }
 
-        if (array_key_exists('can_access_manager_portal', $this->attributes) && $this->attributes['can_access_manager_portal'] !== null) {
-            return (bool) $this->attributes['can_access_manager_portal'];
+        // 1. If explicitly enabled on this specific user record
+        if (isset($this->attributes['can_access_manager_portal']) && $this->attributes['can_access_manager_portal'] == 1) {
+            return true;
         }
 
         $roleName = $this->relationLoaded('role') ? strtolower($this->role?->name ?? '') : '';
-        return $this->hasPermission('view-manager-portal')
+
+        // 2. Dynamic permissions assigned to user's role (Super Admin configured)
+        if (
+            $this->hasPermission('view-manager-portal')
+            || $this->hasPermission('manage-approvals')
             || $this->hasPermission('approve-leaves')
             || $this->hasPermission('approve-permits')
             || $this->hasPermission('approve-overtimes')
@@ -93,17 +120,28 @@ class User extends Authenticatable
             || $this->hasPermission('approve-vehicle-logs')
             || $this->hasPermission('approve-shift-swaps')
             || $this->hasPermission('approve-project-costs')
-            || str_contains($roleName, 'manager')
-            || str_contains($roleName, 'supervisor')
-            || str_contains($roleName, 'admin')
-            || str_contains($roleName, 'hrd')
-            || str_contains($roleName, 'hr')
-            || str_contains($roleName, 'direktur')
-            || str_contains($roleName, 'director')
-            || str_contains($roleName, 'coo')
-            || str_contains($roleName, 'ceo')
-            || str_contains($roleName, 'boc')
-            || str_contains($roleName, 'management');
+            || $this->hasPermission('manage-attendance-corrections')
+            || $this->hasPermission('approve-attendance-corrections')
+        ) {
+            return true;
+        }
+
+        // 3. If user has subordinates assigned
+        if ($this->subordinates()->exists()) {
+            return true;
+        }
+
+        // 4. Fallback to role name keywords
+        if ($roleName) {
+            $keywords = ['manager', 'supervisor', 'admin', 'hrd', 'hr', 'lead', 'kadiv', 'head', 'atasan', 'spv', 'direktur', 'director', 'coo', 'ceo', 'boc', 'management'];
+            foreach ($keywords as $keyword) {
+                if (str_contains($roleName, $keyword)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     public function getIsManagerAttribute()
@@ -182,5 +220,39 @@ class User extends Authenticatable
                 $p->where('slug', $permissionSlug);
             });
         });
+    }
+    public function salaries()
+    {
+        return $this->hasMany(Salary::class);
+    }
+
+    public function overtimes()
+    {
+        return $this->hasMany(Overtime::class);
+    }
+
+    public function leaves()
+    {
+        return $this->hasMany(Leave::class);
+    }
+
+    public function permits()
+    {
+        return $this->hasMany(Permit::class);
+    }
+
+    public function faceApprover()
+    {
+        return $this->belongsTo(User::class, 'face_approved_by');
+    }
+
+    public function autoValidateUpdatedBy()
+    {
+        return $this->belongsTo(User::class, 'auto_validate_updated_by');
+    }
+
+    public function webAttendanceAuditLogs()
+    {
+        return $this->hasMany(WebAttendanceAuditLog::class);
     }
 }

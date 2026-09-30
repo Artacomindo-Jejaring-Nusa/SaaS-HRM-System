@@ -41,6 +41,7 @@ use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\VehicleLogController;
 use App\Http\Controllers\ApprovalWorkflowController;
+use App\Http\Controllers\AutoValidationController;
 use App\Http\Controllers\ApiTokenController;
 use App\Http\Middleware\TenantMiddleware;
 use Illuminate\Support\Facades\Broadcast;
@@ -151,23 +152,28 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::delete('/holidays/{id}', [HolidayController::class, 'destroy']);
     });
 
-    // Schedules (Operational)
-    Route::middleware('permission:manage-schedules')->group(function () {
-        Route::get('/schedules', [ScheduleController::class, 'index']);
-        Route::post('/schedules', [ScheduleController::class, 'store']);
-        Route::delete('/schedules/{id}', [ScheduleController::class, 'destroy']);
-    });
 
     // Attendance
     Route::middleware('permission:apply-attendances')->group(function () {
         Route::post('/attendance/check-in', [AttendanceController::class, 'checkIn'])->middleware('throttle:attendance');
         Route::post('/attendance/check-out', [AttendanceController::class, 'checkOut'])->middleware('throttle:attendance');
+        Route::post('/attendance/web-check-in', [AttendanceController::class, 'webCheckIn'])->middleware('throttle:attendance');
+        Route::post('/attendance/web-check-out', [AttendanceController::class, 'webCheckOut'])->middleware('throttle:attendance');
         Route::get('/attendance/today', [AttendanceController::class, 'today']);
     });
 
     Route::middleware('permission:view-attendances')->group(function () {
         Route::get('/attendance/history', [AttendanceController::class, 'history']);
+        Route::get('/attendance/web-pending', [AttendanceController::class, 'webPending']);
+        Route::post('/attendance/web-approve/{id}', [AttendanceController::class, 'webApprove']);
+        Route::post('/attendance/web-reject/{id}', [AttendanceController::class, 'webReject']);
+        Route::get('/attendance/pending-summary', [AttendanceController::class, 'pendingSummary']);
     });
+
+    // Web Attendance Auto-Validation (Whitelist & Bulk Management)
+    Route::post('/superadmin/auto-validation/toggle', [AutoValidationController::class, 'toggle']);
+    Route::post('/superadmin/auto-validation/bulk', [AutoValidationController::class, 'bulk']);
+    Route::get('/superadmin/auto-validation/audit-logs', [AutoValidationController::class, 'auditLogs']);
 
     Route::middleware('permission:view-attendance-map')->get('/attendance/heatmap', [AttendanceController::class, 'heatmap']);
 
@@ -314,16 +320,17 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::middleware('permission:edit-employees')->post('/employees/{id}/reset-password', [EmployeeController::class, 'resetPassword']);
     Route::middleware('permission:manage-wfh')->post('/employees/bulk-wfh', [EmployeeController::class, 'bulkWfh']);
 
-    // Schedules & Shift
+    // Master Shifts
     Route::get('/shifts', [ShiftController::class, 'index']);
     Route::post('/shifts', [ShiftController::class, 'store']);
+    Route::put('/shifts/{id}', [ShiftController::class, 'update']);
+    Route::delete('/shifts/{id}', [ShiftController::class, 'destroy']);
+
+    // Penugasan Schedules
     Route::get('/schedules', [ScheduleController::class, 'index']);
     Route::post('/schedules', [ScheduleController::class, 'store']);
-    // Schedules & Shift (Additional management)
-    Route::middleware('permission:manage-schedules')->group(function () {
-        Route::post('/schedules/generate', [ScheduleController::class, 'generate']);
-        Route::get('/schedules/export', [ScheduleController::class, 'export']);
-    });
+    Route::delete('/schedules/{id}', [ScheduleController::class, 'destroy']);
+    Route::get('/schedules/export', [ScheduleController::class, 'export']);
 
     // Attendance Correction Export
     Route::get('/attendance-corrections/export', [AttendanceCorrectionController::class, 'export']);

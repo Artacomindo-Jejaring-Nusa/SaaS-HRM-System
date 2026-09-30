@@ -21,6 +21,7 @@ import {
 import { ListPageSkeleton } from "@/components/Skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getStorageUrl } from "@/lib/utils";
 
 interface FaceRegistration {
   id: number;
@@ -318,7 +319,7 @@ export default function FaceApprovalPage() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {data.map((item) => {
                   const photoSrc = item.face_registered_photo_path
-                    ? `${process.env.NEXT_PUBLIC_STORAGE_URL || "/storage"}/${item.face_registered_photo_path}`
+                    ? getStorageUrl(item.face_registered_photo_path)
                     : null;
 
                   return (

@@ -16,6 +16,10 @@ interface User {
   kemnaker_leave_balance?: number;
   profile_photo_url?: string;
   is_manager?: boolean;
+  can_access_manager_portal?: boolean;
+  auto_validate_web_attendance?: boolean;
+  auto_validate_until?: string;
+  is_web_auto_validated?: boolean;
   office?: {
     id: number;
     name: string;
@@ -34,6 +38,7 @@ interface AuthContextType {
   user: User | null;
   permissions: string[];
   loading: boolean;
+  isManager: boolean;
   hasPermission: (permission?: string) => boolean;
   refreshUser: () => Promise<void>;
   logout: () => void;
@@ -52,6 +57,44 @@ export const isSuperAdminUser = (u: any): boolean => {
     u.can_access_all_companies === 1 ||
     u.role?.permissions?.some((p: any) => p.slug === "manage-roles" || p.slug === "view-superadmin-dashboard")
   );
+};
+
+export const isManagerUser = (u: any, permissions: string[] = []): boolean => {
+  if (!u) return false;
+  if (isSuperAdminUser(u)) {
+    return Boolean(u.can_access_manager_portal);
+  }
+
+  // 1. If explicitly true on user record or accessor
+  if (u.can_access_manager_portal === true || u.is_manager === true) {
+    return true;
+  }
+
+  // 2. Dynamic permissions assigned to role/user (Super Admin configured)
+  const approvalPerms = [
+    'view-manager-portal',
+    'manage-approvals',
+    'view-approvals',
+    'approve-leaves',
+    'approve-permits',
+    'approve-overtimes',
+    'approve-reimbursements',
+    'approve-fund-requests',
+    'approve-vehicle-logs',
+    'approve-shift-swaps',
+    'approve-attendance-corrections',
+    'approve-project-costs',
+    'manage-attendance-corrections'
+  ];
+  if (permissions.some(p => approvalPerms.includes(p))) return true;
+  
+  // 3. Fallback to role name keyword
+  const roleName = (u.role?.name || '').toLowerCase();
+  const managerKeywords = [
+    'manager', 'supervisor', 'direktur', 'director', 'lead', 
+    'kadiv', 'hrd', 'head', 'atasan', 'spv', 'coo', 'ceo', 'vp', 'management'
+  ];
+  return managerKeywords.some(k => roleName.includes(k));
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -75,20 +118,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userData = response.data?.user || response.data?.data?.user || response.data?.data || response.data;
 
       if (userData) {
-        // Enforce Super Admin only for web app
-        if (!isSuperAdminUser(userData)) {
-          console.warn("Akses web ditolak: Hanya Super Admin yang diizinkan.", userData.email);
-          Cookies.remove("token");
-          Cookies.remove("refresh_token");
-          setUser(null);
-          setPermissions([]);
-          router.replace("/login?unauthorized=1");
-          return;
-        }
-
         setUser(userData);
-        const slugs = userData.role?.permissions?.map((p: { slug: string }) => p.slug) || [];
-        setPermissions(slugs);
+        const roleSlugs = (userData.role?.permissions || []).map((p: any) => typeof p === 'string' ? p : p?.slug).filter(Boolean);
+        const directSlugs = Array.isArray(userData.permission_slugs) ? userData.permission_slugs : [];
+        const allSlugs = Array.from(new Set([...roleSlugs, ...directSlugs]));
+        setPermissions(allSlugs);
       }
     } catch (e: any) {
       console.error("Gagal ambil data user", e);
@@ -127,11 +161,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return permissions.includes(permission);
   };
 
+  const isManager = isManagerUser(user, permissions);
+
   return (
     <AuthContext.Provider value={{
       user,
       permissions,
       loading,
+      isManager,
       hasPermission,
       refreshUser: fetchUser,
       logout

@@ -2,6 +2,7 @@ export const translations = {
   id: {
     // General
     dashboard: "Dashboard",
+    approvals: "Pusat Persetujuan",
     attendance: "Kehadiran",
     leaves: "Cuti",
     leave_management: "Manajemen Cuti",
@@ -59,7 +60,6 @@ export const translations = {
     system: "Sistem",
     attendance_history: "Riwayat Absensi",
     schedules: "Jadwal & Shift",
-    approvals: "Persetujuan",
     approval_workflow: "Alur Persetujuan",
     attendance_report: "Laporan Absensi",
     reimbursement_report: "Laporan Klaim",
@@ -117,6 +117,7 @@ export const translations = {
   en: {
     // General
     dashboard: "Dashboard",
+    approvals: "Approval Center",
     attendance: "Attendance",
     leaves: "Leaves",
     leave_management: "Leave Management",
@@ -173,7 +174,6 @@ export const translations = {
     system: "System",
     attendance_history: "Attendance History",
     schedules: "Schedules & Shifts",
-    approvals: "Approvals",
     approval_workflow: "Approval Workflow",
     attendance_report: "Attendance Report",
     reimbursement_report: "Reimbursement Report",

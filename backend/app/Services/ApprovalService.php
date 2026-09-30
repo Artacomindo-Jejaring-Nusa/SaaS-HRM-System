@@ -219,7 +219,7 @@ class ApprovalService
             return null; // Fallback to default logic
         }
 
-        $workflow = self::getWorkflow($moduleKey, $companyId);
+        $workflow = self::getWorkflow($moduleKey, $companyId, $submitter);
 
         if (! $workflow) {
             return null; // Fallback
@@ -290,7 +290,7 @@ class ApprovalService
             return false; // Not using dynamic workflow
         }
 
-        $workflow = self::getWorkflow($moduleKey, $companyId);
+        $workflow = self::getWorkflow($moduleKey, $companyId, $submitter);
         if (! $workflow) {
             return false;
         }
@@ -314,6 +314,16 @@ class ApprovalService
                 if ($submitter->supervisor_id) {
                     $supervisor = User::find($submitter->supervisor_id);
                     return $supervisor ? collect([$supervisor]) : collect();
+                }
+                // Fallback when submitter has no supervisor: find users with module approval permission
+                $moduleKey = $step->workflow->module_key ?? '';
+                $permission = self::getApprovalPermissionForModule($moduleKey);
+                if ($permission) {
+                    return User::where('company_id', $companyId)
+                        ->where('id', '!=', $submitter->id)
+                        ->get()
+                        ->filter(fn ($u) => $u->hasPermission($permission))
+                        ->values();
                 }
                 return collect();
 
@@ -368,13 +378,13 @@ class ApprovalService
     /**
      * Get the current step info for display purposes (e.g., in API response).
      */
-    public static function getCurrentStepInfo(string $moduleKey, int $companyId, ?int $currentStep): ?array
+    public static function getCurrentStepInfo(string $moduleKey, int $companyId, ?int $currentStep, ?User $submitter = null): ?array
     {
         if ($currentStep === null) {
             return null;
         }
 
-        $workflow = self::getWorkflow($moduleKey, $companyId);
+        $workflow = self::getWorkflow($moduleKey, $companyId, $submitter);
         if (! $workflow) {
             return null;
         }
@@ -449,17 +459,26 @@ class ApprovalService
             || ($hasModulePermission && ($approver->role_id === 1 || str_contains(strtolower($approver->role?->name ?? ''), 'admin')));
     }
 
+    private static function canApproveSupervisorStep(User $approver, User $submitter, bool $hasModulePermission): bool
+    {
+        if ($submitter->supervisor_id) {
+            return $submitter->supervisor_id === $approver->id;
+        }
+
+        return $approver->role_id === 1 || $hasModulePermission;
+    }
+
     /**
      * Check if a specific user can act on a specific workflow step.
      */
     private static function canUserApproveStep(WorkflowStep $step, User $approver, User $submitter, int $companyId, ?string $moduleKey = null): bool
     {
-        // Master Admin (role_id 1) bypasses all checks
-        if ($approver->role_id === 1) {
-            return true;
+        // Approver cannot approve their own submission
+        if ($approver->id === $submitter->id) {
+            return false;
         }
 
-        // Must belong to the same company (or can access all)
+        // Must belong to the same company (or can access all companies)
         if ($approver->company_id !== $companyId && ! (method_exists($approver, 'canAccessAllCompanies') && $approver->canAccessAllCompanies())) {
             return false;
         }
@@ -469,7 +488,7 @@ class ApprovalService
         $hasModulePermission = $permission ? $approver->hasPermission($permission) : false;
 
         return match ($step->approver_type) {
-            'supervisor' => $submitter->supervisor_id === $approver->id || $hasModulePermission,
+            'supervisor' => self::canApproveSupervisorStep($approver, $submitter, $hasModulePermission),
             'role' => self::canApproveRoleStep($step, $approver, $resolvedModuleKey, $hasModulePermission),
             'user' => self::canApproveUserStep($step, $approver, $hasModulePermission),
             default => false,

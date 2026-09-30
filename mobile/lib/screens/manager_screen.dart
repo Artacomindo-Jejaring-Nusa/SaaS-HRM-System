@@ -141,7 +141,7 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
       },
     ];
 
-    if (_isSuperAdmin) return all;
+    if (_isSuperAdmin || _permissions.contains('manage-approvals')) return all;
     return all.where((item) => _permissions.contains(item['permission'])).toList();
   }
 

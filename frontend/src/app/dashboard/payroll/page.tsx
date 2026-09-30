@@ -2,13 +2,15 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import axiosInstance from "@/lib/axios";
+import * as XLSX from "xlsx";
 import { 
   Search, Download, Eye, FileSpreadsheet, 
   DollarSign, Loader2, X, Printer, ArrowLeft,
-  CheckCircle2, Clock, AlertTriangle,
-  ChevronRight, Edit2, Trash2,
-  Sparkles, Plus, Check, Play, RefreshCw,
-  AlertCircle
+  Calendar, Users, CheckCircle2, Clock, AlertTriangle,
+  ChevronRight, TrendingUp, Edit2, Trash2,
+  Sparkles, Plus, Check, Play, Filter, RefreshCw,
+  FileText, ShieldCheck, XCircle, AlertCircle,
+  FileDown, FileUp, CreditCard
 } from "lucide-react";
 import { PayrollSkeleton } from "@/components/Skeleton";
 import { toast } from "sonner";
@@ -516,6 +518,9 @@ interface PayrollUnifiedHeaderProps {
   readonly onExportExcelAll: () => void;
   readonly exporting: boolean;
   readonly onOpenGenerate: () => void;
+  readonly onDownloadPayrollTemplate?: () => void;
+  readonly onPayrollImport?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  readonly importingPayroll?: boolean;
 }
 
 function PayrollUnifiedHeader({
@@ -523,6 +528,9 @@ function PayrollUnifiedHeader({
   onExportExcelAll,
   exporting,
   onOpenGenerate,
+  onDownloadPayrollTemplate,
+  onPayrollImport,
+  importingPayroll,
 }: PayrollUnifiedHeaderProps) {
   return (
     <div className="dash-page-header flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -546,6 +554,35 @@ function PayrollUnifiedHeader({
         >
           <RefreshCw size={18} />
         </button>
+
+        {onDownloadPayrollTemplate && (
+          <button
+            onClick={onDownloadPayrollTemplate}
+            className="flex items-center gap-2 px-4 h-12 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-2xl font-bold text-xs border border-blue-200 transition-all shadow-xs"
+            title="Download template Excel untuk import massal nomor rekening dan gaji pokok"
+          >
+            <FileDown size={16} />
+            <span>Template Payroll</span>
+          </button>
+        )}
+
+        {onPayrollImport && (
+          <label
+            className="flex items-center gap-2 px-4 h-12 bg-white hover:bg-gray-50 text-blue-700 rounded-2xl font-bold text-xs border border-blue-200 transition-all shadow-xs cursor-pointer"
+            title="Import file Excel data rekening dan gaji pokok karyawan"
+          >
+            {importingPayroll ? <Loader2 className="animate-spin" size={16} /> : <FileUp size={16} />}
+            <span>{importingPayroll ? "Mengimpor..." : "Import Rekening/Gaji"}</span>
+            <input
+              type="file"
+              accept=".xlsx, .xls, .csv"
+              className="hidden"
+              disabled={importingPayroll}
+              onChange={onPayrollImport}
+            />
+          </label>
+        )}
+
         <button
           onClick={onExportExcelAll}
           disabled={exporting}
@@ -922,6 +959,9 @@ interface PayrollGenerateModalProps {
   readonly genStats: { total_employees: number; unsaved_profiles: number };
   readonly genLoading: boolean;
   readonly onExecuteGenerate: () => void;
+  readonly onDownloadPayrollTemplate?: () => void;
+  readonly onPayrollImport?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  readonly importingPayroll?: boolean;
 }
 
 function PayrollGenerateModal({
@@ -936,6 +976,9 @@ function PayrollGenerateModal({
   genStats,
   genLoading,
   onExecuteGenerate,
+  onDownloadPayrollTemplate,
+  onPayrollImport,
+  importingPayroll,
 }: PayrollGenerateModalProps) {
   if (!isOpen) return null;
 
@@ -989,15 +1032,41 @@ function PayrollGenerateModal({
             </div>
           </div>
 
-          <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
+          <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-3">
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Total Karyawan Terdaftar:</span>
+              <span className="text-gray-500 font-medium">Total Karyawan Terdaftar:</span>
               <span className="font-bold text-gray-900">{genStats.total_employees} Orang</span>
             </div>
             {genStats.unsaved_profiles > 0 && (
-              <div className="flex items-center gap-1.5 text-amber-700 text-xs font-medium pt-1">
-                <AlertCircle size={14} />
-                <span>{genStats.unsaved_profiles} karyawan belum melengkapi profil gaji pokok.</span>
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                <div className="flex items-start gap-2 text-amber-800 text-xs font-medium">
+                  <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="font-bold">{genStats.unsaved_profiles} karyawan</strong> belum melengkapi data gaji pokok.
+                  </span>
+                </div>
+                {onDownloadPayrollTemplate && onPayrollImport && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={onDownloadPayrollTemplate}
+                      className="flex-1 flex items-center justify-center gap-1.5 h-8 bg-white border border-amber-300 text-amber-900 hover:bg-amber-100/60 rounded-lg text-[11px] font-bold transition-all shadow-2xs"
+                    >
+                      <FileDown size={13} /> Unduh Template
+                    </button>
+                    <label className="flex-1 flex items-center justify-center gap-1.5 h-8 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-xs">
+                      {importingPayroll ? <Loader2 className="animate-spin" size={13} /> : <FileUp size={13} />}
+                      <span>{importingPayroll ? "Mengimpor..." : "Import Excel"}</span>
+                      <input
+                        type="file"
+                        accept=".xlsx, .xls, .csv"
+                        className="hidden"
+                        disabled={importingPayroll}
+                        onChange={onPayrollImport}
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1412,6 +1481,7 @@ export default function PayrollManagementPage() {
   const [genYear, setGenYear] = useState(new Date().getFullYear());
   const [genLoading, setGenLoading] = useState(false);
   const [genStats, setGenStats] = useState({ total_employees: 0, unsaved_profiles: 0 });
+  const [importingPayroll, setImportingPayroll] = useState(false);
 
   // Salary Edit Modal (Cleaner, Non-repetitive)
   const [editingSalary, setEditingSalary] = useState<SalaryRecord | null>(null);
@@ -1533,6 +1603,86 @@ export default function PayrollManagementPage() {
   const handleExportBatchRekap = (batchId: number, month: string, year: number) =>
     executeExportBatchRekapAction(batchId, month, year);
 
+  // Download Template Excel for Payroll Bank & Basic Salary Import
+  const downloadPayrollTemplate = () => {
+    const templateData = [
+      {
+        "Email (WAJIB)": "karyawan@example.com",
+        "NIK (OPSIONAL)": "12345678",
+        "Bank": "BCA",
+        "Nomor Rekening": "1234567890",
+        "Nama Rekening": "Ahmad Rizki",
+        "Cost Center": "PT. Artacomindo Jejaring Nusa",
+        "Gaji Pokok (OPSIONAL)": 5000000,
+        "Tunjangan Tetap (OPSIONAL)": 1000000,
+      },
+      {},
+      { "Email (WAJIB)": ">>> PANDUAN PENGISIAN DATA REKENING & GAJI POKOK <<<" },
+      { "Email (WAJIB)": "1. Email atau NIK digunakan sebagai kunci pencarian identitas karyawan di sistem." },
+      { "Email (WAJIB)": "2. Data Bank & No Rekening akan otomatis tercatat pada slip & rekap penggajian." },
+      { "Email (WAJIB)": "3. Cost Center bisa diisi unit kerja/PT/cabang yang bersangkutan." },
+      { "Email (WAJIB)": "4. Gaji Pokok & Tunjangan Tetap otomatis menjadi baseline saat Generate Payroll bulanan." },
+      { "Email (WAJIB)": "5. Hapus baris contoh karyawan@example.com jika tidak diperlukan sebelum upload." }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    worksheet['!cols'] = [
+      { wch: 30 },
+      { wch: 18 },
+      { wch: 15 },
+      { wch: 22 },
+      { wch: 25 },
+      { wch: 30 },
+      { wch: 22 },
+      { wch: 25 }
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Data Rekening & Gaji");
+    XLSX.writeFile(workbook, "Template_Data_Rekening_Gaji_Karyawan.xlsx");
+    toast.success("Template Payroll Excel berhasil diunduh.");
+  };
+
+  // Bulk Import Payroll Data (Bank Info & Basic Salary)
+  const handlePayrollImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
+      toast.error("Hanya file berekstensi .xlsx, .xls, atau .csv yang diperbolehkan.");
+      return;
+    }
+
+    const formDataUpload = new FormData();
+    formDataUpload.append("file", file);
+
+    try {
+      setImportingPayroll(true);
+      const res = await axiosInstance.post("/payroll/import-data", formDataUpload, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      toast.success(res.data.message || "Data rekening dan gaji karyawan berhasil diimpor!");
+
+      // Refresh stats if modal is active
+      try {
+        const empRes = await axiosInstance.get('/employees?per_page=1000');
+        const emps = empRes.data.data?.data || empRes.data.data || [];
+        const total = empRes.data.data?.total ?? emps.length;
+        const unsaved = emps.filter((emp: any) => !emp.basic_salary || parseInt(emp.basic_salary) === 0).length;
+        setGenStats({ total_employees: total, unsaved_profiles: unsaved });
+      } catch {
+        // silent catch
+      }
+    } catch (err: unknown) {
+      const errorResponse = err as { response?: { data?: { message?: string; error?: string } } };
+      const msg = errorResponse.response?.data?.message || errorResponse.response?.data?.error || "Gagal mengimpor data payroll. Pastikan format sesuai template.";
+      toast.error(typeof msg === 'object' ? JSON.stringify(msg) : msg);
+    } finally {
+      setImportingPayroll(false);
+      e.target.value = '';
+    }
+  };
+
   // Download PDF Slip
   const handleDownloadPDF = (salaryId: number, name: string) => executeDownloadPDFAction(salaryId, name);
 
@@ -1605,6 +1755,9 @@ export default function PayrollManagementPage() {
         onExportExcelAll={handleExportExcelAll}
         exporting={exporting}
         onOpenGenerate={handleOpenGenerate}
+        onDownloadPayrollTemplate={downloadPayrollTemplate}
+        onPayrollImport={handlePayrollImport}
+        importingPayroll={importingPayroll}
       />
 
       {selectedBatch ? (
@@ -1650,6 +1803,9 @@ export default function PayrollManagementPage() {
         genStats={genStats}
         genLoading={genLoading}
         onExecuteGenerate={handleExecuteGenerate}
+        onDownloadPayrollTemplate={downloadPayrollTemplate}
+        onPayrollImport={handlePayrollImport}
+        importingPayroll={importingPayroll}
       />
 
       <PayrollSalaryEditModal

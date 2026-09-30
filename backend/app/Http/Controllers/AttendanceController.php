@@ -36,16 +36,34 @@ class AttendanceController extends Controller
             ->first();
 
         if ($attendance) {
-            $response = $this->errorResponse('Anda sudah check-in hari ini.', 400);
-        } elseif ($securityError = $this->validateDeviceAndSecurity($user, $request)) {
-            $response = $this->errorResponse($securityError['message'], $securityError['code']);
-        } elseif ($isDinasLuar) {
-            // Dinas Luar: skip geofence, but still requires selfie (validated by request rules)
-            $response = $this->processCheckIn($user, $request, null, $now, $today);
-        } elseif (!($geoResult = $this->validateGeofencing($user, $request))['success']) {
-            $response = $this->errorResponse($geoResult['message'], $geoResult['status']);
-        } else {
-            $response = $this->processCheckIn($user, $request, $geoResult['office'], $now, $today);
+            // Mobile Priority Conflict Resolution (Section 5 Spec)
+            if ($attendance->channel === 'web' && $attendance->web_approval_status === 'pending') {
+                // Pending web attendance is overwritten by cryptographic on-device ML verified mobile attendance
+                $attendance->delete();
+                $attendance = null;
+            } elseif ($attendance->channel === 'web' && $attendance->web_approval_status === 'valid') {
+                // Both entries valid -> flag entry as suspicious for Superadmin audit to prevent duplicated working hours
+                $attendance->update([
+                    'is_suspicious' => true,
+                    'suspicious_reason' => 'Konflik Entri Ganda: Terdeteksi Absen Web Valid dan Absen Mobile Sinkronisasi pada hari yang sama.',
+                ]);
+                $response = $this->errorResponse('Konflik Sinkronisasi: Anda sudah memiliki catatan Absen Web yang tervalidasi hari ini. Data ditandai untuk ditinjau Superadmin.', 400);
+            } else {
+                $response = $this->errorResponse('Anda sudah check-in hari ini.', 400);
+            }
+        }
+
+        if (!$attendance && !$response) {
+            if ($securityError = $this->validateDeviceAndSecurity($user, $request)) {
+                $response = $this->errorResponse($securityError['message'], $securityError['code']);
+            } elseif ($isDinasLuar) {
+                // Dinas Luar: skip geofence, but still requires selfie (validated by request rules)
+                $response = $this->processCheckIn($user, $request, null, $now, $today);
+            } elseif (!($geoResult = $this->validateGeofencing($user, $request))['success']) {
+                $response = $this->errorResponse($geoResult['message'], $geoResult['status']);
+            } else {
+                $response = $this->processCheckIn($user, $request, $geoResult['office'], $now, $today);
+            }
         }
 
         return $response;
@@ -77,6 +95,7 @@ class AttendanceController extends Controller
             'status' => $status,
             'office_id' => $matchedOffice ? $matchedOffice->id : null,
             'attendance_type' => $isDinasLuar ? 'dinas_luar' : 'office',
+            'channel' => 'mobile',
         ];
 
         // Add dinas luar specific fields
@@ -424,6 +443,13 @@ class AttendanceController extends Controller
         $faceService = app(\App\Services\FaceRecognitionService::class);
         $verifyResult = $faceService->verifyFace($user->face_embedding, $imageInput);
 
+        if (isset($verifyResult['face_detected']) && $verifyResult['face_detected'] === false) {
+            return [
+                'message' => 'Verifikasi Wajah Gagal: Wajah Anda tidak terdeteksi pada foto selfie. Harap posisikan seluruh wajah Anda di depan kamera (tidak terpotong / bukan benda) dengan pencahayaan yang cukup.',
+                'code' => 422
+            ];
+        }
+
         if (!isset($verifyResult['is_match']) || !$verifyResult['is_match']) {
             $similarityPercent = isset($verifyResult['similarity']) ? round($verifyResult['similarity'] * 100, 1) : 0;
             return [
@@ -436,5 +462,315 @@ class AttendanceController extends Controller
         $request->attributes->set('is_face_verified_' . $type, true);
 
         return null;
+    }
+
+    /**
+     * Web Check-In (Simplified: Photo + Server Timestamp + IP + Auto-Validation/Approval)
+     */
+    public function webCheckIn(Request $request)
+    {
+        $user = $request->user();
+        $now = now();
+        $today = Carbon::today()->toDateString();
+
+        // 1. Check existing attendance today
+        $existing = Attendance::where('user_id', $user->id)
+            ->whereDate('check_in', $today)
+            ->first();
+
+        if ($existing) {
+            if ($existing->channel === 'web' && $existing->web_approval_status === 'pending') {
+                return $this->errorResponse('Anda sudah melakukan Absen Masuk via Web hari ini (Status: Menunggu Persetujuan).', 400);
+            }
+            return $this->errorResponse('Anda sudah tercatat check-in hari ini.', 400);
+        }
+
+        // 2. Validate photo presence
+        if (!$request->hasFile('image') && !$request->image && !$request->image_base64) {
+            return $this->errorResponse('Foto selfie wajib diunggah sebagai bukti kehadiran.', 422);
+        }
+
+        // 3. Save compressed image
+        $imageName = $this->saveCompressedAttendanceImage($request, 'web_in');
+
+        // 4. Determine Shift & Normal Check-in Status
+        $schedule = Schedule::with('shift')
+            ->where('user_id', $user->id)
+            ->where('date', $today)
+            ->first();
+
+        $normalStatus = $this->determineCheckInStatus($user, $schedule, $now);
+
+        // 5. Evaluate Auto-Validation & Anomaly Exceptions
+        $isWhitelisted = $user->isWebAttendanceAutoValidated();
+        $hasAnomaly = false;
+        $anomalyReason = null;
+
+        // Anomaly Check 1: Odd hours (Absen di luar jam kerja wajar, misal 23:00 - 05:00 tanpa shift malam)
+        $currentHour = (int) $now->format('H');
+        if (($currentHour >= 23 || $currentHour < 5) && (!$schedule || !$schedule->shift || !str_contains(strtolower($schedule->shift->name ?? ''), 'malam'))) {
+            $hasAnomaly = true;
+            $anomalyReason = "Anomali Jam Kerja: Absen web pada pukul {$now->format('H:i')} di luar jam operasional wajar.";
+        }
+
+        // Anomaly Check 2: Extreme distance if coordinates are provided
+        if ($request->latitude && $request->longitude && !$user->is_wfh && !str_contains(strtolower($user->role?->name ?? ''), 'teknisi')) {
+            $geoCheck = $this->validateGeofencing($user, $request);
+            if (!$geoCheck['success']) {
+                $hasAnomaly = true;
+                $anomalyReason = ($anomalyReason ? $anomalyReason . " " : "") . "Anomali Lokasi: Koordinat browser berada di luar radius kantor.";
+            }
+        }
+
+        // 6. Set Approval Status and Final Status
+        if ($isWhitelisted && !$hasAnomaly) {
+            $webApprovalStatus = 'valid';
+            $finalStatus = $normalStatus;
+            $isSuspicious = false;
+            $suspiciousReason = null;
+        } else {
+            $webApprovalStatus = 'pending';
+            $finalStatus = 'pending';
+            $isSuspicious = $hasAnomaly;
+            $suspiciousReason = $hasAnomaly ? $anomalyReason : null;
+        }
+
+        // 7. Create Web Attendance Record
+        $attendance = Attendance::create([
+            'user_id' => $user->id,
+            'company_id' => $user->company_id,
+            'office_id' => $user->office_id,
+            'check_in' => $now,
+            'latitude_in' => $request->latitude,
+            'longitude_in' => $request->longitude,
+            'image_in' => $imageName,
+            'channel' => 'web',
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 999),
+            'web_approval_status' => $webApprovalStatus,
+            'status' => $finalStatus,
+            'is_suspicious' => $isSuspicious,
+            'suspicious_reason' => $suspiciousReason,
+            'attendance_type' => 'office',
+        ]);
+
+        // 8. Notifications
+        if ($webApprovalStatus === 'valid') {
+            $this->sendCheckInNotifications($user, $finalStatus, $now);
+            $message = 'Absen Masuk via Web berhasil disahkan secara otomatis (Validasi Otomatis Aktif). Status: ' . strtoupper($finalStatus);
+        } else {
+            // Notify Superadmin / HR about pending approval
+            $this->notifyAdminsAboutPendingWebAttendance($user, $attendance, $now, $hasAnomaly ? $anomalyReason : null);
+            $this->notify(
+                $user,
+                'ABSEN WEB TERCATAT (MENUNGGU PERSETUJUAN)',
+                "Absen masuk via web Anda pada pukul {$now->format('H:i')} WIB telah dicatat dan sedang menunggu persetujuan Superadmin / HRD.",
+                'info',
+                null,
+                'notif',
+                false
+            );
+            $message = 'Absen Masuk via Web berhasil dikirim. Menunggu persetujuan Superadmin / HRD.';
+        }
+
+        return $this->successResponse($attendance->fresh(), $message);
+    }
+
+    /**
+     * Web Check-Out (Simplified: Photo + Server Timestamp)
+     */
+    public function webCheckOut(Request $request)
+    {
+        $user = $request->user();
+        $now = now();
+        $today = Carbon::today()->toDateString();
+
+        $attendance = Attendance::where('user_id', $user->id)
+            ->whereDate('check_in', $today)
+            ->whereNull('check_out')
+            ->first();
+
+        if (!$attendance) {
+            return $this->errorResponse('Anda belum melakukan Check-in hari ini atau sudah Check-out.', 400);
+        }
+
+        // Save compressed checkout image if provided
+        $imageName = $this->saveCompressedAttendanceImage($request, 'web_out');
+
+        $attendance->update([
+            'check_out' => $now,
+            'latitude_out' => $request->latitude ?? $attendance->latitude_out,
+            'longitude_out' => $request->longitude ?? $attendance->longitude_out,
+            'image_out' => $imageName ?? $attendance->image_out,
+        ]);
+
+        $this->notify(
+            $user,
+            'ABSEN KELUAR WEB BERHASIL',
+            "Anda telah berhasil melakukan absen keluar via web pada pukul {$now->format('H:i')} WIB.",
+            'info',
+            null,
+            'notif',
+            false
+        );
+
+        return $this->successResponse($attendance->fresh(), 'Absen keluar via Web berhasil dicatat.');
+    }
+
+    /**
+     * List Pending Web Attendances for Superadmin / HRD review.
+     */
+    public function webPending(Request $request)
+    {
+        $user = $request->user();
+        $query = Attendance::with(['user:id,name,email,role_id,office_id,nik,profile_photo_path,auto_validate_web_attendance', 'user.role', 'user.office'])
+            ->where('company_id', $user->company_id)
+            ->where('channel', 'web')
+            ->where('web_approval_status', 'pending');
+
+        if ($request->search) {
+            $search = $request->search;
+            $query->whereHas('user', function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('nik', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->start_date && $request->end_date) {
+            $query->whereDate('check_in', '>=', $request->start_date)
+                  ->whereDate('check_in', '<=', $request->end_date);
+        }
+
+        $pendings = $query->orderBy('check_in', 'desc')->paginate($request->per_page ?? 15);
+
+        return $this->successResponse($pendings, 'Daftar absensi web menunggu persetujuan berhasil diambil.');
+    }
+
+    /**
+     * Approve Pending Web Attendance
+     */
+    public function webApprove(Request $request, $id)
+    {
+        $admin = $request->user();
+        $attendance = Attendance::with('user')->where('company_id', $admin->company_id)->findOrFail($id);
+
+        if ($attendance->web_approval_status === 'valid') {
+            return $this->errorResponse('Absensi ini sudah disetujui sebelumnya.', 400);
+        }
+
+        $schedule = Schedule::with('shift')
+            ->where('user_id', $attendance->user_id)
+            ->whereDate('date', Carbon::parse($attendance->check_in)->toDateString())
+            ->first();
+
+        $status = $this->determineCheckInStatus($attendance->user, $schedule, Carbon::parse($attendance->check_in));
+
+        $attendance->update([
+            'web_approval_status' => 'valid',
+            'status' => $status,
+            'web_approved_by' => $admin->id,
+            'web_approved_at' => now(),
+            'is_suspicious' => false,
+        ]);
+
+        $this->notify(
+            $attendance->user,
+            'ABSEN WEB DISETUJUI',
+            "Absensi Web Anda pada tanggal " . Carbon::parse($attendance->check_in)->format('d M Y (H:i)') . " telah DISETUJUI oleh Superadmin / HRD. Status: " . strtoupper($status),
+            'success',
+            '/dashboard/attendance'
+        );
+
+        return $this->successResponse($attendance->fresh(), 'Absensi web berhasil disetujui.');
+    }
+
+    /**
+     * Reject Pending Web Attendance
+     */
+    public function webReject(Request $request, $id)
+    {
+        $admin = $request->user();
+        $attendance = Attendance::with('user')->where('company_id', $admin->company_id)->findOrFail($id);
+
+        $request->validate([
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $reason = $request->reason ?? 'Foto tidak jelas atau tidak memenuhi syarat kehadiran.';
+
+        $attendance->update([
+            'web_approval_status' => 'rejected',
+            'status' => 'alfa',
+            'web_rejection_reason' => $reason,
+            'web_approved_by' => $admin->id,
+            'web_approved_at' => now(),
+        ]);
+
+        $this->notify(
+            $attendance->user,
+            'ABSEN WEB DITOLAK',
+            "Absensi Web Anda pada tanggal " . Carbon::parse($attendance->check_in)->format('d M Y') . " DITOLAK oleh Superadmin / HRD. Alasan: " . $reason,
+            'danger',
+            '/dashboard/attendance'
+        );
+
+        return $this->successResponse($attendance->fresh(), 'Absensi web berhasil ditolak.');
+    }
+
+    /**
+     * Get Pending Approvals Summary for Superadmin / HR Notifications
+     */
+    public function pendingSummary(Request $request)
+    {
+        $user = $request->user();
+        $companyId = $user->company_id;
+
+        $webPendingCount = Attendance::where('company_id', $companyId)
+            ->where('channel', 'web')
+            ->where('web_approval_status', 'pending')
+            ->count();
+
+        $dinasLuarPendingCount = Attendance::where('company_id', $companyId)
+            ->where('attendance_type', 'dinas_luar')
+            ->whereIn('dinas_luar_status', ['pending', 'approved_spv'])
+            ->count();
+
+        return $this->successResponse([
+            'web_pending_count' => $webPendingCount,
+            'dinas_luar_pending_count' => $dinasLuarPendingCount,
+            'total_pending' => $webPendingCount + $dinasLuarPendingCount,
+        ], 'Ringkasan persetujuan kehadiran berhasil diambil.');
+    }
+
+    private function notifyAdminsAboutPendingWebAttendance(User $user, Attendance $attendance, Carbon $now, ?string $anomalyReason = null): void
+    {
+        $admins = User::where('company_id', $user->company_id)
+            ->where(function ($q) {
+                $q->where('role_id', 1)
+                  ->orWhereHas('role', function ($r) {
+                      $r->where('name', 'like', '%Super Admin%')
+                        ->orWhere('name', 'like', '%HRD%');
+                  });
+            })
+            ->get();
+
+        $title = $anomalyReason ? 'PERINGATAN: ABSEN WEB ANOMALI' : 'PERSETUJUAN ABSEN WEB BARU';
+        $desc = "Karyawan {$user->name} baru saja melakukan Absen Masuk via Web pada pukul {$now->format('H:i')} WIB dan memerlukan persetujuan.";
+        if ($anomalyReason) {
+            $desc .= " (Catatan: {$anomalyReason})";
+        }
+
+        foreach ($admins as $admin) {
+            $this->notify(
+                $admin,
+                $title,
+                $desc,
+                $anomalyReason ? 'danger' : 'warning',
+                '/dashboard/attendance?tab=web_pending',
+                'notif',
+                false
+            );
+        }
     }
 }

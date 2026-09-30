@@ -18,22 +18,27 @@ class ShiftController extends Controller
             $query->where('company_id', $user->company_id);
         }
 
-        $shifts = $query->paginate(10);
+        $perPage = (int) ($request->per_page ?? 100);
+        $shifts = $query->orderBy('start_time')->paginate($perPage);
 
         return $this->successResponse($shifts, 'Daftar shift berhasil diambil.');
     }
 
     public function store(Request $request)
     {
-        abort_if(! $request->user()->hasPermission('manage-shifts'), 403, self::MSG_FORBIDDEN);
+        $authUser = $request->user();
+        abort_if(! $authUser->hasPermission('manage-shifts') && ! $authUser->canAccessAllCompanies(), 403, self::MSG_FORBIDDEN);
+
         $request->validate([
             'name' => 'required|string',
             'start_time' => 'required',
             'end_time' => 'required',
         ]);
 
+        $companyId = $authUser->company_id ?? $request->company_id ?? \App\Models\Company::first()?->id;
+
         $shift = Shift::create([
-            'company_id' => $request->user()->company_id,
+            'company_id' => $companyId,
             'name' => $request->name,
             'start_time' => $request->start_time,
             'end_time' => $request->end_time,
@@ -44,17 +49,29 @@ class ShiftController extends Controller
 
     public function update(Request $request, $id)
     {
-        abort_if(! $request->user()->hasPermission('manage-shifts'), 403, self::MSG_FORBIDDEN);
+        $authUser = $request->user();
+        abort_if(! $authUser->hasPermission('manage-shifts') && ! $authUser->canAccessAllCompanies(), 403, self::MSG_FORBIDDEN);
+
         $shift = Shift::findOrFail($id);
-        $shift->update($request->all());
+        if ($authUser->company_id && ! $authUser->canAccessAllCompanies() && $shift->company_id !== $authUser->company_id) {
+            return $this->errorResponse('Akses ditolak.', 403);
+        }
+
+        $shift->update($request->only(['name', 'start_time', 'end_time']));
 
         return $this->successResponse($shift, 'Shift berhasil diperbarui.');
     }
 
     public function destroy(Request $request, $id)
     {
-        abort_if(! $request->user()->hasPermission('manage-shifts'), 403, self::MSG_FORBIDDEN);
+        $authUser = $request->user();
+        abort_if(! $authUser->hasPermission('manage-shifts') && ! $authUser->canAccessAllCompanies(), 403, self::MSG_FORBIDDEN);
+
         $shift = Shift::findOrFail($id);
+        if ($authUser->company_id && ! $authUser->canAccessAllCompanies() && $shift->company_id !== $authUser->company_id) {
+            return $this->errorResponse('Akses ditolak.', 403);
+        }
+
         $shift->delete();
 
         return $this->successResponse(null, 'Shift berhasil dihapus.');

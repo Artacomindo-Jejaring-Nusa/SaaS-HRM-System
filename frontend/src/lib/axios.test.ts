@@ -1,20 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock js-cookie before importing axios
-jest.mock('js-cookie', () => ({
-  __esModule: true,
-  default: {
-    get: jest.fn(),
-    set: jest.fn(),
-    remove: jest.fn(),
-  },
-}))
 vi.mock('js-cookie', () => ({
   __esModule: true,
   default: {
-    get: jest.fn(),
-    set: jest.fn(),
-    remove: jest.fn(),
+    get: vi.fn(),
+    set: vi.fn(),
+    remove: vi.fn(),
   },
 }))
 
@@ -23,11 +15,11 @@ import Cookies from 'js-cookie'
 
 describe('axios instance', () => {
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   it('Cookies.get can be called to retrieve token', () => {
-    (jest.mocked(Cookies.get) as any).mockReturnValue('test-token')
+    vi.mocked(Cookies.get).mockReturnValue('test-token' as any)
     const token = Cookies.get('token')
     expect(token).toBe('test-token')
     expect(Cookies.get).toHaveBeenCalledWith('token')
@@ -44,7 +36,7 @@ describe('axios instance', () => {
   })
 
   it('Cookies.get returns undefined when no token set', () => {
-    (jest.mocked(Cookies.get) as any).mockReturnValue(undefined)
+    vi.mocked(Cookies.get).mockReturnValue(undefined as any)
     const token = Cookies.get('token')
     expect(token).toBeUndefined()
   })
@@ -54,3 +46,4 @@ describe('axios instance', () => {
     expect(Cookies.set).toHaveBeenCalledWith('refresh_token', 'refresh-abc', { expires: 30 })
   })
 })
+

@@ -95,32 +95,12 @@ class ManagerController extends Controller
             : $modelClass::where('status', $pendingStatus);
 
         if (!$isGlobalAdmin) {
-            if ($isCompanyAdmin) {
-                $query->where(function ($q) use ($user, $subordinateIds) {
-                    $q->where('company_id', $user->company_id);
-                    if ($subordinateIds->isNotEmpty()) {
-                        $q->orWhereIn('user_id', $subordinateIds);
-                    }
-                });
-            } else {
-                $query->whereIn('user_id', $subordinateIds);
-            }
+            $query->where('company_id', $user->company_id);
         }
 
         if (!$isGlobalAdmin && $type !== 'vehicle_log') {
-            $items = $query->with('user')->get();
-            return $items->filter(function ($item) use ($type, $user) {
-                if (!empty($item->current_approval_step) && $item->user) {
-                    return \App\Services\ApprovalService::canApprove(
-                        $type,
-                        $item->company_id ?? $user->company_id,
-                        $user,
-                        $item->user,
-                        $item->current_approval_step
-                    );
-                }
-                return true;
-            })->count();
+            $items = $query->with(['user.supervisor', 'user.role'])->get();
+            return $this->filterPendingItems($items, $type, $user)->count();
         }
 
         return $query->count();
@@ -137,7 +117,7 @@ class ManagerController extends Controller
         $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
 
         $canApprove = function ($t) use ($user, $isGlobalAdmin) {
-            if ($isGlobalAdmin) {
+            if ($isGlobalAdmin || $user->hasPermission('manage-approvals')) {
                 return true;
             }
             return isset(self::PERM_MAP[$t]) && $user->hasPermission(self::PERM_MAP[$t]);
@@ -169,19 +149,19 @@ class ManagerController extends Controller
     private function resolvePendingBaseQuery(string $type, bool $isGlobalAdmin, bool $isCompanyAdmin)
     {
         return match ($type) {
-            'leave' => Leave::with(['user.role', 'user.office'])->where('status', 'pending'),
-            'overtime' => Overtime::with(['user.role', 'user.office'])->where('status', 'pending'),
-            'reimbursement' => Reimbursement::with(['user.role', 'user.office'])->where('status', 'pending'),
-            'permit' => Permit::with(['user.role', 'user.office'])->where('status', 'pending'),
-            'vehicle_log' => VehicleLog::with(['user.role', 'user.office', 'vehicle'])->whereIn('status', ['pending', 'completed']),
-            'fund_request' => FundRequest::with(['user.role', 'user.office', 'supervisor', 'hrd'])->where(function ($q) use ($isGlobalAdmin, $isCompanyAdmin) {
+            'leave' => Leave::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
+            'overtime' => Overtime::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
+            'reimbursement' => Reimbursement::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
+            'permit' => Permit::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
+            'vehicle_log' => VehicleLog::with(['user.role', 'user.office', 'user.supervisor', 'vehicle'])->whereIn('status', ['pending', 'completed']),
+            'fund_request' => FundRequest::with(['user.role', 'user.office', 'user.supervisor', 'supervisor', 'hrd'])->where(function ($q) use ($isGlobalAdmin, $isCompanyAdmin) {
                 if ($isGlobalAdmin || $isCompanyAdmin) {
                     $q->whereIn('status', ['pending', 'approved_by_supervisor']);
                 } else {
                     $q->where('status', 'pending');
                 }
             }),
-            default => null
+            default => null,
         };
     }
 
@@ -197,7 +177,20 @@ class ManagerController extends Controller
                     $item->current_approval_step
                 );
             }
-            return true;
+
+            if ($item->status === 'pending_supervisor') {
+                return $item->user?->supervisor_id === $user->id;
+            }
+
+            if ($item->status === 'pending_hr') {
+                return $user->hasPermission('approve-leaves') || $user->hasPermission('approve-permits') || $user->role_id === 1;
+            }
+
+            if ($user->supervisor_id && $item->user_id) {
+                return $item->user?->supervisor_id === $user->id;
+            }
+
+            return false;
         })->values();
     }
 
@@ -211,11 +204,13 @@ class ManagerController extends Controller
         $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
         $type = $request->type;
 
-        if (!$isGlobalAdmin && isset(self::PERM_MAP[$type]) && !$user->hasPermission(self::PERM_MAP[$type])) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Anda tidak memiliki hak akses persetujuan untuk kategori ini.'
-            ], 403);
+        if (!$isGlobalAdmin && !$user->hasPermission('manage-approvals')) {
+            if (isset(self::PERM_MAP[$type]) && !$user->hasPermission(self::PERM_MAP[$type])) {
+                return response()->json([
+                    'status' => 'success',
+                    'data' => [],
+                ]);
+            }
         }
 
         $query = $this->resolvePendingBaseQuery((string)$type, $isGlobalAdmin, $isCompanyAdmin);
@@ -223,18 +218,8 @@ class ManagerController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Invalid request type'], 400);
         }
 
-        $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
         if (!$isGlobalAdmin) {
-            if ($isCompanyAdmin) {
-                $query->where(function ($q) use ($user, $subordinateIds) {
-                    $q->where('company_id', $user->company_id);
-                    if ($subordinateIds->isNotEmpty()) {
-                        $q->orWhereIn('user_id', $subordinateIds);
-                    }
-                });
-            } else {
-                $query->whereIn('user_id', $subordinateIds);
-            }
+            $query->where('company_id', $user->company_id);
         }
 
         $items = $query->orderBy('created_at', 'desc')->get();
@@ -486,14 +471,16 @@ class ManagerController extends Controller
         $isGlobalAdmin = $user->role_id === 1;
         $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
 
-        if (!$isGlobalAdmin && isset(self::PERM_MAP[$request->type]) && !$user->hasPermission(self::PERM_MAP[$request->type])) {
+        $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
+
+        // Only block users who have no manager/executive status, no subordinates, and no permission
+        if (! $isGlobalAdmin && ! $isCompanyAdmin && $subordinateIds->isEmpty() && isset(self::PERM_MAP[$request->type]) && ! $user->hasPermission(self::PERM_MAP[$request->type])) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Anda tidak memiliki hak akses untuk menyetujui pengajuan ini.'
             ], 403);
         }
 
-        $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
         $model = match ($request->type) {
             'leave' => Leave::class,
             'overtime' => Overtime::class,
@@ -504,17 +491,8 @@ class ManagerController extends Controller
         };
 
         $query = $model::where('id', $request->id);
-        if (!$isGlobalAdmin) {
-            if ($isCompanyAdmin) {
-                $query->where(function ($q) use ($user, $subordinateIds) {
-                    $q->where('company_id', $user->company_id);
-                    if ($subordinateIds->isNotEmpty()) {
-                        $q->orWhereIn('user_id', $subordinateIds);
-                    }
-                });
-            } else {
-                $query->whereIn('user_id', $subordinateIds);
-            }
+        if (! $isGlobalAdmin) {
+            $query->where('company_id', $user->company_id);
         }
 
         $item = $query->first();

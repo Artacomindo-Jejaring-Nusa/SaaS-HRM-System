@@ -22,6 +22,8 @@ class Attendance extends Model
         'attendance_type', 'dinas_luar_destination', 'dinas_luar_notes',
         'dinas_luar_status', 'approved_by_spv', 'approved_at_spv',
         'approved_by_hr', 'approved_at_hr', 'rejection_reason',
+        'channel', 'ip_address', 'user_agent',
+        'web_approval_status', 'web_approved_by', 'web_approved_at', 'web_rejection_reason',
     ];
 
     protected $casts = [
@@ -32,9 +34,10 @@ class Attendance extends Model
         'face_similarity_score_out' => 'float',
         'approved_at_spv' => 'datetime',
         'approved_at_hr' => 'datetime',
+        'web_approved_at' => 'datetime',
     ];
 
-    protected $appends = ['date', 'check_in_time', 'check_out_time', 'check_in_location', 'image_in_url', 'image_out_url'];
+    protected $appends = ['date', 'check_in_time', 'check_out_time', 'check_in_location', 'image_in_url', 'image_out_url', 'is_web_attendance'];
 
     public function user()
     {
@@ -59,6 +62,16 @@ class Attendance extends Model
     public function hrApprover()
     {
         return $this->belongsTo(User::class, 'approved_by_hr');
+    }
+
+    public function webApprover()
+    {
+        return $this->belongsTo(User::class, 'web_approved_by');
+    }
+
+    public function getIsWebAttendanceAttribute(): bool
+    {
+        return $this->channel === 'web';
     }
 
     public function isDinasLuar(): bool
