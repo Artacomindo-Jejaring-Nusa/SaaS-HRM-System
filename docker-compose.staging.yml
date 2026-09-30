@@ -53,6 +53,7 @@ services:
       DB_DATABASE: ${DB_DATABASE:-hrm_saas_staging}
       DB_USERNAME: ${DB_USERNAME:-hrms_staging}
       DB_PASSWORD: ${DB_PASSWORD:-StagingPass2026!}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service-staging:8001}
     deploy:
       resources:
         limits:
@@ -87,6 +88,33 @@ services:
     networks:
       - hrms-network
 
+  # ── AI Face Recognition Service Staging (Python / YOLOv11 + Keras 128-d) ──
+  ai-service-staging:
+    build:
+      context: ./ai_service
+      dockerfile: Dockerfile
+    container_name: hrms-ai-face-staging
+    restart: unless-stopped
+    environment:
+      PORT: 8001
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1536M
+        reservations:
+          memory: 512M
+    volumes:
+      - ai_model_weights_staging:/app/weights
+    networks:
+      - hrms-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
   # ── Staging Nginx Gateway (Port 8088) ────────────────────
   nginx-proxy-staging:
     image: nginx:1.27-alpine
@@ -99,6 +127,7 @@ services:
     depends_on:
       - frontend-staging
       - backend-staging
+      - ai-service-staging
     networks:
       - hrms-network
 
@@ -111,3 +140,4 @@ volumes:
   mysql_staging_data:
   backend_storage_staging:
   backend_logs_staging:
+  ai_model_weights_staging:
