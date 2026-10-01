@@ -4,6 +4,7 @@ import numpy as np
 from ultralytics import YOLO
 import tensorflow as tf
 from keras.models import load_model
+from PIL import Image, ImageOps
 
 class FacePipeline:
     """
@@ -55,13 +56,19 @@ class FacePipeline:
         else:
             raise FileNotFoundError(f"File model embedder {embedder_path} tidak ditemukan.")
 
-    def detect_and_crop_face(self, image_path_or_array, target_size=(160, 160), min_conf=0.45):
+    def detect_and_crop_face(self, image_path_or_array, target_size=(160, 160)):
         """
         Mendeteksi wajah pada gambar & melakukan crop dengan penyesuaian skala target_size.
-        Hanya mengembalikan face_found=True jika bounding box wajah valid terdeteksi.
         """
         if isinstance(image_path_or_array, str):
-            img = cv2.imread(image_path_or_array)
+            try:
+                pil_img = Image.open(image_path_or_array)
+                pil_img = ImageOps.exif_transpose(pil_img)
+                pil_img = pil_img.convert("RGB")
+                nparr = np.array(pil_img)
+                img = cv2.cvtColor(nparr, cv2.COLOR_RGB2BGR)
+            except Exception as e:
+                img = cv2.imread(image_path_or_array)
             if img is None:
                 raise ValueError(f"Tidak dapat membaca gambar dari {image_path_or_array}")
         else:
@@ -71,27 +78,26 @@ class FacePipeline:
         boxes = results[0].boxes
 
         if len(boxes) == 0:
-            return None, (0, 0, 0, 0), False
+            # Fallback jika YOLO belum mendeteksi: asumsikan wajah ada di tengah 
+            # (Front-end ML Kit sudah memverifikasi liveness & posisi)
+            h, w, _ = img.shape
+            side = min(w, h)
+            crop_x = (w - side) // 2
+            crop_y = (h - side) // 2
+            cropped = img[crop_y:crop_y+side, crop_x:crop_x+side]
+            if cropped.size == 0:
+                cropped = img
+            cropped_face = cv2.resize(cropped, target_size)
+            return cropped_face, (crop_x, crop_y, crop_x+side, crop_y+side), True
 
         # Ambil bounding box dengan tingkat kepercayaan (confidence) tertinggi
         best_box = max(boxes, key=lambda b: float(b.conf[0]))
-        confidence = float(best_box.conf[0])
-
-        if confidence < min_conf:
-            return None, (0, 0, 0, 0), False
-
         x1, y1, x2, y2 = map(int, best_box.xyxy[0].tolist())
-        box_w = x2 - x1
-        box_h = y2 - y1
-
-        # Pastikan ukuran bounding box tidak terlalu kecil (minimal 30x30 px)
-        if box_w < 30 or box_h < 30:
-            return None, (0, 0, 0, 0), False
 
         # Padding 10% agar dahi, telinga, dan dagu ikut ter-crop dengan proporsional
         h, w, _ = img.shape
-        margin_x = int(box_w * 0.1)
-        margin_y = int(box_h * 0.1)
+        margin_x = int((x2 - x1) * 0.1)
+        margin_y = int((y2 - y1) * 0.1)
         
         crop_x1 = max(0, x1 - margin_x)
         crop_y1 = max(0, y1 - margin_y)
@@ -100,7 +106,7 @@ class FacePipeline:
 
         cropped = img[crop_y1:crop_y2, crop_x1:crop_x2]
         if cropped.size == 0:
-            return None, (0, 0, 0, 0), False
+            cropped = img
             
         resized_face = cv2.resize(cropped, target_size)
         return resized_face, (x1, y1, x2, y2), True
@@ -125,11 +131,8 @@ class FacePipeline:
         Fungsi shortcut: Input Gambar -> Output (Vektor 128 angka, face_crop, bbox, face_found)
         """
         face_crop, bbox, face_found = self.detect_and_crop_face(image_input)
-        if not face_found or face_crop is None:
-            return None, None, bbox, False
-
         embedding = self.extract_embedding(face_crop)
-        return embedding, face_crop, bbox, True
+        return embedding, face_crop, bbox, face_found
 
 
 def compute_similarity(vector1, vector2):

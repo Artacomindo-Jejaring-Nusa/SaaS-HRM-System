@@ -4,6 +4,7 @@ import json
 import base64
 import numpy as np
 import cv2
+from PIL import Image, ImageOps
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -38,11 +39,19 @@ def load_ai_models():
         print(f"[Server ERROR] Failed to load models: {e}")
 
 def decode_image_bytes(image_bytes: bytes) -> np.ndarray:
-    nparr = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if img is None:
-        raise ValueError("Format gambar tidak valid atau rusak.")
-    return img
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
+        nparr = np.array(img)
+        return cv2.cvtColor(nparr, cv2.COLOR_RGB2BGR)
+    except Exception as e:
+        print("PIL decode error:", e)
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            raise ValueError("Format gambar tidak valid atau rusak.")
+        return img
 
 class VerifyRequest(BaseModel):
     registered_embedding: List[float]

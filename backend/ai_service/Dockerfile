@@ -9,14 +9,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# 1. Install PyTorch CPU directly from official prebuilt wheels (instant, no backtracking)
-RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision
+# Install Python packages (forced CPU index to prevent downloading >2.5GB of NVIDIA CUDA packages)
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \
+    torch torchvision \
+    "numpy<2.0.0" tensorflow-cpu keras \
+    ultralytics fastapi uvicorn python-multipart pydantic opencv-python-headless
 
-# 2. Install TensorFlow CPU & Keras with compatible NumPy
-RUN pip install --no-cache-dir "numpy<2.0.0" tensorflow-cpu keras
-
-# 3. Install Ultralytics (YOLO), FastAPI server, and OpenCV
-RUN pip install --no-cache-dir ultralytics fastapi uvicorn python-multipart pydantic opencv-python-headless
 
 COPY . .
 

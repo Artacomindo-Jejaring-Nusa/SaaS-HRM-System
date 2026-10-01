@@ -129,6 +129,38 @@ class FaceRecognitionService
     }
 
     /**
+     * Mendapatkan path binary Python yang tepat (Venv / env / system)
+     */
+    protected function getPythonBinary(): string
+    {
+        $custom = env('PYTHON_BINARY') ?? env('PYTHON_PATH');
+        if ($custom) {
+            return $custom;
+        }
+
+        // Cek virtual environment umum
+        $venvPaths = [
+            base_path('ai_service/venv/bin/python'),
+            base_path('ai_service/venv/bin/python3'),
+            base_path('../ai_service/venv/bin/python'),
+            base_path('../ai_service/venv/bin/python3'),
+            base_path('.venv/bin/python'),
+            base_path('venv/bin/python'),
+            base_path('ai_service/venv/Scripts/python.exe'),
+            base_path('../ai_service/venv/Scripts/python.exe'),
+        ];
+
+        foreach ($venvPaths as $path) {
+            if (file_exists($path)) {
+                return $path;
+            }
+        }
+
+        // Default Linux/Unix adalah python3, Windows 'python'
+        return PHP_OS_FAMILY === 'Windows' ? 'python' : 'python3';
+    }
+
+    /**
      * Ekstraksi via CLI Python fallback
      */
     protected function extractViaCli($imageInput): array
@@ -150,12 +182,13 @@ class FaceRecognitionService
             $scriptPath = base_path('../ai_service/cli.py');
         }
 
-        $process = new Process(['python', $scriptPath, 'extract', '--image', $tempPath]);
+        $pythonBin = $this->getPythonBinary();
+        $process = new Process([$pythonBin, $scriptPath, 'extract', '--image', $tempPath]);
         $process->setTimeout(30);
         $process->run();
 
         if (!$process->isSuccessful()) {
-            Log::error("[FaceRecognitionService CLI Extract Error]: " . $process->getErrorOutput());
+            Log::error("[FaceRecognitionService CLI Extract Error]: " . $process->getErrorOutput() . " (Exit Code: " . $process->getExitCode() . ", Binary: $pythonBin, Script: $scriptPath)");
             return [
                 'success' => false,
                 'message' => 'Gagal memproses ekstraksi wajah AI (CLI error).',
@@ -192,8 +225,9 @@ class FaceRecognitionService
             $scriptPath = base_path('../ai_service/cli.py');
         }
 
+        $pythonBin = $this->getPythonBinary();
         $process = new Process([
-            'python',
+            $pythonBin,
             $scriptPath,
             'verify',
             '--image',
@@ -209,7 +243,7 @@ class FaceRecognitionService
         @unlink($tempJsonPath);
 
         if (!$process->isSuccessful()) {
-            Log::error("[FaceRecognitionService CLI Verify Error]: " . $process->getErrorOutput());
+            Log::error("[FaceRecognitionService CLI Verify Error]: " . $process->getErrorOutput() . " (Exit Code: " . $process->getExitCode() . ", Binary: $pythonBin, Script: $scriptPath)");
             return [
                 'success' => false,
                 'is_match' => false,

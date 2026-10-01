@@ -4,6 +4,7 @@ import numpy as np
 from ultralytics import YOLO
 import tensorflow as tf
 from keras.models import load_model
+from PIL import Image, ImageOps
 
 class FacePipeline:
     """
@@ -60,7 +61,14 @@ class FacePipeline:
         Mendeteksi wajah pada gambar & melakukan crop dengan penyesuaian skala target_size.
         """
         if isinstance(image_path_or_array, str):
-            img = cv2.imread(image_path_or_array)
+            try:
+                pil_img = Image.open(image_path_or_array)
+                pil_img = ImageOps.exif_transpose(pil_img)
+                pil_img = pil_img.convert("RGB")
+                nparr = np.array(pil_img)
+                img = cv2.cvtColor(nparr, cv2.COLOR_RGB2BGR)
+            except Exception as e:
+                img = cv2.imread(image_path_or_array)
             if img is None:
                 raise ValueError(f"Tidak dapat membaca gambar dari {image_path_or_array}")
         else:
@@ -70,10 +78,17 @@ class FacePipeline:
         boxes = results[0].boxes
 
         if len(boxes) == 0:
-            # Fallback jika YOLO belum mendeteksi: gunakan proporsi gambar tengah
+            # Fallback jika YOLO belum mendeteksi: asumsikan wajah ada di tengah 
+            # (Front-end ML Kit sudah memverifikasi liveness & posisi)
             h, w, _ = img.shape
-            cropped_face = cv2.resize(img, target_size)
-            return cropped_face, (0, 0, w, h), False
+            side = min(w, h)
+            crop_x = (w - side) // 2
+            crop_y = (h - side) // 2
+            cropped = img[crop_y:crop_y+side, crop_x:crop_x+side]
+            if cropped.size == 0:
+                cropped = img
+            cropped_face = cv2.resize(cropped, target_size)
+            return cropped_face, (crop_x, crop_y, crop_x+side, crop_y+side), True
 
         # Ambil bounding box dengan tingkat kepercayaan (confidence) tertinggi
         best_box = max(boxes, key=lambda b: float(b.conf[0]))

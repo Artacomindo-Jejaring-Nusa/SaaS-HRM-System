@@ -5,6 +5,7 @@ import 'package:camera/camera.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import '../api/api_service.dart';
+import 'package:screen_brightness/screen_brightness.dart';
 
 enum LivenessStep {
   positionFace,
@@ -61,6 +62,23 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _fetchFaceStatus();
+    _setMaxBrightness();
+  }
+
+  Future<void> _setMaxBrightness() async {
+    try {
+      await ScreenBrightness().setScreenBrightness(1.0);
+    } catch (e) {
+      debugPrint("Failed to set brightness: $e");
+    }
+  }
+
+  Future<void> _resetBrightness() async {
+    try {
+      await ScreenBrightness().resetScreenBrightness();
+    } catch (e) {
+      debugPrint("Failed to reset brightness: $e");
+    }
   }
 
   @override
@@ -69,6 +87,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
     _faceDetector.close();
     _stopStreamSafe();
     _cameraController?.dispose();
+    _resetBrightness();
     super.dispose();
   }
 

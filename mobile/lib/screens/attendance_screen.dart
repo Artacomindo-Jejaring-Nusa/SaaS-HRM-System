@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import '../api/api_service.dart';
 import '../services/tracking_service.dart';
+import 'package:screen_brightness/screen_brightness.dart';
 
 /// Skema Absensi Sederhana:
 /// 1. Buka kamera depan
@@ -74,6 +75,23 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initializeCamera();
+    _setMaxBrightness();
+  }
+
+  Future<void> _setMaxBrightness() async {
+    try {
+      await ScreenBrightness().setScreenBrightness(1.0);
+    } catch (e) {
+      debugPrint("Failed to set brightness: $e");
+    }
+  }
+
+  Future<void> _resetBrightness() async {
+    try {
+      await ScreenBrightness().resetScreenBrightness();
+    } catch (e) {
+      debugPrint("Failed to reset brightness: $e");
+    }
   }
 
   @override
@@ -82,6 +100,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     _faceDetector.close();
     _stopStreamSafe();
     _controller?.dispose();
+    _resetBrightness();
     super.dispose();
   }
 
