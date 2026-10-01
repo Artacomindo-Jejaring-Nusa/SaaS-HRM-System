@@ -56,12 +56,12 @@ def decode_image_bytes(image_bytes: bytes) -> np.ndarray:
 class VerifyRequest(BaseModel):
     registered_embedding: List[float]
     image_base64: Optional[str] = None
-    threshold: Optional[float] = 0.70
+    threshold: Optional[float] = 0.82
 
 class CompareVectorsRequest(BaseModel):
     vector1: List[float]
     vector2: List[float]
-    threshold: Optional[float] = 0.70
+    threshold: Optional[float] = 0.82
 
 @app.get("/health")
 def health_check():
@@ -121,7 +121,7 @@ async def extract_face(
 async def verify_face_endpoint(
     file: Optional[UploadFile] = File(None),
     registered_embedding: str = Form(...), # JSON string array 128 float
-    threshold: float = Form(0.70),
+    threshold: float = Form(0.90),
     image_base64: Optional[str] = Form(None)
 ):
     """
@@ -185,13 +185,13 @@ def compare_vectors_endpoint(payload: CompareVectorsRequest):
         raise HTTPException(status_code=400, detail="Kedua vektor harus memiliki panjang 128 dimensi.")
 
     similarity = compute_similarity(payload.vector1, payload.vector2)
-    is_match = similarity >= (payload.threshold or 0.70)
+    is_match = similarity >= (payload.threshold or 0.82)
 
     return {
         "success": True,
         "is_match": bool(is_match),
         "similarity": round(float(similarity), 4),
-        "threshold": payload.threshold or 0.70
+        "threshold": payload.threshold or 0.82
     }
 
 if __name__ == "__main__":

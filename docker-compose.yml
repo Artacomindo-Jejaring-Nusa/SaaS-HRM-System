@@ -159,7 +159,7 @@ services:
       REVERB_SCHEME: ${REVERB_SCHEME:-http}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-google_client_id_placeholder}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8001}
-      FACE_RECOGNITION_THRESHOLD: ${FACE_RECOGNITION_THRESHOLD:-0.70}
+      FACE_RECOGNITION_THRESHOLD: ${FACE_RECOGNITION_THRESHOLD:-0.90}
     volumes:
       - ./backend:/var/www/html
       - /var/www/html/vendor
@@ -224,7 +224,7 @@ services:
       REVERB_SCHEME: ${REVERB_SCHEME:-http}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-google_client_id_placeholder}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8001}
-      FACE_RECOGNITION_THRESHOLD: ${FACE_RECOGNITION_THRESHOLD:-0.70}
+      FACE_RECOGNITION_THRESHOLD: ${FACE_RECOGNITION_THRESHOLD:-0.90}
     volumes:
       - ./backend:/var/www/html
       - /var/www/html/vendor
