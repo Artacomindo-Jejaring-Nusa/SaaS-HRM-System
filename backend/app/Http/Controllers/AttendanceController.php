@@ -442,9 +442,12 @@ class AttendanceController extends Controller
 
     private function evaluateFaceVerificationResult(array $verifyResult): ?array
     {
-        $similarityPercent = isset($verifyResult['similarity_percentage'])
-            ? $verifyResult['similarity_percentage']
-            : (isset($verifyResult['similarity']) ? round($verifyResult['similarity'] * 100, 1) : 0);
+        $similarityPercent = 0;
+        if (isset($verifyResult['similarity_percentage'])) {
+            $similarityPercent = $verifyResult['similarity_percentage'];
+        } elseif (isset($verifyResult['similarity'])) {
+            $similarityPercent = round($verifyResult['similarity'] * 100, 1);
+        }
 
         if (isset($verifyResult['face_detected']) && $verifyResult['face_detected'] === false) {
             $scoreInfo = $similarityPercent > 0 ? " (Skor Kemiripan: {$similarityPercent}%)" : "";
