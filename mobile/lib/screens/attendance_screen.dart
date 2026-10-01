@@ -327,12 +327,22 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         }
 
         // Tampilkan sukses sebentar lalu pop
+        final dynamic rawScore = result['data']?['face_similarity_score_in'] ??
+            result['data']?['face_similarity_score_out'];
+        String scoreText = "";
+        if (rawScore != null) {
+          try {
+            final double sVal = double.parse(rawScore.toString());
+            scoreText = "\n(Kemiripan Wajah: ${(sVal * 100).toStringAsFixed(1)}%)";
+          } catch (_) {}
+        }
+
         setState(() {
           _showResult = true;
           _isSuccess = true;
           _resultMessage = widget.isCheckIn
-              ? "Absen Masuk Berhasil ✅"
-              : "Absen Pulang Berhasil ✅";
+              ? "Absen Masuk Berhasil ✅$scoreText"
+              : "Absen Pulang Berhasil ✅$scoreText";
         });
 
         await Future.delayed(const Duration(seconds: 2));

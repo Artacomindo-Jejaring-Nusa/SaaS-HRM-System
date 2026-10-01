@@ -128,9 +128,13 @@ class AttendanceController extends Controller
             $this->sendCheckInNotifications($user, $status, $now);
         }
 
+        $score = $request->attributes->get('face_similarity_score_in');
+        $scorePercent = $score !== null ? round($score * 100, 1) : null;
+        $scoreText = $scorePercent !== null ? " (Kemiripan Wajah: {$scorePercent}%)" : '';
+
         $message = $isDinasLuar
-            ? 'Absen Dinas Luar berhasil tercatat. Menunggu persetujuan Supervisor.'
-            : 'Check-in berhasil. Status: '.$status;
+            ? "Absen Dinas Luar berhasil tercatat{$scoreText}. Menunggu persetujuan Supervisor."
+            : "Check-in berhasil{$scoreText}. Status: {$status}";
 
         return $this->successResponse($attendance, $message);
     }
@@ -214,7 +218,11 @@ class AttendanceController extends Controller
             false
         );
 
-        return $this->successResponse($attendance, 'Check-out berhasil.');
+        $score = $request->attributes->get('face_similarity_score_out');
+        $scorePercent = $score !== null ? round($score * 100, 1) : null;
+        $scoreText = $scorePercent !== null ? " (Kemiripan Wajah: {$scorePercent}%)" : '';
+
+        return $this->successResponse($attendance, "Check-out berhasil{$scoreText}.");
     }
 
     public function today(Request $request)
@@ -434,15 +442,19 @@ class AttendanceController extends Controller
 
     private function evaluateFaceVerificationResult(array $verifyResult): ?array
     {
+        $similarityPercent = isset($verifyResult['similarity_percentage'])
+            ? $verifyResult['similarity_percentage']
+            : (isset($verifyResult['similarity']) ? round($verifyResult['similarity'] * 100, 1) : 0);
+
         if (isset($verifyResult['face_detected']) && $verifyResult['face_detected'] === false) {
+            $scoreInfo = $similarityPercent > 0 ? " (Skor Kemiripan: {$similarityPercent}%)" : "";
             return [
-                'message' => 'Verifikasi Wajah Gagal: Wajah Anda tidak terdeteksi pada foto selfie. Harap posisikan seluruh wajah Anda di depan kamera (tidak terpotong / bukan benda) dengan pencahayaan yang cukup.',
+                'message' => "Verifikasi Wajah Gagal: Wajah Anda tidak terdeteksi pada foto selfie{$scoreInfo}. Harap posisikan seluruh wajah Anda di depan kamera (tidak terpotong / bukan benda) dengan pencahayaan yang cukup.",
                 'code' => 422,
             ];
         }
 
         if (!isset($verifyResult['is_match']) || !$verifyResult['is_match']) {
-            $similarityPercent = isset($verifyResult['similarity']) ? round($verifyResult['similarity'] * 100, 1) : 0;
             return [
                 'message' => "Verifikasi Wajah Gagal: Wajah Anda tidak sesuai dengan data foto pendaftaran yang disetujui (Skor Kemiripan: {$similarityPercent}%). Absen tidak dapat diselesaikan.",
                 'code' => 422,

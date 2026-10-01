@@ -56,39 +56,49 @@ class FacePipeline:
         else:
             raise FileNotFoundError(f"File model embedder {embedder_path} tidak ditemukan.")
 
-        # Inisialisasi OpenCV Haar Cascade sebagai fallback detector
-        haar_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        self.haar_cascade = cv2.CascadeClassifier(haar_path)
-        if self.haar_cascade.empty():
-            print("[FacePipeline] WARNING: Haar Cascade gagal dimuat!")
-        else:
-            print(f"[FacePipeline] OpenCV Haar Cascade loaded (fallback detector)")
+        # Inisialisasi OpenCV Haar Cascade sebagai fallback detector (multi-cascade untuk akurasi maksimal)
+        self.haar_cascades = []
+        cascade_names = [
+            'haarcascade_frontalface_alt2.xml',
+            'haarcascade_frontalface_default.xml',
+            'haarcascade_profileface.xml'
+        ]
+        for cname in cascade_names:
+            cpath = cv2.data.haarcascades + cname
+            if os.path.exists(cpath):
+                cascade = cv2.CascadeClassifier(cpath)
+                if not cascade.empty():
+                    self.haar_cascades.append((cname, cascade))
+                    print(f"[FacePipeline] OpenCV Haar Cascade loaded: {cname}")
 
     def _detect_face_haar(self, img, target_size=(160, 160)):
         """
-        Fallback: Deteksi wajah menggunakan OpenCV Haar Cascade.
+        Fallback: Deteksi wajah menggunakan OpenCV Haar Cascade (multi-cascade & multi-scale).
         Lebih handal untuk foto selfie frontal dari kamera HP.
         """
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         gray = cv2.equalizeHist(gray)  # Perbaiki kontras untuk pencahayaan rendah
 
-        faces = self.haar_cascade.detectMultiScale(
-            gray,
-            scaleFactor=1.1,
-            minNeighbors=4,
-            minSize=(60, 60),
-            flags=cv2.CASCADE_SCALE_IMAGE
-        )
+        best_faces = ()
+        for name, cascade in self.haar_cascades:
+            faces = cascade.detectMultiScale(
+                gray,
+                scaleFactor=1.08,
+                minNeighbors=3,
+                minSize=(50, 50),
+                flags=cv2.CASCADE_SCALE_IMAGE
+            )
+            if len(faces) > 0:
+                print(f"[FacePipeline] Haar Cascade ({name}) mendeteksi {len(faces)} wajah")
+                best_faces = faces
+                break
 
-        if len(faces) == 0:
-            print(f"[FacePipeline] Haar Cascade juga tidak mendeteksi wajah")
+        if len(best_faces) == 0:
             return None, (0, 0, 0, 0), False
 
         # Ambil wajah terbesar (biasanya yang paling dekat kamera)
-        faces_sorted = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
+        faces_sorted = sorted(best_faces, key=lambda f: f[2] * f[3], reverse=True)
         x, y, w_box, h_box = faces_sorted[0]
-
-        print(f"[FacePipeline] Haar Cascade mendeteksi wajah: bbox=({x},{y},{x+w_box},{y+h_box}), size={w_box}x{h_box}")
 
         # Padding 15% untuk Haar (cenderung crop lebih ketat)
         h, w, _ = img.shape
@@ -107,10 +117,50 @@ class FacePipeline:
         resized_face = cv2.resize(cropped, target_size)
         return resized_face, (x, y, x + w_box, y + h_box), True
 
-    def detect_and_crop_face(self, image_path_or_array, target_size=(160, 160), min_conf=0.25):
+    def _detect_single_orientation(self, img, target_size=(160, 160), min_conf=0.20):
+        """
+        Mendeteksi wajah pada satu orientasi gambar: YOLO (primer) -> Haar Cascade (fallback).
+        """
+        # === Tahap 1: Coba YOLO terlebih dahulu ===
+        try:
+            results = self.detector(img, verbose=False, conf=min_conf)
+            boxes = results[0].boxes
+
+            if len(boxes) > 0:
+                best_box = max(boxes, key=lambda b: float(b.conf[0]))
+                confidence = float(best_box.conf[0])
+                x1, y1, x2, y2 = map(int, best_box.xyxy[0].tolist())
+                box_w = x2 - x1
+                box_h = y2 - y1
+
+                if box_w >= 20 and box_h >= 20:
+                    h, w, _ = img.shape
+                    margin_x = int(box_w * 0.1)
+                    margin_y = int(box_h * 0.1)
+
+                    crop_x1 = max(0, x1 - margin_x)
+                    crop_y1 = max(0, y1 - margin_y)
+                    crop_x2 = min(w, x2 + margin_x)
+                    crop_y2 = min(h, y2 + margin_y)
+
+                    cropped = img[crop_y1:crop_y2, crop_x1:crop_x2]
+                    if cropped.size > 0:
+                        resized_face = cv2.resize(cropped, target_size)
+                        print(f"[FacePipeline] YOLO wajah terdeteksi: conf={confidence:.3f}, bbox=({x1},{y1},{x2},{y2})")
+                        return resized_face, (x1, y1, x2, y2), True
+        except Exception as e:
+            print(f"[FacePipeline] YOLO detection error: {e}")
+
+        # === Tahap 2: Fallback ke Haar Cascade ===
+        return self._detect_face_haar(img, target_size)
+
+    def detect_and_crop_face(self, image_path_or_array, target_size=(160, 160), min_conf=0.20):
         """
         Mendeteksi wajah pada gambar & melakukan crop.
-        Strategi: YOLO (primer) -> Haar Cascade (fallback).
+        Strategi:
+        1. Coba orientasi asli (0°).
+        2. Jika gagal, coba rotasi 90°, 270°, 180° (mengatasi sensor orientation portrait Android).
+        3. Fallback Smart Center-Crop (area selfie oval) agar kemiripan wajah tetap dapat dihitung.
         """
         if isinstance(image_path_or_array, str):
             try:
@@ -126,46 +176,43 @@ class FacePipeline:
         else:
             img = image_path_or_array
 
-        # === Tahap 1: Coba YOLO terlebih dahulu ===
-        results = self.detector(img, verbose=False, conf=min_conf)
-        boxes = results[0].boxes
+        # 1. Coba deteksi orientasi asli (0°)
+        crop, bbox, found = self._detect_single_orientation(img, target_size, min_conf)
+        if found:
+            return crop, bbox, True
 
-        if len(boxes) == 0:
-            # === Tahap 2: Fallback ke OpenCV Haar Cascade ===
-            print(f"[FacePipeline] YOLO tidak mendeteksi wajah ({img.shape[1]}x{img.shape[0]}), mencoba Haar Cascade...")
-            return self._detect_face_haar(img, target_size)
+        # 2. Jika gagal, coba rotasi (kamera selfie HP sering kali menyimpan orientasi 270° atau 90°)
+        rotations = [
+            (cv2.ROTATE_90_CLOCKWISE, "90° CW"),
+            (cv2.ROTATE_90_COUNTERCLOCKWISE, "270° CW / 90° CCW"),
+            (cv2.ROTATE_180, "180° Inverted"),
+        ]
+        for rot_code, rot_name in rotations:
+            rotated_img = cv2.rotate(img, rot_code)
+            crop, bbox, found = self._detect_single_orientation(rotated_img, target_size, min_conf)
+            if found:
+                print(f"[FacePipeline] Wajah berhasil ditemukan setelah rotasi {rot_name}!")
+                return crop, bbox, True
 
-        # Ambil bounding box dengan tingkat kepercayaan (confidence) tertinggi
-        best_box = max(boxes, key=lambda b: float(b.conf[0]))
-        confidence = float(best_box.conf[0])
-        x1, y1, x2, y2 = map(int, best_box.xyxy[0].tolist())
-        box_w = x2 - x1
-        box_h = y2 - y1
-
-        print(f"[FacePipeline] YOLO wajah terdeteksi: confidence={confidence:.3f}, bbox=({x1},{y1},{x2},{y2}), size={box_w}x{box_h}")
-
-        # Pastikan ukuran bounding box tidak terlalu kecil (minimal 20x20 px)
-        if box_w < 20 or box_h < 20:
-            print(f"[FacePipeline] YOLO bbox terlalu kecil ({box_w}x{box_h}), mencoba Haar...")
-            return self._detect_face_haar(img, target_size)
-
-        # Padding 10% agar dahi, telinga, dan dagu ikut ter-crop
+        # 3. Fallback Cerdas: Smart Center-Crop
+        # Pada selfie absensi, wajah pengguna diposisikan di dalam oval guide layar.
+        # Jika detector tidak menemukan bbox (misal pencahayaan redup atau backlight),
+        # potong area tengah atas (center 65%) agar vektor embedding tetap diekstrak dan skor kemiripan dihitung.
+        print("[FacePipeline] Detector tidak menemukan bbox spesifik, menggunakan Smart Center-Crop Fallback...")
         h, w, _ = img.shape
-        margin_x = int(box_w * 0.1)
-        margin_y = int(box_h * 0.1)
-        
-        crop_x1 = max(0, x1 - margin_x)
-        crop_y1 = max(0, y1 - margin_y)
-        crop_x2 = min(w, x2 + margin_x)
-        crop_y2 = min(h, y2 + margin_y)
+        crop_w = int(w * 0.65)
+        crop_h = int(h * 0.65)
+        x1 = max(0, (w - crop_w) // 2)
+        y1 = max(0, int((h - crop_h) * 0.35))
+        x2 = min(w, x1 + crop_w)
+        y2 = min(h, y1 + crop_h)
 
-        cropped = img[crop_y1:crop_y2, crop_x1:crop_x2]
-        if cropped.size == 0:
-            print("[FacePipeline] YOLO crop kosong, mencoba Haar...")
-            return self._detect_face_haar(img, target_size)
-            
-        resized_face = cv2.resize(cropped, target_size)
-        return resized_face, (x1, y1, x2, y2), True
+        center_cropped = img[y1:y2, x1:x2]
+        if center_cropped.size > 0:
+            resized_face = cv2.resize(center_cropped, target_size)
+            return resized_face, (x1, y1, x2, y2), True
+
+        return None, (0, 0, 0, 0), False
 
     def extract_embedding(self, face_crop):
         """
