@@ -12,7 +12,6 @@ use Illuminate\Support\Str;
 class FaceRecognitionController extends Controller
 {
     private const DIR_FACE_REGISTRATIONS = 'face_registrations/';
-    private const PATH_FACE_REGISTRATIONS = 'face_registrations';
 
     protected FaceRecognitionService $faceService;
 
