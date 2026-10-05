@@ -149,7 +149,7 @@ class ManagerController extends Controller
     {
         return match ($type) {
             'leave' => Leave::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
-            'overtime' => Overtime::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
+            'overtime' => Overtime::with(['user.role', 'user.office', 'user.supervisor', 'items'])->where('status', 'pending'),
             'reimbursement' => Reimbursement::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
             'permit' => Permit::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
             'vehicle_log' => VehicleLog::with(['user.role', 'user.office', 'user.supervisor', 'vehicle'])->whereIn('status', ['pending', 'completed']),

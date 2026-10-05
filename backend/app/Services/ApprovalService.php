@@ -441,18 +441,16 @@ class ApprovalService
             return true;
         }
 
-        if (!$hasModulePermission) {
-            return false;
+        if ($approver->role_id === 1) {
+            return true;
         }
 
-        return !in_array($moduleKey, ['fund_request', 'reimbursement'])
-            || self::canApproveFinancialRoleStep($step, $approver);
+        return false;
     }
 
     private static function canApproveUserStep(WorkflowStep $step, User $approver, bool $hasModulePermission): bool
     {
-        return $approver->id === $step->approver_user_id
-            || ($hasModulePermission && ($approver->role_id === 1 || str_contains(strtolower($approver->role?->name ?? ''), 'admin')));
+        return $approver->id === $step->approver_user_id || $approver->role_id === 1;
     }
 
     private static function canApproveSupervisorStep(User $approver, User $submitter, bool $hasModulePermission): bool
