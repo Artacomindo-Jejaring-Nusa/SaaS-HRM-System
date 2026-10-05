@@ -73,14 +73,16 @@ def main():
                 sys.exit(0)
 
             is_match, similarity = verify_face(reg_vector, current_embedding, threshold=args.threshold)
+            similarity_pct = round(float(similarity) * 100, 1)
 
             result = {
                 "success": True,
                 "face_detected": True,
                 "is_match": bool(is_match),
                 "similarity": round(float(similarity), 4),
+                "similarity_percentage": similarity_pct,
                 "threshold": args.threshold,
-                "message": "Verifikasi wajah berhasil cocok." if is_match else "Wajah tidak cocok dengan data terdaftar."
+                "message": f"Verifikasi wajah berhasil cocok (Kemiripan: {similarity_pct}%)." if is_match else f"Wajah tidak sesuai dengan data terdaftar (Kemiripan: {similarity_pct}%)."
             }
             print(json.dumps(result))
 

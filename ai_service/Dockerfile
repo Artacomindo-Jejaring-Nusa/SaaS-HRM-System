@@ -2,6 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+ENV PYTHONUNBUFFERED=1
+ENV YOLO_CONFIG_DIR=/tmp/Ultralytics
+
 # Install system dependencies for OpenCV and image operations
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \

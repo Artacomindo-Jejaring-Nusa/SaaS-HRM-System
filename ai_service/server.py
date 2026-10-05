@@ -1,4 +1,5 @@
 import os
+import sys
 import io
 import json
 import base64
@@ -10,6 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from face_engine import FacePipeline, compute_similarity, verify_face
+
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+except Exception:
+    pass
 
 app = FastAPI(
     title="Artacom HRMS Face Recognition AI Service",
@@ -157,19 +163,22 @@ async def verify_face_endpoint(
                 "face_detected": False,
                 "is_match": False,
                 "similarity": 0.0,
+                "similarity_percentage": 0.0,
                 "threshold": threshold,
                 "message": "Wajah tidak terdeteksi pada foto selfie. Harap posisikan seluruh wajah Anda di depan kamera (bukan benda / tidak terpotong)."
             }
 
         is_match, similarity = verify_face(reg_vector, current_embedding, threshold=threshold)
+        similarity_pct = round(float(similarity) * 100, 1)
 
         return {
             "success": True,
             "face_detected": True,
             "is_match": bool(is_match),
             "similarity": round(float(similarity), 4),
+            "similarity_percentage": similarity_pct,
             "threshold": threshold,
-            "message": "Verifikasi wajah berhasil cocok." if is_match else "Wajah tidak cocok dengan data pendaftaran Anda."
+            "message": f"Verifikasi wajah berhasil cocok (Kemiripan: {similarity_pct}%)." if is_match else f"Wajah tidak sesuai dengan data foto pendaftaran (Kemiripan: {similarity_pct}%)."
         }
     except HTTPException:
         raise
