@@ -424,18 +424,9 @@ class ApprovalService
         };
     }
 
-    private static function canApproveFinancialRoleStep(WorkflowStep $step, User $approver): bool
-    {
-        $roleName = strtolower($approver->role?->name ?? '');
-        $stepRoleName = strtolower($step->role?->name ?? '');
-        $isExecutiveOrAdmin = str_contains($roleName, 'admin') || str_contains($roleName, 'direktur') || str_contains($roleName, 'ceo') || str_contains($roleName, 'boc');
-        if ($isExecutiveOrAdmin) {
-            return true;
-        }
-        return str_contains($stepRoleName, 'hr') || str_contains($stepRoleName, 'admin');
-    }
 
-    private static function canApproveRoleStep(WorkflowStep $step, User $approver, string $moduleKey, bool $hasModulePermission): bool
+
+    private static function canApproveRoleStep(WorkflowStep $step, User $approver): bool
     {
         if ($approver->role_id === $step->approver_role_id) {
             return true;
@@ -448,7 +439,7 @@ class ApprovalService
         return false;
     }
 
-    private static function canApproveUserStep(WorkflowStep $step, User $approver, bool $hasModulePermission): bool
+    private static function canApproveUserStep(WorkflowStep $step, User $approver): bool
     {
         return $approver->id === $step->approver_user_id || $approver->role_id === 1;
     }
@@ -483,8 +474,8 @@ class ApprovalService
 
         return match ($step->approver_type) {
             'supervisor' => self::canApproveSupervisorStep($approver, $submitter, $hasModulePermission),
-            'role' => self::canApproveRoleStep($step, $approver, $resolvedModuleKey, $hasModulePermission),
-            'user' => self::canApproveUserStep($step, $approver, $hasModulePermission),
+            'role' => self::canApproveRoleStep($step, $approver),
+            'user' => self::canApproveUserStep($step, $approver),
             default => false,
         };
     }
