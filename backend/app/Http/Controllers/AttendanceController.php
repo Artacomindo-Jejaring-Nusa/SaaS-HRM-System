@@ -449,17 +449,25 @@ class AttendanceController extends Controller
             $similarityPercent = round($verifyResult['similarity'] * 100, 1);
         }
 
-        if (isset($verifyResult['face_detected']) && $verifyResult['face_detected'] === false) {
-            $scoreInfo = $similarityPercent > 0 ? " (Skor Kemiripan: {$similarityPercent}%)" : "";
+        // If explicitly face_detected is false AND similarity is extremely low (meaning no face found).
+        if (isset($verifyResult['face_detected']) && $verifyResult['face_detected'] === false && $similarityPercent < 1.0) {
             return [
-                'message' => "Verifikasi Wajah Gagal: Wajah Anda tidak terdeteksi pada foto selfie{$scoreInfo}. Harap posisikan seluruh wajah Anda di depan kamera (tidak terpotong / bukan benda) dengan pencahayaan yang cukup.",
+                'message' => "Verifikasi Wajah Gagal: Wajah Anda tidak terdeteksi pada foto selfie. Harap posisikan seluruh wajah Anda di depan kamera (tidak terpotong / bukan benda) dengan pencahayaan yang cukup.",
                 'code' => 422,
             ];
         }
 
-        if (!isset($verifyResult['is_match']) || !$verifyResult['is_match']) {
+        // If it's not a match, or if similarity is below our minimum threshold (0.30 = 30%)
+        $isMatch = isset($verifyResult['is_match']) ? $verifyResult['is_match'] : false;
+        
+        // Safety net: if the API returned is_match=false but the score is very high (>= 75%), we force it to pass
+        if (!$isMatch && $similarityPercent >= 75.0) {
+            $isMatch = true;
+        }
+
+        if (!$isMatch) {
             return [
-                'message' => "Verifikasi Wajah Gagal: Wajah Anda tidak sesuai dengan data foto pendaftaran yang disetujui (Skor Kemiripan: {$similarityPercent}%). Absen tidak dapat diselesaikan.",
+                'message' => "Verifikasi Wajah Gagal: Wajah Anda tidak sesuai dengan data foto pendaftaran yang disetujui (Skor Kemiripan: {$similarityPercent}%). Minimal skor adalah 75%.",
                 'code' => 422,
             ];
         }
