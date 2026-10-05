@@ -43,6 +43,7 @@ RUN apk add --no-cache \
     pdo_mysql \
     mysqli \
     gd \
+    exif \
     zip \
     intl \
     mbstring \

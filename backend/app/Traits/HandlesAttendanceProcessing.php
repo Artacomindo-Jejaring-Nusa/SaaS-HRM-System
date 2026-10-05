@@ -191,10 +191,6 @@ trait HandlesAttendanceProcessing
         }
 
         $imageName = "attendance/{$prefix}_".Str::random(40).'.jpg';
-        $img = Image::decode($file);
-        $img->scale(width: 800);
-        Storage::disk('public')->put($imageName, (string) $img->encodeUsingFileExtension('jpg', 80));
-
-        return $imageName;
+        return \App\Support\SelfieImage::storeNormalized($file, $imageName);
     }
 }

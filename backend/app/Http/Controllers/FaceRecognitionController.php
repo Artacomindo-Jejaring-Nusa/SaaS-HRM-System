@@ -48,14 +48,9 @@ class FaceRecognitionController extends Controller
 
         // 2. Simpan file foto pendaftaran
         $photoPath = null;
-        if ($request->hasFile('image')) {
-            $filename = 'face_' . $user->id . '_' . Str::random(10) . '.' . $request->file('image')->getClientOriginalExtension();
-            $photoPath = $request->file('image')->storeAs(self::PATH_FACE_REGISTRATIONS, $filename, 'public');
-        } elseif ($request->filled('image_base64')) {
+        if ($imageInput) {
             $filename = 'face_' . $user->id . '_' . Str::random(10) . '.jpg';
-            $data = str_contains($request->image_base64, ',') ? explode(',', $request->image_base64)[1] : $request->image_base64;
-            Storage::disk('public')->put(self::DIR_FACE_REGISTRATIONS . $filename, base64_decode($data));
-            $photoPath = self::DIR_FACE_REGISTRATIONS . $filename;
+            $photoPath = \App\Support\SelfieImage::storeNormalized($imageInput, self::DIR_FACE_REGISTRATIONS . $filename);
         }
 
         // 3. Update data User dengan status PENDING
@@ -219,14 +214,9 @@ class FaceRecognitionController extends Controller
         }
 
         $photoPath = null;
-        if ($request->hasFile('image')) {
-            $filename = 'face_admin_' . $user->id . '_' . Str::random(10) . '.' . $request->file('image')->getClientOriginalExtension();
-            $photoPath = $request->file('image')->storeAs(self::PATH_FACE_REGISTRATIONS, $filename, 'public');
-        } elseif ($request->filled('image_base64')) {
+        if ($imageInput) {
             $filename = 'face_admin_' . $user->id . '_' . Str::random(10) . '.jpg';
-            $data = str_contains($request->image_base64, ',') ? explode(',', $request->image_base64)[1] : $request->image_base64;
-            Storage::disk('public')->put(self::DIR_FACE_REGISTRATIONS . $filename, base64_decode($data));
-            $photoPath = self::DIR_FACE_REGISTRATIONS . $filename;
+            $photoPath = \App\Support\SelfieImage::storeNormalized($imageInput, self::DIR_FACE_REGISTRATIONS . $filename);
         }
 
         $user->update([
