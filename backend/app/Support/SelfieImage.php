@@ -73,55 +73,55 @@ class SelfieImage
     public static function readJpegOrientation(string $data): int
     {
         $len = strlen($data);
-        $result = 1;
-
-        if ($len >= 4 && substr($data, 0, 2) === "\xFF\xD8") {
-            $offset = 2;
-            while ($offset + 4 <= $len) {
-                if ($data[$offset] !== "\xFF" || ord($data[$offset + 1]) === 0xDA) {
-                    break;
-                }
-                
-                $marker = ord($data[$offset + 1]);
-                $segLen = unpack('n', substr($data, $offset + 2, 2))[1];
-
-                if ($marker === 0xE1 && substr($data, $offset + 4, 6) === "Exif\0\0") {
-                    $result = self::parseTiffOrientation(substr($data, $offset + 10, $segLen - 8));
-                    break;
-                }
-                $offset += 2 + $segLen;
-            }
+        if ($len < 4 || substr($data, 0, 2) !== "\xFF\xD8") {
+            return 1;
         }
 
-        return $result;
+        $offset = 2;
+        while ($offset + 4 <= $len) {
+            if ($data[$offset] !== "\xFF" || ord($data[$offset + 1]) === 0xDA) {
+                break;
+            }
+            
+            $marker = ord($data[$offset + 1]);
+            $segLen = unpack('n', substr($data, $offset + 2, 2))[1];
+
+            if ($marker === 0xE1 && substr($data, $offset + 4, 6) === "Exif\0\0") {
+                return self::parseTiffOrientation(substr($data, $offset + 10, $segLen - 8));
+            }
+            $offset += 2 + $segLen;
+        }
+
+        return 1;
     }
 
     private static function parseTiffOrientation(string $tiff): int
     {
-        $result = 1;
+        $len = strlen($tiff);
+        if ($len < 8) {
+            return 1;
+        }
 
-        if (strlen($tiff) >= 8) {
-            $le = substr($tiff, 0, 2) === 'II';
-            $u16 = fn (int $o) => unpack($le ? 'v' : 'n', substr($tiff, $o, 2))[1];
-            $u32 = fn (int $o) => unpack($le ? 'V' : 'N', substr($tiff, $o, 4))[1];
+        $le = substr($tiff, 0, 2) === 'II';
+        $fmt16 = $le ? 'v' : 'n';
+        $fmt32 = $le ? 'V' : 'N';
+        
+        $ifd = unpack($fmt32, substr($tiff, 4, 4))[1];
 
-            $ifd = $u32(4);
-            if ($ifd + 2 <= strlen($tiff)) {
-                $count = $u16($ifd);
-                for ($i = 0; $i < $count; $i++) {
-                    $entry = $ifd + 2 + $i * 12;
-                    if ($entry + 12 > strlen($tiff)) {
-                        break;
-                    }
-                    if ($u16($entry) === 0x0112) {
-                        $val = $u16($entry + 8);
-                        $result = ($val >= 1 && $val <= 8) ? $val : 1;
-                        break;
-                    }
+        if ($ifd + 2 <= $len) {
+            $count = unpack($fmt16, substr($tiff, $ifd, 2))[1];
+            for ($i = 0; $i < $count; $i++) {
+                $entry = $ifd + 2 + $i * 12;
+                if ($entry + 12 > $len) {
+                    break;
+                }
+                if (unpack($fmt16, substr($tiff, $entry, 2))[1] === 0x0112) {
+                    $val = unpack($fmt16, substr($tiff, $entry + 8, 2))[1];
+                    return ($val >= 1 && $val <= 8) ? $val : 1;
                 }
             }
         }
 
-        return $result;
+        return 1;
     }
 }
