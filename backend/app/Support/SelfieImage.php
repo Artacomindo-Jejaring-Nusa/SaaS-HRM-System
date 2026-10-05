@@ -108,17 +108,19 @@ class SelfieImage
         
         $ifd = unpack($fmt32, substr($tiff, 4, 4))[1];
 
+        $count = 0;
         if ($ifd + 2 <= $len) {
             $count = unpack($fmt16, substr($tiff, $ifd, 2))[1];
-            for ($i = 0; $i < $count; $i++) {
-                $entry = $ifd + 2 + $i * 12;
-                if ($entry + 12 > $len) {
-                    break;
-                }
-                if (unpack($fmt16, substr($tiff, $entry, 2))[1] === 0x0112) {
-                    $val = unpack($fmt16, substr($tiff, $entry + 8, 2))[1];
-                    return ($val >= 1 && $val <= 8) ? $val : 1;
-                }
+        }
+
+        for ($i = 0; $i < $count; $i++) {
+            $entry = $ifd + 2 + $i * 12;
+            if ($entry + 12 > $len) {
+                break;
+            }
+            if (unpack($fmt16, substr($tiff, $entry, 2))[1] === 0x0112) {
+                $val = unpack($fmt16, substr($tiff, $entry + 8, 2))[1];
+                return ($val >= 1 && $val <= 8) ? $val : 1;
             }
         }
 
