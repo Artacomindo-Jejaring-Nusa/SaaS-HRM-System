@@ -41,4 +41,9 @@ return [
         'base_url' => env('WATZAP_BASE_URL', 'https://api.watzap.id/v1/'),
     ],
 
+    'face_recognition' => [
+        'url' => env('AI_SERVICE_URL', 'http://ai-service:8001'),
+        'threshold' => env('FACE_RECOGNITION_THRESHOLD', 0.40),
+    ],
+
 ];

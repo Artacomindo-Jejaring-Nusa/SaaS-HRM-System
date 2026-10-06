@@ -15,8 +15,8 @@ class FaceRecognitionService
 
     public function __construct()
     {
-        $this->aiServiceUrl = rtrim(env('AI_SERVICE_URL', 'http://ai-service:8001'), '/');
-        $this->defaultThreshold = (float) env('FACE_RECOGNITION_THRESHOLD', 0.40);
+        $this->aiServiceUrl = rtrim(config('services.face_recognition.url', 'http://ai-service:8001'), '/');
+        $this->defaultThreshold = (float) config('services.face_recognition.threshold', 0.40);
     }
 
     /**
