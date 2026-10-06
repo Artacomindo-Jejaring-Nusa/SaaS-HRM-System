@@ -51,12 +51,25 @@ class FaceRecognitionService
             if ($response && $response->successful()) {
                 return $response->json();
             }
+
+            if ($response) {
+                return [
+                    'success' => false,
+                    'message' => 'AI Service HTTP Error ' . $response->status() . ': ' . $response->body()
+                ];
+            }
         } catch (\Throwable $e) {
-            Log::warning("[FaceRecognitionService] HTTP AI Service unreachable: " . $e->getMessage() . ". Falling back to CLI.");
+            Log::warning("[FaceRecognitionService] HTTP AI Service unreachable: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'AI Service Connection Error: ' . $e->getMessage()
+            ];
         }
 
-        // 2. Fallback CLI: Jalankan python ai_service/cli.py langsung
-        return $this->extractViaCli($imageInput);
+        return [
+            'success' => false,
+            'message' => 'AI Service failed with unknown error.'
+        ];
     }
 
     /**
