@@ -168,6 +168,7 @@ services:
       - /var/www/html/vendor
       - ./backend/storage/app/public:/var/www/html/storage/app/public
       - ./backend/storage/logs:/var/www/html/storage/logs
+      - ./face-recog-ArcFace:/var/www/face-recog-ArcFace:ro
     depends_on:
       mysql-master:
         condition: service_healthy
@@ -233,6 +234,7 @@ services:
       - /var/www/html/vendor
       - ./backend/storage/app/public:/var/www/html/storage/app/public
       - ./backend/storage/logs:/var/www/html/storage/logs
+      - ./face-recog-ArcFace:/var/www/face-recog-ArcFace:ro
     depends_on:
       mysql-master:
         condition: service_healthy

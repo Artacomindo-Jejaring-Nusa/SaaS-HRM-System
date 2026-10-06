@@ -140,14 +140,14 @@ class FaceRecognitionService
 
         // Cek virtual environment umum
         $venvPaths = [
-            base_path('ai_service/venv/bin/python'),
-            base_path('ai_service/venv/bin/python3'),
-            base_path('../ai_service/venv/bin/python'),
-            base_path('../ai_service/venv/bin/python3'),
+            base_path('face-recog-ArcFace/venv/bin/python'),
+            base_path('face-recog-ArcFace/venv/bin/python3'),
+            base_path('../face-recog-ArcFace/venv/bin/python'),
+            base_path('../face-recog-ArcFace/venv/bin/python3'),
             base_path('.venv/bin/python'),
             base_path('venv/bin/python'),
-            base_path('ai_service/venv/Scripts/python.exe'),
-            base_path('../ai_service/venv/Scripts/python.exe'),
+            base_path('face-recog-ArcFace/venv/Scripts/python.exe'),
+            base_path('../face-recog-ArcFace/venv/Scripts/python.exe'),
         ];
 
         foreach ($venvPaths as $path) {
@@ -177,9 +177,9 @@ class FaceRecognitionService
             file_put_contents($tempPath, base64_decode($data));
         }
 
-        $scriptPath = base_path('ai_service/cli.py');
+        $scriptPath = base_path('face-recog-ArcFace/cli.py');
         if (!file_exists($scriptPath)) {
-            $scriptPath = base_path('../ai_service/cli.py');
+            $scriptPath = base_path('../face-recog-ArcFace/cli.py');
         }
 
         $pythonBin = $this->getPythonBinary();
@@ -220,9 +220,9 @@ class FaceRecognitionService
         $tempJsonPath = tempnam(sys_get_temp_dir(), 'face_emb_') . '.json';
         file_put_contents($tempJsonPath, json_encode($registeredEmbedding));
 
-        $scriptPath = base_path('ai_service/cli.py');
+        $scriptPath = base_path('face-recog-ArcFace/cli.py');
         if (!file_exists($scriptPath)) {
-            $scriptPath = base_path('../ai_service/cli.py');
+            $scriptPath = base_path('../face-recog-ArcFace/cli.py');
         }
 
         $pythonBin = $this->getPythonBinary();
