@@ -53,7 +53,7 @@ services:
       DB_DATABASE: ${DB_DATABASE:-hrm_saas_staging}
       DB_USERNAME: ${DB_USERNAME:-hrms_staging}
       DB_PASSWORD: ${DB_PASSWORD:-StagingPass2026!}
-      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service-staging:8001}
+      AI_SERVICE_URL: http://ai-service-staging:8001
     deploy:
       resources:
         limits:
