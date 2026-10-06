@@ -20,7 +20,7 @@ class FaceRecognitionService
     }
 
     /**
-     * Mengekstrak 128-d vektor wajah dari file upload atau file path.
+     * Mengekstrak 512-d vektor wajah dari file upload atau file path.
      *
      * @param UploadedFile|string $imageInput
      * @return array
@@ -62,7 +62,7 @@ class FaceRecognitionService
     /**
      * Memverifikasi wajah pada foto saat ini dengan data vektor yang terdaftar di database.
      *
-     * @param array $registeredEmbedding Array 128 float
+     * @param array $registeredEmbedding Array 512 float
      * @param UploadedFile|string $currentImage
      * @param float|null $threshold
      * @return array
@@ -76,7 +76,7 @@ class FaceRecognitionService
             $registeredEmbedding = json_decode($registeredEmbedding, true);
         }
 
-        if (!is_array($registeredEmbedding) || empty($registeredEmbedding) || count($registeredEmbedding) !== 128) {
+        if (!is_array($registeredEmbedding) || empty($registeredEmbedding) || count($registeredEmbedding) !== 512) {
             return [
                 'success' => false,
                 'is_match' => false,

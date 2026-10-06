@@ -54,7 +54,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
-        'face_embedding', // Vektor biometrik 128-d tidak boleh terexpose di API response
+        'face_embedding', // Vektor biometrik 512-d tidak boleh terexpose di API response
     ];
 
     protected $appends = ['profile_photo_url', 'face_registered_photo_url', 'is_face_approved', 'is_manager', 'can_access_manager_portal', 'permission_slugs', 'kemnaker_leave_balance', 'is_eligible_for_leave', 'is_web_auto_validated'];

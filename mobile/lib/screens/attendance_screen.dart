@@ -69,6 +69,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   bool _showResult = false;
   bool _isSuccess = false;
   String _resultMessage = "";
+  bool _isBypassMode = false;
 
   @override
   void initState() {
@@ -291,6 +292,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           attendanceType: widget.attendanceType,
           dinasLuarDestination: widget.dinasLuarDestination,
           dinasLuarNotes: widget.dinasLuarNotes,
+          bypassFaceRecognition: _isBypassMode,
         );
       } else {
         result = await ApiService.checkOut(
@@ -299,6 +301,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           imagePath: image.path,
           deviceId: deviceId,
           isMocked: position.isMocked,
+          bypassFaceRecognition: _isBypassMode,
         );
       }
 
@@ -401,6 +404,11 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         _startFaceDetectionStream();
       }
     });
+  }
+
+  void _bypassAttendance() {
+    _isBypassMode = true;
+    _retryAttendance();
   }
 
   InputImage _convertCameraImageToInputImage(CameraImage image) {
@@ -743,6 +751,23 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 onPressed: _retryAttendance,
                 icon: const Icon(Icons.refresh, color: Colors.white),
                 label: Text("Coba Lagi",
+                    style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16)),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orangeAccent,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 28, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: _bypassAttendance,
+                icon: const Icon(Icons.warning_amber_rounded, color: Colors.white),
+                label: Text("Bypass (Butuh Persetujuan)",
                     style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,

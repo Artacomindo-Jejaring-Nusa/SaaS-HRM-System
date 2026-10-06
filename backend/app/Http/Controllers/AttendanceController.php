@@ -72,6 +72,7 @@ class AttendanceController extends Controller
     private function processCheckIn(User $user, StoreAttendanceRequest $request, $matchedOffice, Carbon $now, string $today)
     {
         $isDinasLuar = $request->attendance_type === 'dinas_luar';
+        $isBypass = $request->boolean('bypass_face_recognition');
 
         $schedule = Schedule::with('shift')
             ->where('user_id', $user->id)
@@ -97,6 +98,11 @@ class AttendanceController extends Controller
             'attendance_type' => $isDinasLuar ? 'dinas_luar' : 'office',
             'channel' => 'mobile',
         ];
+
+        if ($isBypass) {
+            $attendanceData['is_suspicious'] = true;
+            $attendanceData['suspicious_reason'] = 'Bypass pengenalan wajah (Lingkungan tidak mendukung).';
+        }
 
         // Add dinas luar specific fields
         if ($isDinasLuar) {
@@ -183,15 +189,23 @@ class AttendanceController extends Controller
     private function processCheckOut(Attendance $attendance, User $user, StoreAttendanceRequest $request)
     {
         $imageName = $this->saveCompressedAttendanceImage($request, 'out');
+        $isBypass = $request->boolean('bypass_face_recognition');
 
-        $attendance->update([
+        $updateData = [
             'check_out' => now(),
             'latitude_out' => $request->latitude,
             'longitude_out' => $request->longitude,
             'image_out' => $imageName,
             'face_similarity_score_out' => $request->attributes->get('face_similarity_score_out'),
             'is_face_verified_out' => (bool) $request->attributes->get('is_face_verified_out', false),
-        ]);
+        ];
+
+        if ($isBypass) {
+            $updateData['is_suspicious'] = true;
+            $updateData['suspicious_reason'] = trim($attendance->suspicious_reason . ' | Bypass pengenalan wajah saat check-out.', ' |');
+        }
+
+        $attendance->update($updateData);
 
         // Record checkout position into employee_tracks & broadcast live location
         try {
@@ -477,6 +491,12 @@ class AttendanceController extends Controller
 
     private function verifyFaceAttendance($user, $request, string $type): ?array
     {
+        if ($request->boolean('bypass_face_recognition')) {
+            $request->attributes->set('face_similarity_score_' . $type, 0.0);
+            $request->attributes->set('is_face_verified_' . $type, false);
+            return null; // Bypass verifikasi wajah berhasil
+        }
+
         $prereqError = $this->checkFacePrerequisites($user, $request);
         if ($prereqError !== null) {
             return $prereqError;

@@ -9,8 +9,6 @@ import 'package:screen_brightness/screen_brightness.dart';
 
 enum LivenessStep {
   positionFace,
-  blinkEyes,
-  turnHead,
   holdStill,
   capturing,
   completed,
@@ -228,15 +226,16 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
 
       switch (_currentStep) {
         case LivenessStep.positionFace:
-          if (eulerY.abs() < 10 && eulerX.abs() < 12) {
+          if (eulerY.abs() < 12 && eulerX.abs() < 12) {
             _faceAlignedFrames++;
             if (_faceAlignedFrames >= _requiredAlignedFrames) {
               setState(() {
-                _currentStep = LivenessStep.blinkEyes;
-                _stepInstruction = "Tahap 1: Kedipkan Kedua Mata Anda";
-                _stepIcon = Icons.remove_red_eye_outlined;
-                _stepColor = Colors.purpleAccent;
-                _progressValue = 0.35;
+                _currentStep = LivenessStep.holdStill;
+                _stepInstruction = "Bagus! Tahan Posisi Wajah Anda...";
+                _stepIcon = Icons.center_focus_strong;
+                _stepColor = Colors.greenAccent;
+                _progressValue = 0.60;
+                _holdStillFrames = 0;
               });
               _faceAlignedFrames = 0;
             } else {
@@ -255,50 +254,14 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
           }
           break;
 
-        case LivenessStep.blinkEyes:
-          if (leftEye < 0.20 && rightEye < 0.20) {
-            _hasBlinkedClosed = true;
-            setState(() {
-              _stepInstruction = "Mata Tertutup Terdeteksi... Buka Mata Anda";
-              _stepColor = Colors.deepPurpleAccent;
-            });
-          } else if (_hasBlinkedClosed && leftEye > 0.55 && rightEye > 0.55) {
-            _hasBlinkedClosed = false;
-            setState(() {
-              _currentStep = LivenessStep.turnHead;
-              _stepInstruction = "Tahap 2: Tengok Sedikit ke Samping (Kanan / Kiri)";
-              _stepIcon = Icons.rotate_right;
-              _stepColor = Colors.cyanAccent;
-              _progressValue = 0.60;
-            });
-          }
-          break;
-
-        case LivenessStep.turnHead:
-          if (eulerY.abs() > 14) {
-            setState(() {
-              _currentStep = LivenessStep.holdStill;
-              _stepInstruction = "Tahap 3: Hadap Lurus ke Depan & Tahan Sebentar...";
-              _stepIcon = Icons.center_focus_strong;
-              _stepColor = Colors.greenAccent;
-              _progressValue = 0.85;
-              _holdStillFrames = 0;
-            });
-          } else {
-            setState(() {
-              _stepInstruction = "Tengok ke Kanan atau Kiri sedikit (Euler: ${eulerY.toStringAsFixed(1)}°)";
-            });
-          }
-          break;
-
         case LivenessStep.holdStill:
-          if (eulerY.abs() < 8 && eulerX.abs() < 10) {
+          if (eulerY.abs() < 10 && eulerX.abs() < 10) {
             _holdStillFrames++;
             if (_holdStillFrames >= _requiredHoldFrames) {
               // All liveness checks passed — trigger capture
               setState(() {
                 _currentStep = LivenessStep.capturing;
-                _stepInstruction = "Gerakan Terverifikasi! Merekam Foto Wajah...";
+                _stepInstruction = "Merekam Foto Wajah Terbaik...";
                 _stepIcon = Icons.camera_alt;
                 _stepColor = Colors.greenAccent;
                 _progressValue = 1.0;
@@ -313,8 +276,8 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
           } else {
             _holdStillFrames = 0;
             setState(() {
-              _stepInstruction = "Hadap lurus ke depan dan tahan";
-              _stepColor = Colors.greenAccent;
+              _stepInstruction = "Tegakkan Wajah Lurus ke Depan";
+              _stepColor = Colors.amberAccent;
             });
           }
           break;
