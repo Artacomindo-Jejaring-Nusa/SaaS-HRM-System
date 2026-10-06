@@ -497,23 +497,20 @@ class AttendanceController extends Controller
             return null; // Bypass verifikasi wajah berhasil
         }
 
-        $prereqError = $this->checkFacePrerequisites($user, $request);
-        if ($prereqError !== null) {
-            return $prereqError;
+        $error = $this->checkFacePrerequisites($user, $request);
+        if ($error === null) {
+            $imageInput = $request->hasFile('image') ? $request->file('image') : ($request->image ?? $request->image_base64);
+            $faceService = app(\App\Services\FaceRecognitionService::class);
+            $verifyResult = $faceService->verifyFace($user->face_embedding, $imageInput);
+
+            $error = $this->evaluateFaceVerificationResult($verifyResult);
+            if ($error === null) {
+                $request->attributes->set('face_similarity_score_' . $type, $verifyResult['similarity'] ?? 1.0);
+                $request->attributes->set('is_face_verified_' . $type, true);
+            }
         }
 
-        $imageInput = $request->hasFile('image') ? $request->file('image') : ($request->image ?? $request->image_base64);
-        $faceService = app(\App\Services\FaceRecognitionService::class);
-        $verifyResult = $faceService->verifyFace($user->face_embedding, $imageInput);
-
-        $verifyError = $this->evaluateFaceVerificationResult($verifyResult);
-        if ($verifyError !== null) {
-            return $verifyError;
-        }
-
-        $request->attributes->set('face_similarity_score_' . $type, $verifyResult['similarity'] ?? 1.0);
-        $request->attributes->set('is_face_verified_' . $type, true);
-
-        return null;
+        return $error;
     }
 }
+
