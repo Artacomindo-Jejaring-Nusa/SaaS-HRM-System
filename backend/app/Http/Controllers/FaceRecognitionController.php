@@ -305,8 +305,9 @@ class FaceRecognitionController extends Controller
         }
 
         if (empty($extraction['embedding']) || count($extraction['embedding']) !== 512) {
+            $count = isset($extraction['embedding']) ? count($extraction['embedding']) : 0;
             return [
-                'error' => 'Gagal menghasilkan representasi vektor wajah 512-d yang valid.',
+                'error' => "Gagal menghasilkan representasi vektor wajah 512-d yang valid. (Dimensi diterima: {$count})",
                 'code' => 500,
             ];
         }
