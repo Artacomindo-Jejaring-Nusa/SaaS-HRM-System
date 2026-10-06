@@ -27,7 +27,11 @@ class FaceRecognitionService
      */
     public function extractFaceEmbedding($imageInput): array
     {
-        // 1. Coba panggil Microservice HTTP FastAPI
+        $result = [
+            'success' => false,
+            'message' => 'AI Service failed with unknown error.'
+        ];
+
         try {
             $response = null;
 
@@ -48,28 +52,19 @@ class FaceRecognitionService
                     ]);
             }
 
-            if ($response && $response->successful()) {
-                return $response->json();
-            }
-
             if ($response) {
-                return [
-                    'success' => false,
-                    'message' => 'AI Service HTTP Error ' . $response->status() . ': ' . $response->body()
-                ];
+                if ($response->successful()) {
+                    $result = $response->json();
+                } else {
+                    $result['message'] = 'AI Service HTTP Error ' . $response->status() . ': ' . $response->body();
+                }
             }
         } catch (\Throwable $e) {
             Log::warning("[FaceRecognitionService] HTTP AI Service unreachable: " . $e->getMessage());
-            return [
-                'success' => false,
-                'message' => 'AI Service Connection Error: ' . $e->getMessage()
-            ];
+            $result['message'] = 'AI Service Connection Error: ' . $e->getMessage();
         }
 
-        return [
-            'success' => false,
-            'message' => 'AI Service failed with unknown error.'
-        ];
+        return $result;
     }
 
     /**
