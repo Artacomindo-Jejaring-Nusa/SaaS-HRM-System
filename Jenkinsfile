@@ -130,8 +130,11 @@ pipeline {
                                 echo "Menarik Image Staging..."
                                 docker compose -p hrms-staging -f docker-compose.staging.yml pull
                                 
+                                echo "Membangun ulang Image Lokal (AI Service)..."
+                                docker compose -p hrms-staging -f docker-compose.staging.yml build ai-service-staging
+                                
                                 echo "Mengaktifkan Container Staging..."
-                                docker rm -f hrms-backend-staging hrms-frontend-staging hrms-proxy-staging 2>/dev/null || true
+                                docker rm -f hrms-backend-staging hrms-frontend-staging hrms-proxy-staging hrms-ai-face-staging 2>/dev/null || true
                                 docker compose -p hrms-staging --env-file .env.staging -f docker-compose.staging.yml up -d
                                 
                                 echo "Menjalankan migrasi database Staging..."
