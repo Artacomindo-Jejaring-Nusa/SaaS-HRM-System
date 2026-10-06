@@ -57,3 +57,9 @@ Form Permintaan Dana&Uang Muka - AJNusa.xls
 Spend of Layer-Signature.xlsx
 *.xlsx
 *.xls
+
+# AI Model Checkpoints & Weights (>100MB)
+*.pth
+*.pt
+face-recog-ArcFace/checkpoint/*.pth
+face-recog-ArcFace/venv/
