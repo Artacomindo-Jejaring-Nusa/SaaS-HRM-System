@@ -88,15 +88,16 @@ services:
     networks:
       - hrms-network
 
-  # ── AI Face Recognition Service Staging (Python / YOLOv11 + Keras 128-d) ──
+  # ── AI Face Recognition Service Staging (Python / ArcFace IR-50, 512-d) ──
   ai-service-staging:
     build:
-      context: ./ai_service
+      context: ./face-recog-ArcFace
       dockerfile: Dockerfile
     container_name: hrms-ai-face-staging
     restart: unless-stopped
     environment:
       PORT: 8001
+      FACE_RECOGNITION_THRESHOLD: ${FACE_RECOGNITION_THRESHOLD:-0.45}
     deploy:
       resources:
         limits:
@@ -105,7 +106,7 @@ services:
         reservations:
           memory: 512M
     volumes:
-      - ai_model_weights_staging:/app/weights
+      - ./face-recog-ArcFace/checkpoint:/app/checkpoint:ro
     networks:
       - hrms-network
     healthcheck:
@@ -113,7 +114,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s
 
   # ── Staging Nginx Gateway (Port 8088) ────────────────────
   nginx-proxy-staging:
@@ -140,4 +141,3 @@ volumes:
   mysql_staging_data:
   backend_storage_staging:
   backend_logs_staging:
-  ai_model_weights_staging:

@@ -37,7 +37,7 @@ class FaceRecognitionController extends Controller
 
         $user = $request->user();
 
-        // 1. Ekstraksi Vektor 128-d menggunakan AI Pipeline
+        // 1. Ekstraksi Vektor 512-d menggunakan AI Pipeline
         $imageInput = $request->hasFile('image') ? $request->file('image') : $request->input('image_base64');
         $extractResult = $this->validateAndExtractFace($imageInput);
         if (isset($extractResult['error'])) {
@@ -304,9 +304,9 @@ class FaceRecognitionController extends Controller
             ];
         }
 
-        if (empty($extraction['embedding']) || count($extraction['embedding']) !== 128) {
+        if (empty($extraction['embedding']) || count($extraction['embedding']) !== 512) {
             return [
-                'error' => 'Gagal menghasilkan representasi vektor wajah 128-d yang valid.',
+                'error' => 'Gagal menghasilkan representasi vektor wajah 512-d yang valid.',
                 'code' => 500,
             ];
         }
