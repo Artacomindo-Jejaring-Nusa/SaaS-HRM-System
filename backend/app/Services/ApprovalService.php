@@ -502,29 +502,19 @@ class ApprovalService
 
     private static function calculateStepStatus(string $status, int $stepNumber, int $activeStepNumber): array
     {
-        if ($status === 'approved') {
-            return ['approved', false];
+        $stepStatus = 'waiting';
+        $isCurrent = false;
+
+        if ($status === 'approved' || $stepNumber < $activeStepNumber) {
+            $stepStatus = 'approved';
+        } elseif ($stepNumber === $activeStepNumber) {
+            $stepStatus = $status === 'rejected' ? 'rejected' : 'pending';
+            $isCurrent = true;
+        } elseif ($status === 'rejected') {
+            $stepStatus = 'cancelled';
         }
 
-        if ($status === 'rejected') {
-            if ($stepNumber < $activeStepNumber) {
-                return ['approved', false];
-            }
-            if ($stepNumber === $activeStepNumber) {
-                return ['rejected', true];
-            }
-            return ['cancelled', false];
-        }
-
-        // Pending status
-        if ($stepNumber < $activeStepNumber) {
-            return ['approved', false];
-        }
-        if ($stepNumber === $activeStepNumber) {
-            return ['pending', true];
-        }
-
-        return ['waiting', false];
+        return [$stepStatus, $isCurrent];
     }
 
     private static function formatCurrentStepLabel(string $status, string $currentLabel, int $activeStepNumber, int $totalSteps): string
@@ -591,15 +581,7 @@ class ApprovalService
 
     private static function canApproveRoleStep(WorkflowStep $step, User $approver): bool
     {
-        if ($approver->role_id === $step->approver_role_id) {
-            return true;
-        }
-
-        if ($approver->role_id === 1) {
-            return true;
-        }
-
-        return false;
+        return $approver->role_id === $step->approver_role_id || $approver->role_id === 1;
     }
 
     private static function canApproveUserStep(WorkflowStep $step, User $approver): bool
@@ -636,7 +618,7 @@ class ApprovalService
         $hasModulePermission = $permission ? $approver->hasPermission($permission) : false;
 
         return match ($step->approver_type) {
-            'super_admin' => ($approver->role_id === 1 || $approver->role?->name === 'Super Admin' || (method_exists($approver, 'canAccessAllCompanies') && $approver->canAccessAllCompanies())),
+            'super_admin' => ($approver->role_id === 1 || $approver->role?->name === self::ROLE_SUPER_ADMIN || (method_exists($approver, 'canAccessAllCompanies') && $approver->canAccessAllCompanies())),
             'supervisor' => self::canApproveSupervisorStep($approver, $submitter, $hasModulePermission),
             'role' => self::canApproveRoleStep($step, $approver),
             'user' => self::canApproveUserStep($step, $approver),

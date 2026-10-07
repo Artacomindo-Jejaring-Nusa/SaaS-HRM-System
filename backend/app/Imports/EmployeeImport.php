@@ -55,16 +55,8 @@ class EmployeeImport implements ToModel, WithHeadingRow
         return str_contains($nama, '>>>') || str_contains($nama, 'Panduan') || str_contains($nama, 'Angka');
     }
 
-    private function buildUpdateData(array $row, User $existingUser, string $nama, $roleId, $joinDate, $dob, $password): array
+    private function resolveStringFields(array $row): array
     {
-        $updateData = [
-            'name' => trim($nama),
-            'role_id' => $roleId,
-            'join_date' => $joinDate ?: $existingUser->join_date,
-            'employment_status' => $this->getValue($row, 'status_karyawan') ?: ($existingUser->employment_status ?: 'Permanent'),
-            'work_location' => $this->getValue($row, 'lokasi_kerja') ?: ($existingUser->work_location ?: 'Kantor Pusat'),
-        ];
-
         $stringFields = [
             'nik' => 'nik',
             'phone' => 'nomor_telepon',
@@ -79,20 +71,45 @@ class EmployeeImport implements ToModel, WithHeadingRow
             'emergency_contact_phone' => 'nomor_kontak_darurat',
         ];
 
+        $data = [];
         foreach ($stringFields as $field => $key) {
             $val = $this->getValue($row, $key);
             if ($val !== null && $val !== '') {
-                $updateData[$field] = (string) $val;
+                $data[$field] = (string) $val;
             }
         }
+        return $data;
+    }
+
+    private function resolveSupervisorId(array $row): ?int
+    {
+        $supervisorId = $this->getValue($row, 'id_atasan');
+        if ($supervisorId === null) {
+            return null;
+        }
+        return is_numeric($supervisorId) ? (int) $supervisorId : null;
+    }
+
+    private function buildUpdateData(array $row, User $existingUser, string $nama, $roleId, $joinDate, $dob, $password): array
+    {
+        $statusKaryawan = $this->getValue($row, 'status_karyawan') ?: ($existingUser->employment_status ?: 'Permanent');
+        $lokasiKerja = $this->getValue($row, 'lokasi_kerja') ?: ($existingUser->work_location ?: 'Kantor Pusat');
+
+        $updateData = array_merge($this->resolveStringFields($row), [
+            'name' => trim($nama),
+            'role_id' => $roleId,
+            'join_date' => $joinDate ?: $existingUser->join_date,
+            'employment_status' => $statusKaryawan,
+            'work_location' => $lokasiKerja,
+        ]);
 
         if ($dob) {
             $updateData['date_of_birth'] = $dob;
         }
 
-        $supervisorId = $this->getValue($row, 'id_atasan');
+        $supervisorId = $this->resolveSupervisorId($row);
         if ($supervisorId !== null) {
-            $updateData['supervisor_id'] = is_numeric($supervisorId) ? (int) $supervisorId : null;
+            $updateData['supervisor_id'] = $supervisorId;
         }
 
         if (!empty($password) && !in_array($password, ['***', 'tempPassword123!'], true)) {
@@ -104,31 +121,20 @@ class EmployeeImport implements ToModel, WithHeadingRow
 
     private function buildNewUser(array $row, string $nama, string $email, $roleId, $joinDate, $dob, $password): User
     {
-        $supervisorId = $this->getValue($row, 'id_atasan');
-
-        return new User([
+        $userData = array_merge($this->resolveStringFields($row), [
             'company_id' => $this->companyId,
             'name' => trim($nama),
             'email' => trim($email),
-            'nik' => (string) ($this->getValue($row, 'nik') ?? ''),
             'password' => Hash::make($password ?: 'tempPassword123!'),
             'role_id' => $roleId,
             'join_date' => $joinDate ?: now()->format('Y-m-d'),
-            'phone' => (string) ($this->getValue($row, 'nomor_telepon') ?? ''),
-            'address' => $this->getValue($row, 'alamat'),
-            'ktp_no' => (string) ($this->getValue($row, 'nomor_ktp') ?? ''),
-            'place_of_birth' => $this->getValue($row, 'tempat_lahir'),
             'date_of_birth' => $dob,
-            'gender' => $this->getValue($row, 'jenis_kelamin'),
-            'religion' => $this->getValue($row, 'agama'),
-            'marital_status' => $this->getValue($row, 'status_nikah'),
-            'blood_type' => $this->getValue($row, 'gol_darah'),
             'employment_status' => $this->getValue($row, 'status_karyawan') ?: 'Permanent',
             'work_location' => $this->getValue($row, 'lokasi_kerja') ?: 'Kantor Pusat',
-            'supervisor_id' => is_numeric($supervisorId) ? (int) $supervisorId : null,
-            'emergency_contact_name' => $this->getValue($row, 'nama_kontak_darurat'),
-            'emergency_contact_phone' => $this->getValue($row, 'nomor_kontak_darurat'),
+            'supervisor_id' => $this->resolveSupervisorId($row),
         ]);
+
+        return new User($userData);
     }
 
     /**

@@ -529,16 +529,16 @@ class ManagerController extends Controller
         }]);
 
         if ($directSubordinateIds->isNotEmpty()) {
-            return $query->whereIn('id', $directSubordinateIds);
-        }
-        if ($isGlobalAdmin) {
-            return $query->where('id', '!=', $user->id)->take(50);
-        }
-        if ($isCompanyAdmin) {
-            return $query->where('company_id', $user->company_id)->where('id', '!=', $user->id)->take(50);
+            $query->whereIn('id', $directSubordinateIds);
+        } elseif ($isGlobalAdmin) {
+            $query->where('id', '!=', $user->id)->take(50);
+        } elseif ($isCompanyAdmin) {
+            $query->where('company_id', $user->company_id)->where('id', '!=', $user->id)->take(50);
+        } else {
+            $query->where('supervisor_id', $user->id);
         }
 
-        return $query->where('supervisor_id', $user->id);
+        return $query;
     }
 
     private function formatTeamMemberAttendance($sub): array
