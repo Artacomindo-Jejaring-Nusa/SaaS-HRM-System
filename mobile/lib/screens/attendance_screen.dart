@@ -70,6 +70,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   bool _isSuccess = false;
   String _resultMessage = "";
   bool _isBypassMode = false;
+  String? _bypassReason;
 
   @override
   void initState() {
@@ -293,6 +294,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           dinasLuarDestination: widget.dinasLuarDestination,
           dinasLuarNotes: widget.dinasLuarNotes,
           bypassFaceRecognition: _isBypassMode,
+          bypassReason: _bypassReason,
         );
       } else {
         result = await ApiService.checkOut(
@@ -302,6 +304,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           deviceId: deviceId,
           isMocked: position.isMocked,
           bypassFaceRecognition: _isBypassMode,
+          bypassReason: _bypassReason,
         );
       }
 
@@ -407,8 +410,71 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   }
 
   void _bypassAttendance() {
-    _isBypassMode = true;
-    _retryAttendance();
+    TextEditingController reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            "Alasan Bypass",
+            style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "Bypass akan menandai absen ini sebagai 'Mencurigakan' dan butuh persetujuan manual Superadmin.",
+                style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: reasonController,
+                style: GoogleFonts.outfit(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: "Contoh: Kamera rusak, Cahaya gelap...",
+                  hintStyle: GoogleFonts.outfit(color: Colors.white38),
+                  filled: true,
+                  fillColor: Colors.black26,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text("Batal", style: GoogleFonts.outfit(color: Colors.white60)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
+              onPressed: () {
+                final reason = reasonController.text.trim();
+                if (reason.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Alasan bypass wajib diisi")),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext);
+                setState(() {
+                  _isBypassMode = true;
+                  _bypassReason = reason;
+                });
+                _retryAttendance();
+              },
+              child: Text("Lanjutkan Bypass", style: GoogleFonts.outfit(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   InputImage _convertCameraImageToInputImage(CameraImage image) {

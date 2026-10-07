@@ -115,7 +115,8 @@ class ApiService {
           String? attendanceType,
           String? dinasLuarDestination,
           String? dinasLuarNotes,
-          bool bypassFaceRecognition = false}) =>
+          bool bypassFaceRecognition = false,
+          String? bypassReason}) =>
       AttendanceRepository.checkIn(lat, lng,
           imagePath: imagePath,
           deviceId: deviceId,
@@ -123,12 +124,13 @@ class ApiService {
           attendanceType: attendanceType,
           dinasLuarDestination: dinasLuarDestination,
           dinasLuarNotes: dinasLuarNotes,
-          bypassFaceRecognition: bypassFaceRecognition);
+          bypassFaceRecognition: bypassFaceRecognition,
+          bypassReason: bypassReason);
 
   static Future<Map<String, dynamic>?> checkOut(double lat, double lng,
-          {String? imagePath, String? deviceId, bool isMocked = false, bool bypassFaceRecognition = false}) =>
+          {String? imagePath, String? deviceId, bool isMocked = false, bool bypassFaceRecognition = false, String? bypassReason}) =>
       AttendanceRepository.checkOut(lat, lng,
-          imagePath: imagePath, deviceId: deviceId, isMocked: isMocked, bypassFaceRecognition: bypassFaceRecognition);
+          imagePath: imagePath, deviceId: deviceId, isMocked: isMocked, bypassFaceRecognition: bypassFaceRecognition, bypassReason: bypassReason);
 
   // ============ NOTIFICATIONS ============
 

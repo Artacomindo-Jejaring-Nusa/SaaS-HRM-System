@@ -619,4 +619,33 @@ class EmployeeController extends Controller
 
         return $this->successResponse($supervisors, 'Data calon atasan berhasil diambil.');
     }
+
+    public function discipline(Request $request, $id)
+    {
+        $request->validate([
+            'reason' => 'required|string|min:5'
+        ]);
+
+        $employee = User::findOrFail($id);
+        
+        $currentUser = $request->user();
+        if ($currentUser->company_id && ! $currentUser->canAccessAllCompanies()) {
+            if ($employee->company_id !== $currentUser->company_id) {
+                return $this->errorResponse(self::MSG_FORBIDDEN, 403);
+            }
+        }
+
+        \App\Models\Notification::create([
+            'user_id' => $employee->id,
+            'title' => 'Peringatan / Tindakan Disiplin',
+            'message' => "Anda mendapatkan peringatan atau tindakan disiplin dari manajemen dengan detail sebagai berikut:\n\n" . $request->reason,
+            'type' => 'warning',
+            'category' => 'system',
+            'is_read' => false,
+        ]);
+
+        $this->logActivity('DISCIPLINARY_ACTION', "Memberikan tindakan disiplin kepada {$employee->name}. Alasan: {$request->reason}", $employee);
+
+        return $this->successResponse(null, "Tindakan disiplin untuk {$employee->name} berhasil dicatat dan notifikasi telah dikirim ke ponsel karyawan.");
+    }
 }

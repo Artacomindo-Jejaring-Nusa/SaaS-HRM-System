@@ -100,8 +100,9 @@ class AttendanceController extends Controller
         ];
 
         if ($isBypass) {
+            $bypassReason = $request->input('bypass_reason', 'Lingkungan tidak mendukung');
             $attendanceData['is_suspicious'] = true;
-            $attendanceData['suspicious_reason'] = 'Bypass pengenalan wajah (Lingkungan tidak mendukung).';
+            $attendanceData['suspicious_reason'] = "Bypass pengenalan wajah: {$bypassReason}";
         }
 
         // Add dinas luar specific fields
@@ -201,8 +202,9 @@ class AttendanceController extends Controller
         ];
 
         if ($isBypass) {
+            $bypassReason = $request->input('bypass_reason', 'Lingkungan tidak mendukung');
             $updateData['is_suspicious'] = true;
-            $updateData['suspicious_reason'] = trim($attendance->suspicious_reason . ' | Bypass pengenalan wajah saat check-out.', ' |');
+            $updateData['suspicious_reason'] = trim($attendance->suspicious_reason . " | Bypass pengenalan wajah saat check-out: {$bypassReason}", ' |');
         }
 
         $attendance->update($updateData);

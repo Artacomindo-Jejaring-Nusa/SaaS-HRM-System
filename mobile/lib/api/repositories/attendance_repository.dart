@@ -58,6 +58,7 @@ class AttendanceRepository {
     String? dinasLuarDestination,
     String? dinasLuarNotes,
     bool bypassFaceRecognition = false,
+    String? bypassReason,
   }) async {
     return _submitAttendance(
       '${ApiClient.baseUrl}/attendance/check-in',
@@ -70,6 +71,7 @@ class AttendanceRepository {
       dinasLuarDestination: dinasLuarDestination,
       dinasLuarNotes: dinasLuarNotes,
       bypassFaceRecognition: bypassFaceRecognition,
+      bypassReason: bypassReason,
     );
   }
 
@@ -80,6 +82,7 @@ class AttendanceRepository {
     String? deviceId,
     bool isMocked = false,
     bool bypassFaceRecognition = false,
+    String? bypassReason,
   }) async {
     return _submitAttendance(
       '${ApiClient.baseUrl}/attendance/check-out',
@@ -89,6 +92,7 @@ class AttendanceRepository {
       deviceId: deviceId,
       isMocked: isMocked,
       bypassFaceRecognition: bypassFaceRecognition,
+      bypassReason: bypassReason,
     );
   }
 
@@ -104,6 +108,7 @@ class AttendanceRepository {
     String? dinasLuarDestination,
     String? dinasLuarNotes,
     bool bypassFaceRecognition = false,
+    String? bypassReason,
   }) async {
     try {
       final headers = await ApiClient.getHeaders();
@@ -130,6 +135,9 @@ class AttendanceRepository {
       }
       if (bypassFaceRecognition) {
         request.fields['bypass_face_recognition'] = '1';
+        if (bypassReason != null && bypassReason.isNotEmpty) {
+          request.fields['bypass_reason'] = bypassReason;
+        }
       }
 
       // Add image file if provided

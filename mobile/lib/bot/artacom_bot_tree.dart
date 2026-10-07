@@ -2279,6 +2279,21 @@ final Map<String, ConversationNode> conversationTree = {
           '• Cocok dinikmati pas briefing pagi atau jam 10:00.\n'
           '• Kurangi gula jika sudah minum lebih dari 1 gelas sehari.\n'
           '• Bikin mood naik seketika tanpa bikin kembung!',
+      '☕ Pilihan Mantap: Cappuccino Dingin!\n\n'
+          '💡 Tips dari Bot:\n'
+          '• Foam susunya bikin rileks pikiran yang lagi kusut.\n'
+          '• Pas banget buat nemenin nugas di sore hari.\n'
+          '• Tambahin sedikit bubuk cokelat biar makin nikmat!',
+      '🍯 Pilihan Mantap: Caramel Macchiato!\n\n'
+          '💡 Tips dari Bot:\n'
+          '• Perpaduan manis karamel dan kopi yang smooth banget.\n'
+          '• Cocok buat self-reward setelah meeting panjang.\n'
+          '• Aduk perlahan biar karamelnya kecampur rata ya!',
+      '🍫 Pilihan Mantap: Mochaccino (Kopi Cokelat)!\n\n'
+          '💡 Tips dari Bot:\n'
+          '• Buat kamu yang bingung mau kopi atau cokelat.\n'
+          '• Mood booster instan berkat double hormon bahagia.\n'
+          '• Enak diminum sambil ngemil biskuit!',
     ],
     chips: [
       ChipOption(
@@ -3847,6 +3862,126 @@ final Map<String, ConversationNode> conversationTree = {
     messages: [], // di-inject oleh massive_data
     chips: [
       ChipOption(emoji: '🔄', label: 'Pertanyaan Lain', targetNodeId: 'ice_breaker'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
+    ]
+  ),
+  'playlist_menu': ConversationNode(
+    id: 'playlist_menu',
+    mood: 'happy',
+    messages: [
+      '🎵 Coba dengerin Lo-Fi Beats buat nemenin kerja biar fokus tapi tetep rileks!',
+      '🎧 Play lagu Pop Akustik aja biar suasananya lebih tenang dan ga tegang.',
+      '🎸 Butuh semangat? Dengerin lagu Rock Klasik atau EDM favoritmu biar melek!',
+      '🎷 Jazz instrumental pas banget buat sore-sore sambil nyelesaiin laporan.',
+    ],
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Rekomendasi Lain', targetNodeId: 'playlist_menu'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
+    ]
+  ),
+  'karaoke_menu': ConversationNode(
+    id: 'karaoke_menu',
+    mood: 'excited',
+    messages: [
+      '🎤 Nyanyi lagu galau taun 2000-an seru banget nih buat ngeluarin penat! (Di dalam hati aja ya kalo di kubikel 😂)',
+      '🎶 "Daaan... mungkinkah kitaaa..." Ayo tebak lagu apa ini? Nyanyi tipis-tipis gih!',
+      '🎸 Playlist lagu pop ceria cocok buat ngerubah mood kamu sekarang. Sing along yuk!',
+    ],
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Lagu Lain', targetNodeId: 'karaoke_menu'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
+    ]
+  ),
+  'relax_breath_start': ConversationNode(
+    id: 'relax_breath_start',
+    mood: 'calm',
+    messages: [
+      '🧘 Yuk ikuti panduan: Tarik napas 4 detik... Tahan 4 detik... Hembuskan perlahan 6 detik. Ulangi 3 kali ya.',
+      '🌿 Fokus ke pernapasanmu. Tarik napas dalam dari hidung, keluarkan dari mulut perlahan. Rasakan otot bahumu lebih rileks.',
+      '😌 Tutup matamu sejenak (kalau aman). Hitung mundur dari 10 sambil tarik dan buang napas perlahan. Kamu pasti merasa lebih baik.',
+    ],
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Teknik Lain', targetNodeId: 'relax_breath_start'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
+    ]
+  ),
+  'stretch_menu': ConversationNode(
+    id: 'stretch_menu',
+    mood: 'happy',
+    messages: [
+      '💆 Putar kepalamu ke kanan dan ke kiri perlahan 5 kali. Putar bahu ke belakang 10 kali. Badan auto enteng!',
+      '🤸 Angkat kedua tangan ke atas setinggi mungkin, regangkan punggungmu! Tahan 5 detik lalu hembuskan napas.',
+      '🧍 Coba berdiri dari kursimu, lakukan sentuh ujung jari kaki (atau sebisanya) selama 10 detik biar aliran darah lancar.',
+    ],
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Stretching Lain', targetNodeId: 'stretch_menu'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
+    ]
+  ),
+  'dare_menu': ConversationNode(
+    id: 'dare_menu',
+    mood: 'curious',
+    messages: [
+      '🎪 Berani? Coba tegur rekan kerja di sebelahmu dan kasih dia pujian tulus soal bajunya hari ini!',
+      '😎 Tantangan: Jangan buka sosmed (IG, TikTok) selama 2 jam ke depan. Berani terima?',
+      '🚀 Tantangan: Minum 1 gelas air putih sekarang juga, no excuse!',
+      '🔥 Dare: Tulis satu hal yang kamu syukuri hari ini di sticky note dan tempel di monitormu.',
+    ],
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Dare Lain', targetNodeId: 'dare_menu'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
+    ]
+  ),
+  'health_tips_menu': ConversationNode(
+    id: 'health_tips_menu',
+    mood: 'calm',
+    messages: [
+      '🏥 Ingat rule 20-20-20: Setiap 20 menit lihat layar, alihkan pandangan sejauh 20 kaki selama 20 detik.',
+      '💧 Sudah minum berapa gelas hari ini? Dehidrasi ringan bisa bikin gampang ngantuk dan susah fokus lho.',
+      '🍎 Jangan cuma ngemil ciki! Buah-buahan segar jauh lebih bagus buat maintain energi kamu seharian.',
+      '🚶 Sedentary lifestyle itu bahaya. Pastikan kamu selalu jalan-jalan kecil minimal sejam sekali dari kursimu.',
+    ],
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Tips Lain', targetNodeId: 'health_tips_menu'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
+    ]
+  ),
+  'wind_down_menu': ConversationNode(
+    id: 'wind_down_menu',
+    mood: 'calm',
+    messages: [
+      '🌙 Saatnya beres-beres meja. Buang kertas ga penting, rapiin kabel. Besok pagi kamu akan berterima kasih pada dirimu sendiri!',
+      '🎒 Pastikan ga ada barang yang ketinggalan. Tulis to-do list singkat buat besok biar pikiran tenang pas pulang.',
+      '🏠 Sudah mau pulang? Luar biasa kerjamu hari ini. Jangan bawa beban kerjaan ke rumah ya, have a good rest!',
+    ],
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Saran Lain', targetNodeId: 'wind_down_menu'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
+    ]
+  ),
+  'tech_support_menu': ConversationNode(
+    id: 'tech_support_menu',
+    mood: 'curious',
+    messages: [
+      '💻 Komputer lemot? Coba restart dulu. 90% masalah IT selesai dengan keajaiban "Restart" lho!',
+      '🔌 Internet putus-putus? Pastikan kabel LAN tertancap rapat atau coba disconnect-reconnect WiFi.',
+      '🗑️ Harddisk penuh? Coba clear cache browser atau hapus file di folder Downloads yang umurnya udah tahunan.',
+    ],
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Tips IT Lain', targetNodeId: 'tech_support_menu'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
+    ]
+  ),
+  'quiz_menu': ConversationNode(
+    id: 'quiz_menu',
+    mood: 'excited',
+    messages: [
+      '🧠 Quiz Trivia: Hewan apa yang tidak bisa melompat?\nJawaban: Gajah! 🐘',
+      '🤔 Quiz Trivia: Negara manakah yang memiliki jumlah pulau terbanyak di dunia?\nJawaban: Swedia! (Iya, bukan Indonesia lho!) 🇸🇪',
+      '💡 Quiz Trivia: Apa nama tulang terpanjang di tubuh manusia?\nJawaban: Tulang Paha (Femur)! 🦴',
+    ],
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Quiz Lain', targetNodeId: 'quiz_menu'),
       ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
     ]
   ),

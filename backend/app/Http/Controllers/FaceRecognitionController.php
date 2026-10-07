@@ -304,6 +304,26 @@ class FaceRecognitionController extends Controller
             ];
         }
 
+        // STRICT REGISTRATION: Pastikan HANYA 1 wajah yang terdeteksi
+        if (isset($extraction['face_count']) && $extraction['face_count'] > 1) {
+            return [
+                'error' => 'Pendaftaran gagal: Terdeteksi lebih dari 1 wajah. Harap pastikan hanya wajah Anda yang terlihat di foto (hindari orang lain di background) agar absensi 100% akurat.',
+                'code' => 422,
+            ];
+        }
+
+        // STRICT REGISTRATION: Pastikan wajah cukup besar/dekat
+        if (isset($extraction['bbox']) && count($extraction['bbox']) === 4) {
+            $width = $extraction['bbox'][2] - $extraction['bbox'][0];
+            $height = $extraction['bbox'][3] - $extraction['bbox'][1];
+            if ($width < 100 || $height < 100) {
+                return [
+                    'error' => 'Pendaftaran gagal: Wajah terlalu jauh dari kamera. Harap ambil foto selfie lebih dekat agar AI dapat memetakan wajah Anda secara maksimal dan akurat.',
+                    'code' => 422,
+                ];
+            }
+        }
+
         if (empty($extraction['embedding']) || count($extraction['embedding']) !== 512) {
             $count = isset($extraction['embedding']) ? count($extraction['embedding']) : 0;
             return [

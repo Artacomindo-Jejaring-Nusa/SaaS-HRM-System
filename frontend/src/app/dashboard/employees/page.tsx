@@ -600,6 +600,7 @@ function confirmResetPasswordAction(
 }
 
 async function executeEmployeeDisciplineAction(
+  employeeId: number,
   employeeName: string,
   disciplineNote: string,
   setIsSubmitting: (val: boolean) => void,
@@ -608,11 +609,13 @@ async function executeEmployeeDisciplineAction(
   if (!disciplineNote.trim()) return;
   setIsSubmitting(true);
   try {
-    await new Promise(r => setTimeout(r, 800));
+    await axiosInstance.post(`/employees/${employeeId}/discipline`, {
+      reason: disciplineNote.trim(),
+    });
     toast.success(`Tindakan disiplin untuk ${employeeName} berhasil dicatat.`);
     onSuccess();
-  } catch {
-    toast.error("Gagal mencatat tindakan disiplin");
+  } catch (e: unknown) {
+    toast.error(extractEmployeeErrorMessage(e, "Gagal mencatat tindakan disiplin"));
   } finally {
     setIsSubmitting(false);
   }
@@ -2475,6 +2478,20 @@ function EmployeesContent() {
     confirmResetPasswordAction(id, name, () => fetchEmployees(pagination?.current_page || 1), setIsSubmitting);
   };
 
+  const handleDisciplineSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!disciplinedEmployee) return;
+    await executeEmployeeDisciplineAction(
+      disciplinedEmployee.id,
+      disciplinedEmployee.name,
+      disciplineNote,
+      setIsSubmitting,
+      () => {
+        setDisciplineModalOpen(false);
+        setDisciplineNote('');
+      }
+    );
+  };
 
   const formatDate = formatEmployeeDate;
 
