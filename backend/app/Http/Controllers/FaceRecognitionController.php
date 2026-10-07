@@ -296,39 +296,33 @@ class FaceRecognitionController extends Controller
     private function validateAndExtractFace($imageInput): array
     {
         $extraction = $this->faceService->extractFaceEmbedding($imageInput);
+        $error = null;
+        $code = 422;
 
         if (!isset($extraction['success']) || !$extraction['success']) {
-            return [
-                'error' => $extraction['message'] ?? 'Gagal mendeteksi wajah pada foto. Pastikan wajah terlihat jelas dan pencahayaan cukup.',
-                'code' => 422,
-            ];
-        }
-
-        // STRICT REGISTRATION: Pastikan HANYA 1 wajah yang terdeteksi
-        if (isset($extraction['face_count']) && $extraction['face_count'] > 1) {
-            return [
-                'error' => 'Pendaftaran gagal: Terdeteksi lebih dari 1 wajah. Harap pastikan hanya wajah Anda yang terlihat di foto (hindari orang lain di background) agar absensi 100% akurat.',
-                'code' => 422,
-            ];
-        }
-
-        // STRICT REGISTRATION: Pastikan wajah cukup besar/dekat
-        if (isset($extraction['bbox']) && count($extraction['bbox']) === 4) {
+            $error = $extraction['message'] ?? 'Gagal mendeteksi wajah pada foto. Pastikan wajah terlihat jelas dan pencahayaan cukup.';
+        } elseif (isset($extraction['face_count']) && $extraction['face_count'] > 1) {
+            // STRICT REGISTRATION: Pastikan HANYA 1 wajah yang terdeteksi
+            $error = 'Pendaftaran gagal: Terdeteksi lebih dari 1 wajah. Harap pastikan hanya wajah Anda yang terlihat di foto (hindari orang lain di background) agar absensi 100% akurat.';
+        } elseif (isset($extraction['bbox']) && count($extraction['bbox']) === 4) {
+            // STRICT REGISTRATION: Pastikan wajah cukup besar/dekat
             $width = $extraction['bbox'][2] - $extraction['bbox'][0];
             $height = $extraction['bbox'][3] - $extraction['bbox'][1];
             if ($width < 100 || $height < 100) {
-                return [
-                    'error' => 'Pendaftaran gagal: Wajah terlalu jauh dari kamera. Harap ambil foto selfie lebih dekat agar AI dapat memetakan wajah Anda secara maksimal dan akurat.',
-                    'code' => 422,
-                ];
+                $error = 'Pendaftaran gagal: Wajah terlalu jauh dari kamera. Harap ambil foto selfie lebih dekat agar AI dapat memetakan wajah Anda secara maksimal dan akurat.';
             }
         }
 
-        if (empty($extraction['embedding']) || count($extraction['embedding']) !== 512) {
+        if (!$error && (empty($extraction['embedding']) || count($extraction['embedding']) !== 512)) {
             $count = isset($extraction['embedding']) ? count($extraction['embedding']) : 0;
+            $error = "Gagal menghasilkan representasi vektor wajah 512-d yang valid. (Dimensi diterima: {$count})";
+            $code = 500;
+        }
+
+        if ($error) {
             return [
-                'error' => "Gagal menghasilkan representasi vektor wajah 512-d yang valid. (Dimensi diterima: {$count})",
-                'code' => 500,
+                'error' => $error,
+                'code' => $code,
             ];
         }
 

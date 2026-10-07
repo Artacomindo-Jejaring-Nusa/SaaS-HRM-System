@@ -2275,19 +2275,6 @@ function EmployeesContent() {
     );
   };
 
-  const handleDisciplineSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    executeEmployeeDisciplineAction(
-      disciplinedEmployee?.name || "",
-      disciplineNote,
-      setIsSubmitting,
-      () => {
-        setDisciplineModalOpen(false);
-        setDisciplineNote("");
-      }
-    );
-  };
-
   // Handle Debouncing Search
   useEffect(() => {
     const timer = setTimeout(() => {

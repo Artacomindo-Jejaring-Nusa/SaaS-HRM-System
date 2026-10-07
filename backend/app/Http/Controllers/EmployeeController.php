@@ -629,10 +629,8 @@ class EmployeeController extends Controller
         $employee = User::findOrFail($id);
         
         $currentUser = $request->user();
-        if ($currentUser->company_id && ! $currentUser->canAccessAllCompanies()) {
-            if ($employee->company_id !== $currentUser->company_id) {
-                return $this->errorResponse(self::MSG_FORBIDDEN, 403);
-            }
+        if ($currentUser->company_id && ! $currentUser->canAccessAllCompanies() && $employee->company_id !== $currentUser->company_id) {
+            return $this->errorResponse(self::MSG_FORBIDDEN, 403);
         }
 
         \App\Models\Notification::create([
