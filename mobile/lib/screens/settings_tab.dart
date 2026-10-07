@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_service.dart';
 import '../services/notification_service.dart';
+import '../services/attendance_alarm_service.dart';
 import 'face_registration_screen.dart';
 import '../main.dart'; // Import global notifiers
 
@@ -18,11 +19,13 @@ class SettingsTab extends StatefulWidget {
 class _SettingsTabState extends State<SettingsTab> {
   final Color maroon = const Color(0xFF800000);
   bool _notifEnabled = true;
+  bool _alarmEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _notifEnabled = NotificationService().isEnabled;
+    _alarmEnabled = AttendanceAlarmService().isEnabled;
   }
 
   void _showChangePasswordDialog() {
@@ -315,6 +318,47 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
 
           _buildSection("Preferensi"),
+          _buildSettingItem(
+            Icons.alarm_on_rounded,
+            "Alarm Jam Absensi (Dering)",
+            _alarmEnabled
+                ? "Aktif • Berdering jam masuk (${AttendanceAlarmService().workStartTime}) & pulang (${AttendanceAlarmService().workEndTime})"
+                : "Nonaktif • Alarm suara tidak akan berdering",
+            showSwitch: true,
+            switchValue: _alarmEnabled,
+            onSwitchChanged: (val) async {
+              await AttendanceAlarmService().setEnabled(val);
+              if (!mounted) return;
+              setState(() => _alarmEnabled = val);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(val
+                      ? "Alarm jam absensi diaktifkan"
+                      : "Alarm jam absensi dinonaktifkan"),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+          ),
+          if (_alarmEnabled)
+            _buildSettingItem(
+              Icons.volume_up_outlined,
+              "Uji Coba Dering Alarm",
+              "Bunyikan sampel suara & notifikasi alarm",
+              onTap: () async {
+                await AttendanceAlarmService().testAlarm();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Memutar sampel dering alarm..."),
+                      duration: Duration(seconds: 2),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              },
+            ),
           _buildSettingItem(
             Icons.language_outlined,
             "Bahasa",

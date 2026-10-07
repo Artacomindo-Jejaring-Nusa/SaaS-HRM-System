@@ -40,7 +40,9 @@ import {
   ShieldCheck,
   Wallet,
   HelpCircle,
+  AlertCircle,
 } from "lucide-react";
+import { toast } from "sonner";
 import Cookies from "js-cookie";
 import { useState, useEffect, useRef, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
@@ -342,6 +344,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const [inboxMessages, setInboxMessages] = useState<any[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const isSuperAdmin = Boolean(user?.role?.name?.toLowerCase().includes('super admin') || user?.role_id === 1);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
@@ -443,10 +446,12 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     e.preventDefault();
     setIsSubmittingProfile(true);
     try {
-      // First update profile data (direct update for name/phone)
-      await axiosInstance.post('/profile/update', profileData);
+      if (isSuperAdmin) {
+        // Super Admin can update personal data directly
+        await axiosInstance.post('/profile/update', profileData);
+      }
 
-      // Then upload photo if exists
+      // Upload photo if exists
       if (photoFile) {
         const formData = new FormData();
         formData.append('photo', photoFile);
@@ -455,13 +460,13 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         });
       }
 
-      alert("Profil berhasil diperbarui!");
+      toast.success(isSuperAdmin ? "Profil berhasil diperbarui!" : "Foto profil berhasil diperbarui!");
       setIsProfileModalOpen(false);
       setPhotoFile(null);
       setPhotoPreview(null);
       refreshUser();
     } catch (e: any) {
-      alert("Gagal memperbarui profil: " + (e.response?.data?.message || e.message));
+      toast.error("Gagal memperbarui profil: " + (e.response?.data?.message || e.message));
     } finally {
       setIsSubmittingProfile(false);
     }
@@ -1083,6 +1088,16 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
             </div>
             
             <form onSubmit={handleProfileSubmit} className="p-6 space-y-4">
+              {/* Informative Banner for non-superadmin */}
+              {!isSuperAdmin && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2.5">
+                  <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    Data identitas karyawan (Nama, Email, Telepon, Alamat) dikelola terpusat oleh <strong>Super Admin / HRD</strong>. Karyawan hanya dapat mengganti foto profil.
+                  </p>
+                </div>
+              )}
+
               {/* Photo Upload Section */}
               <div className="flex flex-col items-center mb-4">
                 <div className="relative group cursor-pointer" onClick={() => document.getElementById('profile-photo-input')?.click()}>
@@ -1109,13 +1124,19 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                 </div>
                 <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-tight">Klik untuk ganti foto</p>
               </div>
+
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-gray-500 uppercase">Nama Lengkap</label>
                 <input 
                   type="text" 
                   value={profileData.name}
                   onChange={e => setProfileData({...profileData, name: e.target.value})}
-                  className="w-full h-11 px-4 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#8B0000] focus:ring-1 focus:ring-[#8B0000] transition-all text-sm"
+                  disabled={!isSuperAdmin}
+                  className={`w-full h-11 px-4 border rounded-xl text-sm transition-all ${
+                    isSuperAdmin
+                      ? "bg-gray-50 border-gray-200 focus:outline-none focus:border-[#8B0000] focus:ring-1 focus:ring-[#8B0000]"
+                      : "bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed"
+                  }`}
                   placeholder="Masukkan nama lengkap..."
                   required
                 />
@@ -1129,7 +1150,6 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                   disabled
                   className="w-full h-11 px-4 bg-gray-100 border border-gray-200 rounded-xl text-gray-500 cursor-not-allowed text-sm"
                 />
-                <p className="text-[10px] text-gray-400 mt-1 italic">*Email utama tidak bisa diubah demi keamanan akun.</p>
               </div>
 
               <div className="space-y-1.5">
@@ -1138,7 +1158,12 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                   type="text" 
                   value={profileData.phone}
                   onChange={e => setProfileData({...profileData, phone: e.target.value})}
-                  className="w-full h-11 px-4 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#8B0000] transition-all text-sm"
+                  disabled={!isSuperAdmin}
+                  className={`w-full h-11 px-4 border rounded-xl text-sm transition-all ${
+                    isSuperAdmin
+                      ? "bg-gray-50 border-gray-200 focus:outline-none focus:border-[#8B0000]"
+                      : "bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed"
+                  }`}
                   placeholder="Contoh: 0812..."
                 />
               </div>
@@ -1148,7 +1173,12 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                 <textarea 
                   value={profileData.address}
                   onChange={e => setProfileData({...profileData, address: e.target.value})}
-                  className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#8B0000] transition-all text-sm min-h-[100px] resize-none"
+                  disabled={!isSuperAdmin}
+                  className={`w-full p-4 border rounded-xl text-sm min-h-[80px] resize-none transition-all ${
+                    isSuperAdmin
+                      ? "bg-gray-50 border-gray-200 focus:outline-none focus:border-[#8B0000]"
+                      : "bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed"
+                  }`}
                   placeholder="Masukkan alamat lengkap..."
                 />
               </div>
@@ -1163,10 +1193,14 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                 </button>
                 <button 
                   type="submit"
-                  disabled={isSubmittingProfile}
+                  disabled={isSubmittingProfile || (!isSuperAdmin && !photoFile)}
                   className="flex-1 h-11 bg-[#8B0000] text-white rounded-xl text-sm font-bold hover:bg-[#660000] transition-all shadow-lg shadow-red-900/20 disabled:opacity-50"
                 >
-                  {isSubmittingProfile ? "Mengirim..." : "Kirim Permintaan"}
+                  {isSubmittingProfile
+                    ? "Menyimpan..."
+                    : isSuperAdmin
+                    ? "Simpan Perubahan"
+                    : "Simpan Foto"}
                 </button>
               </div>
             </form>

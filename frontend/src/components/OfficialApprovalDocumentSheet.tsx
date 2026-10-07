@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import axiosInstance from "@/lib/axios";
 import { 
   Printer, 
   CheckCircle2, 
@@ -6,14 +7,19 @@ import {
   Clock, 
   FileText, 
   ZoomIn,
-  ExternalLink
+  ExternalLink,
+  ShieldCheck,
+  GitBranch,
+  ArrowRight,
+  UserCheck,
+  AlertCircle,
+  Users
 } from "lucide-react";
 import { terbilang } from "@/lib/terbilang";
 
 export type ApprovalType = 
   | "leave" 
   | "reimbursement" 
-  | "profile" 
   | "overtime" 
   | "permit" 
   | "dinas_luar" 
@@ -66,8 +72,6 @@ export interface ApprovalItem {
   reimbursement_items?: ReimbursementItemDetail[];
   reimbursement_divisi?: string;
   reimbursement_tujuan?: string;
-  // Profile-specific
-  profile_new_data?: Record<string, unknown>;
   // Dinas Luar-specific
   dinas_luar_status?: string;
   dinas_luar_destination?: string;
@@ -83,6 +87,34 @@ export interface ApprovalItem {
   // Dynamic approval workflow
   current_approval_step?: number | null;
   current_step_info?: Record<string, any>;
+}
+
+export interface ApprovalTimelineStep {
+  step_order: number;
+  approver_role?: string | null;
+  approver_user_id?: number | null;
+  approver_name?: string | null;
+  candidate_approvers?: string[];
+  action_type?: string;
+  sla_hours?: number;
+  status: "approved" | "rejected" | "pending" | "waiting";
+  label?: string;
+  is_current: boolean;
+  actor_name?: string | null;
+  acted_at?: string | null;
+  notes?: string | null;
+}
+
+export interface ApprovalTimelineData {
+  request_id: number;
+  request_type: string;
+  status: string;
+  current_step: number;
+  total_steps: number;
+  workflow_name?: string;
+  is_multi_step?: boolean;
+  all_approved?: boolean;
+  steps: ApprovalTimelineStep[];
 }
 
 interface OfficialApprovalDocumentSheetProps {
@@ -129,8 +161,6 @@ export const getDocumentCode = (item: ApprovalItem) => {
       return `GA/F-LOG/${dateStr}/${idStr}`;
     case "dinas_luar":
       return `OPS/F-SPPD/${dateStr}/${idStr}`;
-    case "profile":
-      return `HRD/F-PDK/${dateStr}/${idStr}`;
     default:
       return `DOC/${dateStr}/${idStr}`;
   }
@@ -152,8 +182,6 @@ export const getFormTitle = (type?: string) => {
       return "LEMBAR PENGGUNAAN & LOGBOOK ARMADA DINAS";
     case "dinas_luar":
       return "SURAT TUGAS & LAPORAN DINAS LUAR KANTOR";
-    case "profile":
-      return "FORMULIR PEMBARUAN DATA INDUK KARYAWAN";
     default:
       return "FORMULIR PENGAJUAN RESMI PERUSAHAAN";
   }
@@ -513,18 +541,6 @@ function OfficialApprovalFormDetails({ item, numericAmount }: OfficialApprovalFo
           </div>
         </div>
       )}
-
-      {/* H. FORMULIR PROFILE UPDATE */}
-      {item.type === "profile" && (
-        <div className="space-y-3">
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Alasan / Rincian Perubahan Data:</p>
-            <p className="text-xs text-slate-800 leading-relaxed">
-              {item.description || "Pembaruan informasi profil karyawan"}
-            </p>
-          </div>
-        </div>
-      )}
     </>
   );
 }
@@ -536,6 +552,36 @@ export default function OfficialApprovalDocumentSheet({
   onClose,
 }: OfficialApprovalDocumentSheetProps) {
   const [selectedPreviewImage, setSelectedPreviewImage] = useState<string | null>(null);
+  const [timeline, setTimeline] = useState<ApprovalTimelineData | null>(null);
+  const [isLoadingTimeline, setIsLoadingTimeline] = useState<boolean>(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingTimeline(true);
+
+    axiosInstance
+      .get("/approval-timeline", {
+        params: {
+          type: item.type,
+          id: item.id,
+        },
+      })
+      .then((res) => {
+        if (isMounted && res.data?.success && res.data?.data) {
+          setTimeline(res.data.data);
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to load approval timeline:", err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingTimeline(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [item.id, item.type]);
 
   const handlePrint = () => {
     globalThis.print();
@@ -544,7 +590,7 @@ export default function OfficialApprovalDocumentSheet({
   const formattedDate = new Date(item.created_at || Date.now()).toLocaleDateString("id-ID", {
     day: "numeric",
     month: "long",
-    year: "numeric"
+    year: "numeric",
   });
 
   const numericAmount = item.amount ? Number.parseFloat(item.amount) : 0;
@@ -552,7 +598,6 @@ export default function OfficialApprovalDocumentSheet({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
       <div className="bg-slate-100 rounded-2xl w-full max-w-4xl max-h-[96vh] flex flex-col shadow-2xl border border-slate-300 overflow-hidden my-auto">
-        
         {/* TOP CONTROLS / TOOLBAR (NOT PRINTED) */}
         <div className="p-3.5 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 print:hidden shrink-0">
           <div className="flex items-center gap-2.5">
@@ -567,7 +612,7 @@ export default function OfficialApprovalDocumentSheet({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Dokumen resmi untuk review & persetujuan manajemen
+                Dokumen resmi untuk review & verifikasi persetujuan multi-level manajemen
               </p>
             </div>
           </div>
@@ -591,10 +636,147 @@ export default function OfficialApprovalDocumentSheet({
         </div>
 
         {/* SCROLLABLE DOCUMENT PREVIEW AREA */}
-        <div className="p-3 sm:p-6 overflow-y-auto flex-1 bg-slate-200/70">
-          
+        <div className="p-3 sm:p-6 overflow-y-auto flex-1 bg-slate-200/70 space-y-4">
+          {/* SUPER ADMIN WORKFLOW PROGRESS TRACKER (NON-PRINTED / LIVE MONITORING) */}
+          <div className="max-w-3xl mx-auto bg-white rounded-xl border border-slate-300 p-4 shadow-sm print:hidden">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3.5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-amber-50 text-amber-800 rounded-lg border border-amber-200">
+                  <GitBranch size={16} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    Tahapan & Jalur Persetujuan (Workflow)
+                    {timeline?.is_multi_step && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 lowercase">
+                        {timeline.total_steps} tahapan
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {timeline?.workflow_name || "Alur Persetujuan Standar Berjenjang"}
+                  </p>
+                </div>
+              </div>
+
+              {timeline && (
+                <div className="text-right">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                      timeline.status === "approved"
+                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                        : timeline.status === "rejected"
+                        ? "bg-red-100 text-red-800 border border-red-300"
+                        : "bg-amber-100 text-amber-900 border border-amber-300"
+                    }`}
+                  >
+                    {timeline.status === "approved" && <CheckCircle2 size={12} />}
+                    {timeline.status === "rejected" && <XCircle size={12} />}
+                    {timeline.status === "pending" && <Clock size={12} />}
+                    {timeline.status === "approved"
+                      ? "Disetujui Sepenuhnya"
+                      : timeline.status === "rejected"
+                      ? "Ditolak"
+                      : `Tahap ${timeline.current_step} dari ${timeline.total_steps}`}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* LIVE STEPPER PROGRESS BAR */}
+            {isLoadingTimeline ? (
+              <div className="py-4 text-center text-xs text-slate-400 animate-pulse flex items-center justify-center gap-2">
+                <Clock size={14} className="animate-spin" /> Memuat tahapan approval...
+              </div>
+            ) : timeline && timeline.steps && timeline.steps.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {/* Step 0: Pemohon */}
+                <div className="p-2.5 rounded-lg border border-emerald-200 bg-emerald-50/50 flex flex-col justify-between text-xs">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                      Pengaju (Pemohon)
+                    </span>
+                    <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                      <CheckCircle2 size={10} /> Diajukan
+                    </span>
+                  </div>
+                  <div className="font-bold text-slate-900 truncate">{item.user_name}</div>
+                  <div className="text-[10px] text-slate-500 mt-1">{formattedDate}</div>
+                </div>
+
+                {/* Approver Steps */}
+                {timeline.steps.map((st) => {
+                  const isDone = st.status === "approved";
+                  const isRejected = st.status === "rejected";
+                  const isCurrent = st.status === "pending" || st.is_current;
+                  const isWaiting = st.status === "waiting";
+
+                  let cardBorder = "border-slate-200 bg-slate-50/50 text-slate-400";
+                  let badge = (
+                    <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                      Menunggu Giliran
+                    </span>
+                  );
+
+                  if (isDone) {
+                    cardBorder = "border-emerald-300 bg-emerald-50/60 text-slate-800";
+                    badge = (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                        <CheckCircle2 size={10} /> Disetujui
+                      </span>
+                    );
+                  } else if (isRejected) {
+                    cardBorder = "border-red-300 bg-red-50/60 text-slate-800";
+                    badge = (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded">
+                        <XCircle size={10} /> Ditolak
+                      </span>
+                    );
+                  } else if (isCurrent) {
+                    cardBorder = "border-amber-300 bg-amber-50/70 text-slate-900 ring-2 ring-amber-400/30";
+                    badge = (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-800 bg-amber-200/80 px-1.5 py-0.5 rounded animate-pulse">
+                        <Clock size={10} /> Tahap Aktif
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <div key={st.step_order} className={`p-2.5 rounded-lg border flex flex-col justify-between text-xs ${cardBorder}`}>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                            Tahap {st.step_order}
+                          </span>
+                          {badge}
+                        </div>
+                        <div className="font-bold text-slate-900 truncate">
+                          {st.label || `Penyetuju ${st.approver_role || "Manajemen"}`}
+                        </div>
+                        <div className="text-[11px] text-slate-600 mt-0.5 flex items-center gap-1">
+                          <Users size={11} className="text-slate-400 shrink-0" />
+                          <span className="truncate">
+                            {st.candidate_approvers && st.candidate_approvers.length > 0
+                              ? st.candidate_approvers.join(", ")
+                              : st.approver_name || st.approver_role || "Approver"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 pt-1.5 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-500">
+                        <span>SLA: {st.sla_hours || 24} Jam</span>
+                        {st.status === "approved" && <span className="font-semibold text-emerald-700">ACC Selesai</span>}
+                        {st.status === "pending" && <span className="font-semibold text-amber-700">Perlu Tindakan</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+
           {/* THE OFFICIAL PRINTABLE PAPER SHEET */}
-          <div 
+          <div
             id="official-printable-form"
             className="bg-white text-slate-900 shadow-xl border border-slate-300 rounded-lg p-6 sm:p-10 max-w-3xl mx-auto text-xs font-sans print:shadow-none print:border-none print:p-0 print:m-0 print:w-full print:max-w-none"
             style={{ minHeight: "900px" }}
@@ -603,12 +785,12 @@ export default function OfficialApprovalDocumentSheet({
             <div className="border-b-2 border-black pb-3 mb-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <img 
-                    src="/artacom.png" 
-                    alt="Logo Perusahaan" 
+                  <img
+                    src="/artacom.png"
+                    alt="Logo Perusahaan"
                     className="h-12 sm:h-14 object-contain"
                     onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
+                      (e.target as HTMLElement).style.display = "none";
                     }}
                   />
                   <div>
@@ -689,16 +871,16 @@ export default function OfficialApprovalDocumentSheet({
                   <span>III. LAMPIRAN DOKUMEN & BUKTI FISIK</span>
                   <span className="text-[9px] text-slate-300 font-normal">Bukti Sah Pengajuan</span>
                 </div>
-                
+
                 <div className="p-3 bg-slate-50 border border-slate-300 rounded flex flex-col sm:flex-row items-center gap-4">
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setSelectedPreviewImage(getStorageUrl(item.attachment!))}
                     className="relative group cursor-pointer border border-slate-300 rounded bg-white overflow-hidden shrink-0 shadow-sm hover:shadow-md transition text-left"
                   >
-                    <img 
-                      src={getStorageUrl(item.attachment)} 
-                      alt="Lampiran Dokumen" 
+                    <img
+                      src={getStorageUrl(item.attachment)}
+                      alt="Lampiran Dokumen"
                       className="w-32 h-28 object-contain bg-slate-100 p-1"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = "https://placehold.co/300x200?text=Dokumen+Terlampir";
@@ -716,10 +898,10 @@ export default function OfficialApprovalDocumentSheet({
                     <p className="text-slate-600 text-[11px] leading-relaxed mb-2">
                       Dokumen/kuitansi/surat terlampir diunggah sebagai bukti pendukung verifikasi persetujuan formulir ini.
                     </p>
-                    <a 
-                      href={getStorageUrl(item.attachment)} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
+                    <a
+                      href={getStorageUrl(item.attachment)}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[10px] transition"
                     >
                       <ExternalLink size={12} /> Buka di Tab Baru
@@ -736,66 +918,161 @@ export default function OfficialApprovalDocumentSheet({
                 <span className="text-[9px] text-slate-300 font-normal">Validitas Otorisasi Berlaku Sah</span>
               </div>
 
-              <div className="border-2 border-black rounded-sm overflow-hidden bg-white">
-                <div className="grid grid-cols-3 border-b-2 border-black text-center font-bold text-black bg-slate-100 text-[9px] sm:text-[10px] py-1.5 uppercase tracking-wider">
-                  <div className="border-r-2 border-black">1. PEMOHON / KARYAWAN</div>
-                  <div className="border-r-2 border-black">2. ATASAN LANGSUNG / SPV</div>
-                  <div>3. HRD / MANAJEMEN PENYETUJU</div>
+              {timeline && timeline.steps && timeline.steps.length > 0 ? (
+                /* DYNAMIC MULTI-STEP AUTHORIZATION GRID */
+                <div className="border-2 border-black rounded-sm overflow-hidden bg-white">
+                  <div
+                    className="grid border-b-2 border-black text-center font-bold text-black bg-slate-100 text-[9px] sm:text-[10px] py-1.5 uppercase tracking-wider"
+                    style={{ gridTemplateColumns: `repeat(${timeline.steps.length + 1}, minmax(0, 1fr))` }}
+                  >
+                    <div className="border-r-2 border-black">1. PEMOHON / KARYAWAN</div>
+                    {timeline.steps.map((st, idx) => (
+                      <div
+                        key={st.step_order}
+                        className={idx < timeline.steps.length - 1 ? "border-r-2 border-black truncate px-1" : "truncate px-1"}
+                      >
+                        {idx + 2}. {st.label || (st.approver_role ? st.approver_role.toUpperCase() : `TAHAP ${st.step_order}`)}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div
+                    className="grid text-center"
+                    style={{ gridTemplateColumns: `repeat(${timeline.steps.length + 1}, minmax(0, 1fr))` }}
+                  >
+                    {/* PEMOHON TTD */}
+                    <div className="border-r-2 border-black p-2.5 flex flex-col justify-between min-h-[90px] items-center">
+                      <div className="h-14 flex items-center justify-center w-full">
+                        {item.signature ? (
+                          <img
+                            src={item.signature.startsWith("data:") ? item.signature : getStorageUrl(item.signature)}
+                            alt="Tanda Tangan Pemohon"
+                            className="h-12 object-contain"
+                          />
+                        ) : (
+                          <div className="inline-block border border-emerald-600 text-emerald-700 bg-emerald-50 rounded px-1.5 py-0.5 font-bold text-[8px] uppercase">
+                            TERVERIFIKASI DIGITAL
+                          </div>
+                        )}
+                      </div>
+                      <div className="border-t border-dotted border-slate-500 w-full pt-1 text-slate-900 font-bold text-[9px] truncate">
+                        ( {item.user_name} )
+                      </div>
+                      <div className="text-[8px] text-slate-500 font-medium mt-0.5">Pemohon</div>
+                    </div>
+
+                    {/* DYNAMIC APPROVER STEPS */}
+                    {timeline.steps.map((st, idx) => {
+                      const isLast = idx === timeline.steps.length - 1;
+                      const borderClass = !isLast ? "border-r-2 border-black" : "";
+
+                      let stampBox;
+                      if (st.status === "approved") {
+                        stampBox = (
+                          <div className="border-2 border-emerald-600 text-emerald-700 bg-emerald-50/80 rounded px-2 py-0.5 font-black text-[9px] uppercase tracking-wider">
+                            ACC DISETUJUI ✓
+                          </div>
+                        );
+                      } else if (st.status === "rejected") {
+                        stampBox = (
+                          <div className="border-2 border-red-600 text-red-700 bg-red-50/80 rounded px-2 py-0.5 font-black text-[9px] uppercase tracking-wider">
+                            DITOLAK ✗
+                          </div>
+                        );
+                      } else if (st.status === "pending" || st.is_current) {
+                        stampBox = (
+                          <div className="border border-dashed border-amber-500 bg-amber-50 text-amber-900 rounded px-1.5 py-0.5 font-bold text-[8px] uppercase animate-pulse">
+                            MENUNGGU PROSES
+                          </div>
+                        );
+                      } else {
+                        stampBox = (
+                          <div className="border border-dashed border-slate-300 text-slate-400 rounded px-1.5 py-0.5 font-semibold text-[8px] italic">
+                            Menunggu Giliran
+                          </div>
+                        );
+                      }
+
+                      const displayName =
+                        st.candidate_approvers && st.candidate_approvers.length > 0
+                          ? st.candidate_approvers[0]
+                          : st.approver_name || st.approver_role || "Approver";
+
+                      return (
+                        <div key={st.step_order} className={`p-2.5 flex flex-col justify-between min-h-[90px] items-center ${borderClass}`}>
+                          <div className="h-14 flex items-center justify-center w-full">{stampBox}</div>
+                          <div className="border-t border-dotted border-slate-500 w-full pt-1 text-slate-800 italic text-[9px] truncate px-1">
+                            ( {displayName} )
+                          </div>
+                          <div className="text-[8px] text-slate-500 font-medium mt-0.5 truncate">
+                            {st.label || `Otorisasi Tahap ${st.step_order}`}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-
-                <div className="grid grid-cols-3 text-center">
-                  {/* PEMOHON TTD */}
-                  <div className="border-r-2 border-black p-3 flex flex-col justify-between min-h-[90px] items-center">
-                    <div className="h-14 flex items-center justify-center w-full">
-                      {item.signature ? (
-                        <img 
-                          src={item.signature.startsWith("data:") ? item.signature : getStorageUrl(item.signature)} 
-                          alt="Tanda Tangan Pemohon" 
-                          className="h-12 object-contain"
-                        />
-                      ) : (
-                        <div className="inline-block border border-emerald-600 text-emerald-700 bg-emerald-50 rounded px-2 py-0.5 font-bold text-[9px] uppercase">
-                          TERVERIFIKASI DIGITAL
-                        </div>
-                      )}
-                    </div>
-                    <div className="border-t border-dotted border-slate-500 w-full pt-1 text-slate-900 font-bold text-[10px] truncate">
-                      ( {item.user_name} )
-                    </div>
-                    <div className="text-[8px] text-slate-500 font-medium mt-0.5">Pemohon</div>
+              ) : (
+                /* FALLBACK DEFAULT 3-COLUMN MATRIX */
+                <div className="border-2 border-black rounded-sm overflow-hidden bg-white">
+                  <div className="grid grid-cols-3 border-b-2 border-black text-center font-bold text-black bg-slate-100 text-[9px] sm:text-[10px] py-1.5 uppercase tracking-wider">
+                    <div className="border-r-2 border-black">1. PEMOHON / KARYAWAN</div>
+                    <div className="border-r-2 border-black">2. ATASAN LANGSUNG / SPV</div>
+                    <div>3. HRD / MANAJEMEN PENYETUJU</div>
                   </div>
 
-                  {/* ATASAN LANGSUNG STEP 1 */}
-                  <div className="border-r-2 border-black p-3 flex flex-col justify-between min-h-[90px] items-center">
-                    <div className="h-14 flex items-center justify-center w-full">
-                      {item.current_approval_step && item.current_approval_step > 1 ? (
-                        <div className="border-2 border-blue-600 text-blue-700 bg-blue-50/80 rounded px-2.5 py-1 font-black text-[10px] uppercase tracking-wider">
-                          ACC ATASAN ✓
-                        </div>
-                      ) : (
-                        <div className="border border-dashed border-amber-400 bg-amber-50 text-amber-800 rounded px-2 py-0.5 font-bold text-[9px] uppercase">
-                          MENUNGGU PERSETUJUAN
-                        </div>
-                      )}
+                  <div className="grid grid-cols-3 text-center">
+                    {/* PEMOHON TTD */}
+                    <div className="border-r-2 border-black p-3 flex flex-col justify-between min-h-[90px] items-center">
+                      <div className="h-14 flex items-center justify-center w-full">
+                        {item.signature ? (
+                          <img
+                            src={item.signature.startsWith("data:") ? item.signature : getStorageUrl(item.signature)}
+                            alt="Tanda Tangan Pemohon"
+                            className="h-12 object-contain"
+                          />
+                        ) : (
+                          <div className="inline-block border border-emerald-600 text-emerald-700 bg-emerald-50 rounded px-2 py-0.5 font-bold text-[9px] uppercase">
+                            TERVERIFIKASI DIGITAL
+                          </div>
+                        )}
+                      </div>
+                      <div className="border-t border-dotted border-slate-500 w-full pt-1 text-slate-900 font-bold text-[10px] truncate">
+                        ( {item.user_name} )
+                      </div>
+                      <div className="text-[8px] text-slate-500 font-medium mt-0.5">Pemohon</div>
                     </div>
-                    <div className="border-t border-dotted border-slate-500 w-full pt-1 text-slate-700 italic text-[10px]">
-                      ( Atasan Langsung )
-                    </div>
-                    <div className="text-[8px] text-slate-500 font-medium mt-0.5">Verifikator Tahap 1</div>
-                  </div>
 
-                  {/* FINAL APPROVAL / HRD */}
-                  <div className="p-3 flex flex-col justify-between min-h-[90px] items-center">
-                    <div className="h-14 flex items-center justify-center w-full">
-                      {renderApprovalStatusBadge(item.status)}
+                    {/* ATASAN LANGSUNG STEP 1 */}
+                    <div className="border-r-2 border-black p-3 flex flex-col justify-between min-h-[90px] items-center">
+                      <div className="h-14 flex items-center justify-center w-full">
+                        {item.current_approval_step && item.current_approval_step > 1 ? (
+                          <div className="border-2 border-blue-600 text-blue-700 bg-blue-50/80 rounded px-2.5 py-1 font-black text-[10px] uppercase tracking-wider">
+                            ACC ATASAN ✓
+                          </div>
+                        ) : (
+                          <div className="border border-dashed border-amber-400 bg-amber-50 text-amber-800 rounded px-2 py-0.5 font-bold text-[9px] uppercase">
+                            MENUNGGU PERSETUJUAN
+                          </div>
+                        )}
+                      </div>
+                      <div className="border-t border-dotted border-slate-500 w-full pt-1 text-slate-700 italic text-[10px]">
+                        ( Atasan Langsung )
+                      </div>
+                      <div className="text-[8px] text-slate-500 font-medium mt-0.5">Verifikator Tahap 1</div>
                     </div>
-                    <div className="border-t border-dotted border-slate-500 w-full pt-1 text-slate-700 italic text-[10px]">
-                      ( HRD & Operations )
+
+                    {/* FINAL APPROVAL / HRD */}
+                    <div className="p-3 flex flex-col justify-between min-h-[90px] items-center">
+                      <div className="h-14 flex items-center justify-center w-full">{renderApprovalStatusBadge(item.status)}</div>
+                      <div className="border-t border-dotted border-slate-500 w-full pt-1 text-slate-700 italic text-[10px]">
+                        ( HRD & Operations )
+                      </div>
+                      <div className="text-[8px] text-slate-500 font-medium mt-0.5">Penyetuju Akhir</div>
                     </div>
-                    <div className="text-[8px] text-slate-500 font-medium mt-0.5">Penyetuju Akhir</div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* FOOTER NOTE */}
@@ -803,7 +1080,6 @@ export default function OfficialApprovalDocumentSheet({
               <span>Dicetak otomatis melalui HRMS SaaS Platform PT Artacomindo Jejaring Nusa</span>
               <span>Dokumen Elektronik Sah Berdasarkan UU ITE No. 11/2008</span>
             </div>
-
           </div>
         </div>
 
@@ -831,7 +1107,6 @@ export default function OfficialApprovalDocumentSheet({
             </button>
           </div>
         </div>
-
       </div>
 
       {/* IMAGE PREVIEW MODAL */}
@@ -844,12 +1119,12 @@ export default function OfficialApprovalDocumentSheet({
             className="absolute inset-0 w-full h-full cursor-zoom-out bg-transparent border-0"
           />
           <div className="relative z-10 max-w-4xl max-h-[90vh] bg-white rounded-xl overflow-hidden p-2 shadow-2xl">
-            <img 
-              src={selectedPreviewImage} 
-              alt="Preview Lampiran" 
+            <img
+              src={selectedPreviewImage}
+              alt="Preview Lampiran"
               className="max-h-[85vh] w-auto mx-auto object-contain"
             />
-            <button 
+            <button
               type="button"
               onClick={() => setSelectedPreviewImage(null)}
               className="absolute top-3 right-3 p-2 bg-black/60 hover:bg-black text-white rounded-full transition"

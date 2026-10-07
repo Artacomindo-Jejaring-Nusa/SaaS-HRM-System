@@ -17,14 +17,11 @@ class ShiftSwapController extends Controller
 
     public function index(Request $request)
     {
-        if (! $request->user()->hasPermission('view-shift-swaps')) {
-            return response()->json(['status' => 'error', 'message' => 'Anda tidak memiliki hak akses untuk melihat data ini.'], 403);
-        }
         $user = $request->user();
         $query = ShiftSwap::with(['requester', 'receiver', 'requesterSchedule.shift', 'receiverSchedule.shift'])
             ->where('company_id', $user->company_id);
 
-        if (! $user->is_manager) {
+        if (! $user->is_manager && ! $user->hasRole(['Super Admin', 'Admin', 'HRD', 'Manager'])) {
             $query->where(function ($q) use ($user) {
                 $q->where('requester_id', $user->id)
                     ->orWhere('receiver_id', $user->id);
@@ -33,15 +30,12 @@ class ShiftSwapController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $query->orderBy('created_at', 'desc')->paginate(10),
+            'data' => $query->orderBy('created_at', 'desc')->paginate($request->per_page ?? 10),
         ]);
     }
 
     public function store(Request $request)
     {
-        if (! $request->user()->hasPermission('apply-shift-swaps')) {
-            return response()->json(['status' => 'error', 'message' => 'Anda tidak memiliki hak akses untuk mengajukan tukar shift.'], 403);
-        }
         $request->validate([
             'receiver_id' => 'required|exists:users,id',
             'requester_schedule_id' => 'required|exists:schedules,id',

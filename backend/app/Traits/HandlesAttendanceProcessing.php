@@ -40,7 +40,7 @@ trait HandlesAttendanceProcessing
             $user,
             'BERHASIL ABSEN MASUK',
             "Anda telah berhasil absen masuk pada pukul {$now->format('H:i')} WIB. Status: ".strtoupper($status),
-            $status === 'late' ? 'warning' : 'success',
+            'success',
             null,
             'notif',
             false

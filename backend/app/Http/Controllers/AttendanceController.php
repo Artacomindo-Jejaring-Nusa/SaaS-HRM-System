@@ -228,7 +228,7 @@ class AttendanceController extends Controller
             $user,
             'BERHASIL ABSEN KELUAR',
             'Anda telah berhasil absen keluar pada pukul '.now()->format('H:i').' WIB. Terima kasih atas kerja keras Anda!',
-            'info',
+            'success',
             null,
             'notif',
             false

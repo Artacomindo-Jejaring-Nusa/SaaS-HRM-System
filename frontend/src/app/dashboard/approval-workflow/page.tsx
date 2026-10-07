@@ -62,12 +62,13 @@ export interface SystemCatalogItem {
 }
 
 const roleColors: Record<string, { bg: string; border: string; text: string; glow: string }> = {
-  trigger:    { bg: "#f0f7ff", border: "#3b82f6", text: "#1e40af", glow: "rgba(59,130,246,0.14)" },
-  peer:       { bg: "#fffdf0", border: "#f59e0b", text: "#92400e", glow: "rgba(245,158,11,0.14)" },
-  supervisor: { bg: "#f8f5ff", border: "#8b5cf6", text: "#5b21b6", glow: "rgba(139,92,246,0.14)" },
-  hrd:        { bg: "#fff5f5", border: "#e11d48", text: "#9f1239", glow: "rgba(225,29,72,0.14)" },
-  approved:   { bg: "#f0fdf4", border: "#10b981", text: "#065f46", glow: "rgba(16,185,129,0.14)" },
-  rejected:   { bg: "#fef2f2", border: "#ef4444", text: "#991b1b", glow: "rgba(239,68,68,0.14)" },
+  trigger:     { bg: "#f0f7ff", border: "#3b82f6", text: "#1e40af", glow: "rgba(59,130,246,0.14)" },
+  peer:        { bg: "#fffdf0", border: "#f59e0b", text: "#92400e", glow: "rgba(245,158,11,0.14)" },
+  supervisor:  { bg: "#f8f5ff", border: "#8b5cf6", text: "#5b21b6", glow: "rgba(139,92,246,0.14)" },
+  super_admin: { bg: "#fef2f2", border: "#dc2626", text: "#991b1b", glow: "rgba(220,38,38,0.16)" },
+  hrd:         { bg: "#fff5f5", border: "#e11d48", text: "#9f1239", glow: "rgba(225,29,72,0.14)" },
+  approved:    { bg: "#f0fdf4", border: "#10b981", text: "#065f46", glow: "rgba(16,185,129,0.14)" },
+  rejected:    { bg: "#fef2f2", border: "#ef4444", text: "#991b1b", glow: "rgba(239,68,68,0.14)" },
 };
 
 interface FlowNode {
@@ -112,6 +113,13 @@ const getApproverMeta = (
   roles: Array<{ id: number; name: string }>,
   users: Array<{ id: number; name: string; role?: { name: string } }> = []
 ) => {
+  if (step.approver_type === "super_admin") {
+    return {
+      subText: "Super Admin (Administrator Utama)",
+      icon: "🛡️",
+      type: "super_admin",
+    };
+  }
   if (step.approver_type === "supervisor") {
     return {
       subText: "Atasan Langsung (SPV)",
@@ -164,7 +172,7 @@ const getRejectNodeLabel = (idx: number, _totalSteps: number): string => {
 // Backend Step Data
 interface BackendStep {
   step_number: number;
-  approver_type: "supervisor" | "role" | "user";
+  approver_type: "supervisor" | "super_admin" | "role" | "user";
   approver_role_id: number | null;
   approver_user_id?: number | null;
   sla_hours: number;
@@ -1354,7 +1362,7 @@ function WorkflowBuilderPanel({
                           id={`step-approver-type-${step.step_number}`}
                           value={step.approver_type}
                           onChange={(e) => {
-                            const newType = e.target.value as "supervisor" | "role" | "user";
+                            const newType = e.target.value as "supervisor" | "super_admin" | "role" | "user";
                             onStepChange(index, "approver_type", newType);
                             if (newType === "role" && !step.approver_role_id && roles.length > 0) {
                               onStepChange(index, "approver_role_id", roles[0].id);
@@ -1366,6 +1374,7 @@ function WorkflowBuilderPanel({
                           className="w-full text-xs font-medium bg-gray-50 border border-gray-100 rounded-lg p-2 focus:outline-none focus:border-red-200"
                         >
                           <option value="supervisor">Supervisor (Atasan Langsung)</option>
+                          <option value="super_admin">Super Admin (Administrator Utama)</option>
                           <option value="role">Role Jabatan (COO, HRD, Direktur, dll)</option>
                           <option value="user">User / Pejabat Tertentu</option>
                         </select>
@@ -2106,7 +2115,7 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
                       {n.type !== "approved" && n.type !== "rejected" && (
                         <circle cx={n.x + NODE_W} cy={n.y + NODE_H / 2} r={4.5} fill="white" stroke={c.border} strokeWidth={2} />
                       )}
-                      {(n.type === "supervisor" || n.type === "hrd" || n.type === "peer") && (
+                      {(n.type === "supervisor" || n.type === "super_admin" || n.type === "hrd" || n.type === "peer") && (
                         <circle cx={n.x + NODE_W / 2} cy={n.y + NODE_H} r={4} fill="white" stroke="#ef4444" strokeWidth={1.8} />
                       )}
                       {n.type === "rejected" && (
@@ -2163,6 +2172,7 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
                 { type: "trigger", label: "Karyawan (Pemohon)", icon: "📝" },
                 { type: "peer", label: "Rekan Kerja", icon: "🤝" },
                 { type: "supervisor", label: "Supervisor / Atasan", icon: "👔" },
+                { type: "super_admin", label: "Super Admin", icon: "🛡️" },
                 { type: "hrd", label: "HRD / Admin / Role", icon: "🏢" },
                 { type: "approved", label: "Disetujui (Final)", icon: "✅" },
                 { type: "rejected", label: "Ditolak", icon: "❌" },

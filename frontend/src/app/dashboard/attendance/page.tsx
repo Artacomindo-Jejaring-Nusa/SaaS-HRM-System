@@ -20,12 +20,37 @@ import {
   XCircle, 
   Laptop,
   History,
-  RotateCcw
+  RotateCcw,
+  Building2
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { TableSkeleton } from "@/components/Skeleton";
 import Pagination from "@/components/Pagination";
 import { getStorageUrl } from "@/lib/utils";
+
+const getLocationBadge = (record: any) => {
+  if (record.attendance_type === 'dinas_luar') {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+          <MapPin size={11} className="text-rose-600 shrink-0" />
+          Dinas Luar
+        </span>
+        {record.dinas_luar_destination && (
+          <span className="text-[10px] font-semibold text-slate-500 truncate max-w-[130px]" title={record.dinas_luar_destination}>
+            {record.dinas_luar_destination}
+          </span>
+        )}
+      </div>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200">
+      <Building2 size={11} className="text-slate-500 shrink-0" />
+      Di Kantor
+    </span>
+  );
+};
 
 const getDinasLuarBadge = (spvStatus?: string) => {
   switch (spvStatus) {
@@ -282,6 +307,7 @@ export default function AttendancePage() {
               <th className="px-4 py-3.5 font-black text-slate-500 uppercase tracking-widest text-[10px]">Tanggal</th>
               <th className="px-4 py-3.5 font-black text-slate-500 uppercase tracking-widest text-[10px]">Jam Masuk</th>
               <th className="px-4 py-3.5 font-black text-slate-500 uppercase tracking-widest text-[10px]">Jam Pulang</th>
+              <th className="px-4 py-3.5 font-black text-slate-500 uppercase tracking-widest text-[10px]">Lokasi</th>
               <th className="px-4 py-3.5 font-black text-slate-500 uppercase tracking-widest text-[10px]">Kanal</th>
               <th className="px-4 py-3.5 font-black text-slate-500 uppercase tracking-widest text-[10px]">Status Kehadiran</th>
               <th className="px-4 py-3.5 font-black text-slate-500 uppercase tracking-widest text-[10px] text-right">Aksi</th>
@@ -313,6 +339,9 @@ export default function AttendancePage() {
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap font-black text-orange-600">
                   {record.check_out_time || "-"}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  {getLocationBadge(record)}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   {getChannelBadge(record)}
@@ -709,7 +738,14 @@ export default function AttendancePage() {
               </div>
 
               {/* Additional Metadata Details */}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tipe / Lokasi</p>
+                  <p className="text-xs font-bold text-slate-900">
+                    {selectedRecord.attendance_type === 'dinas_luar' ? '📍 Dinas Luar' : '🏢 Di Kantor'}
+                  </p>
+                </div>
+
                 <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Kanal</p>
                   <p className="text-xs font-bold text-slate-900">{selectedRecord.channel === 'web' ? 'Web Dashboard' : 'Mobile App'}</p>
@@ -725,6 +761,26 @@ export default function AttendancePage() {
                   <p className="text-xs font-mono text-slate-900">{selectedRecord.ip_address || '-'}</p>
                 </div>
               </div>
+
+              {/* Dinas Luar Specific Details */}
+              {selectedRecord.attendance_type === 'dinas_luar' && (
+                <div className="p-4 bg-rose-50/70 border border-rose-200 rounded-2xl space-y-2">
+                  <div className="flex items-center gap-2 text-rose-800 font-bold text-xs">
+                    <MapPin size={15} className="text-rose-600" />
+                    <span>Detail Tugas Dinas Luar</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-rose-700 block">Tujuan Kunjungan</span>
+                      <span className="font-black text-slate-800">{selectedRecord.dinas_luar_destination || "-"}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-rose-700 block">Catatan / Keperluan</span>
+                      <span className="text-slate-700">{selectedRecord.dinas_luar_notes || "-"}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {selectedRecord.channel === 'web' && selectedRecord.web_approval_status === 'pending' && (
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between">

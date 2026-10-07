@@ -7,6 +7,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Traits\Notifiable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Intervention\Image\Laravel\Facades\Image;
@@ -119,10 +120,31 @@ class ProfileController extends Controller
 
     public function me(Request $request)
     {
-        $user = $request->user()->load(['role.permissions', 'office']);
+        $user = $request->user()->load(['role.permissions', 'office', 'company']);
+
+        $today = Carbon::today()->toDateString();
+        $todaySchedule = \App\Models\Schedule::with('shift')
+            ->where('user_id', $user->id)
+            ->whereDate('date', $today)
+            ->first();
+
+        $workStartTime = null;
+        $workEndTime = null;
+
+        if ($todaySchedule && $todaySchedule->shift) {
+            $workStartTime = $todaySchedule->shift->start_time;
+            $workEndTime = $todaySchedule->shift->end_time;
+        } else {
+            $workStartTime = $user->office?->work_start_time ?? $user->company?->work_start_time ?? '08:30:00';
+            $workEndTime = $user->office?->work_end_time ?? $user->company?->work_end_time ?? '17:30:00';
+        }
+
+        $userData = $user->toArray();
+        $userData['work_start_time'] = $workStartTime ? substr($workStartTime, 0, 5) : '08:30';
+        $userData['work_end_time'] = $workEndTime ? substr($workEndTime, 0, 5) : '17:30';
 
         return $this->successResponse([
-            'user' => $user,
+            'user' => $userData,
         ]);
     }
 }

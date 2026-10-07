@@ -5,39 +5,23 @@ import '../../api/api_service.dart';
 import '../../widgets/skeleton_loading.dart';
 
 class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key});
+
   @override
-  _ProfileScreenState createState() => _ProfileScreenState();
+  State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? _userData;
   bool _isLoading = true;
-  bool _isEditing = false;
   bool _isSaving = false;
 
   final Color maroon = Color(0xFF800000);
-
-  // Controllers untuk form edit
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _nikController = TextEditingController();
-  final _addressController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _nikController.dispose();
-    _addressController.dispose();
-    super.dispose();
   }
 
   void _loadProfile() async {
@@ -46,169 +30,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _userData = data;
         _isLoading = false;
-        _populateControllers();
       });
-    }
-  }
-
-  void _populateControllers() {
-    _nameController.text = _userData?['name'] ?? '';
-    _emailController.text = _userData?['email'] ?? '';
-    _phoneController.text = _userData?['phone'] ?? '';
-    _nikController.text = _userData?['nik'] ?? '';
-    _addressController.text = _userData?['address'] ?? '';
-  }
-
-  void _toggleEdit() {
-    setState(() {
-      _isEditing = !_isEditing;
-      if (!_isEditing) _populateControllers(); // Reset jika cancel
-    });
-  }
-
-  void _saveProfile() async {
-    // Cek field sensitif yang diubah
-    List<String> sensitiveChanged = [];
-    if (_emailController.text != (_userData?['email'] ?? ''))
-      sensitiveChanged.add('Email');
-    if (_phoneController.text != (_userData?['phone'] ?? ''))
-      sensitiveChanged.add('No. Telepon');
-    if (_nikController.text != (_userData?['nik'] ?? ''))
-      sensitiveChanged.add('NIK');
-
-    // Jika ada field sensitif, tampilkan dialog konfirmasi
-    if (sensitiveChanged.isNotEmpty) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
-              SizedBox(width: 10),
-              Text(
-                "Perlu Persetujuan",
-                style: GoogleFonts.outfit(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Perubahan pada field berikut memerlukan persetujuan HRD/Admin:",
-                style: TextStyle(fontSize: 14),
-              ),
-              SizedBox(height: 12),
-              ...sensitiveChanged.map(
-                (field) => Padding(
-                  padding: EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    children: [
-                      Icon(Icons.lock_outline, size: 16, color: maroon),
-                      SizedBox(width: 8),
-                      Text(
-                        field,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: maroon,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(height: 12),
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  "Pengajuan akan dikirim ke Admin/HRD untuk di-review. Data lama tetap berlaku sampai pengajuan disetujui.",
-                  style: TextStyle(fontSize: 12, color: Colors.orange[800]),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text("Batal", style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: maroon,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              child: Text(
-                "Kirim Pengajuan",
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed != true) return;
-    }
-
-    setState(() => _isSaving = true);
-
-    final result = await ApiService.updateProfile({
-      'name': _nameController.text,
-      'email': _emailController.text,
-      'phone': _phoneController.text,
-      'nik': _nikController.text,
-      'address': _addressController.text,
-    });
-
-    setState(() => _isSaving = false);
-
-    if (result['success']) {
-      final needsApproval = result['needs_approval'] ?? false;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(
-                needsApproval ? Icons.hourglass_bottom : Icons.check_circle,
-                color: Colors.white,
-                size: 20,
-              ),
-              SizedBox(width: 10),
-              Expanded(child: Text(result['message'])),
-            ],
-          ),
-          backgroundColor: needsApproval ? Colors.orange : Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-
-      setState(() => _isEditing = false);
-      _loadProfile(); // Refresh data
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message']),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
     }
   }
 
@@ -234,7 +56,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
 
-    if (source != null) {
+    if (source != null && mounted) {
       final XFile? pickedFile = await picker.pickImage(
         source: source,
         maxWidth: 800,
@@ -242,15 +64,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
         imageQuality: 85,
       );
 
-      if (pickedFile != null) {
+      if (pickedFile != null && mounted) {
         setState(() => _isSaving = true);
         final result = await ApiService.uploadProfilePhoto(pickedFile.path);
+        if (!mounted) return;
         setState(() => _isSaving = false);
 
         if (result['success']) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result['message']),
+              content: Text(result['message'] ?? 'Foto profil berhasil diperbarui'),
               backgroundColor: Colors.green,
             ),
           );
@@ -258,7 +81,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result['message']),
+              content: Text(result['message'] ?? 'Gagal mengunggah foto profil'),
               backgroundColor: Colors.red,
             ),
           );
@@ -279,13 +102,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final name = _userData?['name'] ?? 'Karyawan';
     final role = _userData?['role']?['name'] ?? '-';
+    final email = _userData?['email'] ?? '-';
+    final phone = _userData?['phone'] ?? '-';
+    final nik = _userData?['nik'] ?? '-';
+    final address = _userData?['address'] ?? '-';
+    final joinDate = _userData?['join_date'] ?? '-';
     final photoUrl = _fixPhotoUrl(_userData?['profile_photo_url']);
 
     return Column(
       children: [
-        // Header with Edit button
+        // Header
         Padding(
-          padding: EdgeInsets.fromLTRB(25, 20, 15, 0),
+          padding: EdgeInsets.fromLTRB(25, 20, 25, 0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -296,16 +124,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              TextButton.icon(
-                onPressed: _isEditing ? null : _toggleEdit,
-                icon: Icon(
-                  _isEditing ? Icons.close : Icons.edit,
-                  color: maroon,
-                  size: 18,
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: maroon.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                label: Text(
-                  _isEditing ? "" : "Edit",
-                  style: TextStyle(color: maroon),
+                child: Row(
+                  children: [
+                    Icon(Icons.verified_user_outlined, color: maroon, size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      "Data Terverifikasi",
+                      style: TextStyle(
+                        color: maroon,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -317,8 +154,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: EdgeInsets.symmetric(horizontal: 25),
             child: Column(
               children: [
-                SizedBox(height: 10),
-                // Foto Profil
+                SizedBox(height: 15),
+                // Foto Profil dengan tombol ganti foto
                 Stack(
                   children: [
                     CircleAvatar(
@@ -329,7 +166,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           : null,
                       child: photoUrl.isEmpty
                           ? Text(
-                              name[0].toUpperCase(),
+                              name.isNotEmpty ? name[0].toUpperCase() : 'U',
                               style: TextStyle(
                                 fontSize: 38,
                                 color: Colors.white,
@@ -392,102 +229,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 SizedBox(height: 25),
 
-                // Data Fields
-                _buildField(
-                  Icons.person_outline,
-                  "Nama Lengkap",
-                  _nameController,
-                  editable: _isEditing,
-                ),
-                _buildField(
-                  Icons.email_outlined,
-                  "Email",
-                  _emailController,
-                  editable: _isEditing,
-                  isSensitive: true,
-                ),
-                _buildField(
-                  Icons.phone_outlined,
-                  "No. Telepon",
-                  _phoneController,
-                  editable: _isEditing,
-                  isSensitive: true,
-                ),
-                _buildField(
-                  Icons.badge_outlined,
-                  "NIK",
-                  _nikController,
-                  editable: _isEditing,
-                  isSensitive: true,
-                ),
-                _buildField(
-                  Icons.location_on_outlined,
-                  "Alamat",
-                  _addressController,
-                  editable: _isEditing,
-                ),
-                _buildInfoCard(
-                  Icons.calendar_today_outlined,
-                  "Tanggal Bergabung",
-                  _userData?['join_date'] ?? '-',
-                ),
-                _buildInfoCard(Icons.shield_outlined, "Role", role),
+                // Data Profile Cards (Read-Only)
+                _buildInfoCard(Icons.person_outline, "Nama Lengkap", name),
+                _buildInfoCard(Icons.email_outlined, "Email (Gmail Akun)", email),
+                _buildInfoCard(Icons.phone_outlined, "No. Telepon / WhatsApp", phone),
+                _buildInfoCard(Icons.badge_outlined, "Nomor Induk Karyawan (NIK)", nik),
+                _buildInfoCard(Icons.location_on_outlined, "Alamat Tinggal", address),
+                _buildInfoCard(Icons.calendar_today_outlined, "Tanggal Bergabung", joinDate),
+                _buildInfoCard(Icons.shield_outlined, "Jabatan / Role", role),
 
-                // Buttons saat editing
-                if (_isEditing)
-                  Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _toggleEdit,
-                            style: OutlinedButton.styleFrom(
-                              side: BorderSide(color: Colors.grey[400]!),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: EdgeInsets.symmetric(vertical: 15),
-                            ),
-                            child: Text(
-                              "Batal",
-                              style: TextStyle(color: Colors.grey[600]),
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 15),
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton(
-                            onPressed: _isSaving ? null : _saveProfile,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: maroon,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: EdgeInsets.symmetric(vertical: 15),
-                            ),
-                            child: _isSaving
-                                ? SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : Text(
-                                    "Simpan Perubahan",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                      ],
-                    ),
+                SizedBox(height: 15),
+
+                // Informasi Kebijakan Data
+                Container(
+                  padding: EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
                   ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded, color: Colors.orange[800], size: 20),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          "Untuk menjaga validitas data kepegawaian, perubahan data pribadi (Email, NIK, Telepon, dan Alamat) hanya dapat dilakukan oleh Super Admin / HRD melalui Web Dashboard.",
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange[900],
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
                 SizedBox(height: 30),
               ],
@@ -498,96 +276,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // EDITABLE FIELD
-  Widget _buildField(
-    IconData icon,
-    String label,
-    TextEditingController controller, {
-    bool editable = false,
-    bool isSensitive = false,
-  }) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      padding: EdgeInsets.symmetric(
-        horizontal: 18,
-        vertical: editable ? 5 : 16,
-      ),
-      decoration: BoxDecoration(
-        color: editable ? Color(0xFFFFF0F0) : Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: editable ? Border.all(color: maroon.withOpacity(0.3)) : null,
-        boxShadow: editable
-            ? null
-            : [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 8,
-                  offset: Offset(0, 2),
-                ),
-              ],
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: maroon, size: 22),
-          SizedBox(width: 15),
-          Expanded(
-            child: editable
-                ? TextField(
-                    controller: controller,
-                    style: TextStyle(fontSize: 14, color: Colors.black),
-                    decoration: InputDecoration(
-                      labelText: label,
-                      labelStyle: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
-                      border: InputBorder.none,
-                      suffixIcon: isSensitive
-                          ? Tooltip(
-                              message: 'Perubahan memerlukan persetujuan HRD',
-                              child: Icon(
-                                Icons.lock_outline,
-                                size: 16,
-                                color: Colors.orange,
-                              ),
-                            )
-                          : null,
-                    ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label,
-                        style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        controller.text.isNotEmpty ? controller.text : '-',
-                        style: GoogleFonts.outfit(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // READ-ONLY INFO CARD (untuk role & tanggal gabung)
+  // READ-ONLY INFO CARD
   Widget _buildInfoCard(IconData icon, String label, String value) {
     return Container(
       margin: EdgeInsets.only(bottom: 12),
-      padding: EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      padding: EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: Offset(0, 2),
           ),
@@ -597,25 +296,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           Icon(icon, color: maroon, size: 22),
           SizedBox(width: 15),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-              ),
-              SizedBox(height: 2),
-              Text(
-                value,
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                 ),
-              ),
-            ],
+                SizedBox(height: 2),
+                Text(
+                  value.isNotEmpty ? value : '-',
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 }
+

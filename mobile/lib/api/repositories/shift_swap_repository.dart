@@ -15,7 +15,12 @@ class ShiftSwapRepository {
       );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        return body['data'];
+        if (body['data'] is List) {
+          return body['data'];
+        } else if (body['data'] is Map && body['data']['data'] is List) {
+          return body['data']['data'];
+        }
+        return [];
       }
       return null;
     } catch (e) {
@@ -80,12 +85,17 @@ class ShiftSwapRepository {
   static Future<List<dynamic>?> getSchedules({int? userId}) async {
     try {
       final headers = await ApiClient.getHeaders();
-      String url = '${ApiClient.baseUrl}/schedules';
-      if (userId != null) url += '?user_id=$userId';
+      String url = '${ApiClient.baseUrl}/schedules?per_page=100';
+      if (userId != null) url += '&user_id=$userId';
       final response = await ApiClient.client.get(Uri.parse(url), headers: headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        return body['data'];
+        if (body['data'] is List) {
+          return body['data'];
+        } else if (body['data'] is Map && body['data']['data'] is List) {
+          return body['data']['data'];
+        }
+        return [];
       }
       return null;
     } catch (e) {
@@ -97,16 +107,17 @@ class ShiftSwapRepository {
     try {
       final headers = await ApiClient.getHeaders();
       final response = await ApiClient.client.get(
-        Uri.parse('${ApiClient.baseUrl}/employees'),
+        Uri.parse('${ApiClient.baseUrl}/employees?per_page=100'),
         headers: headers,
       );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        // It could be directly 'data' or 'data.data' depending on API
-        if (body['data'] != null && body['data']['data'] != null) {
+        if (body['data'] is List) {
+          return body['data'];
+        } else if (body['data'] is Map && body['data']['data'] is List) {
           return body['data']['data'];
         }
-        return body['data'];
+        return [];
       }
       return null;
     } catch (e) {

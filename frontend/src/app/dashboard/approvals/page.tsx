@@ -23,7 +23,9 @@ import {
   CalendarCheck,
   ClipboardList,
   UserCheck,
-  AlertCircle
+  AlertCircle,
+  MapPin,
+  Building2
 } from "lucide-react";
 import { ListPageSkeleton } from "@/components/Skeleton";
 import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
@@ -34,7 +36,6 @@ import OfficialApprovalDocumentSheet from "@/components/OfficialApprovalDocument
 type ApprovalType = 
   | "leave" 
   | "reimbursement" 
-  | "profile" 
   | "overtime" 
   | "permit" 
   | "dinas_luar" 
@@ -117,6 +118,11 @@ interface TeamMemberAttendance {
   status: string;
   check_in?: string | null;
   check_out?: string | null;
+  attendance_type?: string;
+  is_dinas_luar?: boolean;
+  dinas_luar_destination?: string | null;
+  dinas_luar_status?: string | null;
+  location_label?: string | null;
 }
 
 const typeLabel: Record<ApprovalType, string> = {
@@ -124,7 +130,6 @@ const typeLabel: Record<ApprovalType, string> = {
   reimbursement: "Klaim Biaya",
   overtime: "Lembur",
   permit: "Izin",
-  profile: "Profil",
   dinas_luar: "Dinas Luar",
   fund_request: "Pengajuan Dana",
   vehicle_log: "Log Armada",
@@ -135,7 +140,6 @@ const typeColor: Record<ApprovalType, string> = {
   reimbursement: "bg-emerald-50 text-emerald-700 border-emerald-200",
   overtime: "bg-amber-50 text-amber-700 border-amber-200",
   permit: "bg-purple-50 text-purple-700 border-purple-200",
-  profile: "bg-orange-50 text-orange-700 border-orange-200",
   dinas_luar: "bg-rose-50 text-rose-700 border-rose-200",
   fund_request: "bg-teal-50 text-teal-700 border-teal-200",
   vehicle_log: "bg-indigo-50 text-indigo-700 border-indigo-200",
@@ -309,20 +313,6 @@ const normalizeDinas = (rawDinas: any[]): ApprovalItem[] =>
     target_supervisor_id: d.user?.supervisor_id
   }));
 
-const normalizeProfiles = (rawProfiles: any[]): ApprovalItem[] =>
-  rawProfiles.map((p: any) => ({
-    id: p.id,
-    type: "profile",
-    user_name: p.user?.name || "Karyawan",
-    user_email: p.user?.email,
-    user_role: p.user?.role?.name || p.user?.role,
-    description: p.new_data ? `Perubahan: ${Object.keys(p.new_data).join(", ")}` : "Perubahan Profil",
-    category: "Perubahan Profil",
-    status: p.status,
-    profile_new_data: p.new_data,
-    created_at: p.created_at
-  }));
-
 const dispatchApprovalRequest = async (
   item: ApprovalItem,
   action: ActionType,
@@ -338,9 +328,6 @@ const dispatchApprovalRequest = async (
     }
     return axiosInstance.post(`/attendance/dinas-luar/${item.id}/${actionSuffix}`, { reason: remarkInput });
   }
-  if (item.type === "profile") {
-    return axiosInstance.post(`/profile-requests/${item.id}/${action}`, { remark: remarkInput });
-  }
   const payload: Record<string, any> = { 
     remark: remarkInput,
     type: item.type,
@@ -354,27 +341,45 @@ const dispatchApprovalRequest = async (
   return axiosInstance.post("/manager/update-status", payload);
 };
 
-const renderMemberStatusBadge = (status: string) => {
-  if (status === "Hadir") {
+const renderMemberStatusBadge = (member: TeamMemberAttendance) => {
+  const isDinasLuar = member.is_dinas_luar || member.attendance_type === "dinas_luar";
+
+  if (member.status === "Belum Masuk") {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-        <span>Hadir</span>
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+        <span>Belum Masuk</span>
       </span>
     );
   }
-  if (status === "Selesai") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-        <CheckCircle2 size={11} />
-        <span>Selesai</span>
-      </span>
-    );
-  }
+
   return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-      <span>Belum Masuk</span>
-    </span>
+    <div className="flex flex-col items-end gap-1.5">
+      {/* Location Badge */}
+      {isDinasLuar ? (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200 shadow-xs">
+          <MapPin size={10} className="text-rose-600 shrink-0" />
+          <span>Dinas Luar</span>
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200">
+          <Building2 size={10} className="text-slate-500 shrink-0" />
+          <span>Di Kantor</span>
+        </span>
+      )}
+
+      {/* Main Status Badge */}
+      {member.status === "Hadir" ? (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Hadir</span>
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+          <CheckCircle2 size={10} />
+          <span>Selesai</span>
+        </span>
+      )}
+    </div>
   );
 };
 
@@ -404,8 +409,6 @@ export default function ApprovalsPage() {
         return hasPermission("approve-vehicle-logs");
       case "dinas_luar":
         return hasPermission("approve-leaves") || hasPermission("view-attendances");
-      case "profile":
-        return hasPermission("manage-roles") || hasPermission("manage-employees");
       default:
         return false;
     }
@@ -420,8 +423,7 @@ export default function ApprovalsPage() {
     canApprove("reimbursement") ||
     canApprove("fund_request") ||
     canApprove("vehicle_log") ||
-    canApprove("dinas_luar") ||
-    canApprove("profile");
+    canApprove("dinas_luar");
 
   // Approval state
   const [items, setItems] = useState<ApprovalItem[]>([]);
@@ -533,8 +535,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         permitData,
         fundData,
         vehicleData,
-        dinasData,
-        profileData
+        dinasData
       ] = await Promise.all([
         fetchCategoryData(canApprove("leave"), "/manager/pending-requests?type=leave"),
         fetchCategoryData(canApprove("reimbursement"), "/manager/pending-requests?type=reimbursement"),
@@ -543,7 +544,6 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         fetchCategoryData(canApprove("fund_request"), "/manager/pending-requests?type=fund_request"),
         fetchCategoryData(canApprove("vehicle_log"), "/manager/pending-requests?type=vehicle_log"),
         fetchCategoryData(canApprove("dinas_luar"), "/attendance/dinas-luar/pending"),
-        fetchCategoryData(canApprove("profile"), "/profile-requests?status=pending"),
       ]);
 
       const allMerged = [
@@ -553,8 +553,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         ...normalizePermits(permitData),
         ...normalizeFunds(fundData),
         ...normalizeVehicles(vehicleData),
-        ...normalizeDinas(dinasData),
-        ...normalizeProfiles(profileData)
+        ...normalizeDinas(dinasData)
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setItems(allMerged);
@@ -677,7 +676,10 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
     return teamMembers.filter(m => 
       m.name.toLowerCase().includes(q) || 
       m.role.toLowerCase().includes(q) ||
-      m.status.toLowerCase().includes(q)
+      m.status.toLowerCase().includes(q) ||
+      (m.dinas_luar_destination && m.dinas_luar_destination.toLowerCase().includes(q)) ||
+      (m.is_dinas_luar && "dinas luar".includes(q)) ||
+      (!m.is_dinas_luar && "di kantor".includes(q))
     );
   }, [teamMembers, teamSearchQuery]);
 
@@ -687,7 +689,9 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
     const working = teamMembers.filter(m => m.status === "Hadir").length;
     const finished = teamMembers.filter(m => m.status === "Selesai").length;
     const absent = teamMembers.filter(m => m.status === "Belum Masuk").length;
-    return { total, working, finished, absent };
+    const dinasLuar = teamMembers.filter(m => (m.is_dinas_luar || m.attendance_type === "dinas_luar") && m.status !== "Belum Masuk").length;
+    const diKantor = teamMembers.filter(m => (!m.is_dinas_luar && m.attendance_type !== "dinas_luar") && m.status !== "Belum Masuk").length;
+    return { total, working, finished, absent, dinasLuar, diKantor };
   }, [teamMembers]);
 
   // Reset page when filter changes
@@ -718,7 +722,11 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
     return filteredTeam.map((member) => (
       <div
         key={member.id}
-        className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-4"
+        className={`bg-white rounded-2xl border p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-4 ${
+          member.is_dinas_luar || member.attendance_type === "dinas_luar"
+            ? "border-rose-200/90 bg-gradient-to-b from-rose-50/20 to-white"
+            : "border-slate-200"
+        }`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -740,8 +748,30 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
           </div>
 
           {/* Status Badge */}
-          {renderMemberStatusBadge(member.status)}
+          {renderMemberStatusBadge(member)}
         </div>
+
+        {/* Dinas Luar Info Banner */}
+        {(member.is_dinas_luar || member.attendance_type === "dinas_luar") && member.status !== "Belum Masuk" && (
+          <div className="p-2.5 bg-rose-50 border border-rose-200/70 rounded-xl text-xs flex items-start gap-2">
+            <MapPin size={14} className="text-rose-600 shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] uppercase font-black text-rose-700 tracking-wider block">Lokasi Dinas Luar</span>
+              <span className="font-bold text-rose-950 text-xs truncate block">
+                {member.dinas_luar_destination || "Tugas di luar kantor"}
+              </span>
+              {member.dinas_luar_status && (
+                <span className="text-[10px] text-rose-600 font-semibold block mt-0.5">
+                  Persetujuan: {
+                    member.dinas_luar_status === 'approved_hr' ? 'Disetujui HRD' : 
+                    member.dinas_luar_status === 'approved_spv' ? 'Disetujui SPV' : 
+                    member.dinas_luar_status === 'rejected' ? 'Ditolak' : 'Menunggu Approval'
+                  }
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Attendance Times */}
         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
@@ -1095,18 +1125,6 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
                   Dinas Luar
                 </button>
               )}
-              {canApprove("profile") && (
-                <button
-                  onClick={() => setFilter("profile")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                    filter === "profile"
-                      ? "bg-orange-600 text-white shadow-sm"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  Profil
-                </button>
-              )}
             </div>
           </div>
 
@@ -1331,48 +1349,59 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
       {activeTab === "team" && (
         <div className="space-y-6">
           {/* Top Summary Metrics */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex items-center justify-between">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4.5 shadow-xs flex items-center justify-between">
               <div>
-                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Anggota Tim</div>
-                <div className="text-2xl font-black text-slate-900 mt-1">{teamStats.total}</div>
-                <div className="text-[11px] text-slate-400">Bawahan langsung</div>
+                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Tim</div>
+                <div className="text-xl font-black text-slate-900 mt-0.5">{teamStats.total}</div>
+                <div className="text-[10px] text-slate-400">Bawahan terdaftar</div>
               </div>
-              <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
-                <Users size={22} />
+              <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                <Users size={20} />
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex items-center justify-between">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4.5 shadow-xs flex items-center justify-between">
               <div>
-                <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Sedang Bekerja</div>
-                <div className="text-2xl font-black text-emerald-700 mt-1">{teamStats.working}</div>
-                <div className="text-[11px] text-emerald-600/80">Check-in aktif</div>
+                <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Di Kantor</div>
+                <div className="text-xl font-black text-emerald-700 mt-0.5">{teamStats.diKantor}</div>
+                <div className="text-[10px] text-emerald-600/80">Absen di kantor</div>
               </div>
-              <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-100">
-                <UserCheck size={22} />
+              <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-100 shrink-0">
+                <Building2 size={20} />
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex items-center justify-between">
+            <div className="bg-white rounded-2xl border border-rose-200 p-4.5 shadow-xs flex items-center justify-between bg-gradient-to-br from-rose-50/40 to-white">
               <div>
-                <div className="text-xs font-bold text-blue-600 uppercase tracking-wider">Selesai Kerja</div>
-                <div className="text-2xl font-black text-blue-700 mt-1">{teamStats.finished}</div>
-                <div className="text-[11px] text-blue-600/80">Sudah check-out</div>
+                <div className="text-[11px] font-bold text-rose-600 uppercase tracking-wider">Dinas Luar</div>
+                <div className="text-xl font-black text-rose-700 mt-0.5">{teamStats.dinasLuar}</div>
+                <div className="text-[10px] text-rose-600/80">Tugas luar kantor</div>
               </div>
-              <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-100">
-                <CheckCircle2 size={22} />
+              <div className="w-10 h-10 rounded-2xl bg-rose-100/70 text-rose-700 flex items-center justify-center border border-rose-200 shrink-0">
+                <MapPin size={20} />
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex items-center justify-between">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4.5 shadow-xs flex items-center justify-between">
               <div>
-                <div className="text-xs font-bold text-amber-600 uppercase tracking-wider">Belum Masuk</div>
-                <div className="text-2xl font-black text-amber-700 mt-1">{teamStats.absent}</div>
-                <div className="text-[11px] text-amber-600/80">Belum absen hari ini</div>
+                <div className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Selesai</div>
+                <div className="text-xl font-black text-blue-700 mt-0.5">{teamStats.finished}</div>
+                <div className="text-[10px] text-blue-600/80">Sudah check-out</div>
               </div>
-              <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-100">
-                <Clock size={22} />
+              <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-100 shrink-0">
+                <CheckCircle2 size={20} />
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 p-4.5 shadow-xs flex items-center justify-between col-span-2 sm:col-span-1">
+              <div>
+                <div className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">Belum Masuk</div>
+                <div className="text-xl font-black text-amber-700 mt-0.5">{teamStats.absent}</div>
+                <div className="text-[10px] text-amber-600/80">Belum absen</div>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-100 shrink-0">
+                <Clock size={20} />
               </div>
             </div>
           </div>

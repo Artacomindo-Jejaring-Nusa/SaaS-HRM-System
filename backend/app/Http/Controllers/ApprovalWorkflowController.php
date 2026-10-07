@@ -83,7 +83,7 @@ class ApprovalWorkflowController extends Controller
             'scope_id' => 'nullable|integer',
             'steps' => 'required|array|min:1',
             'steps.*.step_number' => 'required|integer|min:1',
-            'steps.*.approver_type' => 'required|string|in:supervisor,role,user',
+            'steps.*.approver_type' => 'required|string|in:supervisor,super_admin,role,user',
             'steps.*.approver_role_id' => 'nullable|integer|exists:roles,id',
             'steps.*.approver_user_id' => 'nullable|integer|exists:users,id',
             'steps.*.sla_hours' => 'nullable|integer|min:1',
@@ -583,5 +583,55 @@ class ApprovalWorkflowController extends Controller
             ->get();
 
         return $this->successResponse($users, 'Users retrieved successfully.');
+    }
+
+    /**
+     * Get real-time multi-step approval progress timeline for any request.
+     */
+    public function getRequestTimeline(Request $request)
+    {
+        $request->validate([
+            'module' => 'required|string',
+            'id' => 'required|integer',
+        ]);
+
+        $user = $request->user();
+        $companyId = $user->company_id;
+        $module = $request->module;
+        $id = (int) $request->id;
+
+        $model = match ($module) {
+            'leave' => \App\Models\Leave::with(['user.supervisor', 'user.role'])->find($id),
+            'permit' => \App\Models\Permit::with(['user.supervisor', 'user.role'])->find($id),
+            'overtime' => \App\Models\Overtime::with(['user.supervisor', 'user.role'])->find($id),
+            'reimbursement' => \App\Models\Reimbursement::with(['user.supervisor', 'user.role'])->find($id),
+            'fund_request' => \App\Models\FundRequest::with(['user.supervisor', 'user.role'])->find($id),
+            'attendance_correction' => \App\Models\AttendanceCorrection::with(['user.supervisor', 'user.role'])->find($id),
+            'shift_swap' => \App\Models\ShiftSwap::with(['requester.supervisor', 'requester.role', 'receiver'])->find($id),
+            'vehicle_log' => \App\Models\VehicleLog::with(['user.supervisor', 'user.role'])->find($id),
+            'task' => \App\Models\Task::with(['user.supervisor', 'user.role'])->find($id),
+            default => null,
+        };
+
+        if (! $model) {
+            return $this->errorResponse('Data permohonan tidak ditemukan.', 404);
+        }
+
+        $submitter = $module === 'shift_swap' ? $model->requester : $model->user;
+        if (! $submitter) {
+            return $this->errorResponse('Data pemohon tidak ditemukan.', 404);
+        }
+
+        $timeline = ApprovalService::getApprovalTimeline(
+            $module,
+            $companyId ?? $submitter->company_id,
+            $submitter,
+            $model->current_approval_step ?? ($model->status === 'pending' ? 1 : null),
+            $model->status,
+            $model->approved_by ?? null,
+            $model->rejection_reason ?? $model->remark ?? null
+        );
+
+        return $this->successResponse($timeline, 'Tahap alur persetujuan berhasil dimuat.');
     }
 }

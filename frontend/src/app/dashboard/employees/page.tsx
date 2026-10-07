@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
-import { Plus, Search, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, UserX, ShieldAlert, CreditCard, Mail, MapPin, Phone, Building2, BadgeCheck, Clock, Eye, Key, Briefcase, ChevronDown, UserCog, ShieldCheck, History } from "lucide-react";
+import { Plus, Search, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, UserX, ShieldAlert, Mail, MapPin, Phone, Building2, BadgeCheck, Clock, Eye, Key, Briefcase, ChevronDown, UserCog, ShieldCheck, History } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
 import { PermissionGuard } from "@/components/PermissionGuard";
@@ -165,85 +165,106 @@ function parsePortalAccessValue(val: string): boolean | null {
   return null;
 }
 
-function downloadEmployeeImportTemplate(availableRoles: Role[]) {
-  const templateData: Record<string, string | number | null | undefined>[] = [
-    { 
-      "nama (WAJIB)": "Andi Saputra", 
-      "email (WAJIB)": "andi@example.com", 
-      "nik (OPSIONAL)": "123456789", 
-      "password (WAJIB)": ["pass", "word123"].join(""), 
-      "role_id (WAJIB)": 3, 
-      "tanggal_gabung (OPSIONAL)": "2024-01-01",
-      "nomor_telepon (OPSIONAL)": "08123456789",
-      "alamat (OPSIONAL)": "Jl. Merdeka No. 1",
-      "nomor_ktp (OPSIONAL)": "3171234567890001",
-      "tempat_lahir (OPSIONAL)": "Jakarta",
-      "tanggal_lahir (YYYY-MM-DD)": "1995-05-15",
-      "jenis_kelamin (Laki-laki/Perempuan)": "Laki-laki",
-      "agama (Islam/Kristen/Katolik/Hindu/Buddha/Konghucu)": "Islam",
-      "status_nikah (Single/Menikah/Janda/Duda)": "Single",
-      "gol_darah (A/B/AB/O)": "O",
-      "status_karyawan (Permanent/Contract)": "Permanent",
-      "lokasi_kerja (OPSIONAL)": "Kantor Pusat",
-      "id_atasan (LIHAT DAFTAR)": null,
-      "nama_kontak_darurat": "Budi (Ayah)",
-      "nomor_kontak_darurat": "081222333444"
+async function downloadEmployeeImportTemplate(availableRoles: Role[]) {
+  toast.info("Menyiapkan template Excel data karyawan...");
+  try {
+    const res = await axiosInstance.get('/employees?per_page=2000');
+    const existingEmployees: Employee[] = res.data?.data?.data || res.data?.data || [];
+
+    const templateData: Record<string, string | number | null | undefined>[] = [];
+
+    if (existingEmployees.length > 0) {
+      existingEmployees.forEach((emp) => {
+        templateData.push({
+          "nama (WAJIB)": emp.name,
+          "email (WAJIB)": emp.email,
+          "nik (OPSIONAL)": emp.nik || "",
+          "password (WAJIB)": "", // Kosongkan agar password akun yang sudah ada tidak berubah
+          "role_id (WAJIB)": emp.role_id || emp.role?.id || 3,
+          "tanggal_gabung (OPSIONAL)": emp.join_date ? emp.join_date.substring(0, 10) : "",
+          "nomor_telepon (OPSIONAL)": emp.phone || "",
+          "alamat (OPSIONAL)": emp.address || "",
+          "nomor_ktp (OPSIONAL)": emp.ktp_no || "",
+          "tempat_lahir (OPSIONAL)": emp.place_of_birth || "",
+          "tanggal_lahir (YYYY-MM-DD)": emp.date_of_birth ? emp.date_of_birth.substring(0, 10) : "",
+          "jenis_kelamin (Laki-laki/Perempuan)": emp.gender || "",
+          "agama (Islam/Kristen/Katolik/Hindu/Buddha/Konghucu)": emp.religion || "",
+          "status_nikah (Single/Menikah/Janda/Duda)": emp.marital_status || "",
+          "gol_darah (A/B/AB/O)": emp.blood_type || "",
+          "status_karyawan (Permanent/Contract)": emp.employment_status || "Permanent",
+          "lokasi_kerja (OPSIONAL)": emp.work_location || "Kantor Pusat",
+          "id_atasan (LIHAT DAFTAR)": emp.supervisor_id || null,
+          "nama_kontak_darurat": emp.emergency_contact_name || "",
+          "nomor_kontak_darurat": emp.emergency_contact_phone || "",
+        });
+      });
+    } else {
+      templateData.push({
+        "nama (WAJIB)": "Andi Saputra",
+        "email (WAJIB)": "andi@example.com",
+        "nik (OPSIONAL)": "123456789",
+        "password (WAJIB)": "Password123!",
+        "role_id (WAJIB)": 3,
+        "tanggal_gabung (OPSIONAL)": "2024-01-01",
+        "nomor_telepon (OPSIONAL)": "08123456789",
+        "alamat (OPSIONAL)": "Jl. Merdeka No. 1",
+        "nomor_ktp (OPSIONAL)": "3171234567890001",
+        "tempat_lahir (OPSIONAL)": "Jakarta",
+        "tanggal_lahir (YYYY-MM-DD)": "1995-05-15",
+        "jenis_kelamin (Laki-laki/Perempuan)": "Laki-laki",
+        "agama (Islam/Kristen/Katolik/Hindu/Buddha/Konghucu)": "Islam",
+        "status_nikah (Single/Menikah/Janda/Duda)": "Single",
+        "gol_darah (A/B/AB/O)": "O",
+        "status_karyawan (Permanent/Contract)": "Permanent",
+        "lokasi_kerja (OPSIONAL)": "Kantor Pusat",
+        "id_atasan (LIHAT DAFTAR)": null,
+        "nama_kontak_darurat": "Budi (Ayah)",
+        "nomor_kontak_darurat": "081222333444",
+      });
     }
-  ];
 
-  templateData.push({});
-  templateData.push({ "nama (WAJIB)": ">>> PANDUAN PENGISIAN <<<" });
-  templateData.push({ "nama (WAJIB)": "1. Kolom bertanda (WAJIB) tidak boleh kosong." });
-  templateData.push({ "nama (WAJIB)": "2. Untuk Kolom ROLE_ID, gunakan angka dari daftar di bawah ini:" });
-  
-  availableRoles.forEach(role => {
-    templateData.push({ 
-      "nama (WAJIB)": `   - Angka ${role.id} untuk jabatan: ${role.name.toUpperCase()}`
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    worksheet["!cols"] = [
+      { wch: 30 }, { wch: 28 }, { wch: 18 }, { wch: 18 },
+      { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 30 },
+      { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
+      { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 18 },
+      { wch: 20 }, { wch: 16 }, { wch: 22 }, { wch: 20 },
+    ];
+
+    // Sheet 2: Panduan & Role ID
+    const guideData: Record<string, string>[] = [
+      { "PANDUAN & DAFTAR JABATAN": ">>> PANDUAN PENGISIAN & PEMBARUAN DATA EXCEL <<<" },
+      { "PANDUAN & DAFTAR JABATAN": "1. Tambah Orang Baru: Tambahkan baris baru di sheet 'Data Karyawan' dengan email baru." },
+      { "PANDUAN & DAFTAR JABATAN": "2. Edit Orang Lama: Edit langsung kolom yang ingin diperbarui (NIK, No HP, Jabatan, dll)." },
+      { "PANDUAN & DAFTAR JABATAN": "3. Password: Pada data orang lama, jika dikosongkan password tidak akan berubah." },
+      { "PANDUAN & DAFTAR JABATAN": "4. Format Tanggal: YYYY-MM-DD (Contoh: 2024-01-30)." },
+      { "PANDUAN & DAFTAR JABATAN": "5. DAFTAR KODE ROLE_ID:" },
+    ];
+
+    availableRoles.forEach((role) => {
+      guideData.push({
+        "PANDUAN & DAFTAR JABATAN": `   - Angka ${role.id} untuk jabatan: ${role.name.toUpperCase()}`,
+      });
     });
-  });
 
-  templateData.push({ "nama (WAJIB)": "3. Untuk Kolom ID_ATASAN, masukkan ID Karyawan yang menjadi bosnya (cek di tabel karyawan)." });
-  templateData.push({ "nama (WAJIB)": "4. Format Tanggal gunakan: YYYY-MM-DD (Contoh: 2024-12-30)." });
-  templateData.push({ "nama (WAJIB)": "5. Hapus baris CONTOH (Andi Saputra) sebelum upload jika tidak diperlukan." });
-  
-  const worksheet = XLSX.utils.json_to_sheet(templateData);
-  worksheet['!cols'] = [
-    { wch: 40 }, { wch: 25 }, { wch: 15 }, { wch: 15 },
-    { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 30 },
-    { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 15 },
-  ];
+    const guideSheet = XLSX.utils.json_to_sheet(guideData);
+    guideSheet["!cols"] = [{ wch: 80 }];
 
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Template Karyawan");
-  XLSX.writeFile(workbook, "Template_Import_Karyawan_Narwastu.xlsx");
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Data Karyawan");
+    XLSX.utils.book_append_sheet(workbook, guideSheet, "Panduan & Daftar Role");
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(workbook, `Template_Data_Karyawan_${dateStr}.xlsx`);
+    toast.success(`Template Excel berhasil diunduh (${existingEmployees.length} data karyawan).`);
+  } catch (e) {
+    console.error("Gagal mengunduh template karyawan:", e);
+    toast.error("Gagal mengunduh template karyawan.");
+  }
 }
 
-function downloadPayrollAccountTemplate() {
-  const templateData = [
-    {
-      "Email (WAJIB)": "karyawan@example.com",
-      "NIK (OPSIONAL)": "12345678",
-      "Bank": "BCA",
-      "Nomor Rekening": "1234567890",
-      "Nama Rekening": "Ahmad Rizki",
-      "Cost Center": "PT. Artacomindo Jejaring Nusa",
-      "Gaji Pokok (OPSIONAL)": 0,
-    },
-    {},
-    { "Email (WAJIB)": ">>> PANDUAN PENGISIAN DATA REKENING <<<" },
-    { "Email (WAJIB)": "1. Email atau NIK digunakan sebagai kunci untuk mencari data karyawan." },
-    { "Email (WAJIB)": "2. Data Bank & Rekening yang diisi di sini akan otomatis muncul setiap kali Generate Payroll." },
-    { "Email (WAJIB)": "3. Cost Center bisa diisi 'PT. Artacomindo Jejaring Nusa', 'Artacomindotama', 'Narwasthu' atau sesuai unit kerja." },
-    { "Email (WAJIB)": "4. Jika data sudah ada di sistem, maka akan diperbarui (Update) dengan data baru dari Excel ini." }
-  ];
 
-  const worksheet = XLSX.utils.json_to_sheet(templateData);
-  worksheet['!cols'] = [{wch: 30}, {wch: 15}, {wch: 15}, {wch: 20}, {wch: 25}, {wch: 30}, {wch: 20}];
-  
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Data Rekening Payroll");
-  XLSX.writeFile(workbook, "Template_Data_Rekening_Karyawan.xlsx");
-}
 
 function checkIsHRorAdmin(hasPermission: (perm: string) => boolean, roleName?: string): boolean {
   if (hasPermission('manage-employees')) return true;
@@ -444,19 +465,7 @@ async function executeEmployeeImport(file: File): Promise<ImportResult> {
   }
 }
 
-async function executePayrollImport(file: File): Promise<ImportResult> {
-  const formDataUpload = new FormData();
-  formDataUpload.append("file", file);
 
-  try {
-    const res = await axiosInstance.post("/payroll/import-data", formDataUpload, {
-      headers: { "Content-Type": "multipart/form-data" }
-    });
-    return { type: "success", message: res.data.message };
-  } catch (err: unknown) {
-    return { type: "error", message: extractEmployeeErrorMessage(err, "Gagal mengimpor data payroll.") };
-  }
-}
 
 async function runResendVerification(
   targetId: number | undefined,
@@ -623,18 +632,14 @@ async function executeEmployeeDisciplineAction(
 
 interface EmployeePageHeaderProps {
   readonly onDownloadTemplate: () => void;
-  readonly onDownloadPayrollTemplate: () => void;
   readonly onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  readonly onPayrollImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
   readonly onOpenAddModal: () => void;
   readonly onOpenAuditLogModal?: () => void;
 }
 
 function EmployeePageHeader({
   onDownloadTemplate,
-  onDownloadPayrollTemplate,
   onFileUpload,
-  onPayrollImport,
   onOpenAddModal,
   onOpenAuditLogModal,
 }: EmployeePageHeaderProps) {
@@ -668,22 +673,10 @@ function EmployeePageHeader({
             <FileDown size={14} className="mr-1" />
             Template Karyawan
           </button>
-          <button 
-            onClick={onDownloadPayrollTemplate}
-            className="dash-btn dash-btn-outline border-blue-200 hover:border-blue-300 text-blue-600 font-bold"
-          >
-            <FileDown size={14} className="mr-1" />
-            Template Payroll
-          </button>
           <label className="dash-btn dash-btn-outline border-blue-200 hover:border-blue-300 text-blue-600 font-bold cursor-pointer">
             <FileUp size={14} className="mr-1" />
             Import Data
             <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={onFileUpload} />
-          </label>
-          <label className="dash-btn dash-btn-outline border-blue-200 hover:border-blue-300 text-blue-600 font-bold cursor-pointer">
-            <CreditCard size={14} className="mr-1" />
-            Import Rekening/Gaji
-            <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={onPayrollImport} />
           </label>
           <button 
             onClick={onOpenAddModal}
@@ -2303,8 +2296,6 @@ function EmployeesContent() {
   }, [debouncedSearch, selectedRole, page, urlSearch, urlId, permissions, activeFilter, perPage]);
 
   const handleDownloadTemplate = () => downloadEmployeeImportTemplate(availableRoles);
-  const handleDownloadPayrollTemplate = () => downloadPayrollAccountTemplate();
-
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2320,20 +2311,6 @@ function EmployeesContent() {
 
     setLoading(true);
     const result = await executeEmployeeImport(file);
-    setModalType(result.type);
-    setErrorMessage(result.message);
-    setErrorModalOpen(true);
-    if (result.type === "success") fetchEmployees(1);
-    setLoading(false);
-    e.target.value = '';
-  };
-
-  const handlePayrollImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setLoading(true);
-    const result = await executePayrollImport(file);
     setModalType(result.type);
     setErrorMessage(result.message);
     setErrorModalOpen(true);
@@ -2489,9 +2466,7 @@ function EmployeesContent() {
     <div className="animate-in fade-in duration-700">
       <EmployeePageHeader
         onDownloadTemplate={handleDownloadTemplate}
-        onDownloadPayrollTemplate={handleDownloadPayrollTemplate}
         onFileUpload={handleFileUpload}
-        onPayrollImport={handlePayrollImport}
         onOpenAddModal={handleOpenAddModal}
         onOpenAuditLogModal={handleOpenAuditLogModal}
       />

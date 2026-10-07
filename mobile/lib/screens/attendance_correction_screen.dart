@@ -35,16 +35,66 @@ class _AttendanceCorrectionScreenState
     }
   }
 
+  TimeOfDay? _parseTimeString(dynamic timeStr) {
+    if (timeStr == null) return null;
+    final str = timeStr.toString().trim();
+    if (str.isEmpty || str == 'null' || str == '--:--') return null;
+    try {
+      final parts = str.split(':');
+      if (parts.length >= 2) {
+        final h = int.parse(parts[0]);
+        final m = int.parse(parts[1]);
+        return TimeOfDay(hour: h, minute: m);
+      }
+    } catch (_) {}
+    return null;
+  }
+
   void _showCreateModal() async {
-    // First fetch attendance history
+    // Show quick loading
+    LoadingDialog.show(context, message: "Memuat riwayat absen...");
     final history = await ApiService.getAttendanceHistory();
+    if (mounted) LoadingDialog.hide(context);
+
     if (history == null || history.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Tidak ada riwayat absen yang bisa dikoreksi."),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Tidak ada riwayat absen yang ditemukan."),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Filter only attendances that are:
+    // 1. Late (status == 'late' or contains 'terlambat')
+    // 2. Missing checkout (check_out == null or check_out_time == null or empty)
+    final List<dynamic> eligibleHistory = history.where((att) {
+      final status = (att['status'] ?? '').toString().toLowerCase();
+      final isLate = status == 'late' || status.contains('terlambat');
+      final checkOut = att['check_out'];
+      final checkOutTime = att['check_out_time'];
+      final isMissingCheckout = checkOut == null ||
+          checkOutTime == null ||
+          checkOut.toString().trim().isEmpty ||
+          checkOutTime.toString().trim().isEmpty ||
+          checkOutTime.toString() == 'null';
+      return isLate || isMissingCheckout;
+    }).toList();
+
+    if (eligibleHistory.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "Semua absensi Anda sudah lengkap & tepat waktu. Tidak ada catatan yang terlambat atau belum absen pulang.",
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
       return;
     }
 
@@ -55,6 +105,8 @@ class _AttendanceCorrectionScreenState
     TimeOfDay? correctedCheckIn;
     final reasonController = TextEditingController();
     bool isSubmitting = false;
+
+    if (!mounted) return;
 
     showModalBottomSheet(
       context: context,
@@ -94,13 +146,13 @@ class _AttendanceCorrectionScreenState
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      "Pilih absen yang ingin dikoreksi dan isi data yang benar.",
+                      "Pilih absen terlambat atau belum checkout yang ingin dikoreksi.",
                       style: TextStyle(color: Colors.grey[600], fontSize: 13),
                     ),
                     const SizedBox(height: 20),
 
                     // Select Attendance
-                    Text("Pilih Tanggal Absen",
+                    Text("Pilih Tanggal Absen (Terlambat / Tanpa Pulang)",
                         style: GoogleFonts.outfit(
                             fontSize: 14, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
@@ -116,22 +168,57 @@ class _AttendanceCorrectionScreenState
                           hint: const Text("-- Pilih tanggal absen --",
                               style: TextStyle(fontSize: 13)),
                           isExpanded: true,
-                          items: history.map<DropdownMenuItem<dynamic>>((att) {
+                          items: eligibleHistory.map<DropdownMenuItem<dynamic>>((att) {
                             final date = att['date'] ?? '-';
                             final checkIn = att['check_in_time'] ?? '--:--';
-                            final checkOut =
-                                att['check_out_time'] ?? '❌ BELUM';
+                            final checkOut = att['check_out_time'];
+                            final status = (att['status'] ?? '').toString().toLowerCase();
+                            final isLate = status == 'late' || status.contains('terlambat');
+                            final isMissingCheckout = checkOut == null ||
+                                checkOut.toString().trim().isEmpty ||
+                                checkOut.toString() == 'null';
+
+                            String badgeText;
+                            if (isLate && isMissingCheckout) {
+                              badgeText = "⚠️ Terlambat ($checkIn) & ❌ Belum Pulang";
+                            } else if (isLate) {
+                              badgeText = "⚠️ Terlambat ($checkIn) • Pulang: ${checkOut ?? '--:--'}";
+                            } else {
+                              badgeText = "Masuk: $checkIn • ❌ Belum Pulang";
+                            }
+
                             return DropdownMenuItem(
                               value: att,
                               child: Text(
-                                "$date | Masuk: $checkIn | Pulang: $checkOut",
-                                style: const TextStyle(fontSize: 12),
+                                "$date | $badgeText",
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             );
                           }).toList(),
                           onChanged: (val) {
-                            setModalState(() => selectedAttendance = val);
+                            if (val != null) {
+                              final status = (val['status'] ?? '').toString().toLowerCase();
+                              final isLate = status == 'late' || status.contains('terlambat');
+                              final checkOut = val['check_out_time'];
+                              final isMissingCheckout = checkOut == null ||
+                                  checkOut.toString().trim().isEmpty ||
+                                  checkOut.toString() == 'null';
+
+                              setModalState(() {
+                                selectedAttendance = val;
+                                if (isMissingCheckout && !isLate) {
+                                  correctionType = 'missing_checkout';
+                                } else if (isLate && !isMissingCheckout) {
+                                  correctionType = 'wrong_time';
+                                }
+
+                                final existingCheckIn = _parseTimeString(val['check_in_time']);
+                                final existingCheckOut = _parseTimeString(val['check_out_time']);
+                                if (existingCheckIn != null) correctedCheckIn = existingCheckIn;
+                                if (existingCheckOut != null) correctedCheckOut = existingCheckOut;
+                              });
+                            }
                           },
                         ),
                       ),
@@ -160,7 +247,7 @@ class _AttendanceCorrectionScreenState
                                     style: TextStyle(fontSize: 13))),
                             DropdownMenuItem(
                                 value: 'wrong_time',
-                                child: Text("Koreksi Waktu (Salah Jam)",
+                                child: Text("Koreksi Waktu (Salah Jam / Terlambat)",
                                     style: TextStyle(fontSize: 13))),
                           ],
                           onChanged: (val) {

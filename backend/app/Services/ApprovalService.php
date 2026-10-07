@@ -23,7 +23,6 @@ class ApprovalService
         'task' => 'Pemberian & Verifikasi Tugas',
         'vehicle_log' => 'Peminjaman Kendaraan',
         'performance_review' => 'Evaluasi Kinerja',
-        'profile_request' => 'Pembaruan Profil',
     ];
 
     public const CAT_ATTENDANCE = 'Kehadiran & Waktu';
@@ -101,13 +100,6 @@ class ApprovalService
             'icon' => 'Award',
             'description' => 'Persetujuan berjenjang atas hasil penilaian performa kerja.',
             'default_layers' => 2,
-        ],
-        'profile_request' => [
-            'name' => 'Pembaruan Data Profil',
-            'category' => 'Administrasi',
-            'icon' => 'UserCheck',
-            'description' => 'Validasi perubahan data rekening, keluarga, atau kontak pribadi.',
-            'default_layers' => 1,
         ],
     ];
 
@@ -309,6 +301,21 @@ class ApprovalService
     public static function getApproversForStep(WorkflowStep $step, User $submitter, int $companyId): Collection
     {
         switch ($step->approver_type) {
+            case 'super_admin':
+                // All Super Admins
+                return User::where(function ($q) use ($companyId) {
+                        $q->where('role_id', 1)
+                            ->orWhereHas('role', function ($r) {
+                                $r->where('name', 'Super Admin');
+                            });
+                    })
+                    ->where(function ($q) use ($companyId) {
+                        $q->where('company_id', $companyId)
+                            ->orWhereNull('company_id');
+                    })
+                    ->where('id', '!=', $submitter->id)
+                    ->get();
+
             case 'supervisor':
                 // The direct supervisor of the submitter
                 if ($submitter->supervisor_id) {
@@ -356,6 +363,8 @@ class ApprovalService
     public static function getStepLabel(WorkflowStep $step): string
     {
         switch ($step->approver_type) {
+            case 'super_admin':
+                return 'Approved by - Disetujui (Super Admin)';
             case 'supervisor':
                 return 'Checked by - Diperiksa (Atasan Langsung)';
             case 'role':
@@ -373,6 +382,132 @@ class ApprovalService
             default:
                 return "Tahap {$step->step_number}";
         }
+    }
+
+    /**
+     * Get the complete multi-step approval timeline for a request.
+     * Useful for Super Admins, Managers, and Employees to see exactly which stage the request is currently at.
+     */
+    public static function getApprovalTimeline(
+        string $moduleKey,
+        int $companyId,
+        User $submitter,
+        ?int $currentStep,
+        string $status,
+        ?int $approvedById = null,
+        ?string $remark = null
+    ): array {
+        $workflow = self::getWorkflow($moduleKey, $companyId, $submitter);
+
+        if (! $workflow || $workflow->steps->isEmpty()) {
+            $approverName = 'Atasan Langsung / HRD';
+            if ($submitter->supervisor_id) {
+                $spv = User::find($submitter->supervisor_id);
+                if ($spv) $approverName = $spv->name . ' (Atasan Langsung)';
+            }
+            $stepStatus = match ($status) {
+                'approved' => 'approved',
+                'rejected' => 'rejected',
+                default => 'pending',
+            };
+
+            return [
+                'has_workflow' => false,
+                'workflow_name' => 'Alur Persetujuan Standar',
+                'current_step' => 1,
+                'total_steps' => 1,
+                'status' => $status,
+                'current_step_label' => 'Tahap 1: ' . $approverName,
+                'steps' => [
+                    [
+                        'step_number' => 1,
+                        'name' => 'Persetujuan Atasan / HRD',
+                        'label' => 'Otorisasi ' . $approverName,
+                        'approver_type' => 'supervisor',
+                        'approver_candidates' => [$approverName],
+                        'status' => $stepStatus,
+                        'is_current' => $stepStatus === 'pending',
+                        'remark' => $remark,
+                    ]
+                ],
+            ];
+        }
+
+        $allSteps = $workflow->steps()->orderBy('step_number')->get();
+        $totalSteps = $allSteps->count();
+        $activeStepNumber = $currentStep ?? 1;
+
+        $timelineSteps = [];
+
+        foreach ($allSteps as $st) {
+            $approverCandidates = [];
+            $approverUsers = self::getApproversForStep($st, $submitter, $companyId);
+            foreach ($approverUsers as $u) {
+                $approverCandidates[] = $u->name . ($u->role ? ' (' . $u->role->name . ')' : '');
+            }
+            if (empty($approverCandidates)) {
+                if ($st->approver_type === 'super_admin') {
+                    $approverCandidates[] = 'Super Admin';
+                } elseif ($st->approver_type === 'supervisor') {
+                    $approverCandidates[] = 'Atasan Langsung';
+                } elseif ($st->role) {
+                    $approverCandidates[] = $st->role->name;
+                }
+            }
+
+            // Determine status of this step
+            $stepStatus = 'waiting';
+            $isCurrent = false;
+
+            if ($status === 'approved') {
+                $stepStatus = 'approved';
+            } elseif ($status === 'rejected') {
+                if ($st->step_number < $activeStepNumber) {
+                    $stepStatus = 'approved';
+                } elseif ($st->step_number === $activeStepNumber) {
+                    $stepStatus = 'rejected';
+                    $isCurrent = true;
+                } else {
+                    $stepStatus = 'cancelled';
+                }
+            } else {
+                // Pending status
+                if ($st->step_number < $activeStepNumber) {
+                    $stepStatus = 'approved';
+                } elseif ($st->step_number === $activeStepNumber) {
+                    $stepStatus = 'pending';
+                    $isCurrent = true;
+                } else {
+                    $stepStatus = 'waiting';
+                }
+            }
+
+            $timelineSteps[] = [
+                'step_number' => $st->step_number,
+                'name' => self::getStepLabel($st),
+                'label' => self::getStepLabel($st),
+                'approver_type' => $st->approver_type,
+                'approver_candidates' => $approverCandidates,
+                'status' => $stepStatus,
+                'is_current' => $isCurrent,
+                'sla_hours' => $st->sla_hours,
+                'remark' => $isCurrent ? $remark : null,
+            ];
+        }
+
+        $currentStepObj = $allSteps->where('step_number', $activeStepNumber)->first();
+        $currentLabel = $currentStepObj ? self::getStepLabel($currentStepObj) : "Tahap {$activeStepNumber}";
+
+        return [
+            'has_workflow' => true,
+            'workflow_id' => $workflow->id,
+            'workflow_name' => $workflow->name,
+            'current_step' => $activeStepNumber,
+            'total_steps' => $totalSteps,
+            'status' => $status,
+            'current_step_label' => $status === 'approved' ? 'Disetujui Sepenuhnya' : ($status === 'rejected' ? 'Ditolak pada ' . $currentLabel : "Tahap {$activeStepNumber} dari {$totalSteps}: {$currentLabel}"),
+            'steps' => $timelineSteps,
+        ];
     }
 
     /**
@@ -419,7 +554,6 @@ class ApprovalService
             'task' => 'manage-tasks',
             'vehicle_log' => 'approve-vehicle-logs',
             'performance_review' => 'manage-performance-reviews',
-            'profile_request' => 'manage-employees',
             default => null,
         };
     }
@@ -473,6 +607,7 @@ class ApprovalService
         $hasModulePermission = $permission ? $approver->hasPermission($permission) : false;
 
         return match ($step->approver_type) {
+            'super_admin' => ($approver->role_id === 1 || $approver->role?->name === 'Super Admin' || (method_exists($approver, 'canAccessAllCompanies') && $approver->canAccessAllCompanies())),
             'supervisor' => self::canApproveSupervisorStep($approver, $submitter, $hasModulePermission),
             'role' => self::canApproveRoleStep($step, $approver),
             'user' => self::canApproveUserStep($step, $approver),

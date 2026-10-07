@@ -78,10 +78,6 @@ class _ShiftSwapScreenState extends State<ShiftSwapScreen> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    final isBlocked = !_isLoading &&
-        (_currentUser?['is_manager'] != true) &&
-        (_currentUser?['attendance_type'] != 'shift');
-
     // Filter logic
     final myRequests = _swaps.where((s) => s['requester_id'] == _currentUser?['id'] || (s['receiver_id'] == _currentUser?['id'] && s['status'] == 'pending_receiver')).toList();
     final managerReview = _swaps.where((s) => s['status'] == 'pending_manager' && _currentUser?['is_manager'] == true).toList();
@@ -93,78 +89,32 @@ class _ShiftSwapScreenState extends State<ShiftSwapScreen> with SingleTickerProv
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 0.5,
-        bottom: isBlocked
-            ? null
-            : TabBar(
-                controller: _tabController,
-                labelColor: primaryColor,
-                unselectedLabelColor: Colors.grey,
-                indicatorColor: primaryColor,
-                labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
-                tabs: [
-                  const Tab(text: "PERMINTAAN SAYA"),
-                  Tab(text: "APPROVAL ${_currentUser?['is_manager'] == true ? '(MANAGER)' : ''}"),
-                ],
-              ),
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: primaryColor,
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: primaryColor,
+          labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+          tabs: [
+            const Tab(text: "PERMINTAAN SAYA"),
+            Tab(text: "APPROVAL ${_currentUser?['is_manager'] == true ? '(MANAGER)' : ''}"),
+          ],
+        ),
       ),
       body: _isLoading
           ? const SimpleListSkeleton()
-          : isBlocked
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(30.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.red[50],
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.lock_person_outlined,
-                            size: 80,
-                            color: Colors.red[800],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          "Akses Terbatas",
-                          style: GoogleFonts.outfit(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[900],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          "Fitur Tukar Shift hanya tersedia untuk karyawan dengan Pola Kehadiran Shift.",
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                            height: 1.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildSwapList(myRequests),
-                    _buildSwapList(managerReview, isManagerView: true),
-                  ],
-                ),
-      floatingActionButton: isBlocked
-          ? null
-          : FloatingActionButton(
-              onPressed: _showAddSwapDialog,
-              backgroundColor: primaryColor,
-              child: const Icon(Icons.add, color: Colors.white),
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildSwapList(myRequests),
+                _buildSwapList(managerReview, isManagerView: true),
+              ],
             ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddSwapDialog,
+        backgroundColor: primaryColor,
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
     );
   }
 
@@ -362,13 +312,7 @@ class __AddSwapModalState extends State<_AddSwapModal> {
     final mySched = await ApiService.getSchedules(userId: widget.currentUserId);
     if (mounted) {
       setState(() {
-        _employees = (emp ?? []).where((e) {
-          if (e['id'] == widget.currentUserId) return false;
-          final roleName = (e['role'] != null && e['role']['name'] != null) 
-              ? e['role']['name'].toString().toLowerCase() 
-              : '';
-          return roleName.contains('karyawan') || roleName.contains('staff') || roleName.contains('noc');
-        }).toList();
+        _employees = (emp ?? []).where((e) => e['id'] != widget.currentUserId).toList();
         _mySchedules = mySched ?? [];
         _loadingData = false;
       });
@@ -414,37 +358,92 @@ class __AddSwapModalState extends State<_AddSwapModal> {
                       : "";
                   return DropdownMenuItem(
                     value: e['id'] as int, 
-                    child: Text("${e['name']}$roleText")
+                    child: Text("${e['name']}$roleText", overflow: TextOverflow.ellipsis)
                   );
                 }).toList(),
                 onChanged: (val) {
+                   if (val == null) return;
                    setState(() {
                      _selectedEmployeeId = val;
                      _selectedReceiverSchedId = null;
                    });
-                   _fetchReceiverSchedules(val!);
+                   _fetchReceiverSchedules(val);
                 },
               ),
               const SizedBox(height: 15),
 
               // Select My Sched
               _buildLabel("2. Jadwal Anda"),
-              DropdownButtonFormField<int>(
-                value: _selectedMySchedId,
-                decoration: _fieldDeco("Pilih Jadwal Anda..."),
-                items: _mySchedules.map((s) => DropdownMenuItem(value: s['id'] as int, child: Text("${DateFormat('dd/MM').format(DateTime.parse(s['date']))} - ${s['shift']['name']}"))).toList(),
-                onChanged: (val) => setState(() => _selectedMySchedId = val),
-              ),
+              if (_mySchedules.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 18, color: Colors.amber.shade800),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Anda belum memiliki jadwal shift yang terdaftar di sistem.",
+                          style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                DropdownButtonFormField<int>(
+                  value: _selectedMySchedId,
+                  decoration: _fieldDeco("Pilih Jadwal Anda..."),
+                  items: _mySchedules.map((s) {
+                    final dateStr = s['date'] != null 
+                        ? DateFormat('dd/MM/yyyy').format(DateTime.parse(s['date'])) 
+                        : '-';
+                    final shiftName = s['shift']?['name'] ?? 'Shift';
+                    return DropdownMenuItem(
+                      value: s['id'] as int, 
+                      child: Text("$dateStr — $shiftName")
+                    );
+                  }).toList(),
+                  onChanged: (val) => setState(() => _selectedMySchedId = val),
+                ),
               const SizedBox(height: 15),
 
               // Select Receiver Sched
               _buildLabel("3. Jadwal Tujuan"),
-              DropdownButtonFormField<int>(
-                value: _selectedReceiverSchedId,
-                decoration: _fieldDeco(_selectedEmployeeId == null ? "Pilih rekan dulu..." : "Pilih Jadwal Rekan..."),
-                items: _receiverSchedules.map((s) => DropdownMenuItem(value: s['id'] as int, child: Text("${DateFormat('dd/MM').format(DateTime.parse(s['date']))} - ${s['shift']['name']}"))).toList(),
-                onChanged: _selectedEmployeeId == null ? null : (val) => setState(() => _selectedReceiverSchedId = val),
-              ),
+              if (_selectedEmployeeId != null && _receiverSchedules.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Text(
+                    "Rekan kerja ini belum memiliki jadwal shift terdaftar.",
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                )
+              else
+                DropdownButtonFormField<int>(
+                  value: _selectedReceiverSchedId,
+                  decoration: _fieldDeco(_selectedEmployeeId == null ? "Pilih rekan dulu..." : "Pilih Jadwal Rekan..."),
+                  items: _receiverSchedules.map((s) {
+                    final dateStr = s['date'] != null 
+                        ? DateFormat('dd/MM/yyyy').format(DateTime.parse(s['date'])) 
+                        : '-';
+                    final shiftName = s['shift']?['name'] ?? 'Shift';
+                    return DropdownMenuItem(
+                      value: s['id'] as int, 
+                      child: Text("$dateStr — $shiftName")
+                    );
+                  }).toList(),
+                  onChanged: _selectedEmployeeId == null ? null : (val) => setState(() => _selectedReceiverSchedId = val),
+                ),
               const SizedBox(height: 15),
 
               _buildLabel("4. Alasan"),

@@ -199,7 +199,8 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::post('/attendance/dinas-luar/{id}/approve-hr', [AttendanceController::class, 'approveDinasLuarHr']);
     Route::post('/attendance/dinas-luar/{id}/reject', [AttendanceController::class, 'rejectDinasLuar']);
 
-    // Custom Approval Workflows
+    // Custom Approval Workflows & Timeline
+    Route::get('/approval-timeline', [ApprovalWorkflowController::class, 'getRequestTimeline']);
     Route::get('/approval-workflows', [ApprovalWorkflowController::class, 'index']);
     Route::get('/approval-workflows/companies', [ApprovalWorkflowController::class, 'getCompanies']);
     Route::get('/approval-workflows/modules', [ApprovalWorkflowController::class, 'getModuleKeys']);
@@ -475,15 +476,11 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     });
 
     // Shift Swap (Tukar Shift)
-    Route::middleware('permission:view-shift-swaps')->group(function () {
-        Route::get('/shift-swap', [ShiftSwapController::class, 'index']);
-        Route::get('/shift-swap/report', [ShiftSwapController::class, 'report']);
-        Route::get('/shift-swap/export', [ShiftSwapController::class, 'export']);
-    });
-    Route::middleware('permission:apply-shift-swaps')->group(function () {
-        Route::post('/shift-swap', [ShiftSwapController::class, 'store']);
-        Route::post('/shift-swap/{id}/respond', [ShiftSwapController::class, 'respond']);
-    });
+    Route::get('/shift-swap', [ShiftSwapController::class, 'index']);
+    Route::post('/shift-swap', [ShiftSwapController::class, 'store']);
+    Route::post('/shift-swap/{id}/respond', [ShiftSwapController::class, 'respond']);
+    Route::middleware('permission:view-shift-swap-reports')->get('/shift-swap/report', [ShiftSwapController::class, 'report']);
+    Route::middleware('permission:export-shift-swaps')->get('/shift-swap/export', [ShiftSwapController::class, 'export']);
     Route::middleware('permission:approve-shift-swaps')->post('/shift-swap/{id}/approve', [ShiftSwapController::class, 'approve']);
 
     // Projects

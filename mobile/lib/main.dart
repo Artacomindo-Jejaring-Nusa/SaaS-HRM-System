@@ -5,6 +5,7 @@ import 'screens/dashboard_screen.dart';
 import 'screens/notification_screen.dart';
 import 'screens/task_screen.dart';
 import 'services/notification_service.dart';
+import 'services/attendance_alarm_service.dart';
 import 'services/secure_storage_service.dart';
 import 'services/tracking_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -48,6 +49,7 @@ void main() async {
     languageNotifier.value = prefs.getString('language') ?? 'ID';
     
     NotificationService().init();
+    await AttendanceAlarmService().init();
     
     // Initialize secure storage and migrate old plaintext tokens
     final secureStorage = await SecureStorageService.getInstance().timeout(const Duration(seconds: 3));

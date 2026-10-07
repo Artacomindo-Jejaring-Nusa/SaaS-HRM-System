@@ -73,15 +73,17 @@ export default function ShiftSwapPage() {
 
   useEffect(() => {
     fetchSwaps(currentPage);
-    fetchInitialData();
-  }, [currentPage]);
+    if (user?.id) {
+      fetchInitialData();
+    }
+  }, [currentPage, user?.id]);
 
   const fetchSwaps = async (page = 1) => {
     try {
       setLoading(true);
       const res = await axiosInstance.get(`/shift-swap?page=${page}`);
       
-      if (res.data.data.data) {
+      if (res.data.data?.data) {
         setSwaps(res.data.data.data || []);
         setCurrentPage(res.data.data.current_page);
         setLastPage(res.data.data.last_page);
@@ -100,15 +102,18 @@ export default function ShiftSwapPage() {
 
   const fetchInitialData = async () => {
     try {
-      // Ambil daftar karyawan (untuk tujuan tukar)
-      const usersRes = await axiosInstance.get("/employees");
+      // Ambil daftar rekan kerja (untuk tujuan tukar)
+      const usersRes = await axiosInstance.get("/employees?per_page=100");
       const uData = usersRes.data.data;
-      setUsers(Array.isArray(uData) ? uData : (uData?.data || []));
+      const rawUsers = Array.isArray(uData) ? uData : (uData?.data || []);
+      setUsers(rawUsers.filter((u: any) => u.id !== user?.id));
 
       // Ambil jadwal saya
-      const mySchedRes = await axiosInstance.get("/schedules");
-      const schedData = mySchedRes.data.data;
-      setMySchedules(Array.isArray(schedData) ? schedData : (schedData?.data || []));
+      if (user?.id) {
+        const mySchedRes = await axiosInstance.get(`/schedules?user_id=${user.id}&per_page=100`);
+        const schedData = mySchedRes.data.data;
+        setMySchedules(Array.isArray(schedData) ? schedData : (schedData?.data || []));
+      }
     } catch (e) {
       console.error("Gagal ambil data pendukung", e);
     }
@@ -117,7 +122,7 @@ export default function ShiftSwapPage() {
   const fetchReceiverSchedules = async (receiverId: string) => {
     if (!receiverId) return;
     try {
-      const res = await axiosInstance.get(`/schedules?user_id=${receiverId}`);
+      const res = await axiosInstance.get(`/schedules?user_id=${receiverId}&per_page=100`);
       const resData = res.data.data;
       setReceiverSchedules(Array.isArray(resData) ? resData : (resData?.data || []));
     } catch (e) {
@@ -525,19 +530,15 @@ export default function ShiftSwapPage() {
                        >
                           <option value="">Pilih Teman Kerja...</option>
                           {users
-                           .filter((u) => {
-                             if (u.id === user?.id) return false;
-                             const roleName = u.role?.name?.toLowerCase() || "";
-                             return roleName.includes("karyawan") || roleName.includes("staff") || roleName.includes("noc");
-                           })
-                           .map((u) => {
-                             const roleDisplay = u.role?.name ? ` (${u.role.name})` : "";
-                             return (
-                               <option key={u.id} value={u.id}>
-                                 {u.name}{roleDisplay}
-                               </option>
-                             );
-                           })}
+                            .filter((u) => u.id !== user?.id)
+                            .map((u) => {
+                              const roleDisplay = u.role?.name ? ` (${u.role.name})` : "";
+                              return (
+                                <option key={u.id} value={u.id}>
+                                  {u.name}{roleDisplay}
+                                </option>
+                              );
+                            })}
                        </select>
                     </div>
 
@@ -551,10 +552,15 @@ export default function ShiftSwapPage() {
                           onChange={(e) => setFormData({...formData, requester_schedule_id: e.target.value})}
                           required
                        >
-                          <option value="">Pilih Jadwal Anda...</option>
-                          {mySchedules.map(s => (
-                            <option key={s.id} value={s.id}>{new Date(s.date).toLocaleDateString('id-ID')} - {s.shift.name} ({s.shift.start_time})</option>
-                          ))}
+                          <option value="">{mySchedules.length === 0 ? "Belum ada jadwal shift Anda" : "Pilih Jadwal Anda..."}</option>
+                          {mySchedules.map(s => {
+                            const shiftName = s.shift?.name || "Shift";
+                            const timeStr = s.shift?.start_time ? ` (${s.shift.start_time.substring(0, 5)})` : "";
+                            const dateStr = s.date ? new Date(s.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : "-";
+                            return (
+                              <option key={s.id} value={s.id}>{dateStr} - {shiftName}{timeStr}</option>
+                            );
+                          })}
                        </select>
                     </div>
 
@@ -569,10 +575,21 @@ export default function ShiftSwapPage() {
                           required
                           disabled={!formData.receiver_id}
                        >
-                          <option value="">Pilih Jadwal Teman...</option>
-                          {receiverSchedules.map(s => (
-                            <option key={s.id} value={s.id}>{new Date(s.date).toLocaleDateString('id-ID')} - {s.shift.name} ({s.shift.start_time})</option>
-                          ))}
+                          <option value="">
+                            {!formData.receiver_id
+                              ? "Pilih rekan dulu..."
+                              : receiverSchedules.length === 0
+                              ? "Rekan ini belum memiliki jadwal shift"
+                              : "Pilih Jadwal Rekan..."}
+                          </option>
+                          {receiverSchedules.map(s => {
+                            const shiftName = s.shift?.name || "Shift";
+                            const timeStr = s.shift?.start_time ? ` (${s.shift.start_time.substring(0, 5)})` : "";
+                            const dateStr = s.date ? new Date(s.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : "-";
+                            return (
+                              <option key={s.id} value={s.id}>{dateStr} - {shiftName}{timeStr}</option>
+                            );
+                          })}
                        </select>
                     </div>
 

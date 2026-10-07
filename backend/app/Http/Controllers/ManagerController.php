@@ -539,6 +539,11 @@ class ManagerController extends Controller
                 'status' => $attendance ? ($attendance->check_out ? 'Selesai' : 'Hadir') : 'Belum Masuk',
                 'check_in' => $attendance?->check_in ? Carbon::parse($attendance->check_in)->format('H:i') : null,
                 'check_out' => $attendance?->check_out ? Carbon::parse($attendance->check_out)->format('H:i') : null,
+                'attendance_type' => $attendance?->attendance_type ?? 'office',
+                'is_dinas_luar' => $attendance?->attendance_type === 'dinas_luar',
+                'dinas_luar_destination' => $attendance?->dinas_luar_destination,
+                'dinas_luar_status' => $attendance?->dinas_luar_status,
+                'location_label' => $attendance ? ($attendance->attendance_type === 'dinas_luar' ? 'Dinas Luar' : 'Di Kantor') : null,
             ];
         });
 

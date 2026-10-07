@@ -8,6 +8,7 @@ import '../api/api_service.dart';
 import 'profile_screen.dart';
 import 'riwayat_screen.dart';
 import '../services/notification_service.dart';
+import '../services/attendance_alarm_service.dart';
 
 import 'package:intl/intl.dart';
 import 'attendance_screen.dart';
@@ -349,6 +350,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         _attendanceType = userData['attendance_type'];
       });
+
+      // Sync and start ringing alarm service
+      AttendanceAlarmService().updateWorkHours(
+        startTime: userData['work_start_time']?.toString(),
+        endTime: userData['work_end_time']?.toString(),
+      );
+      AttendanceAlarmService().start();
     }
   }
 
