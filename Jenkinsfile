@@ -103,6 +103,7 @@ pipeline {
                         sh "cp docker-compose.staging.yml ${TARGET_DIR}/docker-compose.staging.yml"
                         sh "mkdir -p ${TARGET_DIR}/docker/nginx"
                         sh "cp docker/nginx/proxy-staging.conf ${TARGET_DIR}/docker/nginx/proxy-staging.conf"
+                        sh "cp -r face-recog-ArcFace ${TARGET_DIR}/"
                         
                         withCredentials([usernamePassword(credentialsId: "${GHCR_AUTH_ID}", usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
                             sh """
@@ -149,6 +150,7 @@ pipeline {
                             sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no docker-compose.staging.yml ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/docker-compose.staging.yml"
                             sh "ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no ${TARGET_VM_USER}@${TARGET_VM_IP} 'mkdir -p ${TARGET_DIR}/docker/nginx'"
                             sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no docker/nginx/proxy-staging.conf ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/docker/nginx/proxy-staging.conf"
+                            sh "scp -r -i \${SSH_KEY} -o StrictHostKeyChecking=no face-recog-ArcFace ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/"
                             
                             withCredentials([usernamePassword(credentialsId: "${GHCR_AUTH_ID}", usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
                                 sh """
