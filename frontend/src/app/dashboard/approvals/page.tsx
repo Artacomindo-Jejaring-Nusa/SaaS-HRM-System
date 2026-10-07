@@ -22,7 +22,6 @@ import {
   Wallet,
   CalendarCheck,
   ClipboardList,
-  UserCheck,
   AlertCircle,
   MapPin,
   Building2
@@ -677,7 +676,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
       m.name.toLowerCase().includes(q) || 
       m.role.toLowerCase().includes(q) ||
       m.status.toLowerCase().includes(q) ||
-      (m.dinas_luar_destination && m.dinas_luar_destination.toLowerCase().includes(q)) ||
+      Boolean(m.dinas_luar_destination?.toLowerCase().includes(q)) ||
       (m.is_dinas_luar && "dinas luar".includes(q)) ||
       (!m.is_dinas_luar && "di kantor".includes(q))
     );
@@ -698,6 +697,13 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
   useEffect(() => {
     setCurrentPage(1);
   }, [filter, searchQuery]);
+
+  const getDinasLuarStatusText = (status?: string | null) => {
+    if (status === 'approved_hr') return 'Disetujui HRD';
+    if (status === 'approved_spv') return 'Disetujui SPV';
+    if (status === 'rejected') return 'Ditolak';
+    return 'Menunggu Approval';
+  };
 
   const renderTeamAttendanceContent = () => {
     if (loadingTeam) {
@@ -762,11 +768,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
               </span>
               {member.dinas_luar_status && (
                 <span className="text-[10px] text-rose-600 font-semibold block mt-0.5">
-                  Persetujuan: {
-                    member.dinas_luar_status === 'approved_hr' ? 'Disetujui HRD' : 
-                    member.dinas_luar_status === 'approved_spv' ? 'Disetujui SPV' : 
-                    member.dinas_luar_status === 'rejected' ? 'Ditolak' : 'Menunggu Approval'
-                  }
+                  Persetujuan: {getDinasLuarStatusText(member.dinas_luar_status)}
                 </span>
               )}
             </div>

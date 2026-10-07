@@ -356,53 +356,59 @@ export default function AttendanceCorrectionsPage() {
               {/* Select Attendance */}
               <div className="space-y-1">
                 <label className="text-sm font-medium text-gray-700">Pilih Absen yang Ingin Dikoreksi</label>
-                {loadingAttendance ? (
-                  <div className="text-sm text-gray-400 p-2">Memuat riwayat absen...</div>
-                ) : attendanceList.length === 0 ? (
-                  <div className="text-xs text-amber-700 bg-amber-50 p-3 rounded-lg border border-amber-200">
-                    Tidak ada catatan absensi yang terlambat atau belum absen pulang.
-                  </div>
-                ) : (
-                  <select
-                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    value={formData.attendance_id}
-                    onChange={(e) => {
-                      const selectedId = e.target.value;
-                      const selectedAtt = attendanceList.find((a) => String(a.id) === selectedId);
-                      const isLate = (selectedAtt?.status || "").toLowerCase() === "late";
-                      const isMissingCheckout = !selectedAtt?.check_out || !selectedAtt?.check_out_time;
-                      
-                      let defaultCorrType = formData.correction_type;
-                      if (isMissingCheckout && !isLate) defaultCorrType = "missing_checkout";
-                      else if (isLate && !isMissingCheckout) defaultCorrType = "wrong_time";
+                {(() => {
+                  if (loadingAttendance) {
+                    return <div className="text-sm text-gray-400 p-2">Memuat riwayat absen...</div>;
+                  }
+                  if (attendanceList.length === 0) {
+                    return (
+                      <div className="text-xs text-amber-700 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                        Tidak ada catatan absensi yang terlambat atau belum absen pulang.
+                      </div>
+                    );
+                  }
+                  return (
+                    <select
+                      className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      value={formData.attendance_id}
+                      onChange={(e) => {
+                        const selectedId = e.target.value;
+                        const selectedAtt = attendanceList.find((a) => String(a.id) === selectedId);
+                        const isLate = (selectedAtt?.status || "").toLowerCase() === "late";
+                        const isMissingCheckout = !selectedAtt?.check_out || !selectedAtt?.check_out_time;
 
-                      setFormData({
-                        ...formData,
-                        attendance_id: selectedId,
-                        correction_type: defaultCorrType,
-                        corrected_check_in: selectedAtt?.check_in_time ? selectedAtt.check_in_time.substring(0, 5) : "",
-                        corrected_check_out: selectedAtt?.check_out_time ? selectedAtt.check_out_time.substring(0, 5) : "",
-                      });
-                    }}
-                    required
-                  >
-                    <option value="">-- Pilih tanggal absen --</option>
-                    {attendanceList.map((att) => {
-                      const isLate = (att.status || "").toLowerCase() === "late";
-                      const isMissingCheckout = !att.check_out || !att.check_out_time;
-                      let badge = "";
-                      if (isLate && isMissingCheckout) badge = " (⚠️ Terlambat & ❌ Belum Pulang)";
-                      else if (isLate) badge = " (⚠️ Terlambat)";
-                      else if (isMissingCheckout) badge = " (❌ Belum Pulang)";
+                        let defaultCorrType = formData.correction_type;
+                        if (isMissingCheckout && !isLate) defaultCorrType = "missing_checkout";
+                        else if (isLate && !isMissingCheckout) defaultCorrType = "wrong_time";
 
-                      return (
-                        <option key={att.id} value={att.id}>
-                          {att.date} | Masuk: {att.check_in_time || '--:--'} | Pulang: {att.check_out_time || 'BELUM'}{badge}
-                        </option>
-                      );
-                    })}
-                  </select>
-                )}
+                        setFormData({
+                          ...formData,
+                          attendance_id: selectedId,
+                          correction_type: defaultCorrType,
+                          corrected_check_in: selectedAtt?.check_in_time ? selectedAtt.check_in_time.substring(0, 5) : "",
+                          corrected_check_out: selectedAtt?.check_out_time ? selectedAtt.check_out_time.substring(0, 5) : "",
+                        });
+                      }}
+                      required
+                    >
+                      <option value="">-- Pilih tanggal absen --</option>
+                      {attendanceList.map((att) => {
+                        const isLate = (att.status || "").toLowerCase() === "late";
+                        const isMissingCheckout = !att.check_out || !att.check_out_time;
+                        let badge = "";
+                        if (isLate && isMissingCheckout) badge = " (⚠️ Terlambat & ❌ Belum Pulang)";
+                        else if (isLate) badge = " (⚠️ Terlambat)";
+                        else if (isMissingCheckout) badge = " (❌ Belum Pulang)";
+
+                        return (
+                          <option key={att.id} value={att.id}>
+                            {att.date} | Masuk: {att.check_in_time || '--:--'} | Pulang: {att.check_out_time || 'BELUM'}{badge}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  );
+                })()}
               </div>
 
               {/* Correction Type */}

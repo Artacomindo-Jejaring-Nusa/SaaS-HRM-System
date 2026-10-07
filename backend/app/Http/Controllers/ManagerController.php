@@ -507,49 +507,67 @@ class ManagerController extends Controller
     {
         $user = Auth::user();
         $today = Carbon::today()->toDateString();
-        $isGlobalAdmin = $user->role_id === 1;
-        $isCompanyAdmin = $this->isExecutiveOrAdmin($user) || $user->hasPermission('view-attendances');
-
-        $directSubordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
-
-        $subordinatesQuery = User::with(['role', 'attendances' => function ($q) use ($today) {
-            $q->whereDate('check_in', $today);
-        }]);
-
-        if ($directSubordinateIds->isNotEmpty()) {
-            $subordinatesQuery->whereIn('id', $directSubordinateIds);
-        } elseif ($isGlobalAdmin) {
-            $subordinatesQuery->where('id', '!=', $user->id)->take(50);
-        } elseif ($isCompanyAdmin) {
-            $subordinatesQuery->where('company_id', $user->company_id)->where('id', '!=', $user->id)->take(50);
-        } else {
-            $subordinatesQuery->where('supervisor_id', $user->id);
-        }
-
+        $subordinatesQuery = $this->buildTeamAttendanceQuery($user, $today);
         $subordinates = $subordinatesQuery->get();
 
-        $teamAttendance = $subordinates->map(function ($sub) {
-            $attendance = $sub->attendances->first();
-
-            return [
-                'id' => $sub->id,
-                'name' => $sub->name,
-                'role' => $sub->role?->name ?? 'Karyawan',
-                'photo_url' => $sub->profile_photo_url,
-                'status' => $attendance ? ($attendance->check_out ? 'Selesai' : 'Hadir') : 'Belum Masuk',
-                'check_in' => $attendance?->check_in ? Carbon::parse($attendance->check_in)->format('H:i') : null,
-                'check_out' => $attendance?->check_out ? Carbon::parse($attendance->check_out)->format('H:i') : null,
-                'attendance_type' => $attendance?->attendance_type ?? 'office',
-                'is_dinas_luar' => $attendance?->attendance_type === 'dinas_luar',
-                'dinas_luar_destination' => $attendance?->dinas_luar_destination,
-                'dinas_luar_status' => $attendance?->dinas_luar_status,
-                'location_label' => $attendance ? ($attendance->attendance_type === 'dinas_luar' ? 'Dinas Luar' : 'Di Kantor') : null,
-            ];
-        });
+        $teamAttendance = $subordinates->map(fn ($sub) => $this->formatTeamMemberAttendance($sub));
 
         return response()->json([
             'status' => 'success',
             'data' => $teamAttendance,
         ]);
+    }
+
+    private function buildTeamAttendanceQuery($user, string $today)
+    {
+        $isGlobalAdmin = $user->role_id === 1;
+        $isCompanyAdmin = $this->isExecutiveOrAdmin($user) || $user->hasPermission('view-attendances');
+        $directSubordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
+
+        $query = User::with(['role', 'attendances' => function ($q) use ($today) {
+            $q->whereDate('check_in', $today);
+        }]);
+
+        if ($directSubordinateIds->isNotEmpty()) {
+            return $query->whereIn('id', $directSubordinateIds);
+        }
+        if ($isGlobalAdmin) {
+            return $query->where('id', '!=', $user->id)->take(50);
+        }
+        if ($isCompanyAdmin) {
+            return $query->where('company_id', $user->company_id)->where('id', '!=', $user->id)->take(50);
+        }
+
+        return $query->where('supervisor_id', $user->id);
+    }
+
+    private function formatTeamMemberAttendance($sub): array
+    {
+        $attendance = $sub->attendances->first();
+
+        $status = 'Belum Masuk';
+        if ($attendance) {
+            $status = $attendance->check_out ? 'Selesai' : 'Hadir';
+        }
+
+        $locationLabel = null;
+        if ($attendance) {
+            $locationLabel = $attendance->attendance_type === 'dinas_luar' ? 'Dinas Luar' : 'Di Kantor';
+        }
+
+        return [
+            'id' => $sub->id,
+            'name' => $sub->name,
+            'role' => $sub->role?->name ?? 'Karyawan',
+            'photo_url' => $sub->profile_photo_url,
+            'status' => $status,
+            'check_in' => $attendance?->check_in ? Carbon::parse($attendance->check_in)->format('H:i') : null,
+            'check_out' => $attendance?->check_out ? Carbon::parse($attendance->check_out)->format('H:i') : null,
+            'attendance_type' => $attendance?->attendance_type ?? 'office',
+            'is_dinas_luar' => $attendance?->attendance_type === 'dinas_luar',
+            'dinas_luar_destination' => $attendance?->dinas_luar_destination,
+            'dinas_luar_status' => $attendance?->dinas_luar_status,
+            'location_label' => $locationLabel,
+        ];
     }
 }

@@ -26,21 +26,7 @@ def escape_dart_string(text):
         return ""
     return text.replace('\\', '\\\\').replace("'", "\\'").replace('$', '\\$').replace('\r', '').replace('\n', '\\n')
 
-def main():
-    print("=== Menarik Dataset Open-Source untuk Artacom Bot ===")
-    
-    # 1. Open Source Riddles & Games (BochilTeam GitHub)
-    tebak_data = fetch_json('https://raw.githubusercontent.com/BochilTeam/database/master/games/tebaktebakan.json')
-    caklontong_data = fetch_json('https://raw.githubusercontent.com/BochilTeam/database/master/games/caklontong.json')
-    asahotak_data = fetch_json('https://raw.githubusercontent.com/BochilTeam/database/master/games/asahotak.json')
-    
-    # 2. Open Source English Jokes
-    english_jokes = fetch_json('https://raw.githubusercontent.com/15Dkatz/official_joke_api/master/jokes/index.json')
-    
-    # 3. Open Source Quotable Quotes
-    quotes_data = fetch_json('https://raw.githubusercontent.com/JamesFT/Database-Quotes-JSON/master/quotes.json')
-
-    # Process Riddles for Mini-Game (Strictly Unique Questions)
+def process_riddles(tebak_data, caklontong_data, asahotak_data):
     massive_riddles = []
     seen_q = set()
 
@@ -50,7 +36,7 @@ def main():
         if q and a and q not in seen_q:
             seen_q.add(q)
             massive_riddles.append(f"  {{'q': '{escape_dart_string(q)}', 'a': '{escape_dart_string(a)}'}}")
-            
+
     for item in caklontong_data:
         q = item.get('soal', '').strip()
         a = item.get('jawaban', '').strip()
@@ -59,7 +45,7 @@ def main():
             seen_q.add(q)
             ans = f"{a}\\n\\nAlasan: {d}" if d else a
             massive_riddles.append(f"  {{'q': '{escape_dart_string(q)}', 'a': '{escape_dart_string(ans)}'}}")
-            
+
     for item in asahotak_data:
         q = item.get('soal', '').strip()
         a = item.get('jawaban', '').strip()
@@ -67,9 +53,9 @@ def main():
             seen_q.add(q)
             massive_riddles.append(f"  {{'q': '{escape_dart_string(q)}', 'a': '{escape_dart_string(a)}'}}")
 
-    print(f"Total Unique Riddles: {len(massive_riddles)}")
+    return massive_riddles
 
-    # Process Quotes (Unique)
+def process_quotes(quotes_data):
     quotes_list = []
     seen_quotes = set()
     for q in quotes_data:
@@ -80,8 +66,9 @@ def main():
             quotes_list.append(f"'💪 Motivational Quote:\\n\\n\"{escape_dart_string(content)}\"\\n— {escape_dart_string(author)}',")
             if len(quotes_list) >= 100:
                 break
+    return quotes_list
 
-    # Tech Jokes (Unique)
+def process_tech_jokes(english_jokes):
     tech_jokes = []
     seen_jokes = set()
     for item in english_jokes:
@@ -105,8 +92,9 @@ def main():
         if s not in seen_jokes:
             seen_jokes.add(s)
             tech_jokes.append(f"'💻 Jokes IT & Coding:\\n\\n{escape_dart_string(s)}\\n\\n... {escape_dart_string(p)}',")
+    return tech_jokes
 
-    # Office Jokes (Unique)
+def get_office_and_garing_jokes():
     office_jokes_data = [
         ("Kenapa HRD selalu bawa penggaris?", "Biar bisa ngukur tingkat kesabaran karyawan pas akhir bulan!"),
         ("Apa bedanya bos sama kalender?", "Kalau kalender ada tanggal merahnya banyak, kalau bos nggak kenal tanggal merah!"),
@@ -121,7 +109,6 @@ def main():
     ]
     office_jokes = [f"'💼 Jokes Kantor & HR:\\n\\n{escape_dart_string(s)}\\n\\n... {escape_dart_string(p)}'," for s, p in office_jokes_data]
 
-    # Garing Jokes (Unique)
     garing_jokes_data = [
         ("Burung apa yang suka nolak?", "Burung kutilang... kutilang tidak tidak!"),
         ("Kucing apa yang paling kuno?", "Kucing... peninggalan zaman purba!"),
@@ -135,8 +122,9 @@ def main():
         ("Bebek apa yang jalannya selalu muter ke kiri?", "Bebek yang dikunci stang!"),
     ]
     garing_jokes = [f"'🤣 Jokes Garing & Receh:\\n\\n{escape_dart_string(s)}\\n\\n... {escape_dart_string(p)}'," for s, p in garing_jokes_data]
+    return office_jokes, garing_jokes
 
-    # Kopi Manis & Creamy
+def get_kopi_data():
     kopi_manis_raw = [
         ("Iced Caramel Macchiato", "kombinasi espresso bold dilapisi susu creamy dan drizzle sirup caramel manis lembut."),
         ("Vanilla Sweet Cream Latte", "espresso dipadu vanilla bourbon dan sweet cream dingin yang lumer di lidah."),
@@ -156,7 +144,6 @@ def main():
         for k, d in kopi_manis_raw
     ]
 
-    # Kopi Strong
     kopi_strong_raw = [
         ("Iced Americano Double Shot", "tanpa gula, murni espresso dan air dingin untuk sensasi melek instan."),
         ("Long Black Robusta Blend", "rasa pahit pekat dengan aroma smoky tebal yang langsung membakar rasa kantuk."),
@@ -172,7 +159,6 @@ def main():
         for k, d in kopi_strong_raw
     ]
 
-    # Kopi Manual Brew
     kopi_manual_raw = [
         ("V60 Aceh Gayo Wine Process", "notes fruity anggur, fermented sweetness, dan aftertaste segar bunga."),
         ("Japanese Iced Drip Flores Bajawa", "aroma nutty, chocolate, dan hint floral segar diseduh langsung ke es batu."),
@@ -186,7 +172,6 @@ def main():
         for k, d in kopi_manual_raw
     ]
 
-    # Kopi Non-Coffee
     kopi_noncoffee_raw = [
         ("Ceremonial Uji Matcha Latte", "green tea otentik dari Jepang dengan rasa umami creamy dan antioksidan tinggi."),
         ("Roasted Hojicha Oat Milk", "teh hijau panggang aromatik berpadu kelembutan oat milk bebas laktosa."),
@@ -201,8 +186,9 @@ def main():
     ]
 
     rekomendasi_ngopi = kopi_manis + kopi_strong + kopi_manual + kopi_noncoffee
+    return rekomendasi_ngopi, kopi_manis, kopi_strong, kopi_manual, kopi_noncoffee
 
-    # Makanan Kenyang
+def get_makan_data():
     makan_kenyang_raw = [
         ("Nasi Padang Rendang + Gulai Tunjang", "lengkap dengan daun singkong, sambal ijo, dan siraman kuah gulai gurih mantap."),
         ("Nasi Bebek Madura Bumbu Hitam Pedas", "daging bebek empuk bertabur rempah bumbu hitam pekat gurih berani."),
@@ -218,7 +204,6 @@ def main():
         for m, d in makan_kenyang_raw
     ]
 
-    # Makan Sehat
     makan_sehat_raw = [
         ("Grilled Chicken Caesar Wrap", "daging dada ayam panggang, romaine lettuce segar, telur, dan saus caesar rendah lemak."),
         ("Poke Bowl Salmon Edamame", "nasi merah dengan potongan salmon segar, edamame, jagung manis, dan saus shoyu wijen."),
@@ -232,7 +217,6 @@ def main():
         for m, d in makan_sehat_raw
     ]
 
-    # Makan Hemat
     makan_hemat_raw = [
         ("Warteg Paket Cermat (Nasi + Telur Balado + Orek Tempe + Sayur)", "menu andalan pejuang kantor yang murah, kenyang, dan tetap bergizi."),
         ("Nasi Telur Dadar Krispi Pontianak", "telur krispi bertabur kecap asin spesial dan daun bawang wangi di atas nasi hangat."),
@@ -246,8 +230,9 @@ def main():
     ]
 
     rekomendasi_makan = makan_kenyang + makan_sehat + makan_hemat
+    return rekomendasi_makan, makan_kenyang, makan_sehat, makan_hemat
 
-    # Cemilan Asin
+def get_cemilan_data():
     cemilan_asin_raw = [
         ("Tahu Bakso Ungaran Goreng Renyah", "tahu goreng empuk berisi adonan bakso gurih dicocol cabe rawit hijau."),
         ("Dimsum Ayam Mentai Mozzarella", "siomay ayam lembut disiram saus mentai creamy dan torch keju lumer."),
@@ -262,7 +247,6 @@ def main():
         for c, d in cemilan_asin_raw
     ]
 
-    # Cemilan Manis
     cemilan_manis_raw = [
         ("Martabak Manis Tipker Keju Cokelat", "martabak tipis kering renyah dengan lelehan butter, coklat, dan taburan keju cheddar."),
         ("Pisang Goreng Madu Wijen", "pisang matang manis dibalut karamel madu legit dan taburan wijen renyah."),
@@ -277,7 +261,6 @@ def main():
         for c, d in cemilan_manis_raw
     ]
 
-    # Cemilan Sehat
     cemilan_sehat_raw = [
         ("Edamame Rebus Garam Laut", "kacang kedelai muda tinggi protein dan serat yang gurih dan asik dikupas."),
         ("Potongan Semangka Dingin Segar", "buah semangka merah manis berair dingin yang langsung menghidrasi tubuh."),
@@ -292,8 +275,9 @@ def main():
     ]
 
     cemilan_sore = cemilan_asin + cemilan_manis + cemilan_sehat
+    return cemilan_sore, cemilan_asin, cemilan_manis, cemilan_sehat
 
-    # Playlists
+def get_wellness_data():
     playlist_raw = [
         ("🎧 Lo-Fi Beats to Work & Chill", "Ketukan santai lofi hip-hop tanpa vokal yang bikin fokus ngetik tanpa distraksi.", "Spotify / YouTube: Lofi Girl - beats to relax/study to"),
         ("☕ Acoustic Coffee Shop Vibes", "Petikan gitar akustik manis dan suara indie santai yang bikin suasana kantor adem.", "Spotify: Acoustic Chill Indonesia"),
@@ -307,7 +291,6 @@ def main():
         for p, d, l in playlist_raw
     ]
 
-    # Karaoke
     karaoke_raw = [
         ("🎤 Nostalgia Pop Indonesia 2000-an", "Sheila On 7 (Dan, Sephia), Peterpan (Ada Apa Denganmu), Dewa 19 (Kangen, Separuh Nafas).", "Lagu wajib karaoke sejuta umat!"),
         ("💔 Lagu Galau Nasional Pemecah Suara", "Mahalini (Sial), Rossa (Hati yang Terpilih), Raisa (Serba Salah), Lyodra (Pesan Terakhir).", "Keluarkan uneg-uneg dengan vokal penuh emosi!"),
@@ -319,7 +302,6 @@ def main():
         for k, s, t in karaoke_raw
     ]
 
-    # Relaksasi & Mind
     relaksasi_raw = [
         ("🧘 Teknik Pernapasan 4-7-8", "Tarik napas lewat hidung selama 4 detik, tahan napas 7 detik, lalu hembuskan perlahan lewat mulut 8 detik. Ulangi 4 kali untuk meredakan ketegangan sistem saraf."),
         ("👁️ Aturan 20-20-20 untuk Mata", "Setiap 20 menit menatap layar monitor, alihkan pandanganmu melihat benda berjarak 20 kaki (6 meter) selama 20 detik untuk mencegah ketegangan mata."),
@@ -331,7 +313,6 @@ def main():
         for r, d in relaksasi_raw
     ]
 
-    # Stretching
     stretching_raw = [
         ("🙆 Peregangan Leher & Tengkuk", "Miringkan kepala ke kanan, tahan 10 detik. Ganti ke kiri 10 detik. Tundukkan ke bawah perlahan. Mengurangi pegal akibat menunduk ke layar."),
         ("💪 Shoulder Rolls & Chest Opener", "Putar bahu ke belakang 10 kali, lalu kunci kedua tangan di belakang punggung dan tarik ke atas untuk membuka dada yang bungkuk."),
@@ -344,7 +325,6 @@ def main():
         for s, d in stretching_raw
     ]
 
-    # Dare Tantangan
     dare_raw = [
         "Kirim pesan pujian singkat atau terima kasih ke 1 rekan kerja di divisi berbeda atas bantuannya minggu ini!",
         "Isi botol minum rekan sebelahmu yang airnya sudah mau habis tanpa disuruh!",
@@ -358,7 +338,6 @@ def main():
         for d in dare_raw
     ]
 
-    # Ramalan Zodiak
     zodiak_data = [
         ("Aries", "Fokusmu lagi tajam, cocok untuk eksekusi proyek tertunda.", "Ada rezeki tak terduga menanti akhir pekan ini."),
         ("Taurus", "Komunikasi tim berjalan mulus, ide-idemu didengar atasan.", "Kondisi dompet aman terkendali, hindari belanja impulsif."),
@@ -378,7 +357,6 @@ def main():
         for z, r, k in zodiak_data
     ]
 
-    # Tantangan Harian
     tantangan_data = [
         ("Minum 2 gelas air putih sekarang juga!", "Yuk minum air putih biar otak tetap terhidrasi."),
         ("Berdiri dan regangkan punggungmu selama 30 detik.", "Luruskan postur tubuh dari duduk kelamaan."),
@@ -392,7 +370,6 @@ def main():
         for t, c in tantangan_data
     ]
 
-    # Ice Breaker
     ice_breaker_data = [
         "Kalau kamu bisa punya super-power buat ngerjain tugas kantor, kamu pilih apa? (Teleportasi, Mempercepat Waktu, atau Kopi Otomatis?)",
         "Tim makan bubur diaduk atau gak diaduk? (Jawabanmu menentukan takdirmu di pantry)",
@@ -406,7 +383,33 @@ def main():
         for i in ice_breaker_data
     ]
 
-    # Lokasi target output file
+    return hiburan_playlist, hiburan_karaoke, hiburan_relaksasi, hiburan_stretching, hiburan_dare, ramalan_harian, tantangan_harian, ice_breakers
+
+def main():
+    print("=== Menarik Dataset Open-Source untuk Artacom Bot ===")
+    
+    # 1. Fetch external datasets
+    tebak_data = fetch_json('https://raw.githubusercontent.com/BochilTeam/database/master/games/tebaktebakan.json')
+    caklontong_data = fetch_json('https://raw.githubusercontent.com/BochilTeam/database/master/games/caklontong.json')
+    asahotak_data = fetch_json('https://raw.githubusercontent.com/BochilTeam/database/master/games/asahotak.json')
+    english_jokes = fetch_json('https://raw.githubusercontent.com/15Dkatz/official_joke_api/master/jokes/index.json')
+    quotes_data = fetch_json('https://raw.githubusercontent.com/JamesFT/Database-Quotes-JSON/master/quotes.json')
+
+    # 2. Process data using helpers
+    massive_riddles = process_riddles(tebak_data, caklontong_data, asahotak_data)
+    print(f"Total Unique Riddles: {len(massive_riddles)}")
+
+    quotes_list = process_quotes(quotes_data)
+    tech_jokes = process_tech_jokes(english_jokes)
+    office_jokes, garing_jokes = get_office_and_garing_jokes()
+    
+    rekomendasi_ngopi, kopi_manis, kopi_strong, kopi_manual, kopi_noncoffee = get_kopi_data()
+    rekomendasi_makan, makan_kenyang, makan_sehat, makan_hemat = get_makan_data()
+    cemilan_sore, cemilan_asin, cemilan_manis, cemilan_sehat = get_cemilan_data()
+    
+    hiburan_playlist, hiburan_karaoke, hiburan_relaksasi, hiburan_stretching, hiburan_dare, ramalan_harian, tantangan_harian, ice_breakers = get_wellness_data()
+
+    # 3. Output file generation
     target_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(target_dir, 'artacom_bot_massive_data.dart')
 
@@ -519,3 +522,4 @@ void injectMassiveData() {{
 
 if __name__ == '__main__':
     main()
+

@@ -22,88 +22,89 @@ class EmployeeImport implements ToModel, WithHeadingRow
 
     public function model(array $row)
     {
-        // Debugging keys if needed: Log::info(array_keys($row));
-
-        // Cari key yang mengandung 'nama', 'email', dll karena HeadingRow slugifier
-        // akan mengubah "nama (WAJIB)" menjadi "nama_wajib"
         $nama = $this->getValue($row, 'nama');
         $email = $this->getValue($row, 'email');
 
-        if (empty($nama) || empty($email)) {
-            return null; // Skip invalid row or instruction row
-        }
-
-        // Skip rows that look like instructions
-        if (str_contains($nama, '>>>') || str_contains($nama, 'Panduan') || str_contains($nama, 'Angka')) {
+        if ($this->isInstructionOrInvalidRow($nama, $email)) {
             return null;
         }
 
         $roleId = $this->getValue($row, 'role_id') ?: 3;
         $password = $this->getValue($row, 'password');
-
         $joinDate = $this->parseDate($this->getValue($row, 'tanggal_gabung'), now()->format('Y-m-d'));
         $dob = $this->parseDate($this->getValue($row, 'tanggal_lahir'));
 
         $existingUser = User::where('email', trim($email))->first();
         if ($existingUser) {
-            $updateData = [
-                'name' => trim($nama),
-                'role_id' => $roleId,
-                'join_date' => $joinDate ?: $existingUser->join_date,
-                'employment_status' => $this->getValue($row, 'status_karyawan') ?: ($existingUser->employment_status ?: 'Permanent'),
-                'work_location' => $this->getValue($row, 'lokasi_kerja') ?: ($existingUser->work_location ?: 'Kantor Pusat'),
-            ];
-
-            if ($nik = $this->getValue($row, 'nik')) {
-                $updateData['nik'] = (string) $nik;
-            }
-            if ($phone = $this->getValue($row, 'nomor_telepon')) {
-                $updateData['phone'] = (string) $phone;
-            }
-            if ($address = $this->getValue($row, 'alamat')) {
-                $updateData['address'] = (string) $address;
-            }
-            if ($ktp = $this->getValue($row, 'nomor_ktp')) {
-                $updateData['ktp_no'] = (string) $ktp;
-            }
-            if ($pob = $this->getValue($row, 'tempat_lahir')) {
-                $updateData['place_of_birth'] = (string) $pob;
-            }
-            if ($dob) {
-                $updateData['date_of_birth'] = $dob;
-            }
-            if ($gender = $this->getValue($row, 'jenis_kelamin')) {
-                $updateData['gender'] = (string) $gender;
-            }
-            if ($religion = $this->getValue($row, 'agama')) {
-                $updateData['religion'] = (string) $religion;
-            }
-            if ($marital = $this->getValue($row, 'status_nikah')) {
-                $updateData['marital_status'] = (string) $marital;
-            }
-            if ($blood = $this->getValue($row, 'gol_darah')) {
-                $updateData['blood_type'] = (string) $blood;
-            }
-            if ($supervisorId = $this->getValue($row, 'id_atasan')) {
-                $updateData['supervisor_id'] = is_numeric($supervisorId) ? (int) $supervisorId : null;
-            }
-            if ($ecName = $this->getValue($row, 'nama_kontak_darurat')) {
-                $updateData['emergency_contact_name'] = (string) $ecName;
-            }
-            if ($ecPhone = $this->getValue($row, 'nomor_kontak_darurat')) {
-                $updateData['emergency_contact_phone'] = (string) $ecPhone;
-            }
-            if (! empty($password) && ! in_array($password, ['***', 'tempPassword123!'])) {
-                $updateData['password'] = Hash::make($password);
-            }
-
+            $updateData = $this->buildUpdateData($row, $existingUser, $nama, $roleId, $joinDate, $dob, $password);
             $existingUser->update($updateData);
             $this->importedCount++;
-
             return null;
         }
 
         $this->importedCount++;
+        return $this->buildNewUser($row, $nama, $email, $roleId, $joinDate, $dob, $password);
+    }
+
+    private function isInstructionOrInvalidRow(?string $nama, ?string $email): bool
+    {
+        if (empty($nama) || empty($email)) {
+            return true;
+        }
+
+        return str_contains($nama, '>>>') || str_contains($nama, 'Panduan') || str_contains($nama, 'Angka');
+    }
+
+    private function buildUpdateData(array $row, User $existingUser, string $nama, $roleId, $joinDate, $dob, $password): array
+    {
+        $updateData = [
+            'name' => trim($nama),
+            'role_id' => $roleId,
+            'join_date' => $joinDate ?: $existingUser->join_date,
+            'employment_status' => $this->getValue($row, 'status_karyawan') ?: ($existingUser->employment_status ?: 'Permanent'),
+            'work_location' => $this->getValue($row, 'lokasi_kerja') ?: ($existingUser->work_location ?: 'Kantor Pusat'),
+        ];
+
+        $stringFields = [
+            'nik' => 'nik',
+            'phone' => 'nomor_telepon',
+            'address' => 'alamat',
+            'ktp_no' => 'nomor_ktp',
+            'place_of_birth' => 'tempat_lahir',
+            'gender' => 'jenis_kelamin',
+            'religion' => 'agama',
+            'marital_status' => 'status_nikah',
+            'blood_type' => 'gol_darah',
+            'emergency_contact_name' => 'nama_kontak_darurat',
+            'emergency_contact_phone' => 'nomor_kontak_darurat',
+        ];
+
+        foreach ($stringFields as $field => $key) {
+            $val = $this->getValue($row, $key);
+            if ($val !== null && $val !== '') {
+                $updateData[$field] = (string) $val;
+            }
+        }
+
+        if ($dob) {
+            $updateData['date_of_birth'] = $dob;
+        }
+
+        $supervisorId = $this->getValue($row, 'id_atasan');
+        if ($supervisorId !== null) {
+            $updateData['supervisor_id'] = is_numeric($supervisorId) ? (int) $supervisorId : null;
+        }
+
+        if (!empty($password) && !in_array($password, ['***', 'tempPassword123!'], true)) {
+            $updateData['password'] = Hash::make($password);
+        }
+
+        return $updateData;
+    }
+
+    private function buildNewUser(array $row, string $nama, string $email, $roleId, $joinDate, $dob, $password): User
+    {
+        $supervisorId = $this->getValue($row, 'id_atasan');
 
         return new User([
             'company_id' => $this->companyId,
@@ -124,7 +125,7 @@ class EmployeeImport implements ToModel, WithHeadingRow
             'blood_type' => $this->getValue($row, 'gol_darah'),
             'employment_status' => $this->getValue($row, 'status_karyawan') ?: 'Permanent',
             'work_location' => $this->getValue($row, 'lokasi_kerja') ?: 'Kantor Pusat',
-            'supervisor_id' => is_numeric($this->getValue($row, 'id_atasan')) ? (int) $this->getValue($row, 'id_atasan') : null,
+            'supervisor_id' => is_numeric($supervisorId) ? (int) $supervisorId : null,
             'emergency_contact_name' => $this->getValue($row, 'nama_kontak_darurat'),
             'emergency_contact_phone' => $this->getValue($row, 'nomor_kontak_darurat'),
         ]);

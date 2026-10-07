@@ -628,7 +628,6 @@ class ApprovalWorkflowController extends Controller
             $submitter,
             $model->current_approval_step ?? ($model->status === 'pending' ? 1 : null),
             $model->status,
-            $model->approved_by ?? null,
             $model->rejection_reason ?? $model->remark ?? null
         );
 

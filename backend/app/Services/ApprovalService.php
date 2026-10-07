@@ -295,6 +295,8 @@ class ApprovalService
         return self::canUserApproveStep($step, $approver, $submitter, $companyId, $moduleKey);
     }
 
+    public const ROLE_SUPER_ADMIN = 'Super Admin';
+
     /**
      * Get the list of users who can approve a specific workflow step.
      */
@@ -303,10 +305,10 @@ class ApprovalService
         switch ($step->approver_type) {
             case 'super_admin':
                 // All Super Admins
-                return User::where(function ($q) use ($companyId) {
+                return User::where(function ($q) {
                         $q->where('role_id', 1)
                             ->orWhereHas('role', function ($r) {
-                                $r->where('name', 'Super Admin');
+                                $r->where('name', self::ROLE_SUPER_ADMIN);
                             });
                     })
                     ->where(function ($q) use ($companyId) {
@@ -364,7 +366,7 @@ class ApprovalService
     {
         switch ($step->approver_type) {
             case 'super_admin':
-                return 'Approved by - Disetujui (Super Admin)';
+                return 'Approved by - Disetujui (' . self::ROLE_SUPER_ADMIN . ')';
             case 'supervisor':
                 return 'Checked by - Diperiksa (Atasan Langsung)';
             case 'role':
@@ -394,43 +396,12 @@ class ApprovalService
         User $submitter,
         ?int $currentStep,
         string $status,
-        ?int $approvedById = null,
         ?string $remark = null
     ): array {
         $workflow = self::getWorkflow($moduleKey, $companyId, $submitter);
 
         if (! $workflow || $workflow->steps->isEmpty()) {
-            $approverName = 'Atasan Langsung / HRD';
-            if ($submitter->supervisor_id) {
-                $spv = User::find($submitter->supervisor_id);
-                if ($spv) $approverName = $spv->name . ' (Atasan Langsung)';
-            }
-            $stepStatus = match ($status) {
-                'approved' => 'approved',
-                'rejected' => 'rejected',
-                default => 'pending',
-            };
-
-            return [
-                'has_workflow' => false,
-                'workflow_name' => 'Alur Persetujuan Standar',
-                'current_step' => 1,
-                'total_steps' => 1,
-                'status' => $status,
-                'current_step_label' => 'Tahap 1: ' . $approverName,
-                'steps' => [
-                    [
-                        'step_number' => 1,
-                        'name' => 'Persetujuan Atasan / HRD',
-                        'label' => 'Otorisasi ' . $approverName,
-                        'approver_type' => 'supervisor',
-                        'approver_candidates' => [$approverName],
-                        'status' => $stepStatus,
-                        'is_current' => $stepStatus === 'pending',
-                        'remark' => $remark,
-                    ]
-                ],
-            ];
+            return self::buildDefaultTimeline($submitter, $status, $remark);
         }
 
         $allSteps = $workflow->steps()->orderBy('step_number')->get();
@@ -438,49 +409,9 @@ class ApprovalService
         $activeStepNumber = $currentStep ?? 1;
 
         $timelineSteps = [];
-
         foreach ($allSteps as $st) {
-            $approverCandidates = [];
-            $approverUsers = self::getApproversForStep($st, $submitter, $companyId);
-            foreach ($approverUsers as $u) {
-                $approverCandidates[] = $u->name . ($u->role ? ' (' . $u->role->name . ')' : '');
-            }
-            if (empty($approverCandidates)) {
-                if ($st->approver_type === 'super_admin') {
-                    $approverCandidates[] = 'Super Admin';
-                } elseif ($st->approver_type === 'supervisor') {
-                    $approverCandidates[] = 'Atasan Langsung';
-                } elseif ($st->role) {
-                    $approverCandidates[] = $st->role->name;
-                }
-            }
-
-            // Determine status of this step
-            $stepStatus = 'waiting';
-            $isCurrent = false;
-
-            if ($status === 'approved') {
-                $stepStatus = 'approved';
-            } elseif ($status === 'rejected') {
-                if ($st->step_number < $activeStepNumber) {
-                    $stepStatus = 'approved';
-                } elseif ($st->step_number === $activeStepNumber) {
-                    $stepStatus = 'rejected';
-                    $isCurrent = true;
-                } else {
-                    $stepStatus = 'cancelled';
-                }
-            } else {
-                // Pending status
-                if ($st->step_number < $activeStepNumber) {
-                    $stepStatus = 'approved';
-                } elseif ($st->step_number === $activeStepNumber) {
-                    $stepStatus = 'pending';
-                    $isCurrent = true;
-                } else {
-                    $stepStatus = 'waiting';
-                }
-            }
+            $approverCandidates = self::resolveApproverCandidates($st, $submitter, $companyId);
+            [$stepStatus, $isCurrent] = self::calculateStepStatus($status, $st->step_number, $activeStepNumber);
 
             $timelineSteps[] = [
                 'step_number' => $st->step_number,
@@ -505,9 +436,107 @@ class ApprovalService
             'current_step' => $activeStepNumber,
             'total_steps' => $totalSteps,
             'status' => $status,
-            'current_step_label' => $status === 'approved' ? 'Disetujui Sepenuhnya' : ($status === 'rejected' ? 'Ditolak pada ' . $currentLabel : "Tahap {$activeStepNumber} dari {$totalSteps}: {$currentLabel}"),
+            'current_step_label' => self::formatCurrentStepLabel($status, $currentLabel, $activeStepNumber, $totalSteps),
             'steps' => $timelineSteps,
         ];
+    }
+
+    private static function buildDefaultTimeline(User $submitter, string $status, ?string $remark): array
+    {
+        $approverName = 'Atasan Langsung / HRD';
+        if ($submitter->supervisor_id) {
+            $spv = User::find($submitter->supervisor_id);
+            if ($spv) {
+                $approverName = $spv->name . ' (Atasan Langsung)';
+            }
+        }
+
+        $stepStatus = match ($status) {
+            'approved' => 'approved',
+            'rejected' => 'rejected',
+            default => 'pending',
+        };
+
+        return [
+            'has_workflow' => false,
+            'workflow_name' => 'Alur Persetujuan Standar',
+            'current_step' => 1,
+            'total_steps' => 1,
+            'status' => $status,
+            'current_step_label' => 'Tahap 1: ' . $approverName,
+            'steps' => [
+                [
+                    'step_number' => 1,
+                    'name' => 'Persetujuan Atasan / HRD',
+                    'label' => 'Otorisasi ' . $approverName,
+                    'approver_type' => 'supervisor',
+                    'approver_candidates' => [$approverName],
+                    'status' => $stepStatus,
+                    'is_current' => $stepStatus === 'pending',
+                    'remark' => $remark,
+                ]
+            ],
+        ];
+    }
+
+    private static function resolveApproverCandidates(WorkflowStep $st, User $submitter, int $companyId): array
+    {
+        $approverCandidates = [];
+        $approverUsers = self::getApproversForStep($st, $submitter, $companyId);
+        foreach ($approverUsers as $u) {
+            $approverCandidates[] = $u->name . ($u->role ? ' (' . $u->role->name . ')' : '');
+        }
+
+        if (empty($approverCandidates)) {
+            if ($st->approver_type === 'super_admin') {
+                $approverCandidates[] = self::ROLE_SUPER_ADMIN;
+            } elseif ($st->approver_type === 'supervisor') {
+                $approverCandidates[] = 'Atasan Langsung';
+            } elseif ($st->role) {
+                $approverCandidates[] = $st->role->name;
+            }
+        }
+
+        return $approverCandidates;
+    }
+
+    private static function calculateStepStatus(string $status, int $stepNumber, int $activeStepNumber): array
+    {
+        if ($status === 'approved') {
+            return ['approved', false];
+        }
+
+        if ($status === 'rejected') {
+            if ($stepNumber < $activeStepNumber) {
+                return ['approved', false];
+            }
+            if ($stepNumber === $activeStepNumber) {
+                return ['rejected', true];
+            }
+            return ['cancelled', false];
+        }
+
+        // Pending status
+        if ($stepNumber < $activeStepNumber) {
+            return ['approved', false];
+        }
+        if ($stepNumber === $activeStepNumber) {
+            return ['pending', true];
+        }
+
+        return ['waiting', false];
+    }
+
+    private static function formatCurrentStepLabel(string $status, string $currentLabel, int $activeStepNumber, int $totalSteps): string
+    {
+        if ($status === 'approved') {
+            return 'Disetujui Sepenuhnya';
+        }
+        if ($status === 'rejected') {
+            return 'Ditolak pada ' . $currentLabel;
+        }
+
+        return "Tahap {$activeStepNumber} dari {$totalSteps}: {$currentLabel}";
     }
 
     /**

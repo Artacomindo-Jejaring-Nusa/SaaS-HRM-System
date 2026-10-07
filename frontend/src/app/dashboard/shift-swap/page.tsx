@@ -576,11 +576,15 @@ export default function ShiftSwapPage() {
                           disabled={!formData.receiver_id}
                        >
                           <option value="">
-                            {!formData.receiver_id
-                              ? "Pilih rekan dulu..."
-                              : receiverSchedules.length === 0
-                              ? "Rekan ini belum memiliki jadwal shift"
-                              : "Pilih Jadwal Rekan..."}
+                            {(() => {
+                              if (!formData.receiver_id) {
+                                return "Pilih rekan dulu...";
+                              }
+                              if (receiverSchedules.length === 0) {
+                                return "Rekan ini belum memiliki jadwal shift";
+                              }
+                              return "Pilih Jadwal Rekan...";
+                            })()}
                           </option>
                           {receiverSchedules.map(s => {
                             const shiftName = s.shift?.name || "Shift";

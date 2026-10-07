@@ -1196,11 +1196,11 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                   disabled={isSubmittingProfile || (!isSuperAdmin && !photoFile)}
                   className="flex-1 h-11 bg-[#8B0000] text-white rounded-xl text-sm font-bold hover:bg-[#660000] transition-all shadow-lg shadow-red-900/20 disabled:opacity-50"
                 >
-                  {isSubmittingProfile
-                    ? "Menyimpan..."
-                    : isSuperAdmin
-                    ? "Simpan Perubahan"
-                    : "Simpan Foto"}
+                  {(() => {
+                    if (isSubmittingProfile) return "Menyimpan...";
+                    if (isSuperAdmin) return "Simpan Perubahan";
+                    return "Simpan Foto";
+                  })()}
                 </button>
               </div>
             </form>
