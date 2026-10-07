@@ -10,6 +10,7 @@ library;
 import 'dart:math';
 import 'bot_response.dart';
 import 'artacom_bot_tree.dart';
+import 'artacom_bot_massive_data.dart';
 
 // ═══════════════════════════════════════════════════════════
 // CONVERSATION NODE MODEL
@@ -55,11 +56,50 @@ class ChipOption {
 // ENGINE
 // ═══════════════════════════════════════════════════════════
 
+bool _isMassiveDataInjected = false;
+
 class ArtacomBotEngine {
+  ArtacomBotEngine() {
+    if (!_isMassiveDataInjected) {
+      injectMassiveData();
+      _isMassiveDataInjected = true;
+    }
+  }
+
   final Random _rng = Random();
+  String? _activeRiddleAnswer;
 
   /// Resolve a node ID to a BotResponse.
   BotResponse resolveNode(String nodeId, {Map<String, dynamic>? userData}) {
+    // MINI-GAME INTERCEPTOR
+    if (nodeId == 'joke_riddle') {
+      if (massiveRiddles.isNotEmpty) {
+        final riddle = massiveRiddles[_rng.nextInt(massiveRiddles.length)];
+        _activeRiddleAnswer = riddle['a'];
+        return BotResponse(
+          mood: 'curious',
+          message: riddle['q'] ?? 'Coba tebak!',
+          intentName: 'joke_riddle',
+          actionButtons: [
+            BotAction(label: '🤔 Lihat Jawaban', actionCode: 'joke_riddle_answer'),
+            BotAction(label: '🏠 Kembali', actionCode: 'root')
+          ],
+        );
+      }
+    } else if (nodeId == 'joke_riddle_answer') {
+      final ans = _activeRiddleAnswer ?? 'Maaf, aku lupa pertanyaannya! 😅';
+      _activeRiddleAnswer = null;
+      return BotResponse(
+        mood: 'happy',
+        message: 'Jawabannya adalah:\n\n$ans',
+        intentName: 'joke_riddle_answer',
+        actionButtons: [
+          BotAction(label: '🔄 Main Lagi', actionCode: 'joke_riddle'),
+          BotAction(label: '🏠 Kembali', actionCode: 'root')
+        ],
+      );
+    }
+
     final node = _findNode(nodeId);
     if (node == null) return _fallbackResponse();
 

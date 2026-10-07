@@ -3752,4 +3752,102 @@ final Map<String, ConversationNode> conversationTree = {
       ChipOption(emoji: '🏠', label: 'Menu Utama', targetNodeId: 'root'),
     ],
   ),
+
+  // ┌─────────────────────────────────────────────┐
+  // │  FUN & GAMES MENU                           │
+  // └─────────────────────────────────────────────┘
+  'menu_fun': ConversationNode(
+    id: 'menu_fun',
+    mood: 'happy',
+    messages: [
+      'Waktunya bersenang-senang! 🎉 Pilih hiburan yang kamu mau.',
+      'Bosan kerja? Yuk main sebentar! 🎮',
+      'Otak butuh istirahat! Mau pilih hiburan apa nih? 🎪',
+    ],
+    chips: [
+      ChipOption(emoji: '🤓', label: 'Tebak-tebakan', targetNodeId: 'joke_riddle'),
+      ChipOption(emoji: '😂', label: 'Jokes / Plesetan', targetNodeId: 'joke_tech'),
+      ChipOption(emoji: '🔥', label: 'Tantangan Harian', targetNodeId: 'tantangan_harian'),
+      ChipOption(emoji: '🧊', label: 'Ice Breaker Seru', targetNodeId: 'ice_breaker'),
+      ChipOption(emoji: '🏠', label: 'Menu Utama', targetNodeId: 'root'),
+    ],
+  ),
+
+  'menu_food_coffee': ConversationNode(
+    id: 'menu_food_coffee',
+    mood: 'happy',
+    messages: [
+      'Laper atau ngantuk? Aku punya rekomendasinya! 🍔☕',
+    ],
+    chips: [
+      ChipOption(emoji: '☕', label: 'Rekomendasi Ngopi', targetNodeId: 'rekomendasi_ngopi'),
+      ChipOption(emoji: '🍽️', label: 'Makan Siang', targetNodeId: 'rekomendasi_makan'),
+      ChipOption(emoji: '🍩', label: 'Cemilan Sore', targetNodeId: 'cemilan_sore'),
+      ChipOption(emoji: '🏠', label: 'Menu Utama', targetNodeId: 'root'),
+    ],
+  ),
+
+  'rekomendasi_ngopi': ConversationNode(
+    id: 'rekomendasi_ngopi',
+    mood: 'happy',
+    messages: [], // di-inject oleh massive_data
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Cari Lain', targetNodeId: 'rekomendasi_ngopi'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_food_coffee'),
+    ]
+  ),
+  'rekomendasi_makan': ConversationNode(
+    id: 'rekomendasi_makan',
+    mood: 'happy',
+    messages: [], // di-inject oleh massive_data
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Cari Lain', targetNodeId: 'rekomendasi_makan'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_food_coffee'),
+    ]
+  ),
+  'cemilan_sore': ConversationNode(
+    id: 'cemilan_sore',
+    mood: 'happy',
+    messages: [], // di-inject oleh massive_data
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Cari Lain', targetNodeId: 'cemilan_sore'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_food_coffee'),
+    ]
+  ),
+  'ramalan_harian': ConversationNode(
+    id: 'ramalan_harian',
+    mood: 'happy',
+    messages: [], // di-inject oleh massive_data
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Cari Lain', targetNodeId: 'ramalan_harian'),
+      ChipOption(emoji: '🏠', label: 'Menu Utama', targetNodeId: 'root'),
+    ]
+  ),
+  'daily_fortune': ConversationNode( // Alias for root
+    id: 'daily_fortune',
+    mood: 'happy',
+    messages: ['Mau baca ramalan harianmu? 🔮'],
+    chips: [
+      ChipOption(emoji: '🥠', label: 'Buka Ramalan', targetNodeId: 'ramalan_harian'),
+      ChipOption(emoji: '🏠', label: 'Menu Utama', targetNodeId: 'root'),
+    ]
+  ),
+  'tantangan_harian': ConversationNode(
+    id: 'tantangan_harian',
+    mood: 'curious',
+    messages: [], // di-inject oleh massive_data
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Ganti Tantangan', targetNodeId: 'tantangan_harian'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
+    ]
+  ),
+  'ice_breaker': ConversationNode(
+    id: 'ice_breaker',
+    mood: 'happy',
+    messages: [], // di-inject oleh massive_data
+    chips: [
+      ChipOption(emoji: '🔄', label: 'Pertanyaan Lain', targetNodeId: 'ice_breaker'),
+      ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
+    ]
+  ),
 };

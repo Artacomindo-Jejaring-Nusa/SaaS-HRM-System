@@ -22,7 +22,7 @@ class ApiClient {
   /// Toggle between Development and Production
   static const String _prodIp = 'staging-dev.jelantik.com';
   static const String _devIp =
-      '2.2.2.104'; // Current local Wi-Fi IP address 2.2.2.104
+      '192.168.100.46'; // Current local Wi-Fi IP address 2.2.2.104
 
   static String get serverIp => kDebugMode ? _devIp : _prodIp;
 
