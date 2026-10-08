@@ -486,36 +486,42 @@ class ManagerController extends Controller
         }
 
         if ($request->type === 'payroll') {
-            $batch = PayrollBatch::where('id', $request->id)
-                ->when(! $isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))
-                ->firstOrFail();
-
-            if ($request->status === 'approved') {
-                $batch->update([
-                    'status' => 'approved',
-                    'approved_by' => $user->id,
-                    'approved_at' => now(),
-                ]);
-                Salary::where('batch_id', $batch->id)->update(['status' => 'approved']);
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Batch payroll berhasil disetujui.',
-                    'data' => $batch->fresh(),
-                ]);
-            } else {
-                $batch->update([
-                    'status' => 'rejected',
-                    'rejection_note' => $request->remark ?? 'Ditolak oleh atasan/approver',
-                ]);
-                Salary::where('batch_id', $batch->id)->update(['status' => 'rejected']);
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Batch payroll berhasil ditolak untuk revisi.',
-                    'data' => $batch->fresh(),
-                ]);
-            }
+            return $this->handlePayrollApproval($request, $user, $isGlobalAdmin);
         }
 
+        return $this->handleGeneralRequestApproval($request, $user, $isGlobalAdmin, $isCompanyAdmin);
+    }
+
+    private function handlePayrollApproval(Request $request, $user, bool $isGlobalAdmin)
+    {
+        $batch = PayrollBatch::where('id', $request->id)
+            ->when(! $isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))
+            ->firstOrFail();
+
+        $isApproved = $request->status === 'approved';
+
+        $batch->update([
+            'status' => $request->status,
+            'approved_by' => $isApproved ? $user->id : null,
+            'approved_at' => $isApproved ? now() : null,
+            'rejection_note' => $isApproved ? null : ($request->remark ?? 'Ditolak oleh atasan/approver'),
+        ]);
+
+        Salary::where('batch_id', $batch->id)->update(['status' => $request->status]);
+
+        $message = $isApproved
+            ? 'Batch payroll berhasil disetujui.'
+            : 'Batch payroll berhasil ditolak untuk revisi.';
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $message,
+            'data' => $batch->fresh(),
+        ]);
+    }
+
+    private function handleGeneralRequestApproval(Request $request, $user, bool $isGlobalAdmin, bool $isCompanyAdmin)
+    {
         $model = match ($request->type) {
             'leave' => Leave::class,
             'overtime' => Overtime::class,

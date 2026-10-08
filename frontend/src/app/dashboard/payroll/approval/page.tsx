@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import axiosInstance from "@/lib/axios";
 import { 
   CheckCircle2, XCircle, Clock, AlertTriangle, 
-  FileSpreadsheet, Eye, Loader2, RefreshCw, 
-  Check, X, ChevronRight, Users, DollarSign,
-  ShieldCheck, AlertCircle, ArrowLeft, Download
+  Eye, Loader2, RefreshCw, 
+  Check, X, Users,
+  ShieldCheck, AlertCircle, Download
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
@@ -69,6 +69,176 @@ function parseAmount(val: string | number | undefined | null): number {
 function formatRupiah(val: string | number | undefined | null): string {
   const num = parseAmount(val);
   return new Intl.NumberFormat("id-ID").format(num);
+}
+
+function getBatchStatusBadge(status: string) {
+  if (status === "pending_approval") {
+    return {
+      className: "bg-amber-100 text-amber-800 border border-amber-200",
+      label: "Menunggu Persetujuan",
+    };
+  }
+  if (status === "approved") {
+    return {
+      className: "bg-emerald-100 text-emerald-800 border border-emerald-200",
+      label: "Disetujui",
+    };
+  }
+  if (status === "paid") {
+    return {
+      className: "bg-blue-100 text-blue-800 border border-blue-200",
+      label: "Sudah Ditransfer (Paid)",
+    };
+  }
+  return {
+    className: "bg-rose-100 text-rose-800 border border-rose-200",
+    label: "Ditolak (Revisi)",
+  };
+}
+
+function getEmptyStateInfo(activeTab: "pending" | "approved" | "rejected") {
+  if (activeTab === "pending") {
+    return {
+      title: "Semua Penggajian Telah Ditinjau",
+      description: "Tidak ada batch payroll yang sedang menunggu persetujuan pada periode saat ini.",
+    };
+  }
+  return {
+    title: "Belum Ada Riwayat Batch",
+    description: `Tidak ditemukan batch dengan status ${activeTab}.`,
+  };
+}
+
+interface PayrollBatchCardProps {
+  batch: PayrollBatch;
+  canApprove: boolean;
+  actionLoading: boolean;
+  onExportRekap: (batch: PayrollBatch) => void;
+  onOpenDetail: (batchId: number) => void;
+  onOpenApprove: (batch: PayrollBatch) => void;
+  onOpenReject: (batchId: number) => void;
+}
+
+function PayrollBatchCard({
+  batch,
+  canApprove,
+  actionLoading,
+  onExportRekap,
+  onOpenDetail,
+  onOpenApprove,
+  onOpenReject,
+}: PayrollBatchCardProps) {
+  const statusBadge = getBatchStatusBadge(batch.status);
+
+  return (
+    <div className="bg-white rounded-3xl border border-gray-100 p-6 md:p-8 shadow-sm hover:shadow-md transition-all space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-6">
+        <div>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-black text-gray-900">
+              Periode {batch.period_month} {batch.period_year}
+            </h2>
+            <span
+              className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-xl ${statusBadge.className}`}
+            >
+              {statusBadge.label}
+            </span>
+          </div>
+          <p className="text-xs text-gray-400 font-medium mt-1">
+            Diajukan oleh: <strong className="text-gray-700">{batch.creator?.name || "HR Officer"}</strong> • {batch.total_employees} Karyawan Terdaftar
+          </p>
+        </div>
+
+        {/* Approver Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => onExportRekap(batch)}
+            className="h-11 px-4 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-200 flex items-center gap-1.5 transition-all"
+          >
+            <Download size={14} /> Unduh Rekap
+          </button>
+
+          <button
+            onClick={() => onOpenDetail(batch.id)}
+            className="h-11 px-4 text-xs font-bold text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 flex items-center gap-1.5 transition-all"
+          >
+            <Eye size={14} /> Lihat Detail Karyawan
+          </button>
+
+          {canApprove && batch.status === "pending_approval" && (
+            <>
+              <button
+                onClick={() => onOpenReject(batch.id)}
+                disabled={actionLoading}
+                className="h-11 px-4 text-xs font-black text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 flex items-center gap-1.5 transition-all disabled:opacity-50"
+              >
+                <X size={14} /> Tolak (Revisi)
+              </button>
+
+              <button
+                onClick={() => onOpenApprove(batch)}
+                disabled={actionLoading}
+                className="h-11 px-5 text-xs font-black text-white bg-[#8B0000] hover:bg-[#700000] rounded-xl shadow-md flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+              >
+                <Check size={14} /> Setujui Payroll
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Metrics Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-5 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-1">
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Karyawan</span>
+          <div className="text-xl font-black text-gray-900 flex items-center gap-2">
+            <Users size={18} className="text-[#8B0000]" />
+            {batch.total_employees} Orang
+          </div>
+        </div>
+
+        <div className="p-5 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-1">
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Gross (Pendapatan)</span>
+          <div className="text-xl font-black text-gray-900">
+            Rp {formatRupiah(batch.total_gross)}
+          </div>
+        </div>
+
+        <div className="p-5 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-1">
+          <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Total Potongan (Disiplin + Pajak + BPJS)</span>
+          <div className="text-xl font-black text-rose-600">
+            -Rp {formatRupiah(batch.total_deductions)}
+          </div>
+        </div>
+
+        <div className="p-5 bg-red-50/60 rounded-2xl border border-red-100 space-y-1">
+          <span className="text-[10px] font-black text-[#8B0000] uppercase tracking-widest">Total Transfer Bersih (Net THP)</span>
+          <div className="text-xl font-black text-[#8B0000]">
+            Rp {formatRupiah(batch.total_net)}
+          </div>
+        </div>
+      </div>
+
+      {/* Notes if rejected */}
+      {batch.status === "rejected" && batch.rejection_note && (
+        <div className="p-4 bg-rose-50 rounded-2xl border border-rose-100 text-xs text-rose-800 flex items-start gap-2.5">
+          <AlertCircle size={16} className="text-rose-500 shrink-0 mt-0.5" />
+          <div>
+            <strong>Catatan Revisi dari Approver:</strong>
+            <p className="mt-0.5 text-rose-700">{batch.rejection_note}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Approval Info */}
+      {batch.approver && (
+        <div className="text-[11px] text-gray-400 font-medium">
+          Disetujui oleh: <strong className="text-gray-700">{batch.approver.name}</strong>
+          {batch.approved_at && ` pada ${new Date(batch.approved_at).toLocaleString("id-ID")}`}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function PayrollApprovalPage() {
@@ -210,6 +380,54 @@ export default function PayrollApprovalPage() {
     );
   }, [selectedBatch, searchSalary]);
 
+  const renderBatchContent = () => {
+    if (loading) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[350px] gap-3 bg-white rounded-3xl border border-gray-100 shadow-sm">
+          <Loader2 className="animate-spin text-[#8B0000]" size={40} />
+          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest">Memuat Batch Payroll...</p>
+        </div>
+      );
+    }
+
+    if (filteredBatches.length === 0) {
+      const emptyInfo = getEmptyStateInfo(activeTab);
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[350px] gap-3 bg-white rounded-3xl border border-gray-100 p-12 text-center shadow-sm">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <CheckCircle2 size={32} />
+          </div>
+          <h3 className="text-lg font-black text-gray-800">{emptyInfo.title}</h3>
+          <p className="text-gray-400 text-xs font-medium max-w-md">{emptyInfo.description}</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-1 gap-6">
+        {filteredBatches.map((batch) => (
+          <PayrollBatchCard
+            key={batch.id}
+            batch={batch}
+            canApprove={canApprove}
+            actionLoading={actionLoading}
+            onExportRekap={handleExportRekap}
+            onOpenDetail={handleOpenDetail}
+            onOpenApprove={(b) => {
+              setApproveBatchTarget(b);
+              setApproveConfirmModalOpen(true);
+            }}
+            onOpenReject={(id) => {
+              setRejectBatchId(id);
+              setRejectionNote("");
+              setRejectModalOpen(true);
+            }}
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="w-full max-w-[1600px] mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
       {/* Header Banner */}
@@ -286,164 +504,7 @@ export default function PayrollApprovalPage() {
       </div>
 
       {/* Batches List */}
-      {loading ? (
-        <div className="flex flex-col items-center justify-center min-h-[350px] gap-3 bg-white rounded-3xl border border-gray-100 shadow-sm">
-          <Loader2 className="animate-spin text-[#8B0000]" size={40} />
-          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest">Memuat Batch Payroll...</p>
-        </div>
-      ) : filteredBatches.length === 0 ? (
-        <div className="flex flex-col items-center justify-center min-h-[350px] gap-3 bg-white rounded-3xl border border-gray-100 p-12 text-center shadow-sm">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-            <CheckCircle2 size={32} />
-          </div>
-          <h3 className="text-lg font-black text-gray-800">
-            {activeTab === "pending"
-              ? "Semua Penggajian Telah Ditinjau"
-              : "Belum Ada Riwayat Batch"}
-          </h3>
-          <p className="text-gray-400 text-xs font-medium max-w-md">
-            {activeTab === "pending"
-              ? "Tidak ada batch payroll yang sedang menunggu persetujuan pada periode saat ini."
-              : `Tidak ditemukan batch dengan status ${activeTab}.`}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-6">
-          {filteredBatches.map((batch) => (
-            <div
-              key={batch.id}
-              className="bg-white rounded-3xl border border-gray-100 p-6 md:p-8 shadow-sm hover:shadow-md transition-all space-y-6"
-            >
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-6">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-2xl font-black text-gray-900">
-                      Periode {batch.period_month} {batch.period_year}
-                    </h2>
-                    <span
-                      className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-xl ${
-                        batch.status === "pending_approval"
-                          ? "bg-amber-100 text-amber-800 border border-amber-200"
-                          : batch.status === "approved"
-                          ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                          : batch.status === "paid"
-                          ? "bg-blue-100 text-blue-800 border border-blue-200"
-                          : "bg-rose-100 text-rose-800 border border-rose-200"
-                      }`}
-                    >
-                      {batch.status === "pending_approval"
-                        ? "Menunggu Persetujuan"
-                        : batch.status === "approved"
-                        ? "Disetujui"
-                        : batch.status === "paid"
-                        ? "Sudah Ditransfer (Paid)"
-                        : "Ditolak (Revisi)"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-400 font-medium mt-1">
-                    Diajukan oleh: <strong className="text-gray-700">{batch.creator?.name || "HR Officer"}</strong> • {batch.total_employees} Karyawan Terdaftar
-                  </p>
-                </div>
-
-                {/* Approver Action Buttons */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={() => handleExportRekap(batch)}
-                    className="h-11 px-4 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-200 flex items-center gap-1.5 transition-all"
-                  >
-                    <Download size={14} /> Unduh Rekap
-                  </button>
-
-                  <button
-                    onClick={() => handleOpenDetail(batch.id)}
-                    className="h-11 px-4 text-xs font-bold text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 flex items-center gap-1.5 transition-all"
-                  >
-                    <Eye size={14} /> Rincian Gaji
-                  </button>
-
-                  {batch.status === "pending_approval" && canApprove && (
-                    <>
-                      <button
-                        onClick={() => {
-                          setRejectBatchId(batch.id);
-                          setRejectionNote("");
-                          setRejectModalOpen(true);
-                        }}
-                        disabled={actionLoading}
-                        className="h-11 px-4 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all flex items-center gap-1.5"
-                      >
-                        <X size={15} /> Tolak (Revisi)
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setApproveBatchTarget(batch);
-                          setApproveConfirmModalOpen(true);
-                        }}
-                        disabled={actionLoading}
-                        className="h-11 px-6 text-xs font-black text-white bg-[#8B0000] hover:bg-[#700000] rounded-xl shadow-md transition-all flex items-center gap-1.5 active:scale-95"
-                      >
-                        <Check size={16} /> Setujui Payroll
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Financial Metrics Strip */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-5 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-1">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Karyawan</span>
-                  <div className="text-xl font-black text-gray-900 flex items-center gap-2">
-                    <Users size={18} className="text-gray-400" />
-                    {batch.total_employees} Orang
-                  </div>
-                </div>
-
-                <div className="p-5 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-1">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Gross (Pendapatan)</span>
-                  <div className="text-xl font-black text-gray-900">
-                    Rp {formatRupiah(batch.total_gross)}
-                  </div>
-                </div>
-
-                <div className="p-5 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-1">
-                  <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Total Potongan (Disiplin + Pajak + BPJS)</span>
-                  <div className="text-xl font-black text-rose-600">
-                    -Rp {formatRupiah(batch.total_deductions)}
-                  </div>
-                </div>
-
-                <div className="p-5 bg-red-50/60 rounded-2xl border border-red-100 space-y-1">
-                  <span className="text-[10px] font-black text-[#8B0000] uppercase tracking-widest">Total Transfer Bersih (Net THP)</span>
-                  <div className="text-xl font-black text-[#8B0000]">
-                    Rp {formatRupiah(batch.total_net)}
-                  </div>
-                </div>
-              </div>
-
-              {/* Notes if rejected */}
-              {batch.status === "rejected" && batch.rejection_note && (
-                <div className="p-4 bg-rose-50 rounded-2xl border border-rose-100 text-xs text-rose-800 flex items-start gap-2.5">
-                  <AlertCircle size={16} className="text-rose-500 shrink-0 mt-0.5" />
-                  <div>
-                    <strong>Catatan Revisi dari Approver:</strong>
-                    <p className="mt-0.5 text-rose-700">{batch.rejection_note}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Approval Info */}
-              {batch.approver && (
-                <div className="text-[11px] text-gray-400 font-medium">
-                  Disetujui oleh: <strong className="text-gray-700">{batch.approver.name}</strong>
-                  {batch.approved_at && ` pada ${new Date(batch.approved_at).toLocaleString("id-ID")}`}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      {renderBatchContent()}
 
       {/* Modal Detail Slip Gaji Karyawan */}
       {selectedBatch && (
@@ -605,10 +666,11 @@ export default function PayrollApprovalPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+              <label htmlFor="rejection-note-textarea" className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
                 Alasan / Catatan Revisi (Wajib)
               </label>
               <textarea
+                id="rejection-note-textarea"
                 rows={4}
                 value={rejectionNote}
                 onChange={(e) => setRejectionNote(e.target.value)}
