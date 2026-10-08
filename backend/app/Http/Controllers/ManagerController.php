@@ -389,27 +389,27 @@ class ManagerController extends Controller
         return 'rejected';
     }
 
-    private function handleLegacyApproval($item, Request $request, $user, bool $isGlobalAdmin, bool $isCompanyAdmin)
+    private function determineLegacyTargetStatus($item, Request $request, $user, bool $isCompanyAdmin, bool $isGlobalAdmin): string
     {
+        if ($request->type === 'fund_request') {
+            return $this->updateLegacyFundRequest($item, $request, $user, $isCompanyAdmin, $isGlobalAdmin);
+        }
+
         $targetStatus = $request->status;
         if ($request->type === 'vehicle_log') {
-            $isApproved = $request->status === 'approved';
-            $targetStatus = ($item->status === 'pending')
-                ? ($isApproved ? 'approved' : 'rejected')
-                : ($isApproved ? 'validated' : 'rejected');
+            if ($request->status === 'approved') {
+                $targetStatus = ($item->status === 'pending') ? 'approved' : 'validated';
+            } else {
+                $targetStatus = 'rejected';
+            }
         }
 
         $previousStatus = $item->status;
-
-        if ($request->type === 'fund_request') {
-            $targetStatus = $this->updateLegacyFundRequest($item, $request, $user, $isCompanyAdmin, $isGlobalAdmin);
-        } else {
-            $item->update([
-                'status' => $targetStatus,
-                'approved_by' => $user->id,
-                'remark' => $request->remark,
-            ]);
-        }
+        $item->update([
+            'status' => $targetStatus,
+            'approved_by' => $user->id,
+            'remark' => $request->remark,
+        ]);
 
         if ($request->type === 'leave') {
             if ($targetStatus === 'approved' && $previousStatus !== 'approved') {
@@ -419,19 +419,37 @@ class ManagerController extends Controller
             }
         }
 
-        $statusText = strtoupper($request->status === 'approved' ? 'DISETUJUI' : 'DITOLAK');
+        return $targetStatus;
+    }
+
+    private function sendLegacyNotification($item, Request $request, string $typeText, string $routePath): void
+    {
+        if (!$item->user) {
+            return;
+        }
+
+        $isApproved = $request->status === 'approved';
+        $statusText = $isApproved ? 'DISETUJUI' : 'DITOLAK';
+        $badge = $isApproved ? 'success' : 'danger';
+        $remarkText = $request->remark ? " Catatan: {$request->remark}" : '';
+
+        $this->notify(
+            $item->user,
+            "PENGAJUAN {$typeText} {$statusText}",
+            "Pengajuan {$typeText} Anda telah {$statusText} oleh Manager/Admin.{$remarkText}",
+            $badge,
+            $routePath
+        );
+    }
+
+    private function handleLegacyApproval($item, Request $request, $user, bool $isGlobalAdmin, bool $isCompanyAdmin)
+    {
+        $this->determineLegacyTargetStatus($item, $request, $user, $isCompanyAdmin, $isGlobalAdmin);
+
         $typeText = self::TYPE_TEXTS[$request->type] ?? ucfirst($request->type);
         $routePath = self::ROUTE_PATHS[$request->type] ?? '/dashboard';
 
-        if ($item->user) {
-            $this->notify(
-                $item->user,
-                "PENGAJUAN {$typeText} {$statusText}",
-                "Pengajuan {$typeText} Anda telah {$statusText} oleh Manager/Admin.".($request->remark ? " Catatan: {$request->remark}" : ''),
-                $request->status === 'approved' ? 'success' : 'danger',
-                $routePath
-            );
-        }
+        $this->sendLegacyNotification($item, $request, $typeText, $routePath);
 
         return response()->json([
             'status' => 'success',
@@ -530,52 +548,14 @@ class ManagerController extends Controller
     /**
      * Get team attendance status for today
      */
-    public function getTeamAttendance()
+    public function getTeamAttendance(\App\Services\ManagerAttendanceService $attendanceService)
     {
         $user = Auth::user();
-        $today = Carbon::today()->toDateString();
-        $isGlobalAdmin = $user->role_id === 1;
         $isCompanyAdmin = $this->isExecutiveOrAdmin($user) || $user->hasPermission('view-attendances');
-        $directSubordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
-
-        $query = User::with(['role', 'attendances' => function ($q) use ($today) {
-            $q->whereDate('check_in', $today);
-        }]);
-
-        if ($directSubordinateIds->isNotEmpty()) {
-            $query->whereIn('id', $directSubordinateIds);
-        } elseif ($isGlobalAdmin) {
-            $query->where('id', '!=', $user->id)->take(50);
-        } elseif ($isCompanyAdmin) {
-            $query->where('company_id', $user->company_id)->where('id', '!=', $user->id)->take(50);
-        } else {
-            $query->where('supervisor_id', $user->id);
-        }
-
-        $teamAttendance = $query->get()->map(function ($sub) {
-            $attendance = $sub->attendances->first();
-            $status = $attendance ? ($attendance->check_out ? 'Selesai' : 'Hadir') : 'Belum Masuk';
-            $locationLabel = $attendance ? ($attendance->attendance_type === 'dinas_luar' ? 'Dinas Luar' : 'Di Kantor') : null;
-
-            return [
-                'id' => $sub->id,
-                'name' => $sub->name,
-                'role' => $sub->role?->name ?? 'Karyawan',
-                'photo_url' => $sub->profile_photo_url,
-                'status' => $status,
-                'check_in' => $attendance?->check_in ? Carbon::parse($attendance->check_in)->format('H:i') : null,
-                'check_out' => $attendance?->check_out ? Carbon::parse($attendance->check_out)->format('H:i') : null,
-                'attendance_type' => $attendance?->attendance_type ?? 'office',
-                'is_dinas_luar' => $attendance?->attendance_type === 'dinas_luar',
-                'dinas_luar_destination' => $attendance?->dinas_luar_destination,
-                'dinas_luar_status' => $attendance?->dinas_luar_status,
-                'location_label' => $locationLabel,
-            ];
-        });
 
         return response()->json([
             'status' => 'success',
-            'data' => $teamAttendance,
+            'data' => $attendanceService->getTeamAttendance($user, $isCompanyAdmin),
         ]);
     }
 }
