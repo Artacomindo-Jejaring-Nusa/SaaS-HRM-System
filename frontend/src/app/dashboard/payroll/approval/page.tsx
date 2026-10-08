@@ -110,24 +110,25 @@ function getEmptyStateInfo(activeTab: "pending" | "approved" | "rejected") {
 }
 
 interface PayrollBatchCardProps {
-  batch: PayrollBatch;
-  canApprove: boolean;
-  actionLoading: boolean;
-  onExportRekap: (batch: PayrollBatch) => void;
-  onOpenDetail: (batchId: number) => void;
-  onOpenApprove: (batch: PayrollBatch) => void;
-  onOpenReject: (batchId: number) => void;
+  readonly batch: PayrollBatch;
+  readonly canApprove: boolean;
+  readonly actionLoading: boolean;
+  readonly onExportRekap: (batch: PayrollBatch) => void;
+  readonly onOpenDetail: (batchId: number) => void;
+  readonly onOpenApprove: (batch: PayrollBatch) => void;
+  readonly onOpenReject: (batchId: number) => void;
 }
 
-function PayrollBatchCard({
-  batch,
-  canApprove,
-  actionLoading,
-  onExportRekap,
-  onOpenDetail,
-  onOpenApprove,
-  onOpenReject,
-}: PayrollBatchCardProps) {
+function PayrollBatchCard(props: Readonly<PayrollBatchCardProps>) {
+  const {
+    batch,
+    canApprove,
+    actionLoading,
+    onExportRekap,
+    onOpenDetail,
+    onOpenApprove,
+    onOpenReject,
+  } = props;
   const statusBadge = getBatchStatusBadge(batch.status);
 
   return (

@@ -66,33 +66,25 @@ class ManagerController extends Controller
             || str_contains($roleName, 'lead');
     }
 
-    private function getTypeText(string $type): string
-    {
-        return match ($type) {
-            'leave' => 'Cuti',
-            'overtime' => 'Lembur',
-            'reimbursement' => 'Reimbursement',
-            'permit' => 'Izin',
-            'fund_request' => 'Pengajuan Dana',
-            'vehicle_log' => 'Peminjaman Kendaraan',
-            'payroll' => 'Payroll',
-            default => ucfirst($type),
-        };
-    }
+    private const TYPE_TEXTS = [
+        'leave' => 'Cuti',
+        'overtime' => 'Lembur',
+        'reimbursement' => 'Reimbursement',
+        'permit' => 'Izin',
+        'fund_request' => 'Pengajuan Dana',
+        'vehicle_log' => 'Peminjaman Kendaraan',
+        'payroll' => 'Payroll',
+    ];
 
-    private function getRoutePath(string $type): string
-    {
-        return match ($type) {
-            'leave' => '/dashboard/leaves',
-            'overtime' => '/dashboard/overtimes',
-            'reimbursement' => '/dashboard/reimbursements',
-            'permit' => '/dashboard/permits',
-            'fund_request' => self::ROUTE_FUND_REQUESTS,
-            'vehicle_log' => '/dashboard/fleet-logs',
-            'payroll' => '/dashboard/payroll/approval',
-            default => '/dashboard',
-        };
-    }
+    private const ROUTE_PATHS = [
+        'leave' => '/dashboard/leaves',
+        'overtime' => '/dashboard/overtimes',
+        'reimbursement' => '/dashboard/reimbursements',
+        'permit' => '/dashboard/permits',
+        'fund_request' => self::ROUTE_FUND_REQUESTS,
+        'vehicle_log' => '/dashboard/fleet-logs',
+        'payroll' => '/dashboard/payroll/approval',
+    ];
 
     private function countScopedPending($modelClass, string $type, string|array $pendingStatus, $user, bool $isGlobalAdmin): int
     {
@@ -339,8 +331,8 @@ class ManagerController extends Controller
             LeaveController::processLeaveApprovalDeduction();
         }
 
-        $typeText = $this->getTypeText($request->type);
-        $routePath = $this->getRoutePath($request->type);
+        $typeText = self::TYPE_TEXTS[$request->type] ?? ucfirst($request->type);
+        $routePath = self::ROUTE_PATHS[$request->type] ?? '/dashboard';
         $msg = $this->sendDynamicApprovalNotifications($item, $request, $user, $result, $typeText, $routePath);
 
         return response()->json([
@@ -397,29 +389,14 @@ class ManagerController extends Controller
         return 'rejected';
     }
 
-    private function resolveVehicleLogTargetStatus(string $itemStatus, string $requestStatus): string
-    {
-        $isApproved = $requestStatus === 'approved';
-        if ($itemStatus === 'pending') {
-            return $isApproved ? 'approved' : 'rejected';
-        }
-        return $isApproved ? 'validated' : 'rejected';
-    }
-
-    private function handleLegacyLeaveAdjustment(string $targetStatus, ?string $previousStatus): void
-    {
-        if ($targetStatus === 'approved' && $previousStatus !== 'approved') {
-            LeaveController::processLeaveApprovalDeduction();
-        } elseif ($targetStatus === 'rejected' && $previousStatus === 'approved') {
-            LeaveController::processLeaveApprovalRefund();
-        }
-    }
-
     private function handleLegacyApproval($item, Request $request, $user, bool $isGlobalAdmin, bool $isCompanyAdmin)
     {
         $targetStatus = $request->status;
         if ($request->type === 'vehicle_log') {
-            $targetStatus = $this->resolveVehicleLogTargetStatus($item->status ?? '', $request->status);
+            $isApproved = $request->status === 'approved';
+            $targetStatus = ($item->status === 'pending')
+                ? ($isApproved ? 'approved' : 'rejected')
+                : ($isApproved ? 'validated' : 'rejected');
         }
 
         $previousStatus = $item->status;
@@ -435,12 +412,16 @@ class ManagerController extends Controller
         }
 
         if ($request->type === 'leave') {
-            $this->handleLegacyLeaveAdjustment($targetStatus, $previousStatus);
+            if ($targetStatus === 'approved' && $previousStatus !== 'approved') {
+                LeaveController::processLeaveApprovalDeduction();
+            } elseif ($targetStatus === 'rejected' && $previousStatus === 'approved') {
+                LeaveController::processLeaveApprovalRefund();
+            }
         }
 
         $statusText = strtoupper($request->status === 'approved' ? 'DISETUJUI' : 'DITOLAK');
-        $typeText = $this->getTypeText($request->type);
-        $routePath = $this->getRoutePath($request->type);
+        $typeText = self::TYPE_TEXTS[$request->type] ?? ucfirst($request->type);
+        $routePath = self::ROUTE_PATHS[$request->type] ?? '/dashboard';
 
         if ($item->user) {
             $this->notify(
@@ -553,19 +534,6 @@ class ManagerController extends Controller
     {
         $user = Auth::user();
         $today = Carbon::today()->toDateString();
-        $subordinatesQuery = $this->buildTeamAttendanceQuery($user, $today);
-        $subordinates = $subordinatesQuery->get();
-
-        $teamAttendance = $subordinates->map(fn ($sub) => $this->formatTeamMemberAttendance($sub));
-
-        return response()->json([
-            'status' => 'success',
-            'data' => $teamAttendance,
-        ]);
-    }
-
-    private function buildTeamAttendanceQuery($user, string $today)
-    {
         $isGlobalAdmin = $user->role_id === 1;
         $isCompanyAdmin = $this->isExecutiveOrAdmin($user) || $user->hasPermission('view-attendances');
         $directSubordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
@@ -584,36 +552,30 @@ class ManagerController extends Controller
             $query->where('supervisor_id', $user->id);
         }
 
-        return $query;
-    }
+        $teamAttendance = $query->get()->map(function ($sub) {
+            $attendance = $sub->attendances->first();
+            $status = $attendance ? ($attendance->check_out ? 'Selesai' : 'Hadir') : 'Belum Masuk';
+            $locationLabel = $attendance ? ($attendance->attendance_type === 'dinas_luar' ? 'Dinas Luar' : 'Di Kantor') : null;
 
-    private function formatTeamMemberAttendance($sub): array
-    {
-        $attendance = $sub->attendances->first();
+            return [
+                'id' => $sub->id,
+                'name' => $sub->name,
+                'role' => $sub->role?->name ?? 'Karyawan',
+                'photo_url' => $sub->profile_photo_url,
+                'status' => $status,
+                'check_in' => $attendance?->check_in ? Carbon::parse($attendance->check_in)->format('H:i') : null,
+                'check_out' => $attendance?->check_out ? Carbon::parse($attendance->check_out)->format('H:i') : null,
+                'attendance_type' => $attendance?->attendance_type ?? 'office',
+                'is_dinas_luar' => $attendance?->attendance_type === 'dinas_luar',
+                'dinas_luar_destination' => $attendance?->dinas_luar_destination,
+                'dinas_luar_status' => $attendance?->dinas_luar_status,
+                'location_label' => $locationLabel,
+            ];
+        });
 
-        $status = 'Belum Masuk';
-        if ($attendance) {
-            $status = $attendance->check_out ? 'Selesai' : 'Hadir';
-        }
-
-        $locationLabel = null;
-        if ($attendance) {
-            $locationLabel = $attendance->attendance_type === 'dinas_luar' ? 'Dinas Luar' : 'Di Kantor';
-        }
-
-        return [
-            'id' => $sub->id,
-            'name' => $sub->name,
-            'role' => $sub->role?->name ?? 'Karyawan',
-            'photo_url' => $sub->profile_photo_url,
-            'status' => $status,
-            'check_in' => $attendance?->check_in ? Carbon::parse($attendance->check_in)->format('H:i') : null,
-            'check_out' => $attendance?->check_out ? Carbon::parse($attendance->check_out)->format('H:i') : null,
-            'attendance_type' => $attendance?->attendance_type ?? 'office',
-            'is_dinas_luar' => $attendance?->attendance_type === 'dinas_luar',
-            'dinas_luar_destination' => $attendance?->dinas_luar_destination,
-            'dinas_luar_status' => $attendance?->dinas_luar_status,
-            'location_label' => $locationLabel,
-        ];
+        return response()->json([
+            'status' => 'success',
+            'data' => $teamAttendance,
+        ]);
     }
 }
