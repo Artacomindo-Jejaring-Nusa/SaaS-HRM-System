@@ -174,6 +174,16 @@ function EmployeeWebAttendanceCard({
             {renderAttendanceStatusBadge(loadingAttendance, isCheckedIn, isCheckedOut)}
           </div>
 
+          <div className="flex items-center justify-between text-xs pb-1 border-b border-slate-200/60">
+            <span className="text-slate-500 font-medium flex items-center gap-1">
+              <Clock size={12} className="text-slate-400" />
+              Jadwal Kerja:
+            </span>
+            <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded-md border border-slate-200 text-[11px]">
+              {user?.schedule_label || (user?.work_start_time ? `${user.work_start_time} - ${user.work_end_time}` : "08:30 - 17:30")}
+            </span>
+          </div>
+
           <div className="grid grid-cols-2 gap-2 pt-1">
             <div className="bg-white p-2.5 rounded-lg border border-slate-200/80">
               <div className="text-[10px] text-slate-400 font-semibold uppercase">Masuk</div>

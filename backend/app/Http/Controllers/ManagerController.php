@@ -6,8 +6,10 @@ use App\Models\Attendance;
 use App\Models\FundRequest;
 use App\Models\Leave;
 use App\Models\Overtime;
+use App\Models\PayrollBatch;
 use App\Models\Permit;
 use App\Models\Reimbursement;
+use App\Models\Salary;
 use App\Models\User;
 use App\Models\VehicleLog;
 use App\Traits\Notifiable;
@@ -28,6 +30,7 @@ class ManagerController extends Controller
         'permit' => 'approve-permits',
         'vehicle_log' => 'approve-vehicle-logs',
         'fund_request' => 'approve-fund-requests',
+        'payroll' => 'approve-payroll',
     ];
 
     /**
@@ -44,6 +47,7 @@ class ManagerController extends Controller
             || $user->hasPermission('approve-reimbursements')
             || $user->hasPermission('approve-fund-requests')
             || $user->hasPermission('approve-vehicle-logs')
+            || $user->hasPermission('approve-payroll')
             || $user->hasPermission('approve-shift-swaps')
             || $user->hasPermission('approve-project-costs')
             || $user->hasPermission('view-manager-portal')
@@ -71,6 +75,7 @@ class ManagerController extends Controller
             'permit' => 'Izin',
             'fund_request' => 'Pengajuan Dana',
             'vehicle_log' => 'Peminjaman Kendaraan',
+            'payroll' => 'Payroll',
             default => ucfirst($type),
         };
     }
@@ -84,6 +89,7 @@ class ManagerController extends Controller
             'permit' => '/dashboard/permits',
             'fund_request' => self::ROUTE_FUND_REQUESTS,
             'vehicle_log' => '/dashboard/fleet-logs',
+            'payroll' => '/dashboard/payroll/approval',
             default => '/dashboard',
         };
     }
@@ -98,7 +104,7 @@ class ManagerController extends Controller
             $query->where('company_id', $user->company_id);
         }
 
-        if (!$isGlobalAdmin && $type !== 'vehicle_log') {
+        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'payroll'])) {
             $items = $query->with(['user.supervisor', 'user.role'])->get();
             return $this->filterPendingItems($items, $type, $user)->count();
         }
@@ -130,6 +136,7 @@ class ManagerController extends Controller
         $permitCount = $canApprove('permit') ? $this->countScopedPending(Permit::class, 'permit', 'pending', $user, $isGlobalAdmin) : 0;
         $vehicleCount = $canApprove('vehicle_log') ? $this->countScopedPending(VehicleLog::class, 'vehicle_log', ['pending', 'completed'], $user, $isGlobalAdmin) : 0;
         $fundRequestCount = $canApprove('fund_request') ? $this->countScopedPending(FundRequest::class, 'fund_request', $fundRequestStatus, $user, $isGlobalAdmin) : 0;
+        $payrollCount = $canApprove('payroll') ? $this->countScopedPending(PayrollBatch::class, 'payroll', 'pending_approval', $user, $isGlobalAdmin) : 0;
 
         return response()->json([
             'status' => 'success',
@@ -140,7 +147,8 @@ class ManagerController extends Controller
                 'permit' => $permitCount,
                 'fund_request' => $fundRequestCount,
                 'vehicle_log' => $vehicleCount,
-                'total' => $leaveCount + $overtimeCount + $reimbursementCount + $permitCount + $vehicleCount + $fundRequestCount,
+                'payroll' => $payrollCount,
+                'total' => $leaveCount + $overtimeCount + $reimbursementCount + $permitCount + $vehicleCount + $fundRequestCount + $payrollCount,
             ],
         ]);
     }
@@ -153,6 +161,7 @@ class ManagerController extends Controller
             'reimbursement' => Reimbursement::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
             'permit' => Permit::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
             'vehicle_log' => VehicleLog::with(['user.role', 'user.office', 'user.supervisor', 'vehicle'])->whereIn('status', ['pending', 'completed']),
+            'payroll' => PayrollBatch::with(['creator'])->where('status', 'pending_approval'),
             'fund_request' => FundRequest::with(['user.role', 'user.office', 'user.supervisor', 'supervisor', 'hrd'])->where(function ($q) use ($isGlobalAdmin, $isCompanyAdmin) {
                 if ($isGlobalAdmin || $isCompanyAdmin) {
                     $q->whereIn('status', ['pending', 'approved_by_supervisor']);
@@ -219,7 +228,7 @@ class ManagerController extends Controller
 
         $items = $query->orderBy('created_at', 'desc')->get();
 
-        if (!$isGlobalAdmin && $type !== 'vehicle_log') {
+        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'payroll'])) {
             $items = $this->filterPendingItems($items, (string)$type, $user);
         }
 
@@ -456,7 +465,7 @@ class ManagerController extends Controller
     public function updateRequestStatus(Request $request)
     {
         $request->validate([
-            'type' => 'required|in:leave,overtime,reimbursement,permit,vehicle_log,fund_request',
+            'type' => 'required|in:leave,overtime,reimbursement,permit,vehicle_log,fund_request,payroll',
             'id' => 'required|integer',
             'status' => 'required|in:approved,rejected',
             'remark' => 'nullable|string',
@@ -474,6 +483,37 @@ class ManagerController extends Controller
                 'status' => 'error',
                 'message' => 'Anda tidak memiliki hak akses untuk menyetujui pengajuan ini.'
             ], 403);
+        }
+
+        if ($request->type === 'payroll') {
+            $batch = PayrollBatch::where('id', $request->id)
+                ->when(! $isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))
+                ->firstOrFail();
+
+            if ($request->status === 'approved') {
+                $batch->update([
+                    'status' => 'approved',
+                    'approved_by' => $user->id,
+                    'approved_at' => now(),
+                ]);
+                Salary::where('batch_id', $batch->id)->update(['status' => 'approved']);
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Batch payroll berhasil disetujui.',
+                    'data' => $batch->fresh(),
+                ]);
+            } else {
+                $batch->update([
+                    'status' => 'rejected',
+                    'rejection_note' => $request->remark ?? 'Ditolak oleh atasan/approver',
+                ]);
+                Salary::where('batch_id', $batch->id)->update(['status' => 'rejected']);
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Batch payroll berhasil ditolak untuk revisi.',
+                    'data' => $batch->fresh(),
+                ]);
+            }
         }
 
         $model = match ($request->type) {

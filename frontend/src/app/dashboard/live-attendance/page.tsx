@@ -349,12 +349,12 @@ export default function LiveAttendancePage() {
                   </p>
               )}
 
-              {/* Notice Jam Pulang Kerja (17:00 WIB) */}
-              {user?.role?.id !== 1 && new Date().getHours() < 17 && (
+              {/* Notice Jam Kerja & Jam Pulang */}
+              {user?.role?.id !== 1 && (
                 <p className="text-xs text-amber-800 font-bold mt-3 bg-amber-50 p-3 rounded-xl border border-amber-200 flex items-center gap-2">
                   <AlertCircle size={16} className="text-amber-600 shrink-0" />
                   <span>
-                    <strong>JAM PULANG:</strong> Absen pulang baru dapat dilakukan mulai pukul 17:00 WIB.
+                    <strong>JADWAL KERJA:</strong> {user?.schedule_label || `${user?.work_start_time || '08:30'} - ${user?.work_end_time || '17:30'}`}. Absen pulang dibuka mulai pukul {user?.work_end_time || '17:30'} WIB.
                   </span>
                 </p>
               )}

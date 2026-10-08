@@ -304,7 +304,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     // Employees (Manage Employee)
     Route::middleware('permission:view-employees')->get('/employees/potential-supervisors', [EmployeeController::class, 'potentialSupervisors']);
     Route::middleware('permission:view-employees')->get('/employees/datatables', [EmployeeController::class, 'datatables']);
-    Route::middleware('permission:view-employees')->get('/employees', [EmployeeController::class, 'index']);
+    Route::get('/employees', [EmployeeController::class, 'index']);
     Route::middleware('permission:create-employees')->post('/employees', [EmployeeController::class, 'store']);
     Route::middleware('permission:create-employees')->post('/employees/import', [EmployeeController::class, 'import']);
     Route::middleware('permission:view-employees')->get('/employees/{id}', [EmployeeController::class, 'show']);
@@ -382,25 +382,31 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
             Route::post('/settings', [PayrollController::class, 'updateSettings']);
             Route::post('/import-data', [PayrollController::class, 'importPayrollData']);
 
-            // Generate & History
+            // Generate
             Route::post('/generate', [PayrollController::class, 'generate']);
-            Route::get('/history', [PayrollController::class, 'index']);
 
-            // Batch Operations (Approval Workflow)
-            Route::get('/batches', [PayrollController::class, 'getBatches']);
-            Route::get('/batches/{id}', [PayrollController::class, 'getBatchDetail']);
+            // Batch Operations - Review & Approval (accessible by HR or designated Approver)
+            Route::middleware('permission:manage-payroll,approve-payroll')->group(function () {
+                Route::get('/batches', [PayrollController::class, 'getBatches']);
+                Route::get('/batches/{id}', [PayrollController::class, 'getBatchDetail']);
+                Route::post('/batches/{id}/approve', [PayrollController::class, 'approveBatch']);
+                Route::post('/batches/{id}/reject', [PayrollController::class, 'rejectBatch']);
+                Route::get('/batches/{id}/export-rekap', [PayrollController::class, 'exportRekap']);
+            });
+
+            // Batch Operations - Generation, Submission & Payout (Restricted to HR / Payroll Managers)
             Route::delete('/batches/{id}', [PayrollController::class, 'destroyBatch']);
             Route::post('/batches/{id}/submit', [PayrollController::class, 'submitForApproval']);
-            Route::post('/batches/{id}/approve', [PayrollController::class, 'approveBatch']);
-            Route::post('/batches/{id}/reject', [PayrollController::class, 'rejectBatch']);
             Route::post('/batches/{id}/paid', [PayrollController::class, 'markAsPaid']);
 
             // Individual Salary Edit (HR adjustments)
             Route::put('/salaries/{id}', [PayrollController::class, 'updateSalary']);
+        });
 
-            // Exports
+        // History & Export (Accessible by Payroll Managers and Report Viewers)
+        Route::middleware('permission:manage-payroll,view-payroll-reports')->group(function () {
+            Route::get('/history', [PayrollController::class, 'index']);
             Route::get('/export', [PayrollController::class, 'export']);
-            Route::get('/batches/{id}/export-rekap', [PayrollController::class, 'exportRekap']);
         });
 
         // Personal History (Staff access)

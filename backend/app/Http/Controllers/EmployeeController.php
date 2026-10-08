@@ -28,10 +28,8 @@ class EmployeeController extends Controller
 
     public function index(Request $request)
     {
-        abort_if(! $request->user()->hasPermission('view-employees'), 403, self::MSG_FORBIDDEN);
-
-        $query = User::query();
         $user = $request->user();
+        $query = User::query();
 
         if ($user->company_id && ! $user->canAccessAllCompanies()) {
             $query->where('company_id', $user->company_id);
@@ -63,6 +61,14 @@ class EmployeeController extends Controller
             ->with(['role.permissions', 'supervisor', 'office'])
             ->orderBy('name', 'asc')
             ->paginate($request->per_page ?? 10);
+
+        // Sembunyikan data sensitif payroll / finansial jika bukan HRD/Admin/Manager
+        if (! $user->hasPermission('view-employees') && ! $user->hasRole(['Super Admin', 'Admin', 'HRD', 'Manager'])) {
+            $employees->getCollection()->transform(function ($emp) {
+                $emp->makeHidden(['basic_salary', 'bank_account_no', 'bank_name', 'ktp_no', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no']);
+                return $emp;
+            });
+        }
 
         return $this->successResponse($employees, 'Data karyawan berhasil diambil.');
     }

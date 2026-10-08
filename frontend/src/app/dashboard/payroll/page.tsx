@@ -11,6 +11,7 @@ import {
   FileDown, FileUp } from "lucide-react";
 import { PayrollSkeleton } from "@/components/Skeleton";
 import { toast } from "sonner";
+import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
 
 interface UserInfo {
   id: number;
@@ -613,6 +614,7 @@ interface PayrollBatchDetailViewProps {
   readonly onEditSalary: (salary: SalaryRecord) => void;
   readonly onPreviewSlip: (salary: SalaryRecord) => void;
   readonly onDownloadPDF: (id: number, name: string) => void;
+  readonly canApprove?: boolean;
 }
 
 function PayrollBatchDetailView({
@@ -628,6 +630,7 @@ function PayrollBatchDetailView({
   onEditSalary,
   onPreviewSlip,
   onDownloadPDF,
+  canApprove = true,
 }: PayrollBatchDetailViewProps) {
   return (
     <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
@@ -677,25 +680,31 @@ function PayrollBatchDetailView({
 
           {/* Pending Approval actions */}
           {selectedBatch.status === 'pending_approval' && (
-            <>
-              <button
-                onClick={() => {
-                  const note = globalThis.prompt("Alasan penolakan untuk revisi:");
-                  if (note) onStatusChange('reject', note);
-                }}
-                disabled={actionSubmitting}
-                className="h-11 px-4 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all"
-              >
-                Tolak (Revisi)
-              </button>
-              <button
-                onClick={() => onStatusChange('approve')}
-                disabled={actionSubmitting}
-                className="h-11 px-5 text-xs font-bold text-white bg-[#8B0000] hover:bg-[#700000] rounded-xl transition-all shadow-md flex items-center gap-2"
-              >
-                <Check size={16} /> Setujui Payroll
-              </button>
-            </>
+            canApprove ? (
+              <>
+                <button
+                  onClick={() => {
+                    const note = globalThis.prompt("Alasan penolakan untuk revisi:");
+                    if (note) onStatusChange('reject', note);
+                  }}
+                  disabled={actionSubmitting}
+                  className="h-11 px-4 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all"
+                >
+                  Tolak (Revisi)
+                </button>
+                <button
+                  onClick={() => onStatusChange('approve')}
+                  disabled={actionSubmitting}
+                  className="h-11 px-5 text-xs font-bold text-white bg-[#8B0000] hover:bg-[#700000] rounded-xl transition-all shadow-md flex items-center gap-2"
+                >
+                  <Check size={16} /> Setujui Payroll
+                </button>
+              </>
+            ) : (
+              <span className="h-11 px-4 text-xs font-bold text-amber-700 bg-amber-50 rounded-xl border border-amber-200 flex items-center gap-2">
+                <Clock size={15} /> Menunggu Persetujuan Direksi / Approver
+              </span>
+            )
           )}
 
           {/* Approved actions */}
@@ -1460,6 +1469,7 @@ function PayrollSlipPreviewModal({
 }
 
 export default function PayrollManagementPage() {
+  const { user, hasPermission } = useAuth();
   const [loading, setLoading] = useState(true);
   const [batches, setBatches] = useState<PayrollBatch[]>([]);
   const [statusTab, setStatusTab] = useState<PayrollStatusTab>('all');
@@ -1771,6 +1781,7 @@ export default function PayrollManagementPage() {
           onEditSalary={(s) => setEditingSalary(s)}
           onPreviewSlip={handlePreviewSlip}
           onDownloadPDF={handleDownloadPDF}
+          canApprove={isSuperAdminUser(user) || hasPermission('approve-payroll') || hasPermission('manage-payroll')}
         />
       ) : (
         <PayrollBatchListView

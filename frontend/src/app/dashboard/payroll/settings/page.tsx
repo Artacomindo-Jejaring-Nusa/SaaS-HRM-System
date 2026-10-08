@@ -260,7 +260,7 @@ export default function PayrollSettingsPage() {
                   value={settings.late_deduction_base}
                   onChange={(e) => setSettings({ ...settings, late_deduction_base: e.target.value })}
                 >
-                  <option value="daily_salary">Persentase dari Gaji Harian (Direkomendasikan)</option>
+                  <option value="daily_salary">Persentase dari Gaji Harian</option>
                   <option value="basic_salary">Persentase dari Gaji Pokok Bulanan</option>
                   <option value="attendance_allowance">Persentase dari Tunjangan Kehadiran Harian</option>
                   <option value="fixed_amount">Nominal Tetap (Rp)</option>
@@ -288,7 +288,7 @@ export default function PayrollSettingsPage() {
                   />
                 </div>
                 <p className="text-[11px] text-gray-400 px-1">
-                  Karyawan yang telat $\le$ {settings.late_grace_period_minutes || 0} menit tidak dikenakan denda.
+                  Karyawan yang telat lebih dari {settings.late_grace_period_minutes || 0} menit tidak dikenakan denda.
                 </p>
               </div>
 

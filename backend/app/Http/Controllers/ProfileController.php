@@ -135,13 +135,23 @@ class ProfileController extends Controller
             $workStartTime = $todaySchedule->shift->start_time;
             $workEndTime = $todaySchedule->shift->end_time;
         } else {
-            $workStartTime = $user->office?->work_start_time ?? $user->company?->work_start_time ?? '08:30:00';
-            $workEndTime = $user->office?->work_end_time ?? $user->company?->work_end_time ?? '17:30:00';
+            $workStartTime = !empty($user->office?->work_start_time) ? $user->office->work_start_time : ($user->company?->work_start_time ?? '08:30:00');
+            $workEndTime = !empty($user->office?->work_end_time) ? $user->office->work_end_time : ($user->company?->work_end_time ?? '17:30:00');
         }
 
         $userData = $user->toArray();
         $userData['work_start_time'] = $workStartTime ? substr($workStartTime, 0, 5) : '08:30';
         $userData['work_end_time'] = $workEndTime ? substr($workEndTime, 0, 5) : '17:30';
+        $userData['shift_name'] = $todaySchedule?->shift?->name ?? ($user->attendance_type === 'shift' ? 'Belum Ada Jadwal Shift' : 'Jam Kantor');
+        $userData['today_shift'] = $todaySchedule?->shift ? [
+            'id' => $todaySchedule->shift->id,
+            'name' => $todaySchedule->shift->name,
+            'start_time' => substr($todaySchedule->shift->start_time, 0, 5),
+            'end_time' => substr($todaySchedule->shift->end_time, 0, 5),
+        ] : null;
+        $userData['schedule_label'] = $todaySchedule?->shift
+            ? substr($todaySchedule->shift->start_time, 0, 5) . ' - ' . substr($todaySchedule->shift->end_time, 0, 5) . ' (' . $todaySchedule->shift->name . ')'
+            : substr($userData['work_start_time'], 0, 5) . ' - ' . substr($userData['work_end_time'], 0, 5) . ' (Normal)';
 
         return $this->successResponse([
             'user' => $userData,

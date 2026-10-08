@@ -59,6 +59,7 @@ void main() async {
     hasToken = await secureStorage.hasValidToken().timeout(const Duration(seconds: 2));
     
     if (hasToken) {
+      AttendanceAlarmService().start();
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         try {
           await TrackingService.startTracking();

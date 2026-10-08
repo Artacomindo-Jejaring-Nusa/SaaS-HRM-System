@@ -78,6 +78,12 @@ export default function ShiftSwapPage() {
     }
   }, [currentPage, user?.id]);
 
+  useEffect(() => {
+    if (isModalOpen && user?.id) {
+      fetchInitialData();
+    }
+  }, [isModalOpen, user?.id]);
+
   const fetchSwaps = async (page = 1) => {
     try {
       setLoading(true);
@@ -107,7 +113,11 @@ export default function ShiftSwapPage() {
       const uData = usersRes.data.data;
       const rawUsers = Array.isArray(uData) ? uData : (uData?.data || []);
       setUsers(rawUsers.filter((u: any) => u.id !== user?.id));
+    } catch (e) {
+      console.error("Gagal ambil data rekan kerja", e);
+    }
 
+    try {
       // Ambil jadwal saya
       if (user?.id) {
         const mySchedRes = await axiosInstance.get(`/schedules?user_id=${user.id}&per_page=100`);
@@ -115,7 +125,7 @@ export default function ShiftSwapPage() {
         setMySchedules(Array.isArray(schedData) ? schedData : (schedData?.data || []));
       }
     } catch (e) {
-      console.error("Gagal ambil data pendukung", e);
+      console.error("Gagal ambil jadwal shift saya", e);
     }
   };
 

@@ -20,6 +20,9 @@ interface User {
   auto_validate_web_attendance?: boolean;
   auto_validate_until?: string;
   is_web_auto_validated?: boolean;
+  schedule_label?: string;
+  work_start_time?: string;
+  work_end_time?: string;
   office?: {
     id: number;
     name: string;

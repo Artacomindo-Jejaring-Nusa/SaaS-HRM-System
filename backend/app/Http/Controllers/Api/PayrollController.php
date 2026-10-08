@@ -420,28 +420,43 @@ class PayrollController extends Controller
 
     public function getBatches(Request $request)
     {
-        $batches = PayrollBatch::where('company_id', $request->user()->company_id)
-            ->with(['creator', 'approver'])
+        $query = PayrollBatch::with(['creator', 'approver'])
             ->orderBy('period_year', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->get();
+            ->orderBy('created_at', 'desc');
+
+        if ($request->user()->company_id && ! $request->user()->canAccessAllCompanies()) {
+            $query->where('company_id', $request->user()->company_id);
+        }
+
+        if ($request->has('status') && !empty($request->status)) {
+            $query->where('status', $request->status);
+        }
+
+        $batches = $query->get();
 
         return response()->json(['data' => $batches]);
     }
 
     public function getBatchDetail(Request $request, $id)
     {
-        $batch = PayrollBatch::where('company_id', $request->user()->company_id)
-            ->with(['salaries.user', 'salaries.detailsRecords', 'creator', 'approver'])
-            ->findOrFail($id);
+        $query = PayrollBatch::with(['salaries.user', 'salaries.detailsRecords', 'creator', 'approver']);
+
+        if ($request->user()->company_id && ! $request->user()->canAccessAllCompanies()) {
+            $query->where('company_id', $request->user()->company_id);
+        }
+
+        $batch = $query->findOrFail($id);
 
         return response()->json(['data' => $batch]);
     }
 
     public function submitForApproval(Request $request, $batchId)
     {
-        $batch = PayrollBatch::where('company_id', $request->user()->company_id)
-            ->findOrFail($batchId);
+        $query = PayrollBatch::query();
+        if ($request->user()->company_id && ! $request->user()->canAccessAllCompanies()) {
+            $query->where('company_id', $request->user()->company_id);
+        }
+        $batch = $query->findOrFail($batchId);
 
         if ($batch->status !== 'draft' && $batch->status !== 'rejected') {
             return response()->json(['message' => 'Batch ini tidak bisa disubmit.'], 422);
@@ -456,15 +471,23 @@ class PayrollController extends Controller
         Salary::where('batch_id', $batch->id)->update(['status' => 'pending_approval']);
 
         return response()->json([
-            'message' => 'Payroll berhasil disubmit untuk persetujuan CEO.',
+            'message' => 'Payroll berhasil disubmit untuk persetujuan.',
             'data' => $batch->fresh(),
         ]);
     }
 
     public function approveBatch(Request $request, $batchId)
     {
-        $batch = PayrollBatch::where('company_id', $request->user()->company_id)
-            ->findOrFail($batchId);
+        $user = $request->user();
+        if ($user->role_id !== 1 && ! $user->hasPermission('approve-payroll') && ! $user->hasPermission('manage-payroll')) {
+            return response()->json(['message' => 'Anda tidak memiliki hak akses untuk menyetujui payroll.'], 403);
+        }
+
+        $query = PayrollBatch::query();
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
+            $query->where('company_id', $user->company_id);
+        }
+        $batch = $query->findOrFail($batchId);
 
         if ($batch->status !== 'pending_approval') {
             return response()->json(['message' => 'Batch ini tidak dalam status menunggu persetujuan.'], 422);
@@ -472,7 +495,7 @@ class PayrollController extends Controller
 
         $batch->update([
             'status' => 'approved',
-            'approved_by' => $request->user()->id,
+            'approved_by' => $user->id,
             'approved_at' => now(),
         ]);
 
@@ -487,10 +510,18 @@ class PayrollController extends Controller
 
     public function rejectBatch(Request $request, $batchId)
     {
+        $user = $request->user();
+        if ($user->role_id !== 1 && ! $user->hasPermission('approve-payroll') && ! $user->hasPermission('manage-payroll')) {
+            return response()->json(['message' => 'Anda tidak memiliki hak akses untuk menolak payroll.'], 403);
+        }
+
         $request->validate(['rejection_note' => 'required|string']);
 
-        $batch = PayrollBatch::where('company_id', $request->user()->company_id)
-            ->findOrFail($batchId);
+        $query = PayrollBatch::query();
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
+            $query->where('company_id', $user->company_id);
+        }
+        $batch = $query->findOrFail($batchId);
 
         if ($batch->status !== 'pending_approval') {
             return response()->json(['message' => 'Batch ini tidak dalam status menunggu persetujuan.'], 422);
@@ -504,7 +535,7 @@ class PayrollController extends Controller
         Salary::where('batch_id', $batch->id)->update(['status' => 'rejected']);
 
         return response()->json([
-            'message' => 'Payroll ditolak.',
+            'message' => 'Payroll ditolak untuk revisi.',
             'data' => $batch->fresh(),
         ]);
     }

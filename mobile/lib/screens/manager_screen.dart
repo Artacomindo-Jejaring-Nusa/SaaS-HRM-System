@@ -142,6 +142,15 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
         'desc': 'Validasi fleet dan jarak tempuh kendaraan',
         'permission': 'approve-vehicle-logs',
       },
+      {
+        'title': 'Persetujuan Payroll',
+        'short': 'Payroll',
+        'type': 'payroll',
+        'icon': Icons.payments_rounded,
+        'color': const Color(0xFF8B0000),
+        'desc': 'Otorisasi batch penggajian & transfer gaji',
+        'permission': 'approve-payroll',
+      },
     ];
 
     if (_isSuperAdmin || _permissions.contains('manage-approvals')) return all;
@@ -686,6 +695,9 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
     if (type == 'fund_request') {
       return _buildFundRequestApprovalCard(item, onItemProcessed);
     }
+    if (type == 'payroll') {
+      return _buildPayrollApprovalCard(item, onItemProcessed);
+    }
 
     if (type == 'leave') {
       date = "${item['start_date']} s/d ${item['end_date']}";
@@ -880,6 +892,141 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
     );
   }
 
+  Widget _buildPayrollApprovalCard(dynamic item, VoidCallback onItemProcessed) {
+    final period = "Periode ${item['period_month']} ${item['period_year']}";
+    final totalEmployees = item['total_employees'] ?? 0;
+    final totalGross = double.tryParse(item['total_gross']?.toString() ?? '0') ?? 0;
+    final totalDeductions = double.tryParse(item['total_deductions']?.toString() ?? '0') ?? 0;
+    final totalNet = double.tryParse(item['total_net']?.toString() ?? '0') ?? 0;
+    final creatorName = item['creator']?['name'] ?? 'HR Officer';
+    final currency = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B0000).withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.payments_rounded, color: Color(0xFF8B0000), size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        period,
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      Text(
+                        "Diajukan oleh $creatorName • $totalEmployees Karyawan",
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Text(
+                    "Menunggu",
+                    style: TextStyle(color: Colors.amber.shade800, fontWeight: FontWeight.bold, fontSize: 10),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("Total Gross", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                      Text(currency.format(totalGross), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("Total Potongan", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                      Text("-${currency.format(totalDeductions)}", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600, fontSize: 12)),
+                    ],
+                  ),
+                  const Divider(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("Transfer Bersih (Net THP)", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF8B0000))),
+                      Text(currency.format(totalNet), style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF8B0000))),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red.shade700,
+                      side: BorderSide(color: Colors.red.shade200),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.close_rounded, size: 16),
+                    label: const Text("Tolak (Revisi)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    onPressed: () => _promptRemarkAndAction('payroll', item['id'], 'rejected', onItemProcessed),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF8B0000),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.check_rounded, size: 16),
+                    label: const Text("Setujui", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    onPressed: () => _handleApproval('payroll', item['id'], 'approved', null, onItemProcessed),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildReimbursementApprovalCard(dynamic item, VoidCallback onItemProcessed) {
     String name = item['employee_name'] ?? item['user']?['name'] ?? "Pegawai";
     String role = item['user']?['role']?['name'] ?? "Staff";
@@ -989,7 +1136,7 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.emerald.withOpacity(0.12),
+                        color: const Color(0xFF10B981).withOpacity(0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(

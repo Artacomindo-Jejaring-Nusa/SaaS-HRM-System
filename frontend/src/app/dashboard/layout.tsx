@@ -190,6 +190,7 @@ const sidebarLinks: SidebarLink[] = [
     permission: 'view-salaries',
     submenus: [
       { name: "payroll_batches", href: "/dashboard/payroll", permission: 'manage-payroll' },
+      { name: "payroll_approval", href: "/dashboard/payroll/approval", permission: 'approve-payroll' },
       { name: "payroll_components", href: "/dashboard/payroll/components", permission: 'manage-payroll' },
       { name: "payroll_settings", href: "/dashboard/payroll/settings", permission: 'manage-payroll' },
     ]

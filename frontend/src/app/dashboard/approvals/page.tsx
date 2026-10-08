@@ -31,6 +31,7 @@ import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import OfficialApprovalDocumentSheet from "@/components/OfficialApprovalDocumentSheet";
+import Link from "next/link";
 
 type ApprovalType = 
   | "leave" 
@@ -818,6 +819,15 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
 
           {/* Action & Refresh Button */}
           <div className="flex items-center gap-3">
+            {(isSuperAdmin || hasPermission("approve-payroll") || hasPermission("manage-payroll")) && (
+              <Link
+                href="/dashboard/payroll/approval"
+                className="px-4 py-2.5 bg-white text-[#8B0000] hover:bg-rose-50 rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-sm"
+              >
+                <CreditCard size={14} />
+                <span>Persetujuan Payroll</span>
+              </Link>
+            )}
             <button
               onClick={handleRefreshAll}
               disabled={refreshing}

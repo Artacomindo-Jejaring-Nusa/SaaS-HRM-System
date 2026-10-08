@@ -62,4 +62,5 @@ Spend of Layer-Signature.xlsx
 *.pth
 *.pt
 face-recog-ArcFace/checkpoint/*.pth
-face-recog-ArcFace/venv/
+face-recog-ArcFace/venv/
+.aider*

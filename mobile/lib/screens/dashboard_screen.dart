@@ -61,6 +61,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<String> _pinnedMenuIds = ['absen', 'cuti', 'klaim', 'lembur'];
   bool _isMenuExpanded = false;
   Map<String, dynamic>? _attendanceData;
+  String? _scheduleLabel;
+  String? _shiftName;
   List<dynamic> _announcements = [];
   List<dynamic> _holidays = [];
   bool _hasUnreadNotification = false;
@@ -349,6 +351,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
 
         _attendanceType = userData['attendance_type'];
+        _scheduleLabel = userData['schedule_label'] ??
+            "${userData['work_start_time'] ?? '08:30'} - ${userData['work_end_time'] ?? '17:30'}";
+        _shiftName = userData['shift_name'];
       });
 
       // Sync and start ringing alarm service
@@ -1435,7 +1440,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ],
                   ),
-                  SizedBox(height: 25),
+                  const SizedBox(height: 18),
+                  if (_scheduleLabel != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.schedule_rounded, color: Colors.white, size: 14),
+                          const SizedBox(width: 6),
+                          Text(
+                            "Jadwal: $_scheduleLabel",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ] else
+                    const SizedBox(height: 25),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [

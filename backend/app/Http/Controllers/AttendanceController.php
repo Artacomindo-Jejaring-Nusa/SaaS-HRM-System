@@ -156,10 +156,9 @@ class AttendanceController extends Controller
             ->whereNull('check_out')
             ->first();
 
-        // Check minimum clock-out time (Default: 17:00 WIB / 5 PM, or Shift End Time)
+        // Check minimum clock-out time (Shift End Time or Company/Office Work End Time)
         $now = now();
         $today = Carbon::today()->toDateString();
-        $minCheckOutTime = Carbon::today()->setHour(17)->setMinute(0)->setSecond(0);
 
         $schedule = Schedule::with('shift')
             ->where('user_id', $user->id)
@@ -168,6 +167,9 @@ class AttendanceController extends Controller
 
         if ($schedule && $schedule->shift && $schedule->shift->end_time) {
             $minCheckOutTime = Carbon::parse($today . ' ' . $schedule->shift->end_time);
+        } else {
+            $workEndTime = $user->office?->work_end_time ?? $user->company?->work_end_time ?? '17:00:00';
+            $minCheckOutTime = Carbon::parse($today . ' ' . $workEndTime);
         }
 
         if (! $attendance) {

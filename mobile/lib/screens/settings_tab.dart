@@ -26,6 +26,9 @@ class _SettingsTabState extends State<SettingsTab> {
     super.initState();
     _notifEnabled = NotificationService().isEnabled;
     _alarmEnabled = AttendanceAlarmService().isEnabled;
+    AttendanceAlarmService().syncWorkHoursFromBackend().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   void _showChangePasswordDialog() {

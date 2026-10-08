@@ -58,6 +58,17 @@ class CompanyController extends Controller
 
         $company->update($data);
 
+        if (isset($data['work_start_time']) || isset($data['work_end_time'])) {
+            $officeUpdate = [];
+            if (isset($data['work_start_time'])) {
+                $officeUpdate['work_start_time'] = $data['work_start_time'];
+            }
+            if (isset($data['work_end_time'])) {
+                $officeUpdate['work_end_time'] = $data['work_end_time'];
+            }
+            \App\Models\Office::where('company_id', $company->id)->update($officeUpdate);
+        }
+
         return $this->successResponse($company, 'Data perusahaan berhasil diperbarui.');
     }
 }
