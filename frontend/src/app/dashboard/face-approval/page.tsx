@@ -320,11 +320,8 @@ export default function FaceApprovalPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {data.map((item) => {
-                  const photoSrc = item.face_registered_photo_url
-                    ? getStorageUrl(item.face_registered_photo_url)
-                    : (item.face_registered_photo_path
-                      ? getStorageUrl(item.face_registered_photo_path)
-                      : null);
+                  const rawPhoto = item.face_registered_photo_url || item.face_registered_photo_path;
+                  const photoSrc = rawPhoto ? getStorageUrl(rawPhoto) : null;
 
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">

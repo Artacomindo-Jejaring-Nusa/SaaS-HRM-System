@@ -355,13 +355,6 @@ export default function FundRequestsPage() {
     return empName.includes(q) || title.includes(q);
   });
 
-  let submitButtonLabel = "Kirim Pengajuan Dana";
-  if (isSubmitting) {
-    submitButtonLabel = "Menyimpan...";
-  } else if (editingId) {
-    submitButtonLabel = "Perbarui Pengajuan Dana";
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}

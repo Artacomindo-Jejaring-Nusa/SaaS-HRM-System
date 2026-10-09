@@ -86,6 +86,18 @@ class EmployeeController extends Controller
         abort_if(! $request->user()->hasPermission('view-employees'), 403, self::MSG_FORBIDDEN);
 
         $user = $request->user();
+        $query = $this->buildDatatablesBaseQuery($user, $request);
+
+        return DataTables::of($query)
+            ->with([
+                'unverified_count' => User::where('company_id', $user->company_id)->whereNull('email_verified_at')->count(),
+            ])
+            ->filter(fn ($q) => $this->applyDatatablesFilter($q, $request))
+            ->make(true);
+    }
+
+    private function buildDatatablesBaseQuery($user, Request $request)
+    {
         $query = User::with(['role.permissions', 'supervisor', 'office']);
 
         if ($user->company_id && ! $user->canAccessAllCompanies()) {
@@ -108,30 +120,28 @@ class EmployeeController extends Controller
             $query->where('attendance_type', $request->attendance_type);
         }
 
-        return DataTables::of($query)
-            ->with([
-                'unverified_count' => User::where('company_id', $user->company_id)->whereNull('email_verified_at')->count(),
-            ])
-            ->filter(function ($query) use ($request) {
-                if ($request->filled('role_id') && $request->role_id !== 'all') {
-                    $query->where('role_id', $request->role_id);
-                }
-                if ($request->filled('attendance_type') && $request->attendance_type !== 'all') {
-                    $query->where('attendance_type', $request->attendance_type);
-                }
-                if ($request->has('search') && $request->search['value']) {
-                    $searchTerm = $request->search['value'];
-                    $query->where(function ($q) use ($searchTerm) {
-                        $q->where('name', 'like', "%{$searchTerm}%")
-                            ->orWhere('email', 'like', "%{$searchTerm}%")
-                            ->orWhere('nik', 'like', "%{$searchTerm}%")
-                            ->orWhereHas('role', function ($r) use ($searchTerm) {
-                                $r->where('name', 'like', "%{$searchTerm}%");
-                            });
+        return $query;
+    }
+
+    private function applyDatatablesFilter($query, Request $request)
+    {
+        if ($request->filled('role_id') && $request->role_id !== 'all') {
+            $query->where('role_id', $request->role_id);
+        }
+        if ($request->filled('attendance_type') && $request->attendance_type !== 'all') {
+            $query->where('attendance_type', $request->attendance_type);
+        }
+        if ($request->has('search') && ! empty($request->search['value'])) {
+            $searchTerm = $request->search['value'];
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('name', 'like', "%{$searchTerm}%")
+                    ->orWhere('email', 'like', "%{$searchTerm}%")
+                    ->orWhere('nik', 'like', "%{$searchTerm}%")
+                    ->orWhereHas('role', function ($r) use ($searchTerm) {
+                        $r->where('name', 'like', "%{$searchTerm}%");
                     });
-                }
-            })
-            ->make(true);
+            });
+        }
     }
 
     public function store(Request $request)

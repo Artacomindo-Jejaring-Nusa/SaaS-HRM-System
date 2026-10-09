@@ -7,6 +7,70 @@ import { Camera, MapPin, ScanFace, CheckCircle, AlertCircle, ArrowLeft } from "l
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
+interface OfficeTarget {
+  lat: number;
+  lng: number;
+  radius: number;
+  name: string;
+}
+
+function getDistanceFromLatLonInM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Radius earth in km
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c * 1000; // Return in meters
+}
+
+function findNearestCompanyOffice(lat: number, lng: number, company: any): OfficeTarget | null {
+  if (!company?.offices?.length) return null;
+
+  let minDistance = getDistanceFromLatLonInM(lat, lng, parseFloat(company.latitude), parseFloat(company.longitude));
+  let nearest: OfficeTarget = { 
+    lat: parseFloat(company.latitude), 
+    lng: parseFloat(company.longitude), 
+    radius: Number(company.default_radius) || 100, 
+    name: "Kantor Pusat (HQ)" 
+  };
+
+  for (const office of company.offices) {
+    if (office.is_active) {
+      const d = getDistanceFromLatLonInM(lat, lng, parseFloat(office.latitude), parseFloat(office.longitude));
+      if (d < minDistance) {
+        minDistance = d;
+        nearest = { 
+          lat: parseFloat(office.latitude), 
+          lng: parseFloat(office.longitude), 
+          radius: Number(office.radius) || 100, 
+          name: office.name 
+        };
+      }
+    }
+  }
+
+  return nearest;
+}
+
+function captureWebcamFrame(video: HTMLVideoElement, canvas: HTMLCanvasElement): string {
+  const context = canvas.getContext('2d');
+  const maxWidth = 640;
+  const scale = Math.min(maxWidth / video.videoWidth, 1);
+  canvas.width = video.videoWidth * scale;
+  canvas.height = video.videoHeight * scale;
+
+  if (context) {
+    context.translate(canvas.width, 0);
+    context.scale(-1, 1);
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  }
+
+  return canvas.toDataURL('image/jpeg', 0.7);
+}
+
 export default function LiveAttendancePage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -18,26 +82,42 @@ export default function LiveAttendancePage() {
   const [distance, setDistance] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState("Menyiapkan Sistem...");
   const [loading, setLoading] = useState(false);
-  const [officeConfig, setOfficeConfig] = useState<any>(null);
+  const [officeConfig, setOfficeConfig] = useState<OfficeTarget | null>(null);
   const [attendanceType, setAttendanceType] = useState<'office' | 'dinas_luar'>('office');
   const [destination, setDestination] = useState("");
   const [notes, setNotes] = useState("");
 
+  const resolveTargetOffice = async (lat: number, lng: number): Promise<OfficeTarget | null> => {
+    if (user?.office) {
+      return {
+        lat: parseFloat(user.office.latitude),
+        lng: parseFloat(user.office.longitude),
+        radius: Number((user.office as any).radius) || 100,
+        name: user.office.name
+      };
+    }
+    try {
+      const res = await axiosInstance.get('/company');
+      return findNearestCompanyOffice(lat, lng, res.data?.data);
+    } catch (e) {
+      console.error("Error finding nearest office", e);
+      return null;
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
 
-    // 1. Initialize office config from user's assigned office
     if (user.office) {
       setOfficeConfig({
         lat: parseFloat(user.office.latitude),
         lng: parseFloat(user.office.longitude),
-        radius: Number((user.office as any).radius) || 100, // DB column is 'radius'
+        radius: Number((user.office as any).radius) || 100,
         name: user.office.name
       });
     }
 
-    // 2. Initialize Webcam
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    if (navigator.mediaDevices?.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ video: true })
         .then((stream) => {
           if (videoRef.current) {
@@ -52,9 +132,6 @@ export default function LiveAttendancePage() {
         });
     }
 
-    // 3. Get Geolocation & Match Nearest Office
-    // NOTE: Geolocation usage is required for business logic validation to ensure
-    // employees are physically located within the allowed office geofencing radius.
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
@@ -62,61 +139,7 @@ export default function LiveAttendancePage() {
           const lng = position.coords.longitude;
           setLocation({ lat, lng });
           
-          let targetOffice = null;
-
-          // Check assigned office first (already set in useEffect but let's re-verify inside callback)
-          if (user?.office) {
-            targetOffice = {
-              lat: parseFloat(user.office.latitude),
-              lng: parseFloat(user.office.longitude),
-              radius: Number((user.office as any).radius) || 100,
-              name: user.office.name
-            };
-          } 
-          // Otherwise find nearest from company offices
-          else {
-            try {
-              const res = await axiosInstance.get('/company');
-              const company = res.data?.data;
-              if (company?.offices?.length > 0) {
-                let minDistance = Infinity;
-                let nearest = null;
-
-                // Cek HQ dulu
-                const hqDist = getDistanceFromLatLonInM(lat, lng, parseFloat(company.latitude), parseFloat(company.longitude));
-                minDistance = hqDist;
-                nearest = { 
-                  lat: parseFloat(company.latitude), 
-                  lng: parseFloat(company.longitude), 
-                  radius: Number(company.default_radius) || 100, 
-                  name: "Kantor Pusat (HQ)" 
-                };
-
-                // Cek semua cabang
-                company.offices.forEach((office: any) => {
-                  if (office.is_active) {
-                    const d = getDistanceFromLatLonInM(lat, lng, parseFloat(office.latitude), parseFloat(office.longitude));
-                    if (d < minDistance) {
-                      minDistance = d;
-                      nearest = { 
-                        lat: parseFloat(office.latitude), 
-                        lng: parseFloat(office.longitude), 
-                        radius: Number(office.radius) || 100, 
-                        name: office.name 
-                      };
-                    }
-                  }
-                });
-
-                if (nearest) {
-                  targetOffice = nearest;
-                }
-              }
-            } catch (e) {
-              console.error("Error finding nearest office", e);
-            }
-          }
-
+          const targetOffice = await resolveTargetOffice(lat, lng);
           if (targetOffice) {
             setOfficeConfig(targetOffice);
             const dist = getDistanceFromLatLonInM(lat, lng, targetOffice.lat, targetOffice.lng);
@@ -134,69 +157,39 @@ export default function LiveAttendancePage() {
     }
   }, [user]);
 
-  const getDistanceFromLatLonInM = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; // Radius earth in km
-    const dLat = (lat2 - lat1) * (Math.PI / 180);
-    const dLon = (lon2 - lon1) * (Math.PI / 180);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const d = R * c; 
-    return d * 1000; // Return in meters
+  const validateAttendance = (): boolean => {
+    if (!location) {
+      toast.warning("Menunggu titik koordinat lokasi GPS...");
+      return false;
+    }
+    if (!videoRef.current || !canvasRef.current) {
+      toast.error("Kamera tidak siap!");
+      return false;
+    }
+    const isDinasLuar = attendanceType === 'dinas_luar';
+    if (!isDinasLuar && distance !== null && officeConfig && distance > officeConfig.radius) {
+      toast.error(`Akses Ditolak: Anda berada ${Math.round(distance - officeConfig.radius)}m di luar radius kantor!`);
+      return false;
+    }
+    if (isDinasLuar && !destination.trim()) {
+      toast.error("Tujuan Dinas Luar wajib diisi!");
+      return false;
+    }
+    return true;
   };
 
   const handleAttendance = async (type: 'check-in' | 'check-out') => {
-    if (!location) {
-      toast.warning("Menunggu titik koordinat lokasi GPS...");
-      return;
-    }
-
-    if (!videoRef.current || !canvasRef.current) {
-      toast.error("Kamera tidak siap!");
+    if (!validateAttendance() || !location || !videoRef.current || !canvasRef.current) {
       return;
     }
 
     const isDinasLuar = attendanceType === 'dinas_luar';
-
-    if (!isDinasLuar && distance !== null && officeConfig && distance > officeConfig.radius) {
-      toast.error(`Akses Ditolak: Anda berada ${Math.round(distance - officeConfig.radius)}m di luar radius kantor!`);
-      return;
-    }
-
-    if (isDinasLuar && !destination.trim()) {
-      toast.error("Tujuan Dinas Luar wajib diisi!");
-      return;
-    }
-    
     setLoading(true);
     setStatusMsg("Menganalisis Wajah (Face Recognition)...");
 
-    // Capture Frame After a short delay for dramatic effect/scanning
     setTimeout(async () => {
       try {
-        const video = videoRef.current!;
-        const canvas = canvasRef.current!;
-        const context = canvas.getContext('2d');
-
-        // Resize to max 640px width to reduce payload size
-        const maxWidth = 640;
-        const scale = Math.min(maxWidth / video.videoWidth, 1);
-        canvas.width = video.videoWidth * scale;
-        canvas.height = video.videoHeight * scale;
-
-        // Draw current frame to canvas
-        if (context) {
-          // Mirror image handling
-          context.translate(canvas.width, 0);
-          context.scale(-1, 1);
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        }
-
-        // Use JPEG at 70% quality (~100KB) instead of PNG (~5MB+)
-        const selfieBase64 = canvas.toDataURL('image/jpeg', 0.7);
-
+        const selfieBase64 = captureWebcamFrame(videoRef.current!, canvasRef.current!);
         const payload = {
           latitude: location.lat,
           longitude: location.lng,
@@ -207,21 +200,14 @@ export default function LiveAttendancePage() {
         };
 
         const res = await axiosInstance.post(`/attendance/${type}`, payload);
-        
         setStatusMsg(`Berhasil ${type === 'check-in' ? 'Absen Masuk' : 'Absen Keluar'}!`);
         toast.success(res.data.message || `Berhasil ${type === 'check-in' ? 'Check-in' : 'Check-out'}!`);
         router.push('/dashboard');
-        
       } catch (error: any) {
         setStatusMsg("Gagal melakukan absensi.");
         const errData = error.response?.data;
-        if (errData?.errors) {
-          // Show detailed validation errors
-          const fieldErrors = Object.values(errData.errors).flat().join(', ');
-          toast.error(fieldErrors || errData?.message || "Terjadi kesalahan sistem.");
-        } else {
-          toast.error(errData?.message || "Terjadi kesalahan sistem.");
-        }
+        const fieldErrors = errData?.errors ? Object.values(errData.errors).flat().join(', ') : null;
+        toast.error(fieldErrors || errData?.message || "Terjadi kesalahan sistem.");
       } finally {
         setLoading(false);
       }

@@ -48,6 +48,33 @@ interface Schedule {
   shift: { name: string; start_time: string; end_time: string };
 }
 
+function formatScheduleOption(s: Schedule | null | undefined): string {
+  if (!s?.date) return "-";
+  const d = new Date(s.date);
+  const dayName = d.toLocaleDateString('id-ID', { weekday: 'short' });
+  const dateFormatted = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+  const shiftName = s.shift?.name || "Shift";
+  const startTime = s.shift?.start_time ? s.shift.start_time.substring(0, 5) : "";
+  const endTime = s.shift?.end_time ? s.shift.end_time.substring(0, 5) : "";
+  const timeRange = startTime && endTime ? ` (${startTime} - ${endTime})` : "";
+  return `${dayName}, ${dateFormatted} — ${shiftName}${timeRange}`;
+}
+
+function getStatusBadge(status: string) {
+  switch (status) {
+    case 'pending_receiver': 
+      return <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-[11px] font-bold border border-blue-100 flex items-center gap-1.5 w-max"><Clock size={12} /> Menunggu Rekan</span>;
+    case 'pending_manager': 
+      return <span className="px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg text-[11px] font-bold border border-amber-100 flex items-center gap-1.5 w-max"><Clock size={12} /> Menunggu Atasan</span>;
+    case 'approved': 
+      return <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-[11px] font-bold border border-emerald-100 flex items-center gap-1.5 w-max"><CheckCircle2 size={12} /> Selesai</span>;
+    case 'rejected': 
+      return <span className="px-2.5 py-1 bg-red-50 text-red-700 rounded-lg text-[11px] font-bold border border-red-100 flex items-center gap-1.5 w-max"><XCircle size={12} /> Ditolak</span>;
+    default: 
+      return <span className="px-2.5 py-1 bg-gray-50 text-gray-700 rounded-lg text-[11px] font-bold border border-gray-100 flex items-center gap-1.5 w-max">{status}</span>;
+  }
+}
+
 export default function ShiftSwapPage() {
   const { user, hasPermission } = useAuth();
   const [swaps, setSwaps] = useState<ShiftSwap[]>([]);
@@ -133,7 +160,7 @@ export default function ShiftSwapPage() {
         const mySchedRes = await axiosInstance.get(`/schedules?user_id=${user.id}&start_date=${startOfMonth}&per_page=100`);
         const schedData = mySchedRes.data.data;
         const rawList = Array.isArray(schedData) ? schedData : (schedData?.data || []);
-        setMySchedules(rawList.filter((s: any) => s.shift && s.shift.name));
+        setMySchedules(rawList.filter((s: any) => s.shift?.name));
       }
     } catch (e) {
       console.error("Gagal ambil jadwal shift saya", e);
@@ -150,22 +177,10 @@ export default function ShiftSwapPage() {
       const res = await axiosInstance.get(`/schedules?user_id=${receiverId}&start_date=${startOfMonth}&per_page=100`);
       const resData = res.data.data;
       const rawList = Array.isArray(resData) ? resData : (resData?.data || []);
-      setReceiverSchedules(rawList.filter((s: any) => s.shift && s.shift.name));
+      setReceiverSchedules(rawList.filter((s: any) => s.shift?.name));
     } catch (e) {
       console.error("Gagal ambil jadwal rekan penerima", e);
     }
-  };
-
-  const formatScheduleOption = (s: Schedule) => {
-    if (!s || !s.date) return "-";
-    const d = new Date(s.date);
-    const dayName = d.toLocaleDateString('id-ID', { weekday: 'short' });
-    const dateFormatted = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
-    const shiftName = s.shift?.name || "Shift";
-    const startTime = s.shift?.start_time ? s.shift.start_time.substring(0, 5) : "";
-    const endTime = s.shift?.end_time ? s.shift.end_time.substring(0, 5) : "";
-    const timeRange = startTime && endTime ? ` (${startTime} - ${endTime})` : "";
-    return `${dayName}, ${dateFormatted} — ${shiftName}${timeRange}`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -223,21 +238,6 @@ export default function ShiftSwapPage() {
         },
       },
     });
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending_receiver': 
-        return <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-[11px] font-bold border border-blue-100 flex items-center gap-1.5 w-max"><Clock size={12} /> Menunggu Rekan</span>;
-      case 'pending_manager': 
-        return <span className="px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg text-[11px] font-bold border border-amber-100 flex items-center gap-1.5 w-max"><Clock size={12} /> Menunggu Atasan</span>;
-      case 'approved': 
-        return <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-[11px] font-bold border border-emerald-100 flex items-center gap-1.5 w-max"><CheckCircle2 size={12} /> Selesai</span>;
-      case 'rejected': 
-        return <span className="px-2.5 py-1 bg-red-50 text-red-700 rounded-lg text-[11px] font-bold border border-red-100 flex items-center gap-1.5 w-max"><XCircle size={12} /> Ditolak</span>;
-      default: 
-        return <span className="px-2.5 py-1 bg-gray-50 text-gray-700 rounded-lg text-[11px] font-bold border border-gray-100 flex items-center gap-1.5 w-max">{status}</span>;
-    }
   };
 
   if (loading && swaps.length === 0) return <ListPageSkeleton />;

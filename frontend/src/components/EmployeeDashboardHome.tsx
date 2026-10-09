@@ -80,6 +80,19 @@ function renderWebApprovalStatusBadge(webApprovalStatus?: string) {
   return null;
 }
 
+function getScheduleDisplayLabel(user: any): string {
+  if (user?.attendance_type === "shift" && (!user?.today_shift && (!user?.schedule_label || user?.schedule_label === "Tidak Ada Shift"))) {
+    return "Tidak Ada Shift";
+  }
+  if (user?.schedule_label) {
+    return user.schedule_label;
+  }
+  if (user?.work_start_time) {
+    return `${user.work_start_time} - ${user.work_end_time}`;
+  }
+  return "08:30 - 17:30";
+}
+
 function renderAttendanceActionButton(
   isCheckedIn: boolean,
   isCheckedOut: boolean,
@@ -183,9 +196,7 @@ function EmployeeWebAttendanceCard({
               Jadwal Kerja:
             </span>
             <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded-md border border-slate-200 text-[11px]">
-              {user?.attendance_type === "shift" && (!user?.today_shift && (!user?.schedule_label || user?.schedule_label === "Tidak Ada Shift"))
-                ? "Tidak Ada Shift"
-                : (user?.schedule_label || (user?.work_start_time ? `${user.work_start_time} - ${user.work_end_time}` : "08:30 - 17:30"))}
+              {getScheduleDisplayLabel(user)}
             </span>
           </div>
 
