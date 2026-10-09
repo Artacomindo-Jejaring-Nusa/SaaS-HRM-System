@@ -29,7 +29,9 @@ interface FaceRegistration {
   nik: string | null;
   email: string;
   profile_photo_path: string | null;
+  profile_photo_url?: string | null;
   face_registered_photo_path: string | null;
+  face_registered_photo_url?: string | null;
   face_status: "not_registered" | "pending" | "approved" | "rejected";
   face_rejection_reason: string | null;
   face_registered_at: string | null;
@@ -318,9 +320,11 @@ export default function FaceApprovalPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {data.map((item) => {
-                  const photoSrc = item.face_registered_photo_path
-                    ? getStorageUrl(item.face_registered_photo_path)
-                    : null;
+                  const photoSrc = item.face_registered_photo_url
+                    ? getStorageUrl(item.face_registered_photo_url)
+                    : (item.face_registered_photo_path
+                      ? getStorageUrl(item.face_registered_photo_path)
+                      : null);
 
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
@@ -346,6 +350,13 @@ export default function FaceApprovalPage() {
                                 src={photoSrc}
                                 alt={item.name}
                                 className="w-12 h-12 object-cover rounded-xl border-2 border-slate-200 dark:border-slate-700 shadow-sm group-hover:border-blue-500 transition-all"
+                                onError={(e) => {
+                                  const target = e.currentTarget;
+                                  if (item.face_registered_photo_path && !target.dataset.triedPath) {
+                                    target.dataset.triedPath = "true";
+                                    target.src = getStorageUrl(item.face_registered_photo_path);
+                                  }
+                                }}
                               />
                               <div className="absolute inset-0 bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
                                 <Eye className="w-4 h-4 text-white" />

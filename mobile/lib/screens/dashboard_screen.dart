@@ -329,7 +329,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _permissions = perms;
 
         // Determine Manager Portal access:
-        if (userData['can_access_manager_portal'] == true || userData['is_manager'] == true) {
+        if (userData['can_access_manager_portal'] == false) {
+          _isManager = false;
+        } else if (userData['can_access_manager_portal'] == true || userData['is_manager'] == true) {
           _isManager = true;
         } else if (userData['role_id'] == 1 ||
             (userData['role'] != null && userData['role']['id'] == 1) ||
@@ -351,9 +353,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
 
         _attendanceType = userData['attendance_type'];
-        _scheduleLabel = userData['schedule_label'] ??
-            "${userData['work_start_time'] ?? '08:30'} - ${userData['work_end_time'] ?? '17:30'}";
-        _shiftName = userData['shift_name'];
+        final isShiftWorker = _attendanceType == 'shift';
+        final hasShiftToday = userData['today_shift'] != null;
+
+        if (isShiftWorker && !hasShiftToday) {
+          _scheduleLabel = userData['schedule_label'] ?? 'Tidak Ada Shift';
+          _shiftName = 'Tidak Ada Shift';
+        } else {
+          _scheduleLabel = userData['schedule_label'] ??
+              "${userData['work_start_time'] ?? '08:30'} - ${userData['work_end_time'] ?? '17:30'}";
+          _shiftName = userData['shift_name'];
+        }
       });
 
       // Sync and start ringing alarm service

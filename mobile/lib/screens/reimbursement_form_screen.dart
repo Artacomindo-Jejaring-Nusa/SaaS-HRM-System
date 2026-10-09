@@ -167,19 +167,30 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
   }
 
   // ── Submit ──
-  Future<void> _submit() async {
-    if (_titleCtrl.text.isEmpty) {
-      _snack("Isi keperluan / judul!", Colors.red);
+  // ── Validation & Open Preview ──
+  Future<void> _validateAndShowPreview() async {
+    if (_titleCtrl.text.trim().isEmpty) {
+      _snack("Keperluan / Judul klaim biaya wajib diisi!", Colors.red);
       return;
     }
     for (final i in _items) {
-      if (i.spesifikasiCtrl.text.isEmpty ||
-          i.unitCtrl.text.isEmpty ||
-          i.qtyCtrl.text.isEmpty ||
-          i.hargaCtrl.text.isEmpty) {
+      if (i.spesifikasiCtrl.text.trim().isEmpty ||
+          i.unitCtrl.text.trim().isEmpty ||
+          i.qtyCtrl.text.trim().isEmpty ||
+          i.hargaCtrl.text.trim().isEmpty) {
         _snack("Tolong isi spesifikasi, unit, qty, dan harga untuk semua baris item.", Colors.red);
         return;
       }
+    }
+
+    if (_signatureCtrl.isEmpty && _signatureBase64 == null) {
+      _snack("Tanda tangan digital pengaju wajib dibubuhkan!", Colors.red);
+      return;
+    }
+
+    if (_pickedFiles.isEmpty) {
+      _snack("Foto bukti nota / struk / kuitansi asli wajib diunggah untuk klaim biaya!", Colors.red);
+      return;
     }
 
     // Capture signature if drawn
@@ -197,6 +208,12 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
       }
     }
 
+    if (!mounted) return;
+    _showPreviewModal();
+  }
+
+  // ── Submit API ──
+  Future<void> _submit() async {
     setState(() => _isSubmitting = true);
     LoadingDialog.show(context, message: "Mengajukan klaim biaya...");
 
@@ -234,7 +251,7 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
         if (res['status'] == 'success') {
           widget.onSubmitted();
           Navigator.pop(context);
-          _snack("Klaim berhasil diajukan!", Colors.green);
+          _snack("Klaim biaya berhasil diajukan!", Colors.green);
         } else {
           setState(() => _isSubmitting = false);
           _snack("Gagal: ${res['message'] ?? 'Status Error'}", Colors.red);
@@ -245,6 +262,407 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
       setState(() => _isSubmitting = false);
       _snack("Error: ${e.toString()}", Colors.red);
     }
+  }
+
+  void _showPreviewModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Container(
+          height: MediaQuery.of(context).size.height * 0.88,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF800000),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Preview Klaim Biaya",
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            "Periksa kebenaran data & nota sebelum dikirim",
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Body
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Applicant summary
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.grey[200]!),
+                        ),
+                        child: Column(
+                          children: [
+                            _previewRow("Pemohon", _employeeName()),
+                            const Divider(height: 14),
+                            _previewRow("Divisi", _divisiCtrl.text),
+                            const Divider(height: 14),
+                            _previewRow("Prioritas", _selectedPriority),
+                            const Divider(height: 14),
+                            _previewRow(
+                              "Tujuan",
+                              _selectedTujuan == "Lainnya" ? _tujuanLainnyaCtrl.text : (_selectedTujuan.isEmpty ? "-" : _selectedTujuan),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Keperluan
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF800000).withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFF800000).withOpacity(0.15)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "KEPERLUAN / JUDUL KLAIM",
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF800000),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _titleCtrl.text,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[900],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Items list
+                      Text(
+                        "RINCIAN BARANG / JASA (${_items.length} ITEM)",
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.grey[700],
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ..._items.asMap().entries.map((entry) {
+                        final idx = entry.key;
+                        final it = entry.value;
+                        final qty = int.tryParse(it.qtyCtrl.text) ?? 1;
+                        final harga = double.tryParse(it.hargaCtrl.text) ?? 0.0;
+                        final subtotal = qty * harga;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[200]!),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 24,
+                                height: 24,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[100],
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  "${idx + 1}",
+                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey[700]),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      it.spesifikasiCtrl.text,
+                                      style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
+                                    Text(
+                                      "$qty ${it.unitCtrl.text} x ${_currFmt.format(harga)}",
+                                      style: GoogleFonts.inter(fontSize: 11, color: Colors.grey[600]),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                _currFmt.format(subtotal),
+                                style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey[900]),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 12),
+
+                      // Total & Terbilang
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.amber[50],
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.amber[300]!),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  "TOTAL KLAIM BIAYA:",
+                                  style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    color: Colors.amber[900],
+                                  ),
+                                ),
+                                Text(
+                                  _currFmt.format(_totalAmount),
+                                  style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16,
+                                    color: Colors.amber[950],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "Terbilang: ${_terbilang(_totalAmount)}",
+                              style: GoogleFonts.inter(
+                                fontStyle: FontStyle.italic,
+                                fontSize: 11,
+                                color: Colors.amber[800],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Receipt Photos
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "BUKTI NOTA / KUITANSI (${_pickedFiles.length} FOTO)",
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF800000),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.green[50],
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.green[200]!),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.check_circle, size: 12, color: Colors.green[700]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  "Wajib Terlampir",
+                                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green[800]),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 110,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _pickedFiles.length,
+                          itemBuilder: (ctx, i) => Container(
+                            width: 100,
+                            margin: const EdgeInsets.only(right: 10),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey[300]!),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(File(_pickedFiles[i].path), fit: BoxFit.cover),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Signature preview
+                      if (_signatureBase64 != null) ...[
+                        Text(
+                          "TANDA TANGAN DIGITAL",
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.grey[700],
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 70,
+                          width: 160,
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: Image.memory(
+                            base64Decode(_signatureBase64!.split(',').last),
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+
+              // Footer Action Buttons
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: Colors.grey[200]!)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: BorderSide(color: Colors.grey[300]!),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text(
+                          "Periksa Kembali",
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.grey[700]),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: _isSubmitting
+                            ? null
+                            : () {
+                                Navigator.pop(ctx);
+                                _submit();
+                              },
+                        icon: const Icon(Icons.send_rounded, size: 16, color: Colors.white),
+                        label: Text(
+                          "Kirim Sekarang",
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF800000),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _previewRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[600]),
+        ),
+        Text(
+          value.isEmpty ? "-" : value,
+          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[900]),
+        ),
+      ],
+    );
   }
 
   void _snack(String msg, Color bg) {
@@ -266,7 +684,7 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
         foregroundColor: Colors.black,
         elevation: 0.5,
         title: Text(
-          "Formulir Pengajuan Dana",
+          "Formulir Klaim Biaya",
           style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         bottom: TabBar(
@@ -330,7 +748,7 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "FORM PENGAJUAN DANA",
+                        "FORM KLAIM BIAYA (REIMBURSEMENT)",
                         style: GoogleFonts.inter(
                           fontWeight: FontWeight.w900,
                           fontSize: 13,
@@ -610,8 +1028,25 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
           ),
           const SizedBox(height: 24),
 
-          // ── Lampiran Bukti / Nota ──
-          _sectionTitle("BUKTI NOTA / LAMPIRAN DUKUNGAN"),
+          // ── Lampiran Bukti / Nota (WAJIB) ──
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _sectionTitle("BUKTI NOTA / STRUK PEMBAYARAN (WAJIB) *"),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.red[200]!),
+                ),
+                child: Text(
+                  "Wajib Diisi",
+                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red[800]),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
           GestureDetector(
             onTap: _isSubmitting ? null : _pickImages,
@@ -621,7 +1056,10 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
               decoration: BoxDecoration(
                 color: Colors.grey[50],
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.grey[300]!),
+                border: Border.all(
+                  color: _pickedFiles.isEmpty ? Colors.red[300]! : Colors.grey[300]!,
+                  width: _pickedFiles.isEmpty ? 1.5 : 1.0,
+                ),
               ),
               child: _pickedFiles.isNotEmpty
                   ? ListView.builder(
@@ -643,12 +1081,12 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
                         Icon(Icons.add_a_photo_outlined, size: 36, color: _primary),
                         const SizedBox(height: 8),
                         Text(
-                          "Klik untuk upload foto nota/resi",
-                          style: GoogleFonts.inter(color: Colors.grey[500], fontSize: 12),
+                          "Klik untuk foto / upload nota asli (Wajib)",
+                          style: GoogleFonts.inter(color: Colors.red[700], fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                         Text(
-                          "Bisa melampirkan lebih dari 1 gambar",
-                          style: GoogleFonts.inter(color: Colors.grey[400], fontSize: 10),
+                          "Klaim biaya memerlukan minimal 1 foto struk pembayaran",
+                          style: GoogleFonts.inter(color: Colors.grey[500], fontSize: 10),
                         ),
                       ],
                     ),
@@ -675,15 +1113,10 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
               Expanded(
                 flex: 2,
                 child: ElevatedButton.icon(
-                  onPressed: _isSubmitting ? null : _submit,
-                  icon: _isSubmitting
-                      ? const SizedBox(
-                          width: 18, height: 18,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send_rounded, size: 18, color: Colors.white),
+                  onPressed: _isSubmitting ? null : _validateAndShowPreview,
+                  icon: const Icon(Icons.remove_red_eye_rounded, size: 18, color: Colors.white),
                   label: Text(
-                    "Kirim Pengajuan",
+                    "Preview & Ajukan",
                     style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                   style: ElevatedButton.styleFrom(
@@ -905,6 +1338,24 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
               child: _buildDocumentSheet(dateStr, noStr),
             ),
           ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: _isSubmitting ? null : _validateAndShowPreview,
+              icon: const Icon(Icons.send_rounded, size: 18, color: Colors.white),
+              label: Text(
+                "Review & Kirim Klaim Biaya",
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+            ),
+          ),
           const SizedBox(height: 30),
         ],
       ),
@@ -956,7 +1407,7 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
         // ── TITLE ──
         Center(
           child: Text(
-            "PENGAJUAN UANG MUKA / PERMINTAAN DANA",
+            "FORM KLAIM BIAYA (REIMBURSEMENT)",
             style: GoogleFonts.inter(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.5),
           ),
         ),

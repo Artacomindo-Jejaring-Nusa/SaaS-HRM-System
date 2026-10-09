@@ -554,6 +554,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::get('/vehicle-logs/{id}', [VehicleLogController::class, 'show']);
     });
     Route::middleware('permission:apply-vehicle-logs')->group(function () {
+        Route::post('/vehicle-logs/vehicles', [VehicleLogController::class, 'storeVehicle']);
         Route::post('/vehicle-logs/request', [VehicleLogController::class, 'storeRequest']);
         Route::post('/vehicle-logs/departure', [VehicleLogController::class, 'storeDeparture']);
         Route::post('/vehicle-logs/{id}/departure', [VehicleLogController::class, 'storeDeparture']);

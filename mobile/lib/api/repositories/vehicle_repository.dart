@@ -62,6 +62,23 @@ class VehicleRepository {
     }
   }
 
+  static Future<Map<String, dynamic>> registerVehicle(
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final headers = await ApiClient.getHeaders();
+      headers['Content-Type'] = 'application/json';
+      final response = await ApiClient.client.post(
+        Uri.parse('${ApiClient.baseUrl}/vehicle-logs/vehicles'),
+        headers: headers,
+        body: jsonEncode(data),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'status': 'error', 'message': 'Koneksi gagal: ${e.toString()}'};
+    }
+  }
+
   static Future<Map<String, dynamic>> submitLoanRequest(
     Map<String, dynamic> data,
   ) async {

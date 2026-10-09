@@ -44,6 +44,10 @@ class EmployeeController extends Controller
             $query->where('role_id', $request->role_id);
         }
 
+        if ($request->filled('attendance_type') && $request->attendance_type !== 'all') {
+            $query->where('attendance_type', $request->attendance_type);
+        }
+
         $employees = $query
             ->when($request->search, function ($q) use ($request) {
                 $q->where(function ($qq) use ($request) {
@@ -100,6 +104,10 @@ class EmployeeController extends Controller
             $query->where('role_id', $request->role_id);
         }
 
+        if ($request->filled('attendance_type') && $request->attendance_type !== 'all') {
+            $query->where('attendance_type', $request->attendance_type);
+        }
+
         return DataTables::of($query)
             ->with([
                 'unverified_count' => User::where('company_id', $user->company_id)->whereNull('email_verified_at')->count(),
@@ -107,6 +115,9 @@ class EmployeeController extends Controller
             ->filter(function ($query) use ($request) {
                 if ($request->filled('role_id') && $request->role_id !== 'all') {
                     $query->where('role_id', $request->role_id);
+                }
+                if ($request->filled('attendance_type') && $request->attendance_type !== 'all') {
+                    $query->where('attendance_type', $request->attendance_type);
                 }
                 if ($request->has('search') && $request->search['value']) {
                     $searchTerm = $request->search['value'];
@@ -169,13 +180,19 @@ class EmployeeController extends Controller
             $path = $request->file('photo')->store('profile-photos', 'public');
         }
 
+        $portalAccess = null;
+        if ($request->exists('can_access_manager_portal')) {
+            $rawPortal = $request->input('can_access_manager_portal');
+            $portalAccess = ($rawPortal === '' || $rawPortal === null) ? null : filter_var($rawPortal, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        }
+
         $employee = new User;
         $employee->name = $request->name;
         $employee->email = $request->email;
         $employee->password = Hash::make($request->password);
         $employee->company_id = $request->user()->company_id;
         $employee->role_id = $request->role_id;
-        $employee->can_access_manager_portal = $request->has('can_access_manager_portal') ? $request->can_access_manager_portal : null;
+        $employee->can_access_manager_portal = $portalAccess;
         $employee->nik = $request->nik;
         $employee->phone = $request->phone;
         $employee->address = $request->address;
@@ -266,11 +283,16 @@ class EmployeeController extends Controller
             $employee->profile_photo_path = $path;
         }
 
-        $employee->update($request->except(['photo', 'password']));
+        $updateData = $request->except(['photo', 'password', 'can_access_manager_portal']);
 
-        if ($request->has('can_access_manager_portal')) {
-            $employee->can_access_manager_portal = $request->can_access_manager_portal;
+        if ($request->exists('can_access_manager_portal')) {
+            $rawPortal = $request->input('can_access_manager_portal');
+            $updateData['can_access_manager_portal'] = ($rawPortal === '' || $rawPortal === null)
+                ? null
+                : filter_var($rawPortal, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
         }
+
+        $employee->update($updateData);
 
         if ($request->has('employment_status')) {
             $employee->employment_status = $request->employment_status;

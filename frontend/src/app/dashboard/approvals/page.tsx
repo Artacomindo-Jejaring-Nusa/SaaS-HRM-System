@@ -35,6 +35,7 @@ import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import OfficialApprovalDocumentSheet from "@/components/OfficialApprovalDocumentSheet";
+import { getStorageUrl } from "@/lib/utils";
 import Link from "next/link";
 
 type ApprovalType = 
@@ -493,15 +494,6 @@ export default function ApprovalsPage() {
   // HRD override state for permit approvals
   const [permitOverrideCategory, setPermitOverrideCategory] = useState<string>("I");
   const [permitOverrideDoctorNote, setPermitOverrideDoctorNote] = useState(false);
-
-  const getStorageUrl = (path: string) => {
-    if (!path) return "";
-    if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) {
-      return path;
-    }
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:8000";
-    return `${backendUrl}/storage/${path.replace(/^\/+/, '')}`;
-  };
 
   // 1. Fetch Manager Pending Counts
   const fetchCounts = useCallback(async () => {

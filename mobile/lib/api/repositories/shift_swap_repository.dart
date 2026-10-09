@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../api_client.dart';
 
 /// Repository untuk fitur Tukar Shift (Shift Swap).
@@ -82,11 +81,12 @@ class ShiftSwapRepository {
     }
   }
 
-  static Future<List<dynamic>?> getSchedules({int? userId}) async {
+  static Future<List<dynamic>?> getSchedules({int? userId, String? startDate}) async {
     try {
       final headers = await ApiClient.getHeaders();
       String url = '${ApiClient.baseUrl}/schedules?per_page=100';
       if (userId != null) url += '&user_id=$userId';
+      if (startDate != null) url += '&start_date=$startDate';
       final response = await ApiClient.client.get(Uri.parse(url), headers: headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
@@ -103,11 +103,15 @@ class ShiftSwapRepository {
     }
   }
 
-  static Future<List<dynamic>?> getEmployees() async {
+  static Future<List<dynamic>?> getEmployees({String? attendanceType}) async {
     try {
       final headers = await ApiClient.getHeaders();
+      String url = '${ApiClient.baseUrl}/employees?per_page=100';
+      if (attendanceType != null) {
+        url += '&attendance_type=$attendanceType';
+      }
       final response = await ApiClient.client.get(
-        Uri.parse('${ApiClient.baseUrl}/employees?per_page=100'),
+        Uri.parse(url),
         headers: headers,
       );
       if (response.statusCode == 200) {

@@ -21,7 +21,11 @@ class ShiftSwapController extends Controller
         $query = ShiftSwap::with(['requester', 'receiver', 'requesterSchedule.shift', 'receiverSchedule.shift'])
             ->where('company_id', $user->company_id);
 
-        if (! $user->is_manager && ! $user->hasRole(['Super Admin', 'Admin', 'HRD', 'Manager'])) {
+        $canViewAll = $user->hasRole('Super Admin')
+            || $user->canAccessAllCompanies()
+            || $user->hasPermission('approve-shift-swaps');
+
+        if (! $canViewAll) {
             $query->where(function ($q) use ($user) {
                 $q->where('requester_id', $user->id)
                     ->orWhere('receiver_id', $user->id);
@@ -132,38 +136,40 @@ class ShiftSwapController extends Controller
 
     public function approve(Request $request, $id)
     {
-        if (! $request->user()->hasPermission('approve-shift-swaps')) {
-            return response()->json(['status' => 'error', 'message' => 'Hanya Atasan/Manager yang dapat menyetujui tukar shift.'], 403);
+        $user = $request->user();
+        $canApprove = $user->hasRole('Super Admin')
+            || $user->canAccessAllCompanies()
+            || $user->hasPermission('approve-shift-swaps');
+
+        if (! $canApprove) {
+            return response()->json(['status' => 'error', 'message' => 'Akses ditolak. Anda tidak memiliki izin untuk menyetujui tukar shift.'], 403);
         }
         $request->validate(['status' => 'required|in:approved,rejected']);
 
         $swap = ShiftSwap::findOrFail($id);
-
-        // Security: Hanya Manager/Supervisor
-        if (! $request->user()->is_manager) {
-            return response()->json(['status' => 'error', 'message' => 'Hanya Manager yang dapat melakukan approval.'], 403);
-        }
 
         DB::beginTransaction();
         try {
             if ($request->status === 'approved') {
                 $swap->update([
                     'status' => 'approved',
-                    'approved_by' => $request->user()->id,
+                    'approved_by' => $user->id,
                 ]);
 
                 // PROSES SWAP: Tukar shift_id di tabel schedules
                 $reqSched = Schedule::find($swap->requester_schedule_id);
                 $resSched = Schedule::find($swap->receiver_schedule_id);
 
-                $tempShiftId = $reqSched->shift_id;
-                $reqSched->update(['shift_id' => $resSched->shift_id]);
-                $resSched->update(['shift_id' => $tempShiftId]);
+                if ($reqSched && $resSched) {
+                    $tempShiftId = $reqSched->shift_id;
+                    $reqSched->update(['shift_id' => $resSched->shift_id]);
+                    $resSched->update(['shift_id' => $tempShiftId]);
+                }
 
-                $msg = 'Permintaan tukar shift telah disetujui Manager. Jadwal sudah diperbarui.';
+                $msg = 'Permintaan tukar shift telah disetujui. Jadwal sudah diperbarui.';
             } else {
                 $swap->update(['status' => 'rejected']);
-                $msg = 'Permintaan tukar shift ditolak oleh Manager.';
+                $msg = 'Permintaan tukar shift ditolak.';
             }
 
             DB::commit();

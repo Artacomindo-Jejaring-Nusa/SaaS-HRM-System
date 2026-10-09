@@ -543,7 +543,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
               child: ClipOval(
                 child: photoUrl != null
                     ? Image.network(
-                        photoUrl,
+                        ApiClient.fixUrl(photoUrl),
                         width: 140,
                         height: 140,
                         fit: BoxFit.cover,
@@ -627,7 +627,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
               child: ClipOval(
                 child: photoUrl != null
                     ? Image.network(
-                        photoUrl,
+                        ApiClient.fixUrl(photoUrl),
                         width: 140,
                         height: 140,
                         fit: BoxFit.cover,

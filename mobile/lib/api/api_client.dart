@@ -31,7 +31,7 @@ class ApiClient {
 
   static String get storageUrl => kDebugMode
       ? 'http://$serverIp:8000/storage'
-      : 'https://$serverIp:8000/storage';
+      : 'https://$serverIp/storage';
 
   /// Fixes URLs that might contain localhost or older IPs to use the current serverIp
   static String fixUrl(String? url) {

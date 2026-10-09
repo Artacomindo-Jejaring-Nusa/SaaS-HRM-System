@@ -183,7 +183,9 @@ function EmployeeWebAttendanceCard({
               Jadwal Kerja:
             </span>
             <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded-md border border-slate-200 text-[11px]">
-              {user?.schedule_label || (user?.work_start_time ? `${user.work_start_time} - ${user.work_end_time}` : "08:30 - 17:30")}
+              {user?.attendance_type === "shift" && (!user?.today_shift && (!user?.schedule_label || user?.schedule_label === "Tidak Ada Shift"))
+                ? "Tidak Ada Shift"
+                : (user?.schedule_label || (user?.work_start_time ? `${user.work_start_time} - ${user.work_end_time}` : "08:30 - 17:30"))}
             </span>
           </div>
 

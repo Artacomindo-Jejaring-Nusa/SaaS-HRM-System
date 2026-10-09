@@ -96,6 +96,7 @@ export default function FundRequestsPage() {
   const [selectedItem, setSelectedItem] = useState<FundRequestRecord | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -211,21 +212,35 @@ export default function FundRequestsPage() {
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.employee_name.trim()) {
       toast.error("Nama pemohon wajib diisi!");
       return;
     }
 
-    const calculatedTotal = calculateTotal(formData.items);
-    if (calculatedTotal <= 0 && !formData.title.trim()) {
-      toast.error("Wajib mengisi detail item pengajuan dana!");
+    if (!formData.title?.trim()) {
+      toast.error("Keperluan / Judul pengajuan dana wajib diisi!");
       return;
     }
 
+    if (formData.items.length === 0 || formData.items.some(i => !i.spesifikasi.trim() || Number(i.qty) <= 0 || Number(i.estimasi_harga) <= 0)) {
+      toast.error("Mohon lengkapi spesifikasi, unit, quantity, dan estimasi harga untuk semua baris item!");
+      return;
+    }
+
+    if (!formData.signature) {
+      toast.error("Tanda tangan digital pengaju wajib dicantumkan!");
+      return;
+    }
+
+    setShowPreviewModal(true);
+  };
+
+  const doFinalSubmit = async () => {
     setIsSubmitting(true);
     try {
+      const calculatedTotal = calculateTotal(formData.items);
       const payload = new FormData();
       payload.append("employee_name", formData.employee_name);
       payload.append("is_custom_employee_name", String(formData.is_custom_employee_name));
@@ -257,9 +272,10 @@ export default function FundRequestsPage() {
         await axiosInstance.post("/fund-requests", payload, {
           headers: { "Content-Type": "multipart/form-data" },
         });
-        toast.success("Pengajuan dana berhasil dikirim!");
+        toast.success("Pengajuan dana berhasil dikirim! Menunggu persetujuan.");
       }
 
+      setShowPreviewModal(false);
       setEditingId(null);
       setViewMode("list");
       setFormData({
@@ -276,8 +292,8 @@ export default function FundRequestsPage() {
         attachments: [],
       });
       fetchRequests(page);
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || "Gagal menyimpan pengajuan dana.");
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Gagal menyimpan pengajuan dana.");
     } finally {
       setIsSubmitting(false);
     }
@@ -538,8 +554,8 @@ export default function FundRequestsPage() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-6">
             <div className="flex items-center justify-between border-b pb-4">
               <div>
-                <h2 className="text-base font-bold text-gray-900 uppercase tracking-wide">FORM PENGAJUAN DANA</h2>
-                <p className="text-xs text-gray-500">Lengkapi informasi pengajuan dana di bawah ini.</p>
+                <h2 className="text-base font-bold text-gray-900 uppercase tracking-wide">FORM PENGAJUAN DANA (PERMINTAAN DANA / UANG MUKA)</h2>
+                <p className="text-xs text-gray-500">Lengkapi formulir pengajuan dana operasional / pengadaan sebelum pembelian dilakukan.</p>
               </div>
               <button 
                 onClick={() => setViewMode("list")}
@@ -794,11 +810,11 @@ export default function FundRequestsPage() {
                 </div>
               </div>
 
-              {/* BUKTI NOTA / LAMPIRAN DUKUNGAN (OPSIONAL) & TTD DIGITAL */}
+              {/* LAMPIRAN DUKUNGAN (PROPOSAL/RAB) & TTD DIGITAL */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="fund-request-attachments" className="block text-xs font-bold text-gray-700 uppercase mb-1">
-                    BUKTI NOTA / LAMPIRAN DUKUNGAN (OPSIONAL)
+                    DOKUMEN PROPOSAL / RAB PENDUKUNG (OPSIONAL)
                   </label>
                   <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:border-[#8B0000] transition bg-gray-50/50">
                     <input
@@ -811,8 +827,8 @@ export default function FundRequestsPage() {
                     />
                     <label htmlFor="fund-request-attachments" className="cursor-pointer flex flex-col items-center justify-center gap-1">
                       <Upload size={24} className="text-gray-400" />
-                      <span className="text-xs font-bold text-gray-700">Klik untuk upload lampiran pendukung</span>
-                      <span className="text-[10px] text-gray-400">Bisa melampirkan foto/dokumen pendukung</span>
+                      <span className="text-xs font-bold text-gray-700">Klik untuk upload proposal / RAB pendukung</span>
+                      <span className="text-[10px] text-gray-400">Pengajuan dana belum memiliki nota. Nota (SPJ) dilaporkan setelah dana digunakan.</span>
                     </label>
 
                     {formData.attachments.length > 0 && (
@@ -864,8 +880,8 @@ export default function FundRequestsPage() {
                   disabled={isSubmitting}
                   className="px-6 py-2 bg-[#8B0000] hover:bg-[#700000] text-white rounded-lg text-xs font-bold shadow-md transition disabled:opacity-50 flex items-center gap-2"
                 >
-                  <Send size={14} />
-                  {submitButtonLabel}
+                  <Eye size={14} />
+                  Preview & Ajukan Dana
                 </button>
               </div>
             </form>
@@ -906,6 +922,154 @@ export default function FundRequestsPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ===== PREVIEW & CONFIRMATION MODAL FOR FUND REQUESTS ===== */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-3xl w-full shadow-2xl border border-gray-200 overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-[#8B0000] to-[#5a0000] text-white p-6 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-black tracking-wide">Preview & Konfirmasi Pengajuan Dana</h3>
+                <p className="text-xs text-rose-200">Periksa kembali detail permohonan uang muka sebelum diajukan ke sistem.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+              {/* Informational Banner */}
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 text-xs text-amber-900">
+                <span className="font-bold text-sm">ℹ️</span>
+                <div>
+                  <span className="font-bold block">Informasi Uang Muka / Cash Advance:</span>
+                  <span>Pengajuan ini adalah permohonan dana sebelum belanja. Dokumen nota / struk resmi (SPJ) akan diserahkan setelah uang dibelanjakan.</span>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs">
+                <div>
+                  <span className="text-gray-500 font-medium block">Nama Pemohon:</span>
+                  <span className="font-bold text-gray-900 block truncate">{formData.employee_name}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-medium block">Divisi:</span>
+                  <span className="font-bold text-gray-900 block truncate">{formData.divisi || "Operasional"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-medium block">Prioritas:</span>
+                  <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                    {formData.priority || "Normal"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-medium block">Tujuan:</span>
+                  <span className="font-bold text-gray-900 block truncate">
+                    {formData.tujuan === "Lainnya" ? formData.tujuanLainnya : formData.tujuan || "-"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Title / Keperluan */}
+              <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-3.5">
+                <span className="text-[11px] font-bold text-[#8B0000] uppercase tracking-wider block mb-1">
+                  Keperluan / Judul Pengadaan
+                </span>
+                <p className="text-sm font-semibold text-gray-900">{formData.title}</p>
+              </div>
+
+              {/* Items Table */}
+              <div>
+                <span className="text-xs font-bold text-gray-700 uppercase tracking-wider block mb-2">
+                  Rincian Kebutuhan Dana
+                </span>
+                <div className="border border-gray-200 rounded-xl overflow-hidden text-xs">
+                  <table className="w-full border-collapse">
+                    <thead className="bg-gray-100/80 border-b border-gray-200 font-bold text-gray-700">
+                      <tr>
+                        <th className="p-2 text-center w-8">No</th>
+                        <th className="p-2 text-left">Spesifikasi</th>
+                        <th className="p-2 text-center w-14">Unit</th>
+                        <th className="p-2 text-center w-14">Qty</th>
+                        <th className="p-2 text-right w-28">Estimasi Harga</th>
+                        <th className="p-2 text-right w-28">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {formData.items.map((item, idx) => {
+                        const qty = Number(item.qty) || 0;
+                        const price = Number(item.estimasi_harga) || 0;
+                        return (
+                          <tr key={item.tempId || idx} className="hover:bg-gray-50">
+                            <td className="p-2 text-center font-semibold text-gray-500">{idx + 1}</td>
+                            <td className="p-2 font-medium text-gray-900">{item.spesifikasi}</td>
+                            <td className="p-2 text-center text-gray-600">{item.unit}</td>
+                            <td className="p-2 text-center font-bold">{qty}</td>
+                            <td className="p-2 text-right font-mono">{formatCurrency(price)}</td>
+                            <td className="p-2 text-right font-mono font-bold text-gray-900">{formatCurrency(qty * price)}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="bg-amber-50/70 font-black border-t-2 border-gray-300">
+                        <td colSpan={5} className="p-2.5 text-right uppercase tracking-wider text-gray-800">TOTAL ESTIMASI DANA:</td>
+                        <td className="p-2.5 text-right font-mono text-sm text-[#8B0000]">{formatCurrency(calculateTotal(formData.items))}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Signature Preview */}
+              {formData.signature && (
+                <div>
+                  <span className="text-xs font-bold text-gray-700 uppercase tracking-wider block mb-1">
+                    Tanda Tangan Digital Pengaju
+                  </span>
+                  <div className="w-48 h-20 border border-gray-300 rounded-lg p-1 bg-white">
+                    <img src={formData.signature} alt="TTD Pengaju" className="w-full h-full object-contain" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="bg-gray-50 p-4 border-t border-gray-200 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-white transition"
+              >
+                Kembali & Edit
+              </button>
+              <button
+                type="button"
+                onClick={doFinalSubmit}
+                disabled={isSubmitting}
+                className="px-6 py-2.5 bg-[#8B0000] hover:bg-[#700000] text-white rounded-xl text-xs font-bold shadow-lg shadow-rose-900/20 transition flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Mengirimkan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send size={14} />
+                    <span>Konfirmasi & Kirim Pengajuan Dana</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

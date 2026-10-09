@@ -20,6 +20,15 @@ interface User {
   auto_validate_web_attendance?: boolean;
   auto_validate_until?: string;
   is_web_auto_validated?: boolean;
+  attendance_type?: string;
+  shift_name?: string;
+  today_shift?: {
+    id: number;
+    name: string;
+    start_time: string;
+    end_time: string;
+  } | null;
+  has_shift_today?: boolean;
   schedule_label?: string;
   work_start_time?: string;
   work_end_time?: string;
@@ -68,7 +77,12 @@ export const isManagerUser = (u: any, permissions: string[] = []): boolean => {
     return Boolean(u.can_access_manager_portal);
   }
 
-  // 1. If explicitly true on user record or accessor
+  // 1. Explicit override in database: false = force disabled
+  if (u.can_access_manager_portal === false) {
+    return false;
+  }
+
+  // 2. Explicit override or backend computed manager flag: true = force enabled
   if (u.can_access_manager_portal === true || u.is_manager === true) {
     return true;
   }

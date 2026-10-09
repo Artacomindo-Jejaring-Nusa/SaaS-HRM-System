@@ -130,28 +130,44 @@ class ProfileController extends Controller
 
         $workStartTime = null;
         $workEndTime = null;
+        $shiftName = null;
+        $scheduleLabel = null;
+        $hasShiftToday = false;
 
         if ($todaySchedule && $todaySchedule->shift) {
-            $workStartTime = $todaySchedule->shift->start_time;
-            $workEndTime = $todaySchedule->shift->end_time;
+            $workStartTime = substr($todaySchedule->shift->start_time, 0, 5);
+            $workEndTime = substr($todaySchedule->shift->end_time, 0, 5);
+            $shiftName = $todaySchedule->shift->name;
+            $scheduleLabel = "{$workStartTime} - {$workEndTime} ({$shiftName})";
+            $hasShiftToday = true;
+        } elseif ($user->attendance_type === 'shift') {
+            $workStartTime = null;
+            $workEndTime = null;
+            $shiftName = 'Tidak Ada Shift';
+            $scheduleLabel = 'Tidak Ada Shift';
+            $hasShiftToday = false;
         } else {
-            $workStartTime = !empty($user->office?->work_start_time) ? $user->office->work_start_time : ($user->company?->work_start_time ?? '08:30:00');
-            $workEndTime = !empty($user->office?->work_end_time) ? $user->office->work_end_time : ($user->company?->work_end_time ?? '17:30:00');
+            $rawStart = !empty($user->office?->work_start_time) ? $user->office->work_start_time : ($user->company?->work_start_time ?? '08:30:00');
+            $rawEnd = !empty($user->office?->work_end_time) ? $user->office->work_end_time : ($user->company?->work_end_time ?? '17:30:00');
+            $workStartTime = substr($rawStart, 0, 5);
+            $workEndTime = substr($rawEnd, 0, 5);
+            $shiftName = 'Jam Kantor';
+            $scheduleLabel = "{$workStartTime} - {$workEndTime} (Normal)";
+            $hasShiftToday = true;
         }
 
         $userData = $user->toArray();
-        $userData['work_start_time'] = $workStartTime ? substr($workStartTime, 0, 5) : '08:30';
-        $userData['work_end_time'] = $workEndTime ? substr($workEndTime, 0, 5) : '17:30';
-        $userData['shift_name'] = $todaySchedule?->shift?->name ?? ($user->attendance_type === 'shift' ? 'Belum Ada Jadwal Shift' : 'Jam Kantor');
-        $userData['today_shift'] = $todaySchedule?->shift ? [
+        $userData['work_start_time'] = $workStartTime;
+        $userData['work_end_time'] = $workEndTime;
+        $userData['shift_name'] = $shiftName;
+        $userData['has_shift_today'] = $hasShiftToday;
+        $userData['today_shift'] = ($todaySchedule && $todaySchedule->shift) ? [
             'id' => $todaySchedule->shift->id,
             'name' => $todaySchedule->shift->name,
             'start_time' => substr($todaySchedule->shift->start_time, 0, 5),
             'end_time' => substr($todaySchedule->shift->end_time, 0, 5),
         ] : null;
-        $userData['schedule_label'] = $todaySchedule?->shift
-            ? substr($todaySchedule->shift->start_time, 0, 5) . ' - ' . substr($todaySchedule->shift->end_time, 0, 5) . ' (' . $todaySchedule->shift->name . ')'
-            : substr($userData['work_start_time'], 0, 5) . ' - ' . substr($userData['work_end_time'], 0, 5) . ' (Normal)';
+        $userData['schedule_label'] = $scheduleLabel;
 
         return $this->successResponse([
             'user' => $userData,

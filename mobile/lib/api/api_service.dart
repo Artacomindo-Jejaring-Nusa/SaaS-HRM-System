@@ -286,11 +286,11 @@ class ApiService {
           int id, String status) =>
       ShiftSwapRepository.approveShiftSwap(id, status);
 
-  static Future<List<dynamic>?> getSchedules({int? userId}) =>
-      ShiftSwapRepository.getSchedules(userId: userId);
+  static Future<List<dynamic>?> getSchedules({int? userId, String? startDate}) =>
+      ShiftSwapRepository.getSchedules(userId: userId, startDate: startDate);
 
-  static Future<List<dynamic>?> getEmployees() =>
-      ShiftSwapRepository.getEmployees();
+  static Future<List<dynamic>?> getEmployees({String? attendanceType}) =>
+      ShiftSwapRepository.getEmployees(attendanceType: attendanceType);
 
   // ============ ATTENDANCE CORRECTIONS ============
 
@@ -314,6 +314,10 @@ class ApiService {
 
   static Future<Map<String, dynamic>?> getVehicleReport() =>
       VehicleRepository.getVehicleReport();
+
+  static Future<Map<String, dynamic>> registerVehicle(
+          Map<String, dynamic> data) =>
+      VehicleRepository.registerVehicle(data);
 
   static Future<Map<String, dynamic>> submitLoanRequest(
           Map<String, dynamic> data) =>

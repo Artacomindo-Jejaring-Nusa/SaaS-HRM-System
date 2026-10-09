@@ -57,7 +57,7 @@ class User extends Authenticatable
         'face_embedding', // Vektor biometrik 512-d tidak boleh terexpose di API response
     ];
 
-    protected $appends = ['profile_photo_url', 'face_registered_photo_url', 'is_face_approved', 'is_manager', 'can_access_manager_portal', 'permission_slugs', 'kemnaker_leave_balance', 'is_eligible_for_leave', 'is_web_auto_validated'];
+    protected $appends = ['profile_photo_url', 'face_registered_photo_url', 'is_face_approved', 'is_manager', 'permission_slugs', 'kemnaker_leave_balance', 'is_eligible_for_leave', 'is_web_auto_validated'];
 
     public function getIsWebAutoValidatedAttribute(): bool
     {
@@ -92,21 +92,21 @@ class User extends Authenticatable
         return $this->profile_photo_path ? asset('storage/'.$this->profile_photo_path) : null;
     }
 
-    public function getCanAccessManagerPortalAttribute(): bool
+    public function canAccessManagerPortal(): bool
     {
         if ($this->role_id === 1) {
             return true;
         }
 
-        return $this->hasExplicitManagerAccess()
-            || $this->hasApprovalPermissions()
+        // 1. Explicit override in database: true/1 = Force Enabled, false/0 = Force Disabled
+        if (isset($this->attributes['can_access_manager_portal']) && $this->attributes['can_access_manager_portal'] !== null) {
+            return (bool) $this->attributes['can_access_manager_portal'];
+        }
+
+        // 2. Default: evaluate role permissions, subordinates, or keywords
+        return $this->hasApprovalPermissions()
             || $this->subordinates()->exists()
             || $this->hasManagerRoleKeyword();
-    }
-
-    private function hasExplicitManagerAccess(): bool
-    {
-        return isset($this->attributes['can_access_manager_portal']) && $this->attributes['can_access_manager_portal'] == 1;
     }
 
     private function hasApprovalPermissions(): bool
@@ -144,9 +144,9 @@ class User extends Authenticatable
         return false;
     }
 
-    public function getIsManagerAttribute()
+    public function getIsManagerAttribute(): bool
     {
-        return $this->can_access_manager_portal;
+        return $this->canAccessManagerPortal();
     }
 
     public function getPermissionSlugsAttribute(): array

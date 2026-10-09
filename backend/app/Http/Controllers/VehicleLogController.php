@@ -557,7 +557,7 @@ class VehicleLogController extends Controller
     }
 
     /**
-     * Get list of vehicles with real-time status (available / in use)
+     * Get list of vehicles with real-time status (available / in use / maintenance / booked)
      */
     public function vehicles(Request $request)
     {
@@ -565,34 +565,107 @@ class VehicleLogController extends Controller
 
         // Distinct fleet
         $rawVehicles = VehicleLog::where('company_id', $companyId)
-            ->selectRaw('DISTINCT plate_number, vehicle_name')
+            ->select('plate_number', 'vehicle_name')
+            ->distinct()
             ->orderBy('vehicle_name')
             ->get();
 
         // Check currently active / in-use trips
         $activeTrips = VehicleLog::with('user:id,name')
             ->where('company_id', $companyId)
-            ->whereIn('status', ['in_use', 'departure', 'approved'])
+            ->whereIn('status', ['in_use', 'departure', 'approved', 'maintenance'])
             ->get()
             ->keyBy('plate_number');
 
         $result = $rawVehicles->map(function ($v) use ($activeTrips) {
             $active = $activeTrips->get($v->plate_number);
             $isAvailable = ! $active;
-            $activeStatusLabel = $active?->status === 'in_use' ? 'Sedang Digunakan' : 'Sudah Dipesan';
-            $statusLabel = $isAvailable ? 'Tersedia' : $activeStatusLabel;
+
+            $statusLabel = 'Tersedia';
+            $statusCode = 'available';
+
+            if ($active) {
+                if ($active->status === 'maintenance') {
+                    $statusLabel = 'Dalam Perawatan';
+                    $statusCode = 'maintenance';
+                } elseif ($active->status === 'in_use' || $active->status === 'departure') {
+                    $statusLabel = 'Sedang Digunakan';
+                    $statusCode = 'in_use';
+                } elseif ($active->status === 'approved') {
+                    $statusLabel = 'Sudah Dipesan';
+                    $statusCode = 'booked';
+                }
+            }
 
             return [
                 'vehicle_name' => $v->vehicle_name,
                 'plate_number' => $v->plate_number,
                 'is_available' => $isAvailable,
+                'status_code' => $statusCode,
                 'status_label' => $statusLabel,
                 'current_user' => $active?->user?->name,
                 'destination' => $active?->destination,
+                'purpose' => $active?->purpose,
+                'notes' => $active?->notes,
                 'until' => $active?->return_date ? Carbon::parse($active->return_date)->format('d M Y') : null,
+                'departure_date' => $active?->departure_date ? Carbon::parse($active->departure_date)->format('d M Y') : null,
             ];
         });
 
         return $this->successResponse($result, 'Daftar armada kendaraan berhasil diambil.');
+    }
+
+    /**
+     * Register a new vehicle into fleet catalog
+     */
+    public function storeVehicle(Request $request)
+    {
+        $request->validate([
+            'vehicle_name' => 'required|string|max:255',
+            'plate_number' => 'required|string|max:20',
+            'vehicle_type' => 'nullable|string|max:50',
+            'initial_status' => 'nullable|string|in:available,maintenance',
+            'notes' => 'nullable|string',
+        ]);
+
+        $user = $request->user();
+        $companyId = $user->company_id;
+        $plateNumber = strtoupper(trim($request->plate_number));
+        $vehicleName = trim($request->vehicle_name);
+        $initialStatus = $request->initial_status ?? 'available';
+
+        // Check if already registered
+        $existing = VehicleLog::where('company_id', $companyId)
+            ->where('plate_number', $plateNumber)
+            ->first();
+
+        if ($existing) {
+            return $this->errorResponse("Kendaraan dengan plat nomor {$plateNumber} sudah terdaftar di sistem.", 422);
+        }
+
+        $logStatus = $initialStatus === 'maintenance' ? 'maintenance' : 'completed';
+        $purpose = $initialStatus === 'maintenance' ? 'Armada Dalam Perawatan/Perbaikan' : 'Registrasi Armada Kendaraan Baru';
+
+        $notesWithMeta = $request->notes;
+        if ($request->vehicle_type) {
+            $notesWithMeta = "[Tipe: {$request->vehicle_type}] " . ($request->notes ?? '');
+        }
+
+        $log = VehicleLog::create([
+            'company_id' => $companyId,
+            'user_id' => $user->id,
+            'vehicle_name' => $vehicleName,
+            'plate_number' => $plateNumber,
+            'purpose' => $purpose,
+            'destination' => 'Pool Armada Kantor',
+            'departure_date' => now()->toDateString(),
+            'return_date' => now()->toDateString(),
+            'status' => $logStatus,
+            'notes' => $notesWithMeta,
+        ]);
+
+        $this->logActivity('CREATE_VEHICLE', "Menambahkan armada baru: {$vehicleName} ({$plateNumber})", $log);
+
+        return $this->successResponse($log, 'Armada kendaraan berhasil didaftarkan ke katalog.', 201);
     }
 }

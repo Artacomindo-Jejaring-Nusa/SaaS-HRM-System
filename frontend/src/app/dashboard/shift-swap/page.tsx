@@ -37,12 +37,14 @@ interface ShiftSwap {
 interface WebUser {
   id: number;
   name: string;
+  attendance_type?: string;
   role?: { name: string };
 }
 
 interface Schedule {
   id: number;
   date: string;
+  shift_id?: number;
   shift: { name: string; start_time: string; end_time: string };
 }
 
@@ -70,6 +72,12 @@ export default function ShiftSwapPage() {
 
   const [activeTab, setActiveTab] = useState<'my_requests' | 'to_review'>('my_requests');
   const [searchTerm, setSearchTerm] = useState("");
+
+  const canApprove = Boolean(
+    user?.role_id === 1 || 
+    user?.role?.name === 'Super Admin' || 
+    hasPermission('approve-shift-swaps')
+  );
 
   useEffect(() => {
     fetchSwaps(currentPage);
@@ -108,21 +116,24 @@ export default function ShiftSwapPage() {
 
   const fetchInitialData = async () => {
     try {
-      // Ambil daftar rekan kerja (untuk tujuan tukar)
-      const usersRes = await axiosInstance.get("/employees?per_page=100");
+      // Ambil daftar rekan kerja yang sesama memiliki pola shift
+      const usersRes = await axiosInstance.get("/employees?attendance_type=shift&per_page=100");
       const uData = usersRes.data.data;
       const rawUsers = Array.isArray(uData) ? uData : (uData?.data || []);
-      setUsers(rawUsers.filter((u: any) => u.id !== user?.id));
+      // Filter bukan user sendiri & bertipe shift
+      setUsers(rawUsers.filter((u: any) => u.id !== user?.id && (u.attendance_type === 'shift' || !u.attendance_type)));
     } catch (e) {
-      console.error("Gagal ambil data rekan kerja", e);
+      console.error("Gagal ambil data rekan kerja shift", e);
     }
 
     try {
-      // Ambil jadwal saya
+      // Ambil jadwal saya mulai awal bulan ini
       if (user?.id) {
-        const mySchedRes = await axiosInstance.get(`/schedules?user_id=${user.id}&per_page=100`);
+        const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+        const mySchedRes = await axiosInstance.get(`/schedules?user_id=${user.id}&start_date=${startOfMonth}&per_page=100`);
         const schedData = mySchedRes.data.data;
-        setMySchedules(Array.isArray(schedData) ? schedData : (schedData?.data || []));
+        const rawList = Array.isArray(schedData) ? schedData : (schedData?.data || []);
+        setMySchedules(rawList.filter((s: any) => s.shift && s.shift.name));
       }
     } catch (e) {
       console.error("Gagal ambil jadwal shift saya", e);
@@ -130,14 +141,31 @@ export default function ShiftSwapPage() {
   };
 
   const fetchReceiverSchedules = async (receiverId: string) => {
-    if (!receiverId) return;
-    try {
-      const res = await axiosInstance.get(`/schedules?user_id=${receiverId}&per_page=100`);
-      const resData = res.data.data;
-      setReceiverSchedules(Array.isArray(resData) ? resData : (resData?.data || []));
-    } catch (e) {
-      console.error("Gagal ambil jadwal penerima", e);
+    if (!receiverId) {
+      setReceiverSchedules([]);
+      return;
     }
+    try {
+      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+      const res = await axiosInstance.get(`/schedules?user_id=${receiverId}&start_date=${startOfMonth}&per_page=100`);
+      const resData = res.data.data;
+      const rawList = Array.isArray(resData) ? resData : (resData?.data || []);
+      setReceiverSchedules(rawList.filter((s: any) => s.shift && s.shift.name));
+    } catch (e) {
+      console.error("Gagal ambil jadwal rekan penerima", e);
+    }
+  };
+
+  const formatScheduleOption = (s: Schedule) => {
+    if (!s || !s.date) return "-";
+    const d = new Date(s.date);
+    const dayName = d.toLocaleDateString('id-ID', { weekday: 'short' });
+    const dateFormatted = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+    const shiftName = s.shift?.name || "Shift";
+    const startTime = s.shift?.start_time ? s.shift.start_time.substring(0, 5) : "";
+    const endTime = s.shift?.end_time ? s.shift.end_time.substring(0, 5) : "";
+    const timeRange = startTime && endTime ? ` (${startTime} - ${endTime})` : "";
+    return `${dayName}, ${dateFormatted} — ${shiftName}${timeRange}`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -229,7 +257,7 @@ export default function ShiftSwapPage() {
     s.reason.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const activeList = activeTab === 'my_requests' ? filteredMyRequests : filteredManagerReview;
+  const activeList = (canApprove && activeTab === 'to_review') ? filteredManagerReview : filteredMyRequests;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -241,7 +269,7 @@ export default function ShiftSwapPage() {
             <ArrowLeftRight size={24} className="text-[#8B0000]" />
             Tukar Shift
           </h1>
-          <p className="dash-page-desc">Ajukan pertukaran jadwal kerja dengan rekan tim Anda secara resmi.</p>
+          <p className="dash-page-desc">Ajukan pertukaran jadwal shift dengan sesama rekan kerja secara resmi.</p>
         </div>
         <div className="dash-page-actions">
           {hasPermission('apply-shift-swaps') && (
@@ -258,57 +286,97 @@ export default function ShiftSwapPage() {
 
       {/* Stats/Quick Glance */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-          <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
-            <Clock size={22} />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Menunggu Saya (Pending Me)</p>
-            <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
-              {swaps.filter(s => s.receiver_id === user?.id && s.status === 'pending_receiver').length}
-            </p>
-          </div>
-        </div>
-        <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-          <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center shrink-0">
-            <AlertCircle size={22} />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Menunggu Atasan (Wait Manager)</p>
-            <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
-              {swaps.filter(s => s.requester_id === user?.id && s.status === 'pending_manager').length}
-            </p>
-          </div>
-        </div>
-        <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-          <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
-            <CheckCircle2 size={22} />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Disetujui (Approved)</p>
-            <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
-              {swaps.filter(s => s.status === 'approved').length}
-            </p>
-          </div>
-        </div>
+        {canApprove ? (
+          <>
+            <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+                <AlertCircle size={22} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Menunggu Approval Atasan</p>
+                <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
+                  {managerReview.length}
+                </p>
+              </div>
+            </div>
+            <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
+                <Clock size={22} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Menunggu Respon Rekan</p>
+                <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
+                  {swaps.filter(s => s.receiver_id === user?.id && s.status === 'pending_receiver').length}
+                </p>
+              </div>
+            </div>
+            <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
+                <CheckCircle2 size={22} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Disetujui (Approved)</p>
+                <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
+                  {swaps.filter(s => s.status === 'approved').length}
+                </p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
+                <Clock size={22} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Permintaan Masuk Ke Saya</p>
+                <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
+                  {swaps.filter(s => s.receiver_id === user?.id && s.status === 'pending_receiver').length}
+                </p>
+              </div>
+            </div>
+            <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center shrink-0">
+                <AlertCircle size={22} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Menunggu Diproses</p>
+                <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
+                  {swaps.filter(s => s.requester_id === user?.id && (s.status === 'pending_receiver' || s.status === 'pending_manager')).length}
+                </p>
+              </div>
+            </div>
+            <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
+                <CheckCircle2 size={22} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Disetujui (Approved)</p>
+                <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
+                  {swaps.filter(s => (s.requester_id === user?.id || s.receiver_id === user?.id) && s.status === 'approved').length}
+                </p>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Main Content Tabs & Filters */}
       <div className="space-y-4">
-        <div className="flex border-b border-gray-200 gap-6">
-           <button 
-            onClick={() => { setActiveTab('my_requests'); setSearchTerm(""); }}
-            className={`pb-3 text-sm font-semibold transition-all relative ${activeTab === 'my_requests' ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
-           >
-             Permintaan Saya
-             {activeTab === 'my_requests' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#8B0000]" />}
-           </button>
-           {hasPermission('approve-shift-swaps') && (
+        {canApprove ? (
+          <div className="flex border-b border-gray-200 gap-6">
+             <button 
+              onClick={() => { setActiveTab('my_requests'); setSearchTerm(""); }}
+              className={`pb-3 text-sm font-semibold transition-all relative ${activeTab === 'my_requests' ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
+             >
+               Permintaan Saya
+               {activeTab === 'my_requests' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#8B0000]" />}
+             </button>
              <button 
               onClick={() => { setActiveTab('to_review'); setSearchTerm(""); }}
               className={`pb-3 text-sm font-semibold transition-all relative ${activeTab === 'to_review' ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
              >
-               Approval Manager
+               Approval Manager / Super Admin
                {managerReview.length > 0 && (
                  <span className="ml-2 px-1.5 py-0.5 bg-red-600 text-[10px] text-white rounded-full align-middle font-bold">
                    {managerReview.length}
@@ -316,8 +384,14 @@ export default function ShiftSwapPage() {
                )}
                {activeTab === 'to_review' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#8B0000]" />}
              </button>
-           )}
-        </div>
+          </div>
+        ) : (
+          <div className="flex border-b border-gray-200 gap-6">
+             <div className="pb-3 text-sm font-bold text-gray-900 border-b-2 border-[#8B0000]">
+               Daftar Pengajuan Saya
+             </div>
+          </div>
+        )}
 
         {/* Search input */}
         <div className="flex items-center justify-between bg-white p-3 border border-[#ebedf0] rounded-lg">
@@ -375,10 +449,10 @@ export default function ShiftSwapPage() {
                       <td>
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-full bg-red-50 text-[#8B0000] flex items-center justify-center font-bold text-xs shrink-0">
-                            {swap.requester.name.charAt(0)}
+                            {swap.requester?.name?.charAt(0) || "U"}
                           </div>
                           <div className="flex flex-col">
-                            <span className="font-semibold text-gray-900 text-xs">{swap.requester.name}</span>
+                            <span className="font-semibold text-gray-900 text-xs">{swap.requester?.name}</span>
                             {swap.requester_id === user?.id && (
                               <span className="text-[9px] text-[#8B0000] font-bold bg-red-50 px-1 py-0.5 rounded w-max mt-0.5">Anda</span>
                             )}
@@ -388,10 +462,10 @@ export default function ShiftSwapPage() {
                       <td>
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">
-                            {swap.receiver.name.charAt(0)}
+                            {swap.receiver?.name?.charAt(0) || "U"}
                           </div>
                           <div className="flex flex-col">
-                            <span className="font-semibold text-gray-900 text-xs">{swap.receiver.name}</span>
+                            <span className="font-semibold text-gray-900 text-xs">{swap.receiver?.name}</span>
                             {swap.receiver_id === user?.id && (
                               <span className="text-[9px] text-blue-600 font-bold bg-blue-50 px-1 py-0.5 rounded w-max mt-0.5">Anda</span>
                             )}
@@ -401,20 +475,20 @@ export default function ShiftSwapPage() {
                       <td>
                         <div className="flex flex-col">
                           <span className="text-xs font-semibold text-gray-800">
-                            {new Date(swap.requester_schedule.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            {swap.requester_schedule?.date ? new Date(swap.requester_schedule.date).toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : "-"}
                           </span>
                           <span className="text-[10px] text-gray-500 font-medium">
-                            {swap.requester_schedule.shift.name} ({swap.requester_schedule.shift.start_time} - {swap.requester_schedule.shift.end_time})
+                            {swap.requester_schedule?.shift?.name || "Shift"} ({swap.requester_schedule?.shift?.start_time ? swap.requester_schedule.shift.start_time.substring(0, 5) : ""} - {swap.requester_schedule?.shift?.end_time ? swap.requester_schedule.shift.end_time.substring(0, 5) : ""})
                           </span>
                         </div>
                       </td>
                       <td>
                         <div className="flex flex-col">
                           <span className="text-xs font-semibold text-gray-800">
-                            {new Date(swap.receiver_schedule.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            {swap.receiver_schedule?.date ? new Date(swap.receiver_schedule.date).toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : "-"}
                           </span>
                           <span className="text-[10px] text-gray-500 font-medium">
-                            {swap.receiver_schedule.shift.name} ({swap.receiver_schedule.shift.start_time} - {swap.receiver_schedule.shift.end_time})
+                            {swap.receiver_schedule?.shift?.name || "Shift"} ({swap.receiver_schedule?.shift?.start_time ? swap.receiver_schedule.shift.start_time.substring(0, 5) : ""} - {swap.receiver_schedule?.shift?.end_time ? swap.receiver_schedule.shift.end_time.substring(0, 5) : ""})
                           </span>
                         </div>
                       </td>
@@ -444,8 +518,8 @@ export default function ShiftSwapPage() {
                             </>
                           )}
 
-                          {/* Action for Manager */}
-                          {swap.status === 'pending_manager' && hasPermission('approve-shift-swaps') && (
+                          {/* Action for Manager / Super Admin */}
+                          {swap.status === 'pending_manager' && canApprove && (
                             <>
                               <button 
                                 onClick={() => handleApprove(swap.id, 'rejected')} 
@@ -515,8 +589,8 @@ export default function ShiftSwapPage() {
                       <ArrowLeftRight size={20} />
                    </div>
                    <div>
-                    <h3 className="font-bold text-gray-950 text-lg tracking-tight">Form Tukar Shift</h3>
-                    <p className="text-xs text-gray-500 font-medium italic">Pilih rekan dan ajukan pertukaran jadwal secara resmi.</p>
+                    <h3 className="font-bold text-gray-950 text-lg tracking-tight">Form Pengajuan Tukar Shift</h3>
+                    <p className="text-xs text-gray-500 font-medium italic">Pilih rekan kerja shift dan tentukan jadwal yang ingin ditukar.</p>
                    </div>
                 </div>
                 <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-150 rounded-full transition-colors">
@@ -528,7 +602,7 @@ export default function ShiftSwapPage() {
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* User Selection */}
                     <div className="space-y-1.5">
-                       <label htmlFor="receiver-select" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-0.5">1. Pilih Rekan Kerja</label>
+                       <label htmlFor="receiver-select" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-0.5">1. Pilih Rekan Kerja (Pola Shift)</label>
                        <select id="receiver-select" 
                          className="w-full h-11 bg-gray-50 border border-gray-200 rounded-lg px-3 text-sm font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-red-150 focus:border-[#8B0000] transition-all"
                          value={formData.receiver_id}
@@ -538,17 +612,15 @@ export default function ShiftSwapPage() {
                          }}
                          required
                        >
-                          <option value="">Pilih Teman Kerja...</option>
-                          {users
-                            .filter((u) => u.id !== user?.id)
-                            .map((u) => {
-                              const roleDisplay = u.role?.name ? ` (${u.role.name})` : "";
-                              return (
-                                <option key={u.id} value={u.id}>
-                                  {u.name}{roleDisplay}
-                                </option>
-                              );
-                            })}
+                          <option value="">{users.length === 0 ? "Tidak ada rekan shift tersedia..." : "Pilih Rekan Kerja..."}</option>
+                          {users.map((u) => {
+                            const roleDisplay = u.role?.name ? ` (${u.role.name})` : "";
+                            return (
+                              <option key={u.id} value={u.id}>
+                                {u.name}{roleDisplay}
+                              </option>
+                            );
+                          })}
                        </select>
                     </div>
 
@@ -562,15 +634,12 @@ export default function ShiftSwapPage() {
                           onChange={(e) => setFormData({...formData, requester_schedule_id: e.target.value})}
                           required
                        >
-                          <option value="">{mySchedules.length === 0 ? "Belum ada jadwal shift Anda" : "Pilih Jadwal Anda..."}</option>
-                          {mySchedules.map(s => {
-                            const shiftName = s.shift?.name || "Shift";
-                            const timeStr = s.shift?.start_time ? ` (${s.shift.start_time.substring(0, 5)})` : "";
-                            const dateStr = s.date ? new Date(s.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : "-";
-                            return (
-                              <option key={s.id} value={s.id}>{dateStr} - {shiftName}{timeStr}</option>
-                            );
-                          })}
+                          <option value="">{mySchedules.length === 0 ? "Belum ada jadwal shift Anda bulan ini" : "Pilih Jadwal Anda..."}</option>
+                          {mySchedules.map(s => (
+                            <option key={s.id} value={s.id}>
+                              {formatScheduleOption(s)}
+                            </option>
+                          ))}
                        </select>
                     </div>
 
@@ -593,17 +662,14 @@ export default function ShiftSwapPage() {
                               if (receiverSchedules.length === 0) {
                                 return "Rekan ini belum memiliki jadwal shift";
                               }
-                              return "Pilih Jadwal Rekan...";
+                              return "Pilih Jadwal Rekan (Pilih Tanggal & Shift)...";
                             })()}
                           </option>
-                          {receiverSchedules.map(s => {
-                            const shiftName = s.shift?.name || "Shift";
-                            const timeStr = s.shift?.start_time ? ` (${s.shift.start_time.substring(0, 5)})` : "";
-                            const dateStr = s.date ? new Date(s.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : "-";
-                            return (
-                              <option key={s.id} value={s.id}>{dateStr} - {shiftName}{timeStr}</option>
-                            );
-                          })}
+                          {receiverSchedules.map(s => (
+                            <option key={s.id} value={s.id}>
+                              {formatScheduleOption(s)}
+                            </option>
+                          ))}
                        </select>
                     </div>
 
@@ -628,7 +694,7 @@ export default function ShiftSwapPage() {
                     </div>
                     <div className="space-y-0.5">
                        <p className="text-xs font-bold text-gray-900 uppercase tracking-wide">Perhatian Penting</p>
-                       <p className="text-[11px] text-gray-500 font-medium leading-relaxed italic">Permintaan ini akan otomatis diperbarui setelah rekan Anda menyetujui DAN mendapat persetujuan akhir dari Manager.</p>
+                       <p className="text-[11px] text-gray-500 font-medium leading-relaxed italic">Permintaan ini akan otomatis diperbarui setelah rekan Anda menyetujui DAN mendapat persetujuan akhir dari Super Admin / Manager.</p>
                     </div>
                  </div>
 

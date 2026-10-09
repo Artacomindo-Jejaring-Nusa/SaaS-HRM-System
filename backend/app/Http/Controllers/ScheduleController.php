@@ -32,6 +32,8 @@ class ScheduleController extends Controller
             $query->where('date', $request->date);
         } elseif ($request->start_date && $request->end_date) {
             $query->whereBetween('date', [$request->start_date, $request->end_date]);
+        } elseif ($request->start_date) {
+            $query->whereDate('date', '>=', $request->start_date);
         } elseif ($request->month && $request->year) {
             $query->whereMonth('date', $request->month)
                 ->whereYear('date', $request->year);
@@ -40,7 +42,7 @@ class ScheduleController extends Controller
             $query->whereYear('date', '>=', now()->year);
         }
 
-        return $this->successResponse($query->paginate($request->per_page ?? 10), 'Daftar jadwal berhasil diambil.');
+        return $this->successResponse($query->orderBy('date', 'asc')->paginate($request->per_page ?? 10), 'Daftar jadwal berhasil diambil.');
     }
 
     public function store(Request $request)

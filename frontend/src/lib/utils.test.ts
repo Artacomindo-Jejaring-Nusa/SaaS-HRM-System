@@ -51,10 +51,23 @@ describe('utils', () => {
       expect(getStorageUrl(url)).toBe(url)
     })
 
+    it('returns data and blob URLs unchanged', () => {
+      const dataUri = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
+      const blobUri = 'blob:http://localhost:3000/123-456'
+      expect(getStorageUrl(dataUri)).toBe(dataUri)
+      expect(getStorageUrl(blobUri)).toBe(blobUri)
+    })
+
     it('prepends storage base URL for relative paths', () => {
       const result = getStorageUrl('uploads/photo.jpg')
       expect(result).toContain('uploads/photo.jpg')
       expect(result).toContain('/storage/')
+    })
+
+    it('strips redundant storage/ prefixes and leading slashes', () => {
+      const result = getStorageUrl('/storage/face_registrations/face_1.jpg')
+      expect(result).toContain('/storage/face_registrations/face_1.jpg')
+      expect(result).not.toContain('/storage/storage/')
     })
   })
 })

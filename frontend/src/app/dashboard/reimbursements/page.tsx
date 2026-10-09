@@ -537,7 +537,7 @@ const ReimbursementSheetInner = ({
 
       {/* ===== TITLE ===== */}
       <div className="text-center my-3">
-        <h1 className={`${styles.sizeHeading} font-black text-black tracking-[1px]`}>PENGAJUAN UANG MUKA / PERMINTAAN DANA</h1>
+        <h1 className={`${styles.sizeHeading} font-black text-black tracking-[1px]`}>FORMULIR KLAIM BIAYA (REIMBURSEMENT)</h1>
       </div>
 
       {/* ===== PRIORITY CHECKBOXES ===== */}
@@ -696,6 +696,7 @@ export default function ReimbursementsPage() {
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [workflow, setWorkflow] = useState<WorkflowData | null>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   // form state
   const [formData, setFormData] = useState<ReimbursementFormData>({
@@ -840,24 +841,34 @@ export default function ReimbursementsPage() {
 
   const calculatedTotal = calculateTotal(formData.items);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.title) {
-      toast.warning("Judul/Keperluan pengajuan wajib diisi!");
+    if (!formData.title?.trim()) {
+      toast.warning("Judul/Keperluan klaim wajib diisi!");
       return;
     }
 
     if (!formData.signature) {
-      toast.warning("Tanda tangan digital wajib diisi!");
+      toast.warning("Tanda tangan digital pengaju wajib dibubuhkan!");
       return;
     }
 
-    if (formData.items.some((i: ReimbursementItem) => !i.spesifikasi || !i.unit || i.qty <= 0 || i.estimasi_harga <= 0)) {
+    if (formData.items.length === 0 || formData.items.some((i: ReimbursementItem) => !i.spesifikasi || !i.unit || i.qty <= 0 || i.estimasi_harga <= 0)) {
       toast.warning("Tolong isi spesifikasi, unit, quantity, dan estimasi harga untuk semua baris item.");
       return;
     }
 
+    if (!formData.attachments || formData.attachments.length === 0) {
+      toast.warning("Foto bukti nota / kuitansi / struk asli wajib dilampirkan untuk pengajuan klaim biaya!");
+      return;
+    }
+
+    // All valid -> open preview verification modal
+    setShowPreviewModal(true);
+  };
+
+  const doFinalSubmit = async () => {
     setIsSubmitting(true);
 
     const data = new FormData();
@@ -892,13 +903,14 @@ export default function ReimbursementsPage() {
         await axiosInstance.post(`/reimbursements/${editingId}`, data, {
           headers: { "Content-Type": "multipart/form-data" },
         });
-        toast.success("Klaim berhasil diperbarui!");
+        toast.success("Klaim biaya berhasil diperbarui!");
       } else {
         await axiosInstance.post("/reimbursements", data, {
           headers: { "Content-Type": "multipart/form-data" },
         });
-        toast.success("Klaim berhasil diajukan! Menunggu persetujuan.");
+        toast.success("Klaim biaya berhasil diajukan! Menunggu persetujuan.");
       }
+      setShowPreviewModal(false);
       setEditingId(null);
       setViewMode("list");
       setFormData({
@@ -1278,7 +1290,7 @@ export default function ReimbursementsPage() {
               <ArrowLeft size={16} /> Kembali ke Daftar
             </button>
             <h2 className="text-lg font-extrabold text-gray-900">
-              {editingId ? "Edit Pengajuan Uang Muka & Permintaan Dana" : "Formulir Pengajuan Uang Muka & Permintaan Dana"}
+              {editingId ? "Edit Formulir Klaim Biaya (Reimbursement)" : "Formulir Klaim Biaya (Reimbursement)"}
             </h2>
           </div>
 
@@ -1291,7 +1303,7 @@ export default function ReimbursementsPage() {
                   <div className="text-[10px] font-bold text-gray-800 tracking-wide uppercase">PT ARTACOMINDO JEJARING NUSA</div>
                 </div>
                 <div className="text-center md:text-right">
-                  <h1 className="text-sm font-black text-gray-900 tracking-wider">FORM PENGAJUAN DANA</h1>
+                  <h1 className="text-sm font-black text-gray-900 tracking-wider">FORM KLAIM BIAYA (REIMBURSEMENT)</h1>
                 </div>
               </div>
 
@@ -1621,7 +1633,14 @@ export default function ReimbursementsPage() {
               {/* Attachments Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-150">
                 <div className="space-y-4">
-                  <span className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Bukti Nota / Lampiran Dukungan</span>
+                  <div className="flex items-center justify-between">
+                    <span className="block text-xs font-bold text-rose-700 uppercase tracking-wider">
+                      Foto Bukti Nota / Kuitansi (Wajib) *
+                    </span>
+                    <span className="text-[10px] font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-200">
+                      Wajib
+                    </span>
+                  </div>
                   <div className="relative">
                     <input 
                       type="file" 
@@ -1636,19 +1655,22 @@ export default function ReimbursementsPage() {
                     />
                     <label 
                       htmlFor="attach-file"
-                      className="flex flex-col items-center justify-center border-2 border-dashed border-gray-200 hover:border-blue-400 bg-gray-50 rounded-xl p-4 cursor-pointer hover:bg-blue-50/5 transition-all"
+                      className="flex flex-col items-center justify-center border-2 border-dashed border-rose-200 hover:border-rose-400 bg-rose-50/30 rounded-xl p-4 cursor-pointer hover:bg-rose-50/60 transition-all"
                     >
-                      <Upload className="text-gray-400 mb-1" size={20} />
-                      <span className="text-xs font-bold text-gray-600">Klik untuk upload foto nota/resi</span>
-                      <span className="text-[9px] text-gray-400 mt-0.5">Bisa melampirkan lebih dari 1 gambar</span>
+                      <Upload className="text-rose-500 mb-1" size={20} />
+                      <span className="text-xs font-bold text-gray-800">Klik untuk upload foto nota/resi</span>
+                      <span className="text-[10px] text-rose-600 font-medium mt-0.5">* Wajib dilampirkan sebagai bukti pengeluaran yang sah</span>
                     </label>
                   </div>
 
-                  {formData.attachments.length > 0 && (
-                    <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                  {formData.attachments.length > 0 ? (
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                       {formData.attachments.map((file: File, fIdx: number) => (
-                        <div key={`${file.name}-${file.lastModified}-${fIdx}`} className="flex items-center justify-between p-1.5 border border-gray-200 rounded-lg bg-gray-50 text-[11px] font-semibold text-gray-700">
-                          <span className="truncate max-w-[200px]">{file.name}</span>
+                        <div key={`${file.name}-${file.lastModified}-${fIdx}`} className="flex items-center justify-between p-2 border border-emerald-200 rounded-lg bg-emerald-50/50 text-xs font-semibold text-emerald-900">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                            <span className="truncate max-w-[180px]">{file.name}</span>
+                          </div>
                           <button 
                             type="button"
                             onClick={() => {
@@ -1656,12 +1678,18 @@ export default function ReimbursementsPage() {
                               updated.splice(fIdx, 1);
                               setFormData({ ...formData, attachments: updated });
                             }}
-                            className="text-red-500 hover:text-red-700"
+                            className="text-red-500 hover:text-red-700 p-1"
+                            title="Hapus file"
                           >
-                            <X size={12} />
+                            <X size={14} />
                           </button>
                         </div>
                       ))}
+                    </div>
+                  ) : (
+                    <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 flex items-center gap-1.5 font-medium">
+                      <AlertCircle size={14} className="text-amber-600 shrink-0" />
+                      <span>Belum ada foto nota yang dipilih. Pengajuan tidak dapat dikirim tanpa nota.</span>
                     </div>
                   )}
                 </div>
@@ -1694,13 +1722,8 @@ export default function ReimbursementsPage() {
                   disabled={isSubmitting}
                   className="flex-[2] h-10 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2"
                 >
-                  {isSubmitting ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Send size={14} /> {editingId ? "Perbarui Pengajuan" : "Kirim Pengajuan"}
-                    </>
-                  )}
+                  <Eye size={15} />
+                  <span>Preview & Ajukan Klaim</span>
                 </button>
               </div>
             </div>
@@ -1778,6 +1801,181 @@ export default function ReimbursementsPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ===== PREVIEW & CONFIRMATION MODAL ===== */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-3xl w-full shadow-2xl border border-gray-200 overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-6 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-xs border border-white/20">
+                  <ReceiptCent size={22} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black tracking-wide">Preview & Konfirmasi Klaim Biaya</h3>
+                  <p className="text-xs text-blue-200">Periksa kembali rincian klaim dan nota sebelum dikirim.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs">
+                <div>
+                  <span className="text-gray-500 font-medium block">Nama Pemohon:</span>
+                  <span className="font-bold text-gray-900 block truncate">{formData.employee_name || user?.name}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-medium block">Divisi:</span>
+                  <span className="font-bold text-gray-900 block truncate">{formData.divisi || "Operasional"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-medium block">Prioritas:</span>
+                  <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                    {formData.priority || "Normal"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-medium block">Tujuan:</span>
+                  <span className="font-bold text-gray-900 block truncate">
+                    {formData.tujuan === "Lainnya" ? formData.tujuanLainnya : formData.tujuan || "-"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Title / Keperluan */}
+              <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-3.5">
+                <span className="text-[11px] font-bold text-blue-900 uppercase tracking-wider block mb-1">
+                  Keperluan / Judul Klaim
+                </span>
+                <p className="text-sm font-semibold text-gray-900">{formData.title}</p>
+              </div>
+
+              {/* Items Table */}
+              <div>
+                <span className="text-xs font-bold text-gray-700 uppercase tracking-wider block mb-2">
+                  Rincian Barang / Jasa
+                </span>
+                <div className="border border-gray-200 rounded-xl overflow-hidden text-xs">
+                  <table className="w-full border-collapse">
+                    <thead className="bg-gray-100/80 border-b border-gray-200 font-bold text-gray-700">
+                      <tr>
+                        <th className="p-2 text-center w-8">No</th>
+                        <th className="p-2 text-left">Spesifikasi</th>
+                        <th className="p-2 text-center w-14">Unit</th>
+                        <th className="p-2 text-center w-14">Qty</th>
+                        <th className="p-2 text-right w-28">Harga Satuan</th>
+                        <th className="p-2 text-right w-28">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {formData.items.map((item, idx) => {
+                        const qty = Number(item.qty) || 0;
+                        const price = Number(item.estimasi_harga) || 0;
+                        return (
+                          <tr key={item.tempId || idx} className="hover:bg-gray-50">
+                            <td className="p-2 text-center font-semibold text-gray-500">{idx + 1}</td>
+                            <td className="p-2 font-medium text-gray-900">{item.spesifikasi}</td>
+                            <td className="p-2 text-center text-gray-600">{item.unit}</td>
+                            <td className="p-2 text-center font-bold">{qty}</td>
+                            <td className="p-2 text-right font-mono">{formatCurrency(price)}</td>
+                            <td className="p-2 text-right font-mono font-bold text-gray-900">{formatCurrency(qty * price)}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="bg-amber-50/70 font-black border-t-2 border-gray-300">
+                        <td colSpan={5} className="p-2.5 text-right uppercase tracking-wider text-gray-800">TOTAL KLAIM BIAYA:</td>
+                        <td className="p-2.5 text-right font-mono text-sm text-blue-900">{formatCurrency(calculatedTotal)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-2 text-xs text-gray-500 italic bg-gray-50 p-2 rounded-lg border border-gray-100">
+                  <span className="font-bold">Terbilang:</span> {terbilang(calculatedTotal)}
+                </div>
+              </div>
+
+              {/* Uploaded Receipt Photos (Wajib) */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-rose-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <CheckCircle2 size={14} className="text-emerald-600" />
+                    Foto Bukti Nota / Kuitansi yang Dilampirkan ({formData.attachments.length} File)
+                  </span>
+                  <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Lengkap & Terverifikasi
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {formData.attachments.map((file: File, fIdx: number) => {
+                    const previewUrl = URL.createObjectURL(file);
+                    return (
+                      <div key={`preview-file-${file.name}-${fIdx}`} className="border border-gray-200 rounded-xl overflow-hidden bg-gray-50 p-1">
+                        <img 
+                          src={previewUrl} 
+                          alt={`Nota ${fIdx + 1}`} 
+                          className="w-full h-24 object-cover rounded-lg"
+                        />
+                        <p className="text-[10px] font-medium text-gray-700 truncate px-1 pt-1">{file.name}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Signature Preview */}
+              {formData.signature && (
+                <div>
+                  <span className="text-xs font-bold text-gray-700 uppercase tracking-wider block mb-1">
+                    Tanda Tangan Digital Pengaju
+                  </span>
+                  <div className="w-48 h-20 border border-gray-300 rounded-lg p-1 bg-white">
+                    <img src={formData.signature} alt="TTD Pengaju" className="w-full h-full object-contain" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="bg-gray-50 p-4 border-t border-gray-200 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-white transition"
+              >
+                Kembali & Edit
+              </button>
+              <button
+                type="button"
+                onClick={doFinalSubmit}
+                disabled={isSubmitting}
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-500/20 transition flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Mengirimkan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send size={14} />
+                    <span>Konfirmasi & Kirim Klaim Sekarang</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

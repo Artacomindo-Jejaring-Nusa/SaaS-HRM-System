@@ -6,13 +6,14 @@ import '../../widgets/skeleton_loading.dart';
 import '../../widgets/loading_overlay.dart';
 
 class ShiftSwapScreen extends StatefulWidget {
+  const ShiftSwapScreen({super.key});
+
   @override
-  _ShiftSwapScreenState createState() => _ShiftSwapScreenState();
+  State<ShiftSwapScreen> createState() => _ShiftSwapScreenState();
 }
 
-class _ShiftSwapScreenState extends State<ShiftSwapScreen> with SingleTickerProviderStateMixin {
+class _ShiftSwapScreenState extends State<ShiftSwapScreen> {
   final Color primaryColor = const Color(0xFF800000);
-  late TabController _tabController;
   
   List<dynamic> _swaps = [];
   bool _isLoading = true;
@@ -21,8 +22,23 @@ class _ShiftSwapScreenState extends State<ShiftSwapScreen> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadData();
+  }
+
+  bool _canApprove(Map<String, dynamic>? user) {
+    if (user == null) return false;
+    final roleName = (user['role']?['name'] ?? user['role_name'] ?? '').toString().toLowerCase();
+    if (roleName.contains('super admin') || roleName.contains('superadmin') || user['role_id'] == 1) {
+      return true;
+    }
+    final rawPerms = user['role']?['permissions'] ?? user['permissions'];
+    if (rawPerms is List) {
+      for (var p in rawPerms) {
+        final slug = p is Map ? p['name']?.toString() : p.toString();
+        if (slug == 'approve-shift-swaps') return true;
+      }
+    }
+    return false;
   }
 
   Future<void> _loadData() async {
@@ -48,6 +64,7 @@ class _ShiftSwapScreenState extends State<ShiftSwapScreen> with SingleTickerProv
         res = await ApiService.respondShiftSwap(id, status, remark: remark);
       }
 
+      if (!mounted) return;
       LoadingDialog.hide(context);
       if (res['status'] == 'success' || res['message']?.toString().contains('berhasil') == true) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? "Berhasil diproses"), backgroundColor: Colors.green));
@@ -55,6 +72,7 @@ class _ShiftSwapScreenState extends State<ShiftSwapScreen> with SingleTickerProv
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? "Gagal memproses"), backgroundColor: Colors.red));
       }
     } catch (e) {
+      if (!mounted) return;
       LoadingDialog.hide(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red));
     }
@@ -78,10 +96,81 @@ class _ShiftSwapScreenState extends State<ShiftSwapScreen> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    // Filter logic
-    final myRequests = _swaps.where((s) => s['requester_id'] == _currentUser?['id'] || (s['receiver_id'] == _currentUser?['id'] && s['status'] == 'pending_receiver')).toList();
-    final managerReview = _swaps.where((s) => s['status'] == 'pending_manager' && _currentUser?['is_manager'] == true).toList();
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: Colors.grey[50],
+        appBar: AppBar(
+          title: Text("Tukar Shift", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 18)),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0.5,
+        ),
+        body: const SimpleListSkeleton(),
+      );
+    }
 
+    final canApprove = _canApprove(_currentUser);
+    final myRequests = _swaps.where((s) => s['requester_id'] == _currentUser?['id'] || (s['receiver_id'] == _currentUser?['id'] && s['status'] == 'pending_receiver')).toList();
+    final managerReview = _swaps.where((s) => s['status'] == 'pending_manager').toList();
+
+    if (canApprove) {
+      return DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          backgroundColor: Colors.grey[50],
+          appBar: AppBar(
+            title: Text("Tukar Shift", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 18)),
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.black,
+            elevation: 0.5,
+            bottom: TabBar(
+              labelColor: primaryColor,
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: primaryColor,
+              labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+              tabs: [
+                const Tab(text: "PERMINTAAN SAYA"),
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text("APPROVAL"),
+                      if (managerReview.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            "${managerReview.length}",
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          body: TabBarView(
+            children: [
+              _buildSwapList(myRequests),
+              _buildSwapList(managerReview, isManagerView: true),
+            ],
+          ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: _showAddSwapDialog,
+            backgroundColor: primaryColor,
+            child: const Icon(Icons.add, color: Colors.white),
+          ),
+        ),
+      );
+    }
+
+    // Tampilan Karyawan Biasa: Hilangkan Tab Approval
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -89,27 +178,8 @@ class _ShiftSwapScreenState extends State<ShiftSwapScreen> with SingleTickerProv
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 0.5,
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: primaryColor,
-          unselectedLabelColor: Colors.grey,
-          indicatorColor: primaryColor,
-          labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
-          tabs: [
-            const Tab(text: "PERMINTAAN SAYA"),
-            Tab(text: "APPROVAL ${_currentUser?['is_manager'] == true ? '(MANAGER)' : ''}"),
-          ],
-        ),
       ),
-      body: _isLoading
-          ? const SimpleListSkeleton()
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildSwapList(myRequests),
-                _buildSwapList(managerReview, isManagerView: true),
-              ],
-            ),
+      body: _buildSwapList(myRequests),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddSwapDialog,
         backgroundColor: primaryColor,
@@ -168,7 +238,7 @@ class _SwapCard extends StatelessWidget {
     String statusText = "PENDING";
     
     if (status == 'pending_receiver') { statusText = "MENUNGGU REKAN"; statusColor = Colors.blue; }
-    if (status == 'pending_manager') { statusText = "MENUNGGU MANAGER"; statusColor = Colors.orange; }
+    if (status == 'pending_manager') { statusText = "MENUNGGU ATASAN"; statusColor = Colors.orange; }
     if (status == 'approved') { statusText = "BERHASIL"; statusColor = Colors.green; }
     if (status == 'rejected') { statusText = "DITOLAK"; statusColor = Colors.red; }
 
@@ -202,7 +272,7 @@ class _SwapCard extends StatelessWidget {
               Expanded(
                 child: Column(
                   children: [
-                    Text(swap['requester']['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center, maxLines: 1),
+                    Text(swap['requester']?['name'] ?? 'Pengaju', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center, maxLines: 1),
                     const SizedBox(height: 5),
                     _buildShiftSmall(swap['requester_schedule']),
                   ],
@@ -215,7 +285,7 @@ class _SwapCard extends StatelessWidget {
               Expanded(
                 child: Column(
                   children: [
-                    Text(swap['receiver']['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center, maxLines: 1),
+                    Text(swap['receiver']?['name'] ?? 'Rekan', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center, maxLines: 1),
                     const SizedBox(height: 5),
                     _buildShiftSmall(swap['receiver_schedule']),
                   ],
@@ -230,7 +300,7 @@ class _SwapCard extends StatelessWidget {
             children: [
               const Icon(Icons.info_outline, size: 14, color: Colors.grey),
               const SizedBox(width: 5),
-              Expanded(child: Text("Alasan: ${swap['reason']}", style: TextStyle(color: Colors.grey[600], fontSize: 11, fontStyle: FontStyle.italic))),
+              Expanded(child: Text("Alasan: ${swap['reason'] ?? '-'}", style: TextStyle(color: Colors.grey[600], fontSize: 11, fontStyle: FontStyle.italic))),
             ],
           ),
           
@@ -265,14 +335,22 @@ class _SwapCard extends StatelessWidget {
 
   Widget _buildShiftSmall(dynamic schedule) {
     if (schedule == null) return const Text("-");
+    final shiftName = schedule['shift']?['name'] ?? 'Shift';
+    final startTime = (schedule['shift']?['start_time'] ?? '').toString();
+    final endTime = (schedule['shift']?['end_time'] ?? '').toString();
+    final timeStr = (startTime.length >= 5 && endTime.length >= 5) 
+        ? "${startTime.substring(0, 5)}-${endTime.substring(0, 5)}" 
+        : "";
+
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.grey[100]!)),
       child: Column(
         children: [
           Text(DateFormat('dd/MM').format(DateTime.parse(schedule['date'])), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-          Text(schedule['shift']['name'], style: TextStyle(color: Colors.grey[600], fontSize: 9)),
-          Text("${schedule['shift']['start_time'].substring(0,5)}-${schedule['shift']['end_time'].substring(0,5)}", style: const TextStyle(fontSize: 8, color: Color(0xFF800000))),
+          Text(shiftName, style: TextStyle(color: Colors.grey[600], fontSize: 9)),
+          if (timeStr.isNotEmpty)
+            Text(timeStr, style: const TextStyle(fontSize: 8, color: Color(0xFF800000))),
         ],
       ),
     );
@@ -308,22 +386,53 @@ class __AddSwapModalState extends State<_AddSwapModal> {
   }
 
   void _fetchInit() async {
-    final emp = await ApiService.getEmployees();
-    final mySched = await ApiService.getSchedules(userId: widget.currentUserId);
+    // 1. Ambil rekan kerja sesama pola shift
+    final emp = await ApiService.getEmployees(attendanceType: 'shift');
+    
+    // 2. Ambil jadwal shift pengaju mulai bulan ini
+    final now = DateTime.now();
+    final startOfMonth = DateFormat('yyyy-MM-01').format(now);
+    final mySched = await ApiService.getSchedules(userId: widget.currentUserId, startDate: startOfMonth);
+    
     if (mounted) {
       setState(() {
-        _employees = (emp ?? []).where((e) => e['id'] != widget.currentUserId).toList();
-        _mySchedules = mySched ?? [];
+        _employees = (emp ?? []).where((e) => e['id'] != widget.currentUserId && (e['attendance_type'] == 'shift' || e['attendance_type'] == null)).toList();
+        _mySchedules = (mySched ?? []).where((s) => s['shift'] != null).toList();
         _loadingData = false;
       });
     }
   }
 
   void _fetchReceiverSchedules(int id) async {
-    setState(() => _receiverSchedules = []);
-    final data = await ApiService.getSchedules(userId: id);
+    setState(() {
+      _receiverSchedules = [];
+      _selectedReceiverSchedId = null;
+    });
+    final now = DateTime.now();
+    final startOfMonth = DateFormat('yyyy-MM-01').format(now);
+    final data = await ApiService.getSchedules(userId: id, startDate: startOfMonth);
     if (mounted) {
-      setState(() => _receiverSchedules = data ?? []);
+      setState(() => _receiverSchedules = (data ?? []).where((s) => s['shift'] != null).toList());
+    }
+  }
+
+  String _formatScheduleDisplay(dynamic s) {
+    if (s == null || s['date'] == null) return "-";
+    try {
+      final date = DateTime.parse(s['date']);
+      final dayNames = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+      final dayName = dayNames[date.weekday - 1];
+      final dateStr = DateFormat('dd MMM yyyy').format(date);
+      final shiftName = s['shift']?['name'] ?? 'Shift';
+      final startTime = (s['shift']?['start_time'] ?? '').toString();
+      final endTime = (s['shift']?['end_time'] ?? '').toString();
+      String timeStr = '';
+      if (startTime.length >= 5 && endTime.length >= 5) {
+        timeStr = ' (${startTime.substring(0, 5)} - ${endTime.substring(0, 5)})';
+      }
+      return "$dayName, $dateStr — $shiftName$timeStr";
+    } catch (_) {
+      return s['date'].toString();
     }
   }
 
@@ -341,39 +450,55 @@ class __AddSwapModalState extends State<_AddSwapModal> {
             const SizedBox(height: 20),
             Text("Ajukan Tukar Shift", style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 5),
-            Text("Pilih rekan kerja dan jadwal yang ingin ditukar", style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+            Text("Pilih rekan kerja shift dan tentukan jadwal yang ingin ditukar", style: TextStyle(color: Colors.grey[500], fontSize: 12)),
             const SizedBox(height: 20),
             
             if (_loadingData) 
                const Center(child: Padding(padding: EdgeInsets.all(20.0), child: CircularProgressIndicator()))
             else ...[
-              // Select Employee
-              _buildLabel("1. Pilih Rekan Kerja"),
-              DropdownButtonFormField<int>(
-                value: _selectedEmployeeId,
-                decoration: _fieldDeco("Cari Karyawan..."),
-                items: _employees.map((e) {
-                  final roleText = (e['role'] != null && e['role']['name'] != null) 
-                      ? " (${e['role']['name']})" 
-                      : "";
-                  return DropdownMenuItem(
-                    value: e['id'] as int, 
-                    child: Text("${e['name']}$roleText", overflow: TextOverflow.ellipsis)
-                  );
-                }).toList(),
-                onChanged: (val) {
-                   if (val == null) return;
-                   setState(() {
-                     _selectedEmployeeId = val;
-                     _selectedReceiverSchedId = null;
-                   });
-                   _fetchReceiverSchedules(val);
-                },
-              ),
+              // 1. Select Employee
+              _buildLabel("1. Pilih Rekan Kerja (Pola Shift)"),
+              if (_employees.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 15),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Text(
+                    "Tidak ditemukan rekan kerja lain dengan pola kehadiran shift.",
+                    style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                  ),
+                )
+              else
+                DropdownButtonFormField<int>(
+                  value: _selectedEmployeeId,
+                  decoration: _fieldDeco("Pilih Rekan Kerja..."),
+                  isExpanded: true,
+                  items: _employees.map((e) {
+                    final roleText = (e['role'] != null && e['role']['name'] != null) 
+                        ? " (${e['role']['name']})" 
+                        : "";
+                    return DropdownMenuItem(
+                      value: e['id'] as int, 
+                      child: Text("${e['name']}$roleText", overflow: TextOverflow.ellipsis)
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                     if (val == null) return;
+                     setState(() {
+                       _selectedEmployeeId = val;
+                       _selectedReceiverSchedId = null;
+                     });
+                     _fetchReceiverSchedules(val);
+                  },
+                ),
               const SizedBox(height: 15),
 
-              // Select My Sched
-              _buildLabel("2. Jadwal Anda"),
+              // 2. Select My Sched
+              _buildLabel("2. Jadwal Anda (Dilepas)"),
               if (_mySchedules.isEmpty)
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -388,7 +513,7 @@ class __AddSwapModalState extends State<_AddSwapModal> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          "Anda belum memiliki jadwal shift yang terdaftar di sistem.",
+                          "Anda belum memiliki jadwal shift aktif di bulan ini.",
                           style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
                         ),
                       ),
@@ -399,22 +524,19 @@ class __AddSwapModalState extends State<_AddSwapModal> {
                 DropdownButtonFormField<int>(
                   value: _selectedMySchedId,
                   decoration: _fieldDeco("Pilih Jadwal Anda..."),
+                  isExpanded: true,
                   items: _mySchedules.map((s) {
-                    final dateStr = s['date'] != null 
-                        ? DateFormat('dd/MM/yyyy').format(DateTime.parse(s['date'])) 
-                        : '-';
-                    final shiftName = s['shift']?['name'] ?? 'Shift';
                     return DropdownMenuItem(
                       value: s['id'] as int, 
-                      child: Text("$dateStr — $shiftName")
+                      child: Text(_formatScheduleDisplay(s), overflow: TextOverflow.ellipsis)
                     );
                   }).toList(),
                   onChanged: (val) => setState(() => _selectedMySchedId = val),
                 ),
               const SizedBox(height: 15),
 
-              // Select Receiver Sched
-              _buildLabel("3. Jadwal Tujuan"),
+              // 3. Select Receiver Sched
+              _buildLabel("3. Jadwal Rekan (Diambil)"),
               if (_selectedEmployeeId != null && _receiverSchedules.isEmpty)
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -424,22 +546,19 @@ class __AddSwapModalState extends State<_AddSwapModal> {
                     border: Border.all(color: Colors.grey.shade300),
                   ),
                   child: Text(
-                    "Rekan kerja ini belum memiliki jadwal shift terdaftar.",
+                    "Rekan kerja ini belum memiliki jadwal shift aktif di bulan ini.",
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                   ),
                 )
               else
                 DropdownButtonFormField<int>(
                   value: _selectedReceiverSchedId,
-                  decoration: _fieldDeco(_selectedEmployeeId == null ? "Pilih rekan dulu..." : "Pilih Jadwal Rekan..."),
+                  decoration: _fieldDeco(_selectedEmployeeId == null ? "Pilih rekan dulu..." : "Pilih Jadwal Rekan (Tanggal & Shift)..."),
+                  isExpanded: true,
                   items: _receiverSchedules.map((s) {
-                    final dateStr = s['date'] != null 
-                        ? DateFormat('dd/MM/yyyy').format(DateTime.parse(s['date'])) 
-                        : '-';
-                    final shiftName = s['shift']?['name'] ?? 'Shift';
                     return DropdownMenuItem(
                       value: s['id'] as int, 
-                      child: Text("$dateStr — $shiftName")
+                      child: Text(_formatScheduleDisplay(s), overflow: TextOverflow.ellipsis)
                     );
                   }).toList(),
                   onChanged: _selectedEmployeeId == null ? null : (val) => setState(() => _selectedReceiverSchedId = val),
@@ -449,7 +568,7 @@ class __AddSwapModalState extends State<_AddSwapModal> {
               _buildLabel("4. Alasan"),
               TextField(
                 controller: _reasonController,
-                decoration: _fieldDeco("Kenapa ingin tukar shift?"),
+                decoration: _fieldDeco("Contoh: Ada urusan keluarga mendesak..."),
                 maxLines: 2,
               ),
               const SizedBox(height: 25),
@@ -495,8 +614,6 @@ class __AddSwapModalState extends State<_AddSwapModal> {
       return;
     }
     
-    print("Submitting Shift Swap: Receiver=$_selectedEmployeeId, MySched=$_selectedMySchedId, TargetSched=$_selectedReceiverSchedId");
-    
     setState(() => _isSubmitting = true);
     LoadingDialog.show(context, message: "Mengirim pengajuan tukar shift...");
     try {
@@ -507,8 +624,7 @@ class __AddSwapModalState extends State<_AddSwapModal> {
         'reason': _reasonController.text,
       });
       
-      print("API Response: $res");
-      
+      if (!mounted) return;
       LoadingDialog.hide(context);
       if (res['status'] == 'success' || res['id'] != null) {
         widget.onSuccess();
@@ -518,7 +634,7 @@ class __AddSwapModalState extends State<_AddSwapModal> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
       }
     } catch (e) {
-      print("Submit Error: $e");
+      if (!mounted) return;
       LoadingDialog.hide(context);
       setState(() => _isSubmitting = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red));

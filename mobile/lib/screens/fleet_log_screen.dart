@@ -20,11 +20,15 @@ class _FleetLogScreenState extends State<FleetLogScreen>
   List<dynamic> _vehicles = [];
   final Color primaryColor = const Color(0xFF800000);
   String _activeFilter = 'all';
+  String _activeCatalogFilter = 'all';
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _fetchData();
   }
 
@@ -43,8 +47,8 @@ class _FleetLogScreenState extends State<FleetLogScreen>
       final results = await Future.wait([logsFuture, vehiclesFuture]);
       if (mounted) {
         setState(() {
-          _logs = (results[0] as List<dynamic>?) ?? [];
-          _vehicles = (results[1] as List<dynamic>?) ?? [];
+          _logs = results[0] ?? [];
+          _vehicles = results[1] ?? [];
           _isLoading = false;
         });
       }
@@ -73,17 +77,41 @@ class _FleetLogScreenState extends State<FleetLogScreen>
     return _logs;
   }
 
+  List<dynamic> get _filteredVehicles {
+    if (_activeCatalogFilter == 'all') return _vehicles;
+    if (_activeCatalogFilter == 'available') {
+      return _vehicles.where((v) => v['is_available'] == true || v['status_code'] == 'available').toList();
+    }
+    if (_activeCatalogFilter == 'in_use') {
+      return _vehicles.where((v) =>
+        v['status_code'] == 'in_use' ||
+        v['status_code'] == 'booked' ||
+        (v['is_available'] == false && v['status_code'] != 'maintenance')
+      ).toList();
+    }
+    if (_activeCatalogFilter == 'maintenance') {
+      return _vehicles.where((v) => v['status_code'] == 'maintenance').toList();
+    }
+    return _vehicles;
+  }
+
   int get _countActive => _logs.where((l) => l['status'] == 'approved' || l['status'] == 'in_use' || l['status'] == 'departure').length;
   int get _countPending => _logs.where((l) => l['status'] == 'pending').length;
   int get _countCompleted => _logs.where((l) => l['status'] == 'completed' || l['status'] == 'validated').length;
 
+  int get _countVehiclesAvailable => _vehicles.where((v) => v['is_available'] == true || v['status_code'] == 'available').length;
+  int get _countVehiclesInUse => _vehicles.where((v) => v['status_code'] == 'in_use' || v['status_code'] == 'booked' || (v['is_available'] == false && v['status_code'] != 'maintenance')).length;
+  int get _countVehiclesMaintenance => _vehicles.where((v) => v['status_code'] == 'maintenance').length;
+
   @override
   Widget build(BuildContext context) {
+    final isCatalogTab = _tabController.index == 1;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         title: Text(
-          "Peminjaman Kendaraan",
+          "Peminjaman & Armada",
           style: GoogleFonts.outfit(
             fontWeight: FontWeight.bold,
             color: Colors.white,
@@ -123,19 +151,35 @@ class _FleetLogScreenState extends State<FleetLogScreen>
                 _buildCatalogTab(),
               ],
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openLoanRequestSheet(),
-        backgroundColor: primaryColor,
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: Text(
-          "Ajukan Peminjaman",
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-            fontSize: 14,
-          ),
-        ),
-      ),
+      floatingActionButton: isCatalogTab
+          ? FloatingActionButton.extended(
+              heroTag: 'fab_add_vehicle',
+              onPressed: () => _openAddVehicleSheet(),
+              backgroundColor: primaryColor,
+              icon: const Icon(Icons.add_to_photos_rounded, color: Colors.white),
+              label: Text(
+                "Tambah Armada",
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  fontSize: 14,
+                ),
+              ),
+            )
+          : FloatingActionButton.extended(
+              heroTag: 'fab_loan_request',
+              onPressed: () => _openLoanRequestSheet(),
+              backgroundColor: primaryColor,
+              icon: const Icon(Icons.add_rounded, color: Colors.white),
+              label: Text(
+                "Ajukan Peminjaman",
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  fontSize: 14,
+                ),
+              ),
+            ),
     );
   }
 
@@ -153,7 +197,7 @@ class _FleetLogScreenState extends State<FleetLogScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildStatCards(),
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
             _buildFilterChips(),
             const SizedBox(height: 14),
             Row(
@@ -162,7 +206,7 @@ class _FleetLogScreenState extends State<FleetLogScreen>
                 Text(
                   "Daftar Pengajuan & Perjalanan",
                   style: GoogleFonts.outfit(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
                   ),
@@ -187,7 +231,7 @@ class _FleetLogScreenState extends State<FleetLogScreen>
                     itemBuilder: (context, index) =>
                         _buildLoanCard(_filteredLogs[index]),
                   ),
-            const SizedBox(height: 80), // spacing for FAB
+            const SizedBox(height: 85), // Clean spacing for FAB
           ],
         ),
       ),
@@ -286,46 +330,77 @@ class _FleetLogScreenState extends State<FleetLogScreen>
 
   Widget _buildFilterChips() {
     final filters = [
-      {'id': 'all', 'label': 'Semua'},
-      {'id': 'pending', 'label': 'Menunggu'},
-      {'id': 'approved', 'label': 'Siap Pakai'},
-      {'id': 'in_use', 'label': 'Berjalan'},
-      {'id': 'completed', 'label': 'Selesai'},
-      {'id': 'rejected', 'label': 'Ditolak'},
+      {'id': 'all', 'label': 'Semua', 'count': _logs.length},
+      {'id': 'pending', 'label': 'Menunggu', 'count': _countPending},
+      {'id': 'approved', 'label': 'Disetujui', 'count': _logs.where((l) => l['status'] == 'approved').length},
+      {'id': 'in_use', 'label': 'Berjalan', 'count': _logs.where((l) => l['status'] == 'in_use' || l['status'] == 'departure').length},
+      {'id': 'completed', 'label': 'Selesai', 'count': _countCompleted},
+      {'id': 'rejected', 'label': 'Ditolak', 'count': _logs.where((l) => l['status'] == 'rejected').length},
     ];
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: filters.map((f) {
+    return Container(
+      height: 38,
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: filters.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final f = filters[index];
           final isSelected = _activeFilter == f['id'];
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilterChip(
-              label: Text(
-                f['label']!,
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSelected ? Colors.white : Colors.grey[700],
-                ),
-              ),
-              selected: isSelected,
-              selectedColor: primaryColor,
-              backgroundColor: Colors.white,
-              checkmarkColor: Colors.white,
-              shape: RoundedRectangleBorder(
+          return InkWell(
+            onTap: () => setState(() => _activeFilter = f['id'] as String),
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected ? primaryColor : Colors.white,
                 borderRadius: BorderRadius.circular(20),
-                side: BorderSide(
-                  color: isSelected ? primaryColor : Colors.grey.withOpacity(0.2),
+                border: Border.all(
+                  color: isSelected ? primaryColor : Colors.grey.withOpacity(0.25),
                 ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: primaryColor.withOpacity(0.2),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        )
+                      ]
+                    : null,
               ),
-              onSelected: (_) {
-                setState(() => _activeFilter = f['id']!);
-              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    f['label'] as String,
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      color: isSelected ? Colors.white : Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.white.withOpacity(0.25) : Colors.grey[200],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      "${f['count']}",
+                      style: GoogleFonts.outfit(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected ? Colors.white : Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
-        }).toList(),
+        },
       ),
     );
   }
@@ -333,7 +408,7 @@ class _FleetLogScreenState extends State<FleetLogScreen>
   Widget _buildEmptyState() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 20),
+      padding: const EdgeInsets.symmetric(vertical: 50, horizontal: 20),
       alignment: Alignment.center,
       child: Column(
         children: [
@@ -343,35 +418,22 @@ class _FleetLogScreenState extends State<FleetLogScreen>
               color: Colors.grey[100],
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.directions_car_outlined, size: 48, color: Colors.grey[400]),
+            child: Icon(Icons.directions_car_outlined, size: 44, color: Colors.grey[400]),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           Text(
-            "Tidak Ada Data Peminjaman",
+            "Tidak Ada Riwayat Peminjaman",
             style: GoogleFonts.outfit(
-              fontSize: 16,
+              fontSize: 15,
               fontWeight: FontWeight.bold,
               color: Colors.grey[700],
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
-            "Anda belum memiliki pengajuan peminjaman kendaraan yang sesuai filter ini.",
+            "Gunakan tombol di pojok kanan bawah untuk mengajukan peminjaman kendaraan dinas.",
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[500]),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: () => _openLoanRequestSheet(),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text("Ajukan Peminjaman Baru"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
           ),
         ],
       ),
@@ -393,7 +455,7 @@ class _FleetLogScreenState extends State<FleetLogScreen>
     final approvalStep = log['current_approval_step'];
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -467,11 +529,15 @@ class _FleetLogScreenState extends State<FleetLogScreen>
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              Text(
-                                driverType == 'driver' ? "Supir: $driverName" : "Driver Sendiri",
-                                style: GoogleFonts.outfit(
-                                  fontSize: 11,
-                                  color: Colors.grey[600],
+                              Expanded(
+                                child: Text(
+                                  driverType == 'driver' ? "Supir: $driverName" : "Driver Sendiri",
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    color: Colors.grey[600],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
@@ -479,6 +545,7 @@ class _FleetLogScreenState extends State<FleetLogScreen>
                         ],
                       ),
                     ),
+                    const SizedBox(width: 8),
                     _buildBadge(status),
                   ],
                 ),
@@ -513,7 +580,7 @@ class _FleetLogScreenState extends State<FleetLogScreen>
                   ),
                 ],
 
-                const Divider(height: 22),
+                const Divider(height: 20),
 
                 // Schedule & Destination
                 Row(
@@ -571,10 +638,10 @@ class _FleetLogScreenState extends State<FleetLogScreen>
 
                 // Contextual Action Buttons
                 if (status == 'approved') ...[
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
-                    height: 42,
+                    height: 40,
                     child: ElevatedButton.icon(
                       onPressed: () => _openDepartureForm(log: log),
                       icon: const Icon(Icons.play_circle_fill_rounded, size: 18),
@@ -593,10 +660,10 @@ class _FleetLogScreenState extends State<FleetLogScreen>
                     ),
                   ),
                 ] else if (status == 'in_use' || status == 'departure') ...[
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
-                    height: 42,
+                    height: 40,
                     child: ElevatedButton.icon(
                       onPressed: () => _openReturnForm(log),
                       icon: const Icon(Icons.check_circle_rounded, size: 18),
@@ -683,35 +750,73 @@ class _FleetLogScreenState extends State<FleetLogScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              "Katalog & Ketersediaan Armada",
-              style: GoogleFonts.outfit(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Katalog & Ketersediaan Armada",
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                Text(
+                  "${_filteredVehicles.length} Unit",
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               "Daftar kendaraan operasional kantor beserta status ketersediaannya saat ini.",
               style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[600]),
             ),
-            const SizedBox(height: 16),
-            _vehicles.isEmpty
+            const SizedBox(height: 14),
+            _buildCatalogFilterChips(),
+            const SizedBox(height: 14),
+            _filteredVehicles.isEmpty
                 ? _buildEmptyVehiclesState()
                 : ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _vehicles.length,
+                    itemCount: _filteredVehicles.length,
                     itemBuilder: (context, index) {
-                      final v = _vehicles[index];
-                      final isAvailable = v['is_available'] == true;
+                      final v = _filteredVehicles[index];
+                      final isAvailable = v['is_available'] == true || v['status_code'] == 'available';
+                      final statusCode = v['status_code'] ?? (isAvailable ? 'available' : 'in_use');
                       final vName = v['vehicle_name'] ?? 'Kendaraan';
                       final plate = v['plate_number'] ?? '-';
                       final statusLabel = v['status_label'] ?? (isAvailable ? 'Tersedia' : 'Sedang Digunakan');
                       final currentUser = v['current_user'];
                       final destination = v['destination'];
+                      final purpose = v['purpose'];
+                      final notes = v['notes'];
                       final until = v['until'];
+
+                      Color badgeBg = const Color(0xFFECFDF5);
+                      Color badgeBorder = const Color(0xFF10B981);
+                      Color badgeText = const Color(0xFF047857);
+                      IconData vehicleIcon = Icons.directions_car_filled_rounded;
+
+                      if (statusCode == 'maintenance') {
+                        badgeBg = const Color(0xFFFEF2F2);
+                        badgeBorder = const Color(0xFFEF4444);
+                        badgeText = const Color(0xFFDC2626);
+                        vehicleIcon = Icons.build_circle_rounded;
+                      } else if (statusCode == 'in_use') {
+                        badgeBg = const Color(0xFFEFF6FF);
+                        badgeBorder = const Color(0xFF3B82F6);
+                        badgeText = const Color(0xFF1D4ED8);
+                      } else if (statusCode == 'booked') {
+                        badgeBg = const Color(0xFFFFFBEB);
+                        badgeBorder = const Color(0xFFF59E0B);
+                        badgeText = const Color(0xFFB45309);
+                      }
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -741,16 +846,12 @@ class _FleetLogScreenState extends State<FleetLogScreen>
                                   width: 44,
                                   height: 44,
                                   decoration: BoxDecoration(
-                                    color: isAvailable
-                                        ? const Color(0xFFECFDF5)
-                                        : const Color(0xFFFFFBEB),
+                                    color: badgeBg,
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Icon(
-                                    Icons.directions_car_filled_rounded,
-                                    color: isAvailable
-                                        ? const Color(0xFF10B981)
-                                        : const Color(0xFFD97706),
+                                    vehicleIcon,
+                                    color: badgeBorder,
                                     size: 24,
                                   ),
                                 ),
@@ -789,22 +890,14 @@ class _FleetLogScreenState extends State<FleetLogScreen>
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: isAvailable
-                                        ? const Color(0xFFECFDF5)
-                                        : const Color(0xFFFFFBEB),
+                                    color: badgeBg,
                                     borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: isAvailable
-                                          ? const Color(0xFF10B981)
-                                          : const Color(0xFFD97706),
-                                    ),
+                                    border: Border.all(color: badgeBorder.withOpacity(0.5)),
                                   ),
                                   child: Text(
                                     statusLabel,
                                     style: GoogleFonts.outfit(
-                                      color: isAvailable
-                                          ? const Color(0xFF047857)
-                                          : const Color(0xFFB45309),
+                                      color: badgeText,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 11,
                                     ),
@@ -813,27 +906,62 @@ class _FleetLogScreenState extends State<FleetLogScreen>
                               ],
                             ),
 
-                            if (!isAvailable) ...[
-                              const Divider(height: 20),
-                              Row(
-                                children: [
-                                  const Icon(Icons.person_outline_rounded, size: 15, color: Colors.grey),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    "Dipakai oleh: ${currentUser ?? '-'}",
-                                    style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[700]),
-                                  ),
-                                ],
+                            if (notes != null && notes.toString().isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                notes.toString(),
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  color: Colors.grey[600],
+                                  fontStyle: FontStyle.italic,
+                                ),
                               ),
+                            ],
+
+                            if (!isAvailable && statusCode != 'maintenance') ...[
+                              const Divider(height: 18),
+                              if (currentUser != null) ...[
+                                Row(
+                                  children: [
+                                    const Icon(Icons.person_outline_rounded, size: 15, color: Colors.grey),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      "Dipakai oleh: $currentUser",
+                                      style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[700]),
+                                    ),
+                                  ],
+                                ),
+                              ],
                               if (destination != null) ...[
                                 const SizedBox(height: 4),
                                 Row(
                                   children: [
                                     const Icon(Icons.place_outlined, size: 15, color: Colors.grey),
                                     const SizedBox(width: 6),
-                                    Text(
-                                      "Tujuan: $destination",
-                                      style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[700]),
+                                    Expanded(
+                                      child: Text(
+                                        "Tujuan: $destination",
+                                        style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[700]),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                              if (purpose != null && purpose.toString().isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.assignment_outlined, size: 15, color: Colors.grey),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        "Keperluan: $purpose",
+                                        style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[700]),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -857,39 +985,149 @@ class _FleetLogScreenState extends State<FleetLogScreen>
                               ],
                             ],
 
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 38,
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  _openLoanRequestSheet(
-                                    preselectedVehicle: vName,
-                                    preselectedPlate: plate,
-                                  );
-                                },
-                                icon: const Icon(Icons.calendar_today_rounded, size: 16),
-                                label: Text(
-                                  isAvailable ? "Pinjam Unit Ini" : "Ajukan Reservasi Jadwal",
-                                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
+                            if (statusCode == 'maintenance') ...[
+                              const SizedBox(height: 10),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF2F2),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFFFECACA)),
                                 ),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: primaryColor,
-                                  side: BorderSide(color: primaryColor),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFDC2626)),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        "Unit sedang dalam perawatan berkala/servis",
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFFB91C1C),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+
+                            const SizedBox(height: 12),
+                            // Single clean button per card
+                            if (statusCode != 'maintenance') ...[
+                              SizedBox(
+                                width: double.infinity,
+                                height: 38,
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    _openLoanRequestSheet(
+                                      preselectedVehicle: vName,
+                                      preselectedPlate: plate,
+                                    );
+                                  },
+                                  icon: Icon(
+                                    isAvailable ? Icons.directions_car_rounded : Icons.calendar_today_rounded,
+                                    size: 16,
+                                  ),
+                                  label: Text(
+                                    isAvailable ? "Pinjam Kendaraan Ini" : "Reservasi Jadwal Lain",
+                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: primaryColor,
+                                    side: BorderSide(color: primaryColor),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       );
                     },
                   ),
-            const SizedBox(height: 80),
+            const SizedBox(height: 85), // Clean spacing for FAB
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildCatalogFilterChips() {
+    final filters = [
+      {'id': 'all', 'label': 'Semua', 'count': _vehicles.length},
+      {'id': 'available', 'label': 'Tersedia', 'count': _countVehiclesAvailable},
+      {'id': 'in_use', 'label': 'Digunakan', 'count': _countVehiclesInUse},
+      {'id': 'maintenance', 'label': 'Perbaikan', 'count': _countVehiclesMaintenance},
+    ];
+
+    return Container(
+      height: 38,
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: filters.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final f = filters[index];
+          final isSelected = _activeCatalogFilter == f['id'];
+          return InkWell(
+            onTap: () => setState(() => _activeCatalogFilter = f['id'] as String),
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected ? primaryColor : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isSelected ? primaryColor : Colors.grey.withOpacity(0.25),
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: primaryColor.withOpacity(0.2),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        )
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    f['label'] as String,
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      color: isSelected ? Colors.white : Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.white.withOpacity(0.25) : Colors.grey[200],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      "${f['count']}",
+                      style: GoogleFonts.outfit(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected ? Colors.white : Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -904,20 +1142,20 @@ class _FleetLogScreenState extends State<FleetLogScreen>
           Icon(Icons.directions_car_filled_outlined, size: 48, color: Colors.grey[400]),
           const SizedBox(height: 12),
           Text(
-            "Belum Ada Armada Terdaftar",
+            "Belum Ada Armada Sesuai Filter",
             style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
           ),
           const SizedBox(height: 4),
           Text(
-            "Unit armada kendaraan akan otomatis terdaftar saat Anda mengajukan peminjaman.",
+            "Tambahkan unit armada baru ke dalam sistem untuk memulai pencatatan dan peminjaman.",
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[600]),
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed: () => _openLoanRequestSheet(),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text("Input Peminjaman Kendaraan"),
+            onPressed: () => _openAddVehicleSheet(),
+            icon: const Icon(Icons.add_to_photos_rounded, size: 18),
+            label: const Text("Tambah Armada Baru"),
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryColor,
               foregroundColor: Colors.white,
@@ -932,6 +1170,18 @@ class _FleetLogScreenState extends State<FleetLogScreen>
   // ════════════════════════════════════════════════════════════════════════════
   // ACTIONS & MODALS
   // ════════════════════════════════════════════════════════════════════════════
+
+  void _openAddVehicleSheet() async {
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const _AddVehicleSheet(),
+    );
+    if (result == true) {
+      _fetchData();
+    }
+  }
 
   void _openLoanRequestSheet({String? preselectedVehicle, String? preselectedPlate}) async {
     final result = await showModalBottomSheet<bool>(
@@ -999,6 +1249,306 @@ class _FleetLogScreenState extends State<FleetLogScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => _SOPModal(),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// FORM SHEET 0: TAMBAH ARMADA KENDARAAN (ADD VEHICLE)
+// ════════════════════════════════════════════════════════════════════════════
+class _AddVehicleSheet extends StatefulWidget {
+  const _AddVehicleSheet();
+
+  @override
+  _AddVehicleSheetState createState() => _AddVehicleSheetState();
+}
+
+class _AddVehicleSheetState extends State<_AddVehicleSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _vehicleNameController = TextEditingController();
+  final TextEditingController _plateNumberController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
+
+  String _vehicleType = 'Mobil Penumpang';
+  String _initialStatus = 'available'; // 'available' or 'maintenance'
+  bool _isSubmitting = false;
+
+  final Color primaryColor = const Color(0xFF800000);
+
+  final List<String> _vehicleTypes = [
+    'Mobil Penumpang',
+    'Motor Operasional',
+    'Minibus / HiAce',
+    'Pickup / Truk Logistik',
+    'Kendaraan Khusus',
+  ];
+
+  @override
+  void dispose() {
+    _vehicleNameController.dispose();
+    _plateNumberController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  void _handleSubmit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSubmitting = true);
+    LoadingDialog.show(context, message: "Menambahkan armada baru...");
+
+    try {
+      final payload = {
+        'vehicle_name': _vehicleNameController.text.trim(),
+        'plate_number': _plateNumberController.text.trim().toUpperCase(),
+        'vehicle_type': _vehicleType,
+        'initial_status': _initialStatus,
+        'notes': _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
+      };
+
+      final result = await ApiService.registerVehicle(payload);
+      if (!mounted) return;
+      LoadingDialog.hide(context);
+
+      if (result['status'] == 'success') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? "Armada kendaraan berhasil didaftarkan!"),
+            backgroundColor: const Color(0xFF16A34A),
+          ),
+        );
+        Navigator.pop(context, true);
+      } else {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? "Gagal mendaftarkan armada"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        LoadingDialog.hide(context);
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header Sheet
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Form Tambah Armada",
+                        style: GoogleFonts.outfit(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        "Daftarkan unit kendaraan baru ke katalog kantor",
+                        style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const Divider(height: 20),
+
+              // Nama Kendaraan
+              TextFormField(
+                controller: _vehicleNameController,
+                decoration: InputDecoration(
+                  labelText: "Nama / Merk & Tipe Kendaraan *",
+                  hintText: "Contoh: Toyota Avanza 1.5 AT / Honda CR-V",
+                  prefixIcon: Icon(Icons.directions_car_filled_rounded, color: primaryColor, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+                validator: (v) => v == null || v.trim().isEmpty ? "Nama kendaraan wajib diisi" : null,
+              ),
+              const SizedBox(height: 12),
+
+              // Plat Nomor
+              TextFormField(
+                controller: _plateNumberController,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(
+                  labelText: "Nomor Plat Polisi *",
+                  hintText: "Contoh: B 1234 CD / D 5678 EF",
+                  prefixIcon: Icon(Icons.badge_rounded, color: primaryColor, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return "Plat nomor wajib diisi";
+                  if (v.trim().length < 3) return "Plat nomor terlalu pendek";
+                  return null;
+                },
+              ),
+              const SizedBox(height: 14),
+
+              // Jenis Kendaraan Dropdown
+              Text(
+                "KATEGORI / JENIS KENDARAAN",
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[700],
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                value: _vehicleType,
+                decoration: InputDecoration(
+                  prefixIcon: Icon(Icons.category_rounded, color: primaryColor, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+                items: _vehicleTypes.map((type) {
+                  return DropdownMenuItem<String>(
+                    value: type,
+                    child: Text(type, style: GoogleFonts.outfit(fontSize: 13)),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => _vehicleType = val);
+                },
+              ),
+              const SizedBox(height: 14),
+
+              // Status Awal Unit
+              Text(
+                "STATUS AWAL UNIT",
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[700],
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: ChoiceChip(
+                      label: Center(
+                        child: Text(
+                          "Tersedia (Ready)",
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: _initialStatus == 'available' ? Colors.white : Colors.grey[700],
+                          ),
+                        ),
+                      ),
+                      selected: _initialStatus == 'available',
+                      selectedColor: const Color(0xFF10B981),
+                      onSelected: (_) => setState(() => _initialStatus = 'available'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ChoiceChip(
+                      label: Center(
+                        child: Text(
+                          "Dalam Perbaikan",
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: _initialStatus == 'maintenance' ? Colors.white : Colors.grey[700],
+                          ),
+                        ),
+                      ),
+                      selected: _initialStatus == 'maintenance',
+                      selectedColor: const Color(0xFFDC2626),
+                      onSelected: (_) => setState(() => _initialStatus = 'maintenance'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Catatan / Lokasi Pool
+              TextFormField(
+                controller: _notesController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: "Keterangan / Lokasi Pool (Opsional)",
+                  hintText: "Contoh: Unit warna hitam, lokasi Pool Basement A, fasilitas e-Toll",
+                  prefixIcon: const Icon(Icons.notes_rounded, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Submit Button
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: _isSubmitting ? null : _handleSubmit,
+                  icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.white, size: 20),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  label: _isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : Text(
+                          "SIMPAN ARMADA KE KATALOG",
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1149,6 +1699,7 @@ class _LoanRequestSheetState extends State<_LoanRequestSheet> {
       };
 
       final result = await ApiService.submitLoanRequest(payload);
+      if (!mounted) return;
       LoadingDialog.hide(context);
 
       if (result['status'] == 'success') {
@@ -1169,11 +1720,13 @@ class _LoanRequestSheetState extends State<_LoanRequestSheet> {
         );
       }
     } catch (e) {
-      LoadingDialog.hide(context);
-      setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        LoadingDialog.hide(context);
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -1640,7 +2193,7 @@ class _DepartureFormScreenState extends State<_DepartureFormScreen> {
 
       final int? logId = widget.log?['id'];
       final result = await ApiService.submitDeparture(data, _image!.path, id: logId);
-
+      if (!mounted) return;
       LoadingDialog.hide(context);
 
       if (result['status'] == 'success') {
@@ -1661,11 +2214,13 @@ class _DepartureFormScreenState extends State<_DepartureFormScreen> {
         );
       }
     } catch (e) {
-      LoadingDialog.hide(context);
-      setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        LoadingDialog.hide(context);
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -1919,7 +2474,7 @@ class _ReturnFormScreenState extends State<_ReturnFormScreen> {
   final TextEditingController _parkController = TextEditingController();
 
   File? _odometerPhoto;
-  List<File> _expensePhotos = [];
+  final List<File> _expensePhotos = [];
   bool _isSubmitting = false;
   final Color primaryColor = const Color(0xFF800000);
 
@@ -1965,7 +2520,7 @@ class _ReturnFormScreenState extends State<_ReturnFormScreen> {
         odometerPhotoPath: _odometerPhoto!.path,
         expenseFiles: _expensePhotos.map((e) => e.path).toList(),
       );
-
+      if (!mounted) return;
       LoadingDialog.hide(context);
 
       if (result['status'] == 'success') {
@@ -1986,11 +2541,13 @@ class _ReturnFormScreenState extends State<_ReturnFormScreen> {
         );
       }
     } catch (e) {
-      LoadingDialog.hide(context);
-      setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        LoadingDialog.hide(context);
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
