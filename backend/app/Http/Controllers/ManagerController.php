@@ -582,229 +582,249 @@ class ManagerController extends Controller
 
         $historyItems = collect();
 
-        // 1. Processed Leaves
         if (in_array($type, ['all', 'leave'])) {
-            $q = Leave::with(['user', 'supervisorApprover', 'hrApprover'])->whereIn('status', ['approved', 'rejected']);
-            $companyScope($q);
-            if ($month) {
-                $q->where('start_date', 'like', "{$month}%");
-            }
-            if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
-                $q->where('status', $status);
-            }
-            $leaves = $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
-                return [
-                    'id' => 'leave-' . $item->id,
-                    'record_id' => $item->id,
-                    'type' => 'leave',
-                    'category' => 'Cuti',
-                    'user_name' => $item->user?->name ?? 'Karyawan',
-                    'description' => "{$item->type} ({$item->start_date} s/d {$item->end_date})" . ($item->reason ? ": {$item->reason}" : ''),
-                    'status' => $item->status,
-                    'action_type' => 'processed',
-                    'actor_name' => $item->hrApprover?->name ?? $item->supervisorApprover?->name ?? 'Approver',
-                    'remark' => $item->remark,
-                    'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
-                    'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
-                ];
-            });
-            $historyItems = $historyItems->concat($leaves);
+            $historyItems = $historyItems->concat($this->fetchHistoryLeaves($companyScope, $status, $month));
         }
 
-        // 2. Processed Permits
         if (in_array($type, ['all', 'permit'])) {
-            $q = Permit::with('user')->whereIn('status', ['approved', 'rejected']);
-            $companyScope($q);
-            if ($month) {
-                $q->where('start_date', 'like', "{$month}%");
-            }
-            if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
-                $q->where('status', $status);
-            }
-            $permits = $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
-                return [
-                    'id' => 'permit-' . $item->id,
-                    'record_id' => $item->id,
-                    'type' => 'permit',
-                    'category' => 'Izin',
-                    'user_name' => $item->user?->name ?? 'Karyawan',
-                    'description' => "{$item->type} ({$item->start_date})" . ($item->reason ? ": {$item->reason}" : ''),
-                    'status' => $item->status,
-                    'action_type' => 'processed',
-                    'actor_name' => 'Approver',
-                    'remark' => $item->remark,
-                    'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
-                    'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
-                ];
-            });
-            $historyItems = $historyItems->concat($permits);
+            $historyItems = $historyItems->concat($this->fetchHistoryPermits($companyScope, $status, $month));
         }
 
-        // 3. Processed Overtimes
         if (in_array($type, ['all', 'overtime'])) {
-            $q = Overtime::with(['user', 'approver'])->whereIn('status', ['approved', 'rejected']);
-            $companyScope($q);
-            if ($month) {
-                $q->where('created_at', 'like', "{$month}%");
-            }
-            if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
-                $q->where('status', $status);
-            }
-            $overtimes = $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
-                return [
-                    'id' => 'overtime-' . $item->id,
-                    'record_id' => $item->id,
-                    'type' => 'overtime',
-                    'category' => 'Lembur',
-                    'user_name' => $item->user?->name ?? 'Karyawan',
-                    'description' => ($item->title ?? 'Lembur') . ($item->reason ? ": {$item->reason}" : ''),
-                    'status' => $item->status,
-                    'action_type' => 'processed',
-                    'actor_name' => $item->approver?->name ?? 'Approver',
-                    'remark' => $item->remark,
-                    'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
-                    'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
-                ];
-            });
-            $historyItems = $historyItems->concat($overtimes);
+            $historyItems = $historyItems->concat($this->fetchHistoryOvertimes($companyScope, $status, $month));
         }
 
-        // 4. Processed Reimbursements
         if (in_array($type, ['all', 'reimbursement'])) {
-            $q = Reimbursement::with('user')->whereIn('status', ['approved', 'rejected']);
-            $companyScope($q);
-            if ($month) {
-                $q->where('created_at', 'like', "{$month}%");
-            }
-            if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
-                $q->where('status', $status);
-            }
-            $reimbursements = $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
-                return [
-                    'id' => 'reimbursement-' . $item->id,
-                    'record_id' => $item->id,
-                    'type' => 'reimbursement',
-                    'category' => 'Reimbursement',
-                    'user_name' => $item->employee_name ?? $item->user?->name ?? 'Karyawan',
-                    'description' => "{$item->title} (Rp " . number_format($item->amount, 0, ',', '.') . ")",
-                    'status' => $item->status,
-                    'action_type' => 'processed',
-                    'actor_name' => 'Approver',
-                    'remark' => $item->remark,
-                    'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
-                    'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
-                ];
-            });
-            $historyItems = $historyItems->concat($reimbursements);
+            $historyItems = $historyItems->concat($this->fetchHistoryReimbursements($companyScope, $status, $month));
         }
 
-        // 5. Processed Fund Requests
         if (in_array($type, ['all', 'fund_request'])) {
-            $q = FundRequest::with('user')->whereIn('status', ['approved', 'rejected']);
-            $companyScope($q);
-            if ($month) {
-                $q->where('created_at', 'like', "{$month}%");
-            }
-            if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
-                $q->where('status', $status);
-            }
-            $fundRequests = $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
-                return [
-                    'id' => 'fund-' . $item->id,
-                    'record_id' => $item->id,
-                    'type' => 'fund_request',
-                    'category' => 'Pengajuan Dana',
-                    'user_name' => $item->employee_name ?? $item->user?->name ?? 'Karyawan',
-                    'description' => "{$item->title} (Rp " . number_format($item->amount, 0, ',', '.') . ")",
-                    'status' => $item->status,
-                    'action_type' => 'processed',
-                    'actor_name' => 'Approver',
-                    'remark' => $item->reject_reason,
-                    'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
-                    'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
-                ];
-            });
-            $historyItems = $historyItems->concat($fundRequests);
+            $historyItems = $historyItems->concat($this->fetchHistoryFundRequests($companyScope, $status, $month));
         }
 
-        // 6. Processed Attendance Corrections
         if (in_array($type, ['all', 'attendance_correction'])) {
-            $q = AttendanceCorrection::with('user')->whereIn('status', ['approved', 'rejected']);
-            $companyScope($q);
-            if ($month) {
-                $q->where('created_at', 'like', "{$month}%");
-            }
-            if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
-                $q->where('status', $status);
-            }
-            $corrections = $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
-                return [
-                    'id' => 'correction-' . $item->id,
-                    'record_id' => $item->id,
-                    'type' => 'attendance_correction',
-                    'category' => 'Koreksi Absen',
-                    'user_name' => $item->user?->name ?? 'Karyawan',
-                    'description' => "Koreksi {$item->correction_type}: {$item->reason}",
-                    'status' => $item->status,
-                    'action_type' => 'processed',
-                    'actor_name' => 'Approver',
-                    'remark' => $item->remark,
-                    'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
-                    'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
-                ];
-            });
-            $historyItems = $historyItems->concat($corrections);
+            $historyItems = $historyItems->concat($this->fetchHistoryCorrections($companyScope, $status, $month));
         }
 
-        // 7. Audit Trail Logs (Edit & Delete actions by pemohon / admin)
         if (in_array($status, ['all', 'edited', 'deleted'])) {
-            $logQuery = ActivityLog::with('user')
-                ->whereIn('module', ['leaves', 'permits', 'overtimes', 'reimbursements', 'fund_requests', 'attendance_corrections', 'maintenance'])
-                ->where(function ($q) {
-                    $q->where('action', 'like', 'UPDATE_%')
-                      ->orWhere('action', 'like', 'DELETE_%')
-                      ->orWhere('action', 'like', 'PURGE_%');
-                });
-
-            $companyScope($logQuery);
-            if ($month) {
-                $logQuery->where('created_at', 'like', "{$month}%");
-            }
-            if ($status === 'edited') {
-                $logQuery->where('action', 'like', 'UPDATE_%');
-            } elseif ($status === 'deleted') {
-                $logQuery->where(function ($q) {
-                    $q->where('action', 'like', 'DELETE_%')->orWhere('action', 'like', 'PURGE_%');
-                });
-            }
-
-            $logs = $logQuery->orderBy('created_at', 'desc')->take(50)->get()->map(function ($log) {
-                $isDelete = str_contains($log->action, 'DELETE') || str_contains($log->action, 'PURGE');
-                return [
-                    'id' => 'log-' . $log->id,
-                    'record_id' => $log->id,
-                    'type' => $log->module ?? 'general',
-                    'category' => strtoupper(str_replace('_', ' ', $log->module ?? 'Log')),
-                    'user_name' => $log->user?->name ?? 'Sistem / Pengguna',
-                    'description' => $log->description,
-                    'status' => $isDelete ? 'deleted' : 'updated',
-                    'action_type' => $isDelete ? 'deleted' : 'updated',
-                    'actor_name' => $log->user?->name ?? 'User',
-                    'remark' => $log->ip_address ? "IP: {$log->ip_address}" : null,
-                    'created_at' => $log->created_at?->toISOString() ?? (string)$log->created_at,
-                    'updated_at' => $log->created_at?->toISOString() ?? (string)$log->created_at,
-                ];
-            });
-            $historyItems = $historyItems->concat($logs);
+            $historyItems = $historyItems->concat($this->fetchHistoryLogs($companyScope, $status, $month));
         }
 
-        // Sort unified collection by created_at desc
         $sorted = $historyItems->sortByDesc('created_at')->values()->take(100);
 
         return response()->json([
             'status' => 'success',
             'data' => $sorted,
         ]);
+    }
+
+    private function fetchHistoryLeaves(\Closure $companyScope, string $status, ?string $month)
+    {
+        $q = Leave::with(['user', 'supervisorApprover', 'hrApprover'])->whereIn('status', ['approved', 'rejected']);
+        $companyScope($q);
+        if ($month) {
+            $q->where('start_date', 'like', "{$month}%");
+        }
+        if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
+            $q->where('status', $status);
+        }
+        return $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
+            return [
+                'id' => 'leave-' . $item->id,
+                'record_id' => $item->id,
+                'type' => 'leave',
+                'category' => 'Cuti',
+                'user_name' => $item->user?->name ?? 'Karyawan',
+                'description' => "{$item->type} ({$item->start_date} s/d {$item->end_date})" . ($item->reason ? ": {$item->reason}" : ''),
+                'status' => $item->status,
+                'action_type' => 'processed',
+                'actor_name' => $item->hrApprover?->name ?? $item->supervisorApprover?->name ?? 'Approver',
+                'remark' => $item->remark,
+                'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
+                'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
+            ];
+        });
+    }
+
+    private function fetchHistoryPermits(\Closure $companyScope, string $status, ?string $month)
+    {
+        $q = Permit::with('user')->whereIn('status', ['approved', 'rejected']);
+        $companyScope($q);
+        if ($month) {
+            $q->where('start_date', 'like', "{$month}%");
+        }
+        if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
+            $q->where('status', $status);
+        }
+        return $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
+            return [
+                'id' => 'permit-' . $item->id,
+                'record_id' => $item->id,
+                'type' => 'permit',
+                'category' => 'Izin',
+                'user_name' => $item->user?->name ?? 'Karyawan',
+                'description' => "{$item->type} ({$item->start_date})" . ($item->reason ? ": {$item->reason}" : ''),
+                'status' => $item->status,
+                'action_type' => 'processed',
+                'actor_name' => 'Approver',
+                'remark' => $item->remark,
+                'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
+                'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
+            ];
+        });
+    }
+
+    private function fetchHistoryOvertimes(\Closure $companyScope, string $status, ?string $month)
+    {
+        $q = Overtime::with(['user', 'approver'])->whereIn('status', ['approved', 'rejected']);
+        $companyScope($q);
+        if ($month) {
+            $q->where('created_at', 'like', "{$month}%");
+        }
+        if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
+            $q->where('status', $status);
+        }
+        return $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
+            return [
+                'id' => 'overtime-' . $item->id,
+                'record_id' => $item->id,
+                'type' => 'overtime',
+                'category' => 'Lembur',
+                'user_name' => $item->user?->name ?? 'Karyawan',
+                'description' => ($item->title ?? 'Lembur') . ($item->reason ? ": {$item->reason}" : ''),
+                'status' => $item->status,
+                'action_type' => 'processed',
+                'actor_name' => $item->approver?->name ?? 'Approver',
+                'remark' => $item->remark,
+                'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
+                'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
+            ];
+        });
+    }
+
+    private function fetchHistoryReimbursements(\Closure $companyScope, string $status, ?string $month)
+    {
+        $q = Reimbursement::with('user')->whereIn('status', ['approved', 'rejected']);
+        $companyScope($q);
+        if ($month) {
+            $q->where('created_at', 'like', "{$month}%");
+        }
+        if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
+            $q->where('status', $status);
+        }
+        return $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
+            return [
+                'id' => 'reimbursement-' . $item->id,
+                'record_id' => $item->id,
+                'type' => 'reimbursement',
+                'category' => 'Reimbursement',
+                'user_name' => $item->employee_name ?? $item->user?->name ?? 'Karyawan',
+                'description' => "{$item->title} (Rp " . number_format($item->amount, 0, ',', '.') . ")",
+                'status' => $item->status,
+                'action_type' => 'processed',
+                'actor_name' => 'Approver',
+                'remark' => $item->remark,
+                'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
+                'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
+            ];
+        });
+    }
+
+    private function fetchHistoryFundRequests(\Closure $companyScope, string $status, ?string $month)
+    {
+        $q = FundRequest::with('user')->whereIn('status', ['approved', 'rejected']);
+        $companyScope($q);
+        if ($month) {
+            $q->where('created_at', 'like', "{$month}%");
+        }
+        if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
+            $q->where('status', $status);
+        }
+        return $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
+            return [
+                'id' => 'fund-' . $item->id,
+                'record_id' => $item->id,
+                'type' => 'fund_request',
+                'category' => 'Pengajuan Dana',
+                'user_name' => $item->employee_name ?? $item->user?->name ?? 'Karyawan',
+                'description' => "{$item->title} (Rp " . number_format($item->amount, 0, ',', '.') . ")",
+                'status' => $item->status,
+                'action_type' => 'processed',
+                'actor_name' => 'Approver',
+                'remark' => $item->reject_reason,
+                'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
+                'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
+            ];
+        });
+    }
+
+    private function fetchHistoryCorrections(\Closure $companyScope, string $status, ?string $month)
+    {
+        $q = AttendanceCorrection::with('user')->whereIn('status', ['approved', 'rejected']);
+        $companyScope($q);
+        if ($month) {
+            $q->where('created_at', 'like', "{$month}%");
+        }
+        if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
+            $q->where('status', $status);
+        }
+        return $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
+            return [
+                'id' => 'correction-' . $item->id,
+                'record_id' => $item->id,
+                'type' => 'attendance_correction',
+                'category' => 'Koreksi Absen',
+                'user_name' => $item->user?->name ?? 'Karyawan',
+                'description' => "Koreksi {$item->correction_type}: {$item->reason}",
+                'status' => $item->status,
+                'action_type' => 'processed',
+                'actor_name' => 'Approver',
+                'remark' => $item->remark,
+                'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
+                'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
+            ];
+        });
+    }
+
+    private function fetchHistoryLogs(\Closure $companyScope, string $status, ?string $month)
+    {
+        $logQuery = ActivityLog::with('user')
+            ->whereIn('module', ['leaves', 'permits', 'overtimes', 'reimbursements', 'fund_requests', 'attendance_corrections', 'maintenance'])
+            ->where(function ($q) {
+                $q->where('action', 'like', 'UPDATE_%')
+                  ->orWhere('action', 'like', 'DELETE_%')
+                  ->orWhere('action', 'like', 'PURGE_%');
+            });
+
+        $companyScope($logQuery);
+        if ($month) {
+            $logQuery->where('created_at', 'like', "{$month}%");
+        }
+        if ($status === 'edited') {
+            $logQuery->where('action', 'like', 'UPDATE_%');
+        } elseif ($status === 'deleted') {
+            $logQuery->where(function ($q) {
+                $q->where('action', 'like', 'DELETE_%')->orWhere('action', 'like', 'PURGE_%');
+            });
+        }
+
+        return $logQuery->orderBy('created_at', 'desc')->take(50)->get()->map(function ($log) {
+            $isDelete = str_contains($log->action, 'DELETE') || str_contains($log->action, 'PURGE');
+            return [
+                'id' => 'log-' . $log->id,
+                'record_id' => $log->id,
+                'type' => $log->module ?? 'general',
+                'category' => strtoupper(str_replace('_', ' ', $log->module ?? 'Log')),
+                'user_name' => $log->user?->name ?? 'Sistem / Pengguna',
+                'description' => $log->description,
+                'status' => $isDelete ? 'deleted' : 'updated',
+                'action_type' => $isDelete ? 'deleted' : 'updated',
+                'actor_name' => $log->user?->name ?? 'User',
+                'remark' => $log->ip_address ? "IP: {$log->ip_address}" : null,
+                'created_at' => $log->created_at?->toISOString() ?? (string)$log->created_at,
+                'updated_at' => $log->created_at?->toISOString() ?? (string)$log->created_at,
+            ];
+        });
     }
 
     /**
@@ -832,71 +852,31 @@ class ManagerController extends Controller
             }
         };
 
-        $deletedCounts = [
-            'reimbursements' => 0,
-            'fund_requests' => 0,
-            'leaves' => 0,
-            'permits' => 0,
-            'overtimes' => 0,
-            'attendance_corrections' => 0,
-            'files' => 0,
-        ];
+        $reimResult = $this->purgeReimbursements($companyScope, $start, $end);
+        $fundResult = $this->purgeFundRequests($companyScope, $start, $end);
+        $otCount = $this->purgeOvertimes($companyScope, $start, $end);
 
-        // 1. Purge Reimbursements & Files
-        $reimQuery = Reimbursement::whereBetween('created_at', [$start, $end]);
-        $companyScope($reimQuery);
-        $reimbursements = $reimQuery->get();
-        foreach ($reimbursements as $reim) {
-            if (!empty($reim->attachment)) {
-                $files = is_array($reim->attachment) ? $reim->attachment : [$reim->attachment];
-                foreach ($files as $file) {
-                    if ($file && Storage::disk('public')->exists($file)) {
-                        Storage::disk('public')->delete($file);
-                        $deletedCounts['files']++;
-                    }
-                }
-            }
-            $reim->delete();
-            $deletedCounts['reimbursements']++;
-        }
-
-        // 2. Purge Fund Requests & Files
-        $fundQuery = FundRequest::whereBetween('created_at', [$start, $end]);
-        $companyScope($fundQuery);
-        $fundRequests = $fundQuery->get();
-        foreach ($fundRequests as $fund) {
-            if (!empty($fund->attachment) && Storage::disk('public')->exists($fund->attachment)) {
-                Storage::disk('public')->delete($fund->attachment);
-                $deletedCounts['files']++;
-            }
-            $fund->delete();
-            $deletedCounts['fund_requests']++;
-        }
-
-        // 3. Purge Leaves
         $leaveQuery = Leave::whereBetween('created_at', [$start, $end]);
         $companyScope($leaveQuery);
-        $deletedCounts['leaves'] = $leaveQuery->delete();
+        $leavesDeleted = $leaveQuery->delete();
 
-        // 4. Purge Permits
         $permitQuery = Permit::whereBetween('created_at', [$start, $end]);
         $companyScope($permitQuery);
-        $deletedCounts['permits'] = $permitQuery->delete();
+        $permitsDeleted = $permitQuery->delete();
 
-        // 5. Purge Overtimes
-        $otQuery = Overtime::with('items')->whereBetween('created_at', [$start, $end]);
-        $companyScope($otQuery);
-        $overtimes = $otQuery->get();
-        foreach ($overtimes as $ot) {
-            $ot->items()->delete();
-            $ot->delete();
-            $deletedCounts['overtimes']++;
-        }
-
-        // 6. Purge Attendance Corrections
         $acQuery = AttendanceCorrection::whereBetween('created_at', [$start, $end]);
         $companyScope($acQuery);
-        $deletedCounts['attendance_corrections'] = $acQuery->delete();
+        $correctionsDeleted = $acQuery->delete();
+
+        $deletedCounts = [
+            'reimbursements' => $reimResult['count'],
+            'fund_requests' => $fundResult['count'],
+            'leaves' => $leavesDeleted,
+            'permits' => $permitsDeleted,
+            'overtimes' => $otCount,
+            'attendance_corrections' => $correctionsDeleted,
+            'files' => $reimResult['files'] + $fundResult['files'],
+        ];
 
         $totalRecords = $deletedCounts['reimbursements'] +
             $deletedCounts['fund_requests'] +
@@ -920,5 +900,65 @@ class ManagerController extends Controller
             'message' => "Pembersihan periode {$period} berhasil. {$totalRecords} transaksi dan {$deletedCounts['files']} berkas server berhasil dihapus.",
             'data' => $deletedCounts,
         ]);
+    }
+
+    private function deleteStorageFiles(mixed $attachments): int
+    {
+        if (empty($attachments)) {
+            return 0;
+        }
+        $files = is_array($attachments) ? $attachments : [$attachments];
+        $count = 0;
+        foreach ($files as $file) {
+            if ($file && Storage::disk('public')->exists($file)) {
+                Storage::disk('public')->delete($file);
+                $count++;
+            }
+        }
+        return $count;
+    }
+
+    private function purgeReimbursements(\Closure $companyScope, $start, $end): array
+    {
+        $reimQuery = Reimbursement::whereBetween('created_at', [$start, $end]);
+        $companyScope($reimQuery);
+        $reimbursements = $reimQuery->get();
+        $filesCount = 0;
+
+        foreach ($reimbursements as $reim) {
+            $filesCount += $this->deleteStorageFiles($reim->attachment);
+            $reim->delete();
+        }
+
+        return ['count' => $reimbursements->count(), 'files' => $filesCount];
+    }
+
+    private function purgeFundRequests(\Closure $companyScope, $start, $end): array
+    {
+        $fundQuery = FundRequest::whereBetween('created_at', [$start, $end]);
+        $companyScope($fundQuery);
+        $fundRequests = $fundQuery->get();
+        $filesCount = 0;
+
+        foreach ($fundRequests as $fund) {
+            $filesCount += $this->deleteStorageFiles($fund->attachment);
+            $fund->delete();
+        }
+
+        return ['count' => $fundRequests->count(), 'files' => $filesCount];
+    }
+
+    private function purgeOvertimes(\Closure $companyScope, $start, $end): int
+    {
+        $otQuery = Overtime::with('items')->whereBetween('created_at', [$start, $end]);
+        $companyScope($otQuery);
+        $overtimes = $otQuery->get();
+
+        foreach ($overtimes as $ot) {
+            $ot->items()->delete();
+            $ot->delete();
+        }
+
+        return $overtimes->count();
     }
 }

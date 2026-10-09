@@ -339,6 +339,13 @@ export default function FundRequestsPage() {
     return empName.includes(q) || title.includes(q);
   });
 
+  let submitButtonLabel = "Kirim Pengajuan Dana";
+  if (isSubmitting) {
+    submitButtonLabel = "Menyimpan...";
+  } else if (editingId) {
+    submitButtonLabel = "Perbarui Pengajuan Dana";
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -858,7 +865,7 @@ export default function FundRequestsPage() {
                   className="px-6 py-2 bg-[#8B0000] hover:bg-[#700000] text-white rounded-lg text-xs font-bold shadow-md transition disabled:opacity-50 flex items-center gap-2"
                 >
                   <Send size={14} />
-                  {isSubmitting ? "Menyimpan..." : (editingId ? "Perbarui Pengajuan Dana" : "Kirim Pengajuan Dana")}
+                  {submitButtonLabel}
                 </button>
               </div>
             </form>

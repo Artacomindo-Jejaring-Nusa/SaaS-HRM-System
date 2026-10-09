@@ -63,22 +63,8 @@ class ReimbursementController extends Controller
             'priority' => 'nullable|string',
         ]);
 
-        $items = $request->items;
-        if (is_string($items)) {
-            $items = json_decode($items, true);
-        }
-
-        $paths = [];
-        if ($request->hasFile('attachments')) {
-            foreach ($request->file('attachments') as $file) {
-                // Compress and scale (1000px for receipt readability)
-                $path = 'reimbursements/'.Str::random(40).'.jpg';
-                $img = Image::decode($file);
-                $img->scale(width: 1000);
-                Storage::disk('public')->put($path, (string) $img->encodeUsingFileExtension('jpg', 80));
-                $paths[] = $path;
-            }
-        }
+        $items = is_string($request->items) ? json_decode($request->items, true) : $request->items;
+        $paths = $this->uploadAttachments($request);
 
         $user = $request->user();
         $companyId = $user->company_id;
@@ -87,114 +73,135 @@ class ReimbursementController extends Controller
         $workflowResult = ApprovalService::initApproval('reimbursement', $companyId, $user);
 
         if ($workflowResult) {
-            $isAutoApproved = !empty($workflowResult['auto_approved']);
-            $reimbursement = Reimbursement::create([
-                'company_id' => $companyId,
-                'user_id' => $user->id,
-                'employee_name' => $request->employee_name,
-                'title' => $request->title,
-                'amount' => $request->amount,
-                'description' => $request->description ?? '',
-                'attachment' => $paths,
-                'status' => $workflowResult['status'],
-                'current_approval_step' => $workflowResult['current_approval_step'],
-                'signature' => $request->signature,
-                'items' => $items,
-                'divisi' => $request->divisi,
-                'tujuan' => $request->tujuan,
-                'priority' => $request->priority ?? 'Normal',
-                'approved_by' => $isAutoApproved ? $user->id : null,
-            ]);
-
-            if ($isAutoApproved) {
-                $this->notify(
-                    $user,
-                    'KLAIM REIMBURSEMENT DISETUJUI OTOMATIS',
-                    "Klaim reimbursement Anda '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.')." telah DISETUJUI OTOMATIS karena alur persetujuan dinonaktifkan.",
-                    'success',
-                    self::URL_DASHBOARD_REIMBURSEMENTS
-                );
-            } else {
-                $this->notify(
-                    $user,
-                    'PENGAJUAN REIMBURSEMENT',
-                    "Klaim reimbursement Anda '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.')." telah diajukan. Menunggu: {$workflowResult['step_label']}.",
-                    'info',
-                    self::URL_DASHBOARD_REIMBURSEMENTS
-                );
-
-                foreach ($workflowResult['approvers'] as $approver) {
-                    $this->notify(
-                        $approver,
-                        'KLAIM REIMBURSEMENT PERLU PERSETUJUAN',
-                        "Karyawan {$user->name} mengajukan klaim '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'. Mohon segera tinjau.',
-                        'warning',
-                        self::ROUTE_APPROVALS
-                    );
-                }
-            }
+            $reimbursement = $this->createDynamicWorkflowReimbursement($workflowResult, $user, $companyId, $request, $paths, $items);
         } else {
-            // ── Fallback: Default logic ──
-            $reimbursement = Reimbursement::create([
-                'company_id' => $companyId,
-                'user_id' => $user->id,
-                'title' => $request->title,
-                'amount' => $request->amount,
-                'description' => $request->description ?? '',
-                'attachment' => $paths,
-                'status' => 'pending',
-                'signature' => $request->signature,
-                'items' => $request->items,
-                'divisi' => $request->divisi,
-                'tujuan' => $request->tujuan,
-                'priority' => $request->priority ?? 'Normal',
-            ]);
+            $reimbursement = $this->createFallbackReimbursement($user, $companyId, $request, $paths);
+        }
 
-            // 1. Notify the Submitting User (Confirmation)
+        $this->logActivity('SUBMIT_REIMBURSEMENT', "Mengajukan reimbursement '{$request->title}' senilai Rp ".number_format($request->amount, 0, ',', '.'), $reimbursement);
+
+        return $this->successResponse($reimbursement, 'Klaim berhasil diajukan.', 201);
+    }
+
+    private function uploadAttachments(Request $request): array
+    {
+        $paths = [];
+        if ($request->hasFile('attachments')) {
+            foreach ($request->file('attachments') as $file) {
+                $path = 'reimbursements/'.Str::random(40).'.jpg';
+                $img = Image::decode($file);
+                $img->scale(width: 1000);
+                Storage::disk('public')->put($path, (string) $img->encodeUsingFileExtension('jpg', 80));
+                $paths[] = $path;
+            }
+        }
+        return $paths;
+    }
+
+    private function createDynamicWorkflowReimbursement(array $workflowResult, $user, $companyId, Request $request, array $paths, $items): Reimbursement
+    {
+        $isAutoApproved = !empty($workflowResult['auto_approved']);
+        $reimbursement = Reimbursement::create([
+            'company_id' => $companyId,
+            'user_id' => $user->id,
+            'employee_name' => $request->employee_name,
+            'title' => $request->title,
+            'amount' => $request->amount,
+            'description' => $request->description ?? '',
+            'attachment' => $paths,
+            'status' => $workflowResult['status'],
+            'current_approval_step' => $workflowResult['current_approval_step'],
+            'signature' => $request->signature,
+            'items' => $items,
+            'divisi' => $request->divisi,
+            'tujuan' => $request->tujuan,
+            'priority' => $request->priority ?? 'Normal',
+            'approved_by' => $isAutoApproved ? $user->id : null,
+        ]);
+
+        if ($isAutoApproved) {
+            $this->notify(
+                $user,
+                'KLAIM REIMBURSEMENT DISETUJUI OTOMATIS',
+                "Klaim reimbursement Anda '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.')." telah DISETUJUI OTOMATIS karena alur persetujuan dinonaktifkan.",
+                'success',
+                self::URL_DASHBOARD_REIMBURSEMENTS
+            );
+        } else {
             $this->notify(
                 $user,
                 'PENGAJUAN REIMBURSEMENT',
-                "Klaim reimbursement Anda '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').' telah diajukan.',
+                "Klaim reimbursement Anda '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.')." telah diajukan. Menunggu: {$workflowResult['step_label']}.",
                 'info',
                 self::URL_DASHBOARD_REIMBURSEMENTS
             );
 
-            // 2. Notify User's Supervisor
-            if ($user->supervisor_id) {
-                $supervisor = $user->supervisor;
-                if ($supervisor) {
-                    $this->notify(
-                        $supervisor,
-                        'KLAIM REIMBURSEMENT BAWAHAN',
-                        "Karyawan {$user->name} mengajukan klaim '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'. Mohon segera tinjau.',
-                        'warning',
-                        self::ROUTE_APPROVALS
-                    );
-                }
-            }
-
-            // 3. Notify Admins/Approvers/Finance in the same company
-            // Approver roles: Super Admin (7), HRD (2), Finance (10), HRD Manager (8)
-            $admins = User::where('company_id', $companyId)
-                ->whereIn('role_id', [7, 2, 10, 8])
-                ->where('id', '!=', $user->id)
-                ->where('id', '!=', $user->supervisor_id) // Don't notify twice
-                ->get();
-
-            foreach ($admins as $admin) {
+            foreach ($workflowResult['approvers'] as $approver) {
                 $this->notify(
-                    $admin,
-                    'KLAIM REIMBURSEMENT BARU (ADMIN)',
-                    "Karyawan {$user->name} mengajukan klaim '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'.',
+                    $approver,
+                    'KLAIM REIMBURSEMENT PERLU PERSETUJUAN',
+                    "Karyawan {$user->name} mengajukan klaim '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'. Mohon segera tinjau.',
                     'warning',
                     self::ROUTE_APPROVALS
                 );
             }
         }
 
-        $this->logActivity('SUBMIT_REIMBURSEMENT', "Mengajukan reimbursement '{$request->title}' senilai Rp ".number_format($request->amount, 0, ',', '.'), $reimbursement);
+        return $reimbursement;
+    }
 
-        return $this->successResponse($reimbursement, 'Klaim berhasil diajukan.', 201);
+    private function createFallbackReimbursement($user, $companyId, Request $request, array $paths): Reimbursement
+    {
+        $reimbursement = Reimbursement::create([
+            'company_id' => $companyId,
+            'user_id' => $user->id,
+            'title' => $request->title,
+            'amount' => $request->amount,
+            'description' => $request->description ?? '',
+            'attachment' => $paths,
+            'status' => 'pending',
+            'signature' => $request->signature,
+            'items' => $request->items,
+            'divisi' => $request->divisi,
+            'tujuan' => $request->tujuan,
+            'priority' => $request->priority ?? 'Normal',
+        ]);
+
+        $this->notify(
+            $user,
+            'PENGAJUAN REIMBURSEMENT',
+            "Klaim reimbursement Anda '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').' telah diajukan.',
+            'info',
+            self::URL_DASHBOARD_REIMBURSEMENTS
+        );
+
+        if ($user->supervisor_id && $user->supervisor) {
+            $this->notify(
+                $user->supervisor,
+                'KLAIM REIMBURSEMENT BAWAHAN',
+                "Karyawan {$user->name} mengajukan klaim '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'. Mohon segera tinjau.',
+                'warning',
+                self::ROUTE_APPROVALS
+            );
+        }
+
+        $admins = User::where('company_id', $companyId)
+            ->whereIn('role_id', [7, 2, 10, 8])
+            ->where('id', '!=', $user->id)
+            ->where('id', '!=', $user->supervisor_id)
+            ->get();
+
+        foreach ($admins as $admin) {
+            $this->notify(
+                $admin,
+                'KLAIM REIMBURSEMENT BARU (ADMIN)',
+                "Karyawan {$user->name} mengajukan klaim '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'.',
+                'warning',
+                self::ROUTE_APPROVALS
+            );
+        }
+
+        return $reimbursement;
     }
 
     public function approve(Request $request, $id)
@@ -358,12 +365,9 @@ class ReimbursementController extends Controller
             }
         })->findOrFail($id);
 
-        if (!$isSuperAdmin && $reimbursement->user_id !== $user->id) {
-            return $this->errorResponse(self::MSG_FORBIDDEN, 403);
-        }
-
-        if (!$isSuperAdmin && $reimbursement->status !== 'pending') {
-            return $this->errorResponse('Hanya klaim yang masih pending yang dapat diubah.', 403);
+        $accessError = $this->validateReimbursementCanBeUpdated($reimbursement, $user, $isSuperAdmin);
+        if ($accessError !== null) {
+            return $this->errorResponse($accessError, 403);
         }
 
         $request->validate([
@@ -380,21 +384,10 @@ class ReimbursementController extends Controller
             'priority' => 'nullable|string',
         ]);
 
-        $items = $request->items;
-        if (is_string($items)) {
-            $items = json_decode($items, true);
-        }
-
-        $paths = is_array($reimbursement->attachment) ? $reimbursement->attachment : ($reimbursement->attachment ? [$reimbursement->attachment] : []);
-        if ($request->hasFile('attachments')) {
-            foreach ($request->file('attachments') as $file) {
-                $path = 'reimbursements/'.Str::random(40).'.jpg';
-                $img = Image::decode($file);
-                $img->scale(width: 1000);
-                Storage::disk('public')->put($path, (string) $img->encodeUsingFileExtension('jpg', 80));
-                $paths[] = $path;
-            }
-        }
+        $items = is_string($request->items) ? json_decode($request->items, true) : $request->items;
+        $existingPaths = $this->normalizeAttachmentList($reimbursement->attachment);
+        $newPaths = $this->uploadAttachments($request);
+        $paths = array_merge($existingPaths, $newPaths);
 
         $oldValues = $reimbursement->only(['title', 'amount', 'description', 'divisi', 'tujuan', 'priority']);
 
@@ -418,6 +411,30 @@ class ReimbursementController extends Controller
         return $this->successResponse($reimbursement, 'Klaim reimbursement berhasil diperbarui.');
     }
 
+    private function validateReimbursementCanBeUpdated(Reimbursement $reimbursement, $user, bool $isSuperAdmin): ?string
+    {
+        if (!$isSuperAdmin && $reimbursement->user_id !== $user->id) {
+            return self::MSG_FORBIDDEN;
+        }
+
+        if (!$isSuperAdmin && $reimbursement->status !== 'pending') {
+            return 'Hanya klaim yang masih pending yang dapat diubah.';
+        }
+
+        return null;
+    }
+
+    private function normalizeAttachmentList(mixed $attachment): array
+    {
+        if (is_array($attachment)) {
+            return $attachment;
+        }
+        if (!empty($attachment)) {
+            return [$attachment];
+        }
+        return [];
+    }
+
     public function destroy(Request $request, $id)
     {
         $user = $request->user();
@@ -425,35 +442,50 @@ class ReimbursementController extends Controller
 
         $reimbursement = Reimbursement::findOrFail($id);
 
-        $isOwner = $reimbursement->user_id === $user->id;
-        $canDelete = $user->hasPermission('delete-reimbursements') || $user->hasPermission('approve-reimbursements');
-
-        if (!$isSuperAdmin && !$isOwner && !$canDelete) {
-            abort(403, self::MSG_FORBIDDEN);
-        }
-
-        if (!$isSuperAdmin && $reimbursement->status !== 'pending') {
-            return $this->errorResponse('Klaim yang sudah diproses tidak bisa dihapus.', 403);
+        $error = $this->checkCanDeleteReimbursement($reimbursement, $user, $isSuperAdmin);
+        if ($error !== null) {
+            if ($error === self::MSG_FORBIDDEN) {
+                abort(403, self::MSG_FORBIDDEN);
+            }
+            return $this->errorResponse($error, 403);
         }
 
         $id_deleted = $reimbursement->id;
         $title_deleted = $reimbursement->title;
         $oldValues = $reimbursement->toArray();
 
-        // Free storage space by unlinking attached files
-        if (!empty($reimbursement->attachment)) {
-            $files = is_array($reimbursement->attachment) ? $reimbursement->attachment : [$reimbursement->attachment];
-            foreach ($files as $filePath) {
-                if ($filePath && Storage::disk('public')->exists($filePath)) {
-                    Storage::disk('public')->delete($filePath);
-                }
-            }
-        }
+        $this->deleteAttachmentFiles($reimbursement->attachment);
 
         $reimbursement->delete();
 
         $this->logActivity('DELETE_REIMBURSEMENT', "Menghapus pengajuan reimbursement '{$title_deleted}' (ID: {$id_deleted})", null, 'reimbursements', $oldValues, null);
 
         return $this->successResponse(null, 'Klaim berhasil dihapus.');
+    }
+
+    private function checkCanDeleteReimbursement(Reimbursement $reimbursement, $user, bool $isSuperAdmin): ?string
+    {
+        $isOwner = $reimbursement->user_id === $user->id;
+        $canDelete = $user->hasPermission('delete-reimbursements') || $user->hasPermission('approve-reimbursements');
+
+        if (!$isSuperAdmin && !$isOwner && !$canDelete) {
+            return self::MSG_FORBIDDEN;
+        }
+
+        if (!$isSuperAdmin && $reimbursement->status !== 'pending') {
+            return 'Klaim yang sudah diproses tidak bisa dihapus.';
+        }
+
+        return null;
+    }
+
+    private function deleteAttachmentFiles(mixed $attachment): void
+    {
+        $files = $this->normalizeAttachmentList($attachment);
+        foreach ($files as $filePath) {
+            if ($filePath && Storage::disk('public')->exists($filePath)) {
+                Storage::disk('public')->delete($filePath);
+            }
+        }
     }
 }

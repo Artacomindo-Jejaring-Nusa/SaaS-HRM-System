@@ -27,7 +27,6 @@ import {
   Building2,
   Trash2,
   History,
-  Calendar,
   Filter,
   ShieldAlert
 } from "lucide-react";
@@ -1851,10 +1850,11 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <label htmlFor="purge-period-input" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Periode Bulan & Tahun (YYYY-MM)
                 </label>
                 <input
+                  id="purge-period-input"
                   type="month"
                   value={purgePeriod}
                   onChange={(e) => setPurgePeriod(e.target.value)}
@@ -1863,13 +1863,14 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <label htmlFor="purge-confirmation-input" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Konfirmasi Tindakan
                 </label>
                 <p className="text-[11px] text-slate-500 mb-1.5">
                   Ketik kata <span className="font-mono font-bold text-rose-600">HAPUS</span> di bawah untuk melanjutkan:
                 </p>
                 <input
+                  id="purge-confirmation-input"
                   type="text"
                   placeholder="Ketik HAPUS..."
                   value={purgeConfirmation}

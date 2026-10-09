@@ -12,6 +12,7 @@ import { TableSkeleton } from "@/components/Skeleton";
 
 interface LeaveRecord {
   id: number;
+  user_id?: number;
   user?: {
     name?: string;
     leave_balance?: number;
@@ -1033,7 +1034,7 @@ export default function LeavesPage() {
                             >
                               <Eye size={16} />
                             </button>
-                            {['pending', 'pending_supervisor', 'pending_hr'].includes(leave.status) && (isSuperAdmin || leave.user?.name === user?.name || (leave as any).user_id === user?.id) && (
+                            {['pending', 'pending_supervisor', 'pending_hr'].includes(leave.status) && (isSuperAdmin || leave.user?.name === user?.name || leave.user_id === user?.id) && (
                               <button 
                                 className="dash-action-btn edit text-blue-600 hover:bg-blue-50" 
                                 title="Edit Pengajuan Cuti"
@@ -1042,7 +1043,7 @@ export default function LeavesPage() {
                                 <Pencil size={15} />
                               </button>
                             )}
-                            {(isSuperAdmin || hasPermission('delete-leaves') || (['pending', 'pending_supervisor', 'pending_hr'].includes(leave.status) && (leave.user?.name === user?.name || (leave as any).user_id === user?.id))) && (
+                            {(isSuperAdmin || hasPermission('delete-leaves') || (['pending', 'pending_supervisor', 'pending_hr'].includes(leave.status) && (leave.user?.name === user?.name || leave.user_id === user?.id))) && (
                               <button 
                                 className="dash-action-btn delete text-red-600 hover:bg-red-50" 
                                 title="Hapus Pengajuan Cuti"

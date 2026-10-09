@@ -128,7 +128,7 @@ class LeaveController extends Controller
             'signature' => $request->signature,
             'duration_days' => $requestedDays,
             'is_paid' => $typeMeta['paid'] ?? true,
-            'kemnaker_article' => $typeMeta['article'] ?? 'Kebijakan Perusahaan',
+            'kemnaker_article' => $typeMeta['article'] ?? self::ARTICLE_KEBIJAKAN_PERUSAHAAN,
         ];
 
         // ── Dynamic Workflow Check ──
@@ -520,12 +520,9 @@ class LeaveController extends Controller
             }
         })->findOrFail($id);
 
-        if (!$isSuperAdmin && $leave->user_id !== $user->id) {
-            return $this->errorResponse('Anda tidak memiliki akses untuk mengubah pengajuan cuti ini.', 403);
-        }
-
-        if (!$isSuperAdmin && !in_array($leave->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
-            return $this->errorResponse('Hanya permohonan cuti yang masih menunggu persetujuan yang bisa diubah.', 403);
+        $accessError = $this->checkLeaveUpdateAccess($leave, $user, $isSuperAdmin);
+        if ($accessError) {
+            return $this->errorResponse($accessError, 403);
         }
 
         $request->validate([
@@ -566,7 +563,7 @@ class LeaveController extends Controller
             'signature' => $request->signature ?? $leave->signature,
             'duration_days' => $requestedDays,
             'is_paid' => $typeMeta['paid'] ?? true,
-            'kemnaker_article' => $typeMeta['article'] ?? 'Kebijakan Perusahaan',
+            'kemnaker_article' => $typeMeta['article'] ?? self::ARTICLE_KEBIJAKAN_PERUSAHAAN,
         ]);
 
         $newValues = $leave->only(['start_date', 'end_date', 'type', 'reason', 'leave_address', 'emergency_phone', 'duration_days']);
@@ -574,6 +571,19 @@ class LeaveController extends Controller
         $this->logActivity('UPDATE_LEAVE', "Mengubah pengajuan cuti #{$leave->id} ({$leave->type}) periode {$leave->start_date} s/d {$leave->end_date}", $leave, 'leaves', $oldValues, $newValues);
 
         return $this->successResponse($leave, 'Permohonan cuti berhasil diperbarui.');
+    }
+
+    private function checkLeaveUpdateAccess(Leave $leave, $user, bool $isSuperAdmin): ?string
+    {
+        if (!$isSuperAdmin && $leave->user_id !== $user->id) {
+            return 'Anda tidak memiliki akses untuk mengubah pengajuan cuti ini.';
+        }
+
+        if (!$isSuperAdmin && !in_array($leave->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
+            return 'Hanya permohonan cuti yang masih menunggu persetujuan yang bisa diubah.';
+        }
+
+        return null;
     }
 
     public function destroy(Request $request, $id): \Illuminate\Http\JsonResponse
