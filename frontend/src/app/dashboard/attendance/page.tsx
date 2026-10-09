@@ -23,7 +23,7 @@ import {
   RotateCcw,
   Building2
 } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
 import { TableSkeleton } from "@/components/Skeleton";
 import Pagination from "@/components/Pagination";
 import { getStorageUrl } from "@/lib/utils";
@@ -78,7 +78,8 @@ const getWebApprovalBadge = (webStatus?: string) => {
 };
 
 export default function AttendancePage() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
+  const isSuperAdmin = isSuperAdminUser(user);
   const [activeTab, setActiveTab] = useState<'all' | 'web_pending'>('all');
 
   // History State
@@ -161,13 +162,21 @@ export default function AttendancePage() {
   }, []);
 
   useEffect(() => {
+    if (!isSuperAdmin && activeTab === 'web_pending') {
+      setActiveTab('all');
+    }
+  }, [isSuperAdmin, activeTab]);
+
+  useEffect(() => {
     if (activeTab === 'all') {
       fetchAttendance(page);
-    } else {
+    } else if (isSuperAdmin) {
       fetchWebPending();
     }
-    fetchSummary();
-  }, [activeTab, page, fetchAttendance, fetchWebPending, fetchSummary]);
+    if (isSuperAdmin) {
+      fetchSummary();
+    }
+  }, [activeTab, page, fetchAttendance, fetchWebPending, fetchSummary, isSuperAdmin]);
 
   const handleApprove = async (id: number) => {
     setProcessingId(id);
@@ -498,8 +507,14 @@ export default function AttendancePage() {
       {/* Header */}
       <div className="dash-page-header">
         <div>
-          <h1 className="dash-page-title">Riwayat & Persetujuan Absensi</h1>
-          <p className="dash-page-desc">Pantau catatan kehadiran harian karyawan dan kelola verifikasi absensi web.</p>
+          <h1 className="dash-page-title">
+            {isSuperAdmin ? "Riwayat & Persetujuan Absensi" : "Riwayat Absensi"}
+          </h1>
+          <p className="dash-page-desc">
+            {isSuperAdmin 
+              ? "Pantau catatan kehadiran harian karyawan dan kelola verifikasi absensi web."
+              : "Pantau catatan kehadiran harian karyawan."}
+          </p>
         </div>
         <div className="dash-page-actions">
           {hasPermission('export-attendance') && (
@@ -511,51 +526,53 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      {/* Tabs Switcher */}
-      <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-3">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setActiveTab('all')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${
-              activeTab === 'all'
-                ? 'bg-slate-900 text-white shadow-md shadow-slate-900/10'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            <History size={14} />
-            Semua Absensi
-          </button>
+      {/* Tabs Switcher - Super Admin Only */}
+      {isSuperAdmin && (
+        <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${
+                activeTab === 'all'
+                  ? 'bg-slate-900 text-white shadow-md shadow-slate-900/10'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <History size={14} />
+              Semua Absensi
+            </button>
 
-          <button
-            onClick={() => setActiveTab('web_pending')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${
-              activeTab === 'web_pending'
-                ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            <Laptop size={14} />
-            Persetujuan Absen Web
-            {webPendingCount > 0 && (
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                activeTab === 'web_pending' ? 'bg-white text-amber-600' : 'bg-amber-100 text-amber-700'
-              }`}>
-                {webPendingCount}
-              </span>
-            )}
-          </button>
+            <button
+              onClick={() => setActiveTab('web_pending')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${
+                activeTab === 'web_pending'
+                  ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <Laptop size={14} />
+              Persetujuan Absen Web
+              {webPendingCount > 0 && (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  activeTab === 'web_pending' ? 'bg-white text-amber-600' : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {webPendingCount}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {activeTab === 'web_pending' && (
+            <button
+              onClick={fetchWebPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+            >
+              <RotateCcw size={13} className={loadingWebPending ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          )}
         </div>
-
-        {activeTab === 'web_pending' && (
-          <button
-            onClick={fetchWebPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-          >
-            <RotateCcw size={13} className={loadingWebPending ? "animate-spin" : ""} />
-            Refresh
-          </button>
-        )}
-      </div>
+      )}
 
       {/* TAB 1: ALL ATTENDANCE */}
       {activeTab === 'all' && (
@@ -590,8 +607,8 @@ export default function AttendancePage() {
         </div>
       )}
 
-      {/* TAB 2: WEB PENDING APPROVAL */}
-      {activeTab === 'web_pending' && (
+      {/* TAB 2: WEB PENDING APPROVAL - Super Admin Only */}
+      {isSuperAdmin && activeTab === 'web_pending' && (
         <div className="space-y-4">
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
             <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={18} />
@@ -606,7 +623,7 @@ export default function AttendancePage() {
       )}
 
       {/* Reject Modal */}
-      {rejectModalOpen && (
+      {isSuperAdmin && rejectModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-rose-50/50">
@@ -784,23 +801,32 @@ export default function AttendancePage() {
 
               {selectedRecord.channel === 'web' && selectedRecord.web_approval_status === 'pending' && (
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between">
-                  <div className="text-xs text-amber-900 font-bold">
-                    Absensi ini menunggu persetujuan Anda
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleOpenRejectModal(selectedRecord.id)}
-                      className="px-4 py-2 bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-xl text-xs font-black transition-colors"
-                    >
-                      Tolak
-                    </button>
-                    <button
-                      onClick={() => handleApprove(selectedRecord.id)}
-                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/20 transition-all"
-                    >
-                      Setujui
-                    </button>
-                  </div>
+                  {isSuperAdmin ? (
+                    <>
+                      <div className="text-xs text-amber-900 font-bold">
+                        Absensi ini menunggu persetujuan Anda
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleOpenRejectModal(selectedRecord.id)}
+                          className="px-4 py-2 bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-xl text-xs font-black transition-colors"
+                        >
+                          Tolak
+                        </button>
+                        <button
+                          onClick={() => handleApprove(selectedRecord.id)}
+                          className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/20 transition-all"
+                        >
+                          Setujui
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-xs text-amber-900 font-semibold flex items-center gap-2">
+                      <Clock size={14} className="text-amber-600 shrink-0" />
+                      <span>Absensi web ini masih menunggu verifikasi persetujuan oleh Super Admin.</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

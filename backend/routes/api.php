@@ -186,7 +186,11 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
 
     // Attendance Corrections (Koreksi Absen)
     Route::middleware('permission:view-attendances')->get('/attendance-corrections', [AttendanceCorrectionController::class, 'index']);
-    Route::middleware('permission:apply-attendances')->post('/attendance-corrections', [AttendanceCorrectionController::class, 'store']);
+    Route::middleware('permission:apply-attendances')->group(function () {
+        Route::post('/attendance-corrections', [AttendanceCorrectionController::class, 'store']);
+        Route::put('/attendance-corrections/{id}', [AttendanceCorrectionController::class, 'update']);
+        Route::delete('/attendance-corrections/{id}', [AttendanceCorrectionController::class, 'destroy']);
+    });
     Route::middleware('permission:manage-attendance-corrections')->group(function () {
         Route::put('/attendance/{id}', [AttendanceController::class, 'update']);
         Route::post('/attendance-corrections/{id}/approve', [AttendanceCorrectionController::class, 'approve']);
@@ -223,7 +227,11 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::get('/leave/calendar', [LeaveController::class, 'calendar']);
         Route::delete('/leave/{id}', [LeaveController::class, 'destroy']);
     });
-    Route::middleware('permission:apply-leaves')->post('/leave', [LeaveController::class, 'store']);
+    Route::middleware('permission:apply-leaves')->group(function () {
+        Route::post('/leave', [LeaveController::class, 'store']);
+        Route::put('/leave/{id}', [LeaveController::class, 'update']);
+        Route::delete('/leave/{id}', [LeaveController::class, 'destroy']);
+    });
     Route::middleware('permission:approve-leaves')->group(function () {
         Route::post('/leave/{id}/approve', [LeaveController::class, 'approve']);
         Route::post('/leave/{id}/reject', [LeaveController::class, 'reject']);
@@ -234,7 +242,11 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::get('/permits', [PermitController::class, 'index']);
         Route::delete('/permits/{id}', [PermitController::class, 'destroy']);
     });
-    Route::middleware('permission:apply-permits')->post('/permits', [PermitController::class, 'store']);
+    Route::middleware('permission:apply-permits')->group(function () {
+        Route::post('/permits', [PermitController::class, 'store']);
+        Route::put('/permits/{id}', [PermitController::class, 'update']);
+        Route::delete('/permits/{id}', [PermitController::class, 'destroy']);
+    });
     Route::middleware('permission:approve-permits')->group(function () {
         Route::post('/permits/{id}/approve', [PermitController::class, 'approve']);
         Route::post('/permits/{id}/reject', [PermitController::class, 'reject']);
@@ -250,6 +262,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::middleware('permission:apply-overtimes')->group(function () {
         Route::post('/overtimes', [OvertimeController::class, 'store']);
         Route::put('/overtimes/{id}', [OvertimeController::class, 'update']);
+        Route::delete('/overtimes/{id}', [OvertimeController::class, 'destroy']);
     });
     Route::middleware('permission:approve-overtimes')->group(function () {
         Route::post('/overtimes/{id}/approve', [OvertimeController::class, 'approve']);
@@ -262,7 +275,12 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::get('/reimbursements/{id}', [ReimbursementController::class, 'show']);
         Route::delete('/reimbursements/{id}', [ReimbursementController::class, 'destroy']);
     });
-    Route::middleware('permission:apply-reimbursements')->post('/reimbursements', [ReimbursementController::class, 'store']);
+    Route::middleware('permission:apply-reimbursements')->group(function () {
+        Route::post('/reimbursements', [ReimbursementController::class, 'store']);
+        Route::put('/reimbursements/{id}', [ReimbursementController::class, 'update']);
+        Route::post('/reimbursements/{id}', [ReimbursementController::class, 'update']);
+        Route::delete('/reimbursements/{id}', [ReimbursementController::class, 'destroy']);
+    });
     Route::middleware('permission:approve-reimbursements')->group(function () {
         Route::post('/reimbursements/{id}/approve', [ReimbursementController::class, 'approve']);
         Route::post('/reimbursements/{id}/reject', [ReimbursementController::class, 'reject']);
@@ -271,6 +289,8 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     // Fund Requests (Pengajuan Dana)
     Route::get('/fund-requests', [FundRequestController::class, 'index']);
     Route::post('/fund-requests', [FundRequestController::class, 'store']);
+    Route::put('/fund-requests/{id}', [FundRequestController::class, 'update']);
+    Route::post('/fund-requests/{id}', [FundRequestController::class, 'update']);
     Route::get('/fund-requests/{id}', [FundRequestController::class, 'show']);
     Route::post('/fund-requests/{id}/approve', [FundRequestController::class, 'approve']);
     Route::post('/fund-requests/{id}/reject', [FundRequestController::class, 'reject']);
@@ -454,8 +474,10 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::group(['prefix' => 'manager'], function () {
         Route::get('/pending-count', [ManagerController::class, 'getPendingCount']);
         Route::get('/pending-requests', [ManagerController::class, 'getPendingRequests']);
+        Route::get('/history-requests', [ManagerController::class, 'getHistoryRequests']);
         Route::post('/update-status', [ManagerController::class, 'updateRequestStatus']);
         Route::get('/team-attendance', [ManagerController::class, 'getTeamAttendance']);
+        Route::post('/purge-current-month', [ManagerController::class, 'purgeCurrentMonth']);
     });
 
     // Profile Settings

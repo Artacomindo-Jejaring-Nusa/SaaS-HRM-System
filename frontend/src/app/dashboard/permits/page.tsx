@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
 import { downloadFile, sanitizeFileName } from "@/lib/downloadHelper";
-import { Plus, Search, Eye, Printer, ClipboardList, X, Check, FileDown, AlertTriangle, Ban } from "lucide-react";
+import { Plus, Search, Eye, Printer, ClipboardList, X, Check, FileDown, AlertTriangle, Ban, Pencil, Trash2 } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import SignaturePad from "@/components/SignaturePad";
 import { useAuth } from "@/contexts/AuthContext";
@@ -84,11 +84,14 @@ function buildPermitActionPayload(
 interface PermitTableRowProps {
   readonly permit: PermitRecord;
   readonly hasApprovePermission: boolean;
+  readonly canModify: boolean;
   readonly onViewDetail: (item: PermitRecord) => void;
   readonly onActionClick: (item: PermitRecord, action: PermitAction) => void;
+  readonly onEdit: (item: PermitRecord) => void;
+  readonly onDelete: (id: number) => void;
 }
 
-function PermitTableRow({ permit, hasApprovePermission, onViewDetail, onActionClick }: Readonly<PermitTableRowProps>) {
+function PermitTableRow({ permit, hasApprovePermission, canModify, onViewDetail, onActionClick, onEdit, onDelete }: Readonly<PermitTableRowProps>) {
   return (
     <tr>
       <td>
@@ -138,6 +141,24 @@ function PermitTableRow({ permit, hasApprovePermission, onViewDetail, onActionCl
           >
             <Eye size={16} />
           </button>
+          {canModify && (
+            <>
+              <button
+                className="dash-action-btn edit text-blue-600 hover:bg-blue-50"
+                title="Edit Izin"
+                onClick={() => onEdit(permit)}
+              >
+                <Pencil size={15} />
+              </button>
+              <button
+                className="dash-action-btn delete text-red-600 hover:bg-red-50"
+                title="Hapus Izin"
+                onClick={() => onDelete(permit.id)}
+              >
+                <Trash2 size={16} />
+              </button>
+            </>
+          )}
           {hasApprovePermission && permit.status === 'pending' && (
             <>
               <button
@@ -197,16 +218,26 @@ interface PermitTableContentProps {
   readonly loading: boolean;
   readonly permits: PermitRecord[];
   readonly hasApprovePermission: boolean;
+  readonly isSuperAdmin: boolean;
+  readonly currentUserName?: string;
+  readonly currentUserId?: number;
   readonly onViewDetail: (item: PermitRecord) => void;
   readonly onActionClick: (item: PermitRecord, action: PermitAction) => void;
+  readonly onEdit: (item: PermitRecord) => void;
+  readonly onDelete: (id: number) => void;
 }
 
 function PermitTableContent({
   loading,
   permits,
   hasApprovePermission,
+  isSuperAdmin,
+  currentUserName,
+  currentUserId,
   onViewDetail,
-  onActionClick
+  onActionClick,
+  onEdit,
+  onDelete
 }: PermitTableContentProps) {
   if (loading) {
     return <div className="p-6"><TableSkeleton rows={6} cols={6} /></div>;
@@ -233,15 +264,21 @@ function PermitTableContent({
           </tr>
         </thead>
         <tbody>
-          {permits.map((permit) => (
-            <PermitTableRow
-              key={permit.id}
-              permit={permit}
-              hasApprovePermission={hasApprovePermission}
-              onViewDetail={onViewDetail}
-              onActionClick={onActionClick}
-            />
-          ))}
+          {permits.map((permit) => {
+            const canModify = permit.status === 'pending' && (isSuperAdmin || permit.user?.name === currentUserName || (permit as any).user_id === currentUserId);
+            return (
+              <PermitTableRow
+                key={permit.id}
+                permit={permit}
+                hasApprovePermission={hasApprovePermission}
+                canModify={Boolean(canModify)}
+                onViewDetail={onViewDetail}
+                onActionClick={onActionClick}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -409,7 +446,8 @@ function PermitActionConfirmationModal({
 }
 
 export default function PermitsPage() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
+  const isSuperAdmin = Boolean(user?.role_id === 1 || (user?.role && user.role.name?.toLowerCase() === 'super admin'));
   const [permits, setpermits] = useState<PermitRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -464,6 +502,8 @@ export default function PermitsPage() {
     }
   };
 
+  const [editingId, setEditingId] = useState<number | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.signature) {
@@ -473,16 +513,47 @@ export default function PermitsPage() {
     
     setIsSubmitting(true);
     try {
-      await submitPermitApplication(formData);
-      toast.success("Pengajuan Izin berhasil! Menunggu persetujuan.");
+      if (editingId) {
+        await axiosInstance.put(`/permits/${editingId}`, formData);
+        toast.success("Pengajuan Izin berhasil diperbarui!");
+      } else {
+        await submitPermitApplication(formData);
+        toast.success("Pengajuan Izin berhasil! Menunggu persetujuan.");
+      }
       setIsModalOpen(false);
+      setEditingId(null);
       setFormData({ start_date: "", end_date: "", category: "I", type: "Izin Terlambat", reason: "", signature: "" });
       fetchpermits(page);
     } catch (error) {
       const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || "Gagal mengajukan Izin");
+      toast.error(err.response?.data?.message || "Gagal memproses pengajuan Izin");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleEdit = (item: PermitRecord) => {
+    setEditingId(item.id);
+    setFormData({
+      start_date: item.start_date || "",
+      end_date: item.end_date || "",
+      category: item.category || "I",
+      type: item.type || "Izin Terlambat",
+      reason: item.reason || "",
+      signature: item.signature || "",
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus permohonan izin ini?")) return;
+    try {
+      await axiosInstance.delete(`/permits/${id}`);
+      toast.success("Izin berhasil dihapus.");
+      fetchpermits(page);
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error(err.response?.data?.message || "Gagal menghapus izin");
     }
   };
 
@@ -570,8 +641,13 @@ export default function PermitsPage() {
             loading={loading}
             permits={permits}
             hasApprovePermission={hasPermission('approve-permits')}
+            isSuperAdmin={isSuperAdmin}
+            currentUserName={user?.name}
+            currentUserId={user?.id}
             onViewDetail={handleViewDetail}
             onActionClick={handleActionClick}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
           />
           
           {pagination.last_page > 1 && (

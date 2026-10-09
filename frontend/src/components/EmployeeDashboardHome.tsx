@@ -73,7 +73,7 @@ function renderWebApprovalStatusBadge(webApprovalStatus?: string) {
   if (webApprovalStatus === "pending") {
     return (
       <span className="text-[10px] text-amber-600 font-medium flex items-center gap-0.5">
-        <Clock size={10} /> Menunggu Review
+        <Clock size={10} /> Menunggu Verifikasi Super Admin
       </span>
     );
   }
@@ -161,9 +161,12 @@ function EmployeeWebAttendanceCard({
               Auto-Valid
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <span 
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"
+              title="Absensi web memerlukan persetujuan Super Admin"
+            >
               <Clock size={12} className="text-amber-600" />
-              Approval Manual
+              Verifikasi Super Admin
             </span>
           )}
         </div>

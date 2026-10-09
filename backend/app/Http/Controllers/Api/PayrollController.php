@@ -480,7 +480,7 @@ class PayrollController extends Controller
     {
         $user = $request->user();
         if ($user->role_id !== 1 && ! $user->hasPermission('approve-payroll') && ! $user->hasPermission('manage-payroll')) {
-            return response()->json(['message' => 'Anda tidak memiliki hak akses untuk menyetujui payroll.'], 403);
+            return response()->json(['message' => 'Anda tidak memiliki hak akses untuk Setujui Payroll.'], 403);
         }
 
         $query = PayrollBatch::query();

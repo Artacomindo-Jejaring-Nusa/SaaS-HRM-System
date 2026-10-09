@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
 import { downloadFile, sanitizeFileName } from "@/lib/downloadHelper";
 import { toast } from "sonner";
-import { Plus, Search, X, Eye, Plane, Printer, Check, ArrowLeft, FileDown, Trash2 } from "lucide-react";
+import { Plus, Search, X, Eye, Plane, Printer, Check, ArrowLeft, FileDown, Trash2, Pencil } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import SignaturePad from "@/components/SignaturePad";
 import { useAuth } from "@/contexts/AuthContext";
@@ -678,6 +678,7 @@ export default function LeavesPage() {
   const [viewMode, setViewMode] = useState<"list" | "create" | "detail">("list");
   const [selectedItem, setSelectedItem] = useState<LeaveRecord | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     start_date: "",
@@ -727,9 +728,15 @@ export default function LeavesPage() {
     
     setIsSubmitting(true);
     try {
-      await axiosInstance.post("/leave", formData);
-      toast.success("Pengajuan cuti berhasil! Menunggu persetujuan.");
+      if (editingId) {
+        await axiosInstance.put(`/leave/${editingId}`, formData);
+        toast.success("Pengajuan cuti berhasil diperbarui!");
+      } else {
+        await axiosInstance.post("/leave", formData);
+        toast.success("Pengajuan cuti berhasil! Menunggu persetujuan.");
+      }
       setViewMode("list");
+      setEditingId(null);
       setFormData({
         start_date: "",
         end_date: "",
@@ -742,10 +749,24 @@ export default function LeavesPage() {
       fetchLeaves(page);
     } catch (error) {
       const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || "Gagal mengajukan cuti");
+      toast.error(err.response?.data?.message || "Gagal memproses permohonan cuti");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleEdit = (item: LeaveRecord) => {
+    setEditingId(item.id);
+    setFormData({
+      start_date: item.start_date,
+      end_date: item.end_date,
+      type: item.type,
+      reason: item.reason || "",
+      leave_address: item.leave_address || "",
+      emergency_phone: item.emergency_phone || "",
+      signature: item.signature || "",
+    });
+    setViewMode("create");
   };
 
   const isSuperAdmin = user?.role_id === 1 || user?.role?.name === 'Super Admin';
@@ -927,6 +948,7 @@ export default function LeavesPage() {
               {hasPermission('apply-leaves') && (
                 <button 
                   onClick={() => {
+                    setEditingId(null);
                     setFormData({
                       start_date: "",
                       end_date: "",
@@ -1011,7 +1033,16 @@ export default function LeavesPage() {
                             >
                               <Eye size={16} />
                             </button>
-                            {(isSuperAdmin || hasPermission('delete-leaves')) && (
+                            {['pending', 'pending_supervisor', 'pending_hr'].includes(leave.status) && (isSuperAdmin || leave.user?.name === user?.name || (leave as any).user_id === user?.id) && (
+                              <button 
+                                className="dash-action-btn edit text-blue-600 hover:bg-blue-50" 
+                                title="Edit Pengajuan Cuti"
+                                onClick={() => handleEdit(leave)}
+                              >
+                                <Pencil size={15} />
+                              </button>
+                            )}
+                            {(isSuperAdmin || hasPermission('delete-leaves') || (['pending', 'pending_supervisor', 'pending_hr'].includes(leave.status) && (leave.user?.name === user?.name || (leave as any).user_id === user?.id))) && (
                               <button 
                                 className="dash-action-btn delete text-red-600 hover:bg-red-50" 
                                 title="Hapus Pengajuan Cuti"

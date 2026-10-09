@@ -321,7 +321,7 @@ export default function PayrollApprovalPage() {
       }
       fetchBatches();
     } catch (e: any) {
-      toast.error(e.response?.data?.message || "Gagal menyetujui payroll.");
+      toast.error(e.response?.data?.message || "Gagal Setujui Payroll.");
     } finally {
       setActionLoading(false);
     }

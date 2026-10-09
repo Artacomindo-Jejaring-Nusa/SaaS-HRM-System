@@ -153,7 +153,7 @@ export default function DashboardPage() {
   useEffect(() => {
     async function fetchData() {
       if (authLoading) return;
-      if (!user) {
+      if (!user || !isSuperAdminUser(user)) {
         setLoading(false);
         return;
       }
@@ -176,16 +176,26 @@ export default function DashboardPage() {
     fetchData();
   }, [user, authLoading]);
 
-  // Determine if we should show Employee View
+  // Only Super Admin gets the executive/admin overview dashboard
   const isSuperAdmin = isSuperAdminUser(user);
-  const isManagerOrAdmin = isSuperAdmin || Boolean(user?.can_access_manager_portal);
-  const shouldShowEmployeeView = viewMode === 'employee' || (viewMode === 'auto' && !isManagerOrAdmin);
 
-  if (shouldShowEmployeeView) {
+  // If not Super Admin, ALWAYS render Employee Dashboard (no switch to admin)
+  if (!isSuperAdmin) {
     return (
       <div className="w-full">
         <EmployeeDashboardHome
-          canSwitchToAdmin={isManagerOrAdmin}
+          canSwitchToAdmin={false}
+        />
+      </div>
+    );
+  }
+
+  // If Super Admin toggled to employee view
+  if (viewMode === 'employee') {
+    return (
+      <div className="w-full">
+        <EmployeeDashboardHome
+          canSwitchToAdmin={true}
           onSwitchToAdmin={() => setViewMode('admin')}
         />
       </div>
@@ -238,7 +248,7 @@ export default function DashboardPage() {
       {/* Page Header */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-[22px] font-bold text-gray-900">Dashboard Admin & Manajemen</h1>
+          <h1 className="text-[22px] font-bold text-gray-900">Dashboard Super Admin</h1>
           <p className="text-xs text-gray-500">Ringkasan analitik kehadiran, approval, dan aktivitas perusahaan.</p>
         </div>
         <div className="flex items-center gap-2">

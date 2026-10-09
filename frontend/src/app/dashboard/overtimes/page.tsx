@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
 import { downloadFile, sanitizeFileName } from "@/lib/downloadHelper";
-import { Plus, Search, Eye, Clock, FileDown, Trash2, Save, Send, Printer, ArrowLeft } from "lucide-react";
+import { Plus, Search, Eye, Clock, FileDown, Trash2, Save, Send, Printer, ArrowLeft, Pencil } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import { useAuth } from "@/contexts/AuthContext";
 import { TableSkeleton } from "@/components/Skeleton";
@@ -461,13 +461,15 @@ export default function OvertimesPage() {
                         <td className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             <button className="dash-action-btn view" title="Lihat Detail" onClick={() => handleViewDetail(ot)}><Eye size={16} /></button>
-                            {ot.status === 'draft' && ot.user?.name === user?.name && (
-                              <button className="dash-action-btn edit" title="Edit Draf" onClick={() => openEditPage(ot)}>
-                                <Save size={16} />
+                            {['draft', 'pending'].includes(ot.status) && (ot.user?.name === user?.name || user?.role_id === 1 || user?.role?.name?.toLowerCase() === 'super admin') && (
+                              <button className="dash-action-btn edit" title="Edit Pengajuan" onClick={() => openEditPage(ot)}>
+                                <Pencil size={16} />
                               </button>
                             )}
-                            {['draft','pending'].includes(ot.status) && ot.user?.name === user?.name && (
-                              <button className="dash-action-btn delete" title="Hapus" onClick={() => handleDelete(ot.id)}><Trash2 size={16} /></button>
+                            {['draft', 'pending'].includes(ot.status) && (ot.user?.name === user?.name || user?.role_id === 1 || user?.role?.name?.toLowerCase() === 'super admin') && (
+                              <button className="dash-action-btn delete" title="Hapus Pengajuan" onClick={() => handleDelete(ot.id)}>
+                                <Trash2 size={16} />
+                              </button>
                             )}
                           </div>
                         </td>

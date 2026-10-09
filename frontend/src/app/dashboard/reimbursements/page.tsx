@@ -5,7 +5,7 @@ import axiosInstance from "@/lib/axios";
 import { 
   Plus, Search, X, Eye, ReceiptCent, Upload, AlertCircle, 
   ArrowLeft, Printer, Trash2, Send, FileDown,
-  GitMerge, CheckCircle2, Clock, Check, XCircle
+  GitMerge, CheckCircle2, Clock, Check, XCircle, Pencil
 } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import { useAuth } from "@/contexts/AuthContext";
@@ -690,6 +690,7 @@ export default function ReimbursementsPage() {
 
   const [viewMode, setViewMode] = useState<"list" | "create" | "detail">("list");
   const [selectedItem, setSelectedItem] = useState<ReimbursementRecord | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -785,6 +786,26 @@ export default function ReimbursementsPage() {
     setViewMode("detail");
   };
 
+  const handleEdit = (item: ReimbursementRecord) => {
+    setEditingId(item.id);
+    const parsedItems = getRecordItems(item);
+    setFormData({
+      employee_name: item.employee_name || item.user?.name || user?.name || "",
+      is_custom_employee_name: Boolean(item.is_custom_employee_name),
+      title: item.title || "",
+      divisi: item.divisi || (user as { department?: string })?.department || "Operasional",
+      tujuan: item.tujuan || "Pengadaan Baru",
+      tujuanLainnya: "",
+      priority: item.priority || "Normal",
+      items: parsedItems.length > 0 
+        ? parsedItems.map(it => ({ ...it, tempId: generateUniqueId() }))
+        : [{ tempId: generateUniqueId(), spesifikasi: "", unit: "", qty: 1, estimasi_harga: 0, keterangan: "" }],
+      signature: item.signature || "",
+      attachments: [],
+    });
+    setViewMode("create");
+  };
+
   const handleDelete = async (id: number) => {
     if (!confirm("Apakah Anda yakin ingin menghapus pengajuan ini?")) return;
     try {
@@ -867,17 +888,25 @@ export default function ReimbursementsPage() {
     }
 
     try {
-      await axiosInstance.post("/reimbursements", data, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      toast.success("Klaim berhasil diajukan! Menunggu persetujuan.");
+      if (editingId) {
+        await axiosInstance.post(`/reimbursements/${editingId}`, data, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        toast.success("Klaim berhasil diperbarui!");
+      } else {
+        await axiosInstance.post("/reimbursements", data, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        toast.success("Klaim berhasil diajukan! Menunggu persetujuan.");
+      }
+      setEditingId(null);
       setViewMode("list");
       setFormData({
         employee_name: user?.name || "",
         is_custom_employee_name: false,
         title: "",
         divisi: (user as { department?: string })?.department || "Operasional",
-        tujuan: "",
+        tujuan: "Pengadaan Baru",
         tujuanLainnya: "",
         priority: "Normal",
         items: [{ tempId: generateUniqueId(), spesifikasi: "", unit: "", qty: 1, estimasi_harga: 0, keterangan: "" }],
@@ -893,7 +922,7 @@ export default function ReimbursementsPage() {
           .join(", ");
         toast.error(`Gagal: ${err.response.data.message}. ${errorDetails}`);
       } else {
-        toast.error(err.response?.data?.message || "Gagal mengajukan klaim.");
+        toast.error(err.response?.data?.message || "Gagal menyimpan klaim.");
       }
     } finally {
       setIsSubmitting(false);
@@ -941,6 +970,7 @@ export default function ReimbursementsPage() {
   };
 
   const handleCancelCreate = () => {
+    setEditingId(null);
     setViewMode("list");
   };
 
@@ -1105,6 +1135,7 @@ export default function ReimbursementsPage() {
                 <button 
                   className="dash-btn dash-btn-primary"
                   onClick={() => {
+                    setEditingId(null);
                     setFormData({
                       employee_name: user?.name || "",
                       is_custom_employee_name: false,
@@ -1197,7 +1228,17 @@ export default function ReimbursementsPage() {
                               <Eye size={16} />
                             </button>
                             
-                            {item.status === 'pending' && (hasPermission('delete-reimbursements') || item.user?.id === (user as { id?: number })?.id) && (
+                            {item.status === 'pending' && (hasPermission('apply-reimbursements') || item.user?.id === (user as { id?: number })?.id || (user as { role_id?: number })?.role_id === 1) && (
+                              <button 
+                                className="dash-action-btn edit text-amber-600 hover:bg-amber-50" 
+                                title="Edit Pengajuan"
+                                onClick={() => handleEdit(item)}
+                              >
+                                <Pencil size={16} />
+                              </button>
+                            )}
+
+                            {item.status === 'pending' && (hasPermission('delete-reimbursements') || item.user?.id === (user as { id?: number })?.id || (user as { role_id?: number })?.role_id === 1) && (
                               <button 
                                 className="dash-action-btn delete text-red-600 hover:bg-red-50" 
                                 title="Hapus"
@@ -1236,7 +1277,9 @@ export default function ReimbursementsPage() {
             >
               <ArrowLeft size={16} /> Kembali ke Daftar
             </button>
-            <h2 className="text-lg font-extrabold text-gray-900">Formulir Pengajuan Uang Muka & Permintaan Dana</h2>
+            <h2 className="text-lg font-extrabold text-gray-900">
+              {editingId ? "Edit Pengajuan Uang Muka & Permintaan Dana" : "Formulir Pengajuan Uang Muka & Permintaan Dana"}
+            </h2>
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6 items-start">
@@ -1655,7 +1698,7 @@ export default function ReimbursementsPage() {
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>
-                      <Send size={14} /> Kirim Pengajuan
+                      <Send size={14} /> {editingId ? "Perbarui Pengajuan" : "Kirim Pengajuan"}
                     </>
                   )}
                 </button>

@@ -155,15 +155,64 @@ class ApprovalService
     }
 
     /**
+     * Check if the workflow for this module, company, and submitter is explicitly deactivated (disabled).
+     */
+    public static function isWorkflowDisabled(string $moduleKey, int $companyId, ?User $submitter = null): bool
+    {
+        if (self::getWorkflow($moduleKey, $companyId, $submitter) !== null) {
+            return false;
+        }
+
+        $query = ApprovalWorkflow::where('company_id', $companyId)
+            ->where('module_key', $moduleKey);
+
+        if ($submitter) {
+            $userScoped = (clone $query)->where('scope_type', 'user')->where('scope_id', $submitter->id)->first();
+            if ($userScoped) {
+                return ! $userScoped->is_active;
+            }
+
+            if ($submitter->role_id) {
+                $roleScoped = (clone $query)->where('scope_type', 'role')->where('scope_id', $submitter->role_id)->first();
+                if ($roleScoped) {
+                    return ! $roleScoped->is_active;
+                }
+            }
+        }
+
+        $companyScoped = (clone $query)->where(function ($q) {
+            $q->where('scope_type', 'company')->orWhereNull('scope_type');
+        })->first();
+
+        if ($companyScoped) {
+            return ! $companyScoped->is_active;
+        }
+
+        return false;
+    }
+
+    /**
      * Initialize the approval process when a request is first submitted.
      *
      * @return array|null Returns approval info or null to use default/fallback logic.
      *   - 'status': The initial status string to set
      *   - 'current_approval_step': The step number to start on
      *   - 'approvers': Collection of User models who should be notified
+     *   - 'auto_approved': Boolean indicating if the request was auto-approved
      */
     public static function initApproval(string $moduleKey, int $companyId, User $submitter): ?array
     {
+        // 1. If workflow is explicitly turned off / disabled, auto-approve immediately!
+        if (self::isWorkflowDisabled($moduleKey, $companyId, $submitter)) {
+            return [
+                'status' => 'approved',
+                'current_approval_step' => null,
+                'approvers' => collect(),
+                'step_label' => 'Disetujui Otomatis',
+                'auto_approved' => true,
+            ];
+        }
+
         $workflow = self::getWorkflow($moduleKey, $companyId, $submitter);
 
         if (! $workflow) {
@@ -173,7 +222,14 @@ class ApprovalService
         $firstStep = $workflow->steps()->orderBy('step_number')->first();
 
         if (! $firstStep) {
-            return null; // Workflow exists but has no steps → fallback
+            // Workflow exists with 0 steps -> auto-approved directly
+            return [
+                'status' => 'approved',
+                'current_approval_step' => null,
+                'approvers' => collect(),
+                'step_label' => 'Disetujui Otomatis',
+                'auto_approved' => true,
+            ];
         }
 
         $approvers = self::getApproversForStep($firstStep, $submitter, $companyId);
@@ -183,6 +239,7 @@ class ApprovalService
             'current_approval_step' => $firstStep->step_number,
             'approvers' => $approvers,
             'step_label' => self::getStepLabel($firstStep),
+            'auto_approved' => false,
         ];
     }
 

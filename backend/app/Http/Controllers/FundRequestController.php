@@ -98,6 +98,7 @@ class FundRequestController extends Controller
             'supervisor_id' => $user->supervisor_id,
             'status' => $workflowResult ? $workflowResult['status'] : 'pending',
             'current_approval_step' => $workflowResult['current_approval_step'] ?? null,
+            'approved_by' => (!empty($workflowResult['auto_approved'])) ? $user->id : null,
         ];
 
         $fundRequest = FundRequest::create($fundRequestData);
@@ -287,12 +288,90 @@ class FundRequestController extends Controller
         return response()->json(['status' => 'success', 'message' => 'Pengajuan dana ditolak.']);
     }
 
-    public function destroy($id)
+    public function update(Request $request, $id)
     {
+        $user = $request->user();
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+
         $fundRequest = FundRequest::findOrFail($id);
-        if ($fundRequest->status !== 'pending') {
+
+        if (!$isSuperAdmin && $fundRequest->user_id !== $user->id) {
+            return response()->json(['status' => 'error', 'message' => 'Anda tidak memiliki akses untuk mengubah pengajuan dana ini.'], 403);
+        }
+
+        if (!$isSuperAdmin && $fundRequest->status !== 'pending') {
+            return response()->json(['status' => 'error', 'message' => 'Pengajuan yang sudah diproses tidak dapat diubah.'], 403);
+        }
+
+        $request->validate([
+            'amount' => 'nullable|numeric|min:0',
+            'reason' => 'nullable|string',
+            'title' => 'nullable|string',
+            'employee_name' => 'nullable|string',
+            'divisi' => 'nullable|string',
+            'tujuan' => 'nullable|string',
+            'priority' => 'nullable|string',
+            'signature' => 'nullable|string',
+            'items' => 'nullable',
+            'attachment' => ['nullable', File::types(['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'])->max(10240)],
+            'attachments' => ['nullable', 'array', 'max:10'],
+            'attachments.*' => ['nullable', File::types(['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'])->max(10240)],
+        ]);
+
+        [$items, $amount] = $this->parseItemsAndCalculateAmount($request);
+        $reason = $request->reason ?? $request->title ?? $fundRequest->reason;
+
+        $attachmentPath = $this->extractAttachmentPath($request) ?? $fundRequest->attachment;
+
+        $oldValues = $fundRequest->only(['title', 'amount', 'reason', 'divisi', 'tujuan', 'priority']);
+
+        $fundRequest->update([
+            'employee_name' => $request->employee_name ?? $fundRequest->employee_name,
+            'title' => $request->title ?? $reason,
+            'amount' => $amount > 0 ? $amount : $fundRequest->amount,
+            'reason' => $reason,
+            'divisi' => $request->divisi ?? $fundRequest->divisi,
+            'tujuan' => $request->tujuan ?? $fundRequest->tujuan,
+            'priority' => $request->priority ?? $fundRequest->priority,
+            'signature' => $request->signature ?? $fundRequest->signature,
+            'items' => $items ?? $fundRequest->items,
+            'attachment' => $attachmentPath,
+        ]);
+
+        $newValues = $fundRequest->only(['title', 'amount', 'reason', 'divisi', 'tujuan', 'priority']);
+
+        $this->logActivity('UPDATE_FUND_REQUEST', "Mengubah pengajuan dana #{$fundRequest->id} ({$fundRequest->title})", $fundRequest, 'fund_requests', $oldValues, $newValues);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Pengajuan dana berhasil diperbarui.',
+            'data' => $fundRequest,
+        ]);
+    }
+
+    public function destroy(Request $request, $id)
+    {
+        $user = $request->user();
+        $isSuperAdmin = $user && ($user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin'));
+
+        $fundRequest = FundRequest::with('user')->findOrFail($id);
+
+        if (!$isSuperAdmin && $fundRequest->user_id !== $user?->id) {
+            return response()->json(['status' => 'error', 'message' => 'Anda tidak memiliki hak untuk menghapus pengajuan dana ini.'], 403);
+        }
+
+        if (!$isSuperAdmin && $fundRequest->status !== 'pending') {
             return response()->json(['status' => 'error', 'message' => 'Pengajuan yang sudah diproses tidak dapat dihapus.'], 403);
         }
+
+        // Unlink storage file if exists
+        if (!empty($fundRequest->attachment) && Storage::disk('public')->exists($fundRequest->attachment)) {
+            Storage::disk('public')->delete($fundRequest->attachment);
+        }
+
+        $oldValues = $fundRequest->toArray();
+        $this->logActivity('DELETE_FUND_REQUEST', "Menghapus pengajuan dana #{$fundRequest->id} ({$fundRequest->title}) oleh " . ($fundRequest->user?->name ?? 'Karyawan'), $fundRequest, 'fund_requests', $oldValues, null);
+
         $fundRequest->delete();
 
         return response()->json(['status' => 'success', 'message' => 'Pengajuan berhasil dihapus.']);
@@ -340,6 +419,17 @@ class FundRequestController extends Controller
         $formattedAmount = number_format($amount, 0, ',', '.');
 
         if ($workflowResult) {
+            if (!empty($workflowResult['auto_approved'])) {
+                $this->notify(
+                    $user,
+                    'PENGAJUAN DANA DISETUJUI OTOMATIS',
+                    self::FUND_REQUEST_MSG_PREFIX."{$formattedAmount} telah DISETUJUI OTOMATIS karena alur persetujuan dinonaktifkan.",
+                    'success',
+                    self::ROUTE_APPROVALS
+                );
+                return;
+            }
+
             $this->notify(
                 $user,
                 'PENGAJUAN DANA BERHASIL',

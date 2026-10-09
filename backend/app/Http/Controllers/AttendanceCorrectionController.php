@@ -94,6 +94,7 @@ class AttendanceCorrectionController extends Controller
         $workflowResult = ApprovalService::initApproval('attendance_correction', $companyId, $user);
 
         if ($workflowResult) {
+            $isAutoApproved = !empty($workflowResult['auto_approved']);
             $correction = AttendanceCorrection::create([
                 'user_id' => $user->id,
                 'company_id' => $companyId,
@@ -104,26 +105,48 @@ class AttendanceCorrectionController extends Controller
                 'reason' => $request->reason,
                 'status' => $workflowResult['status'],
                 'current_approval_step' => $workflowResult['current_approval_step'],
+                'approved_by' => $isAutoApproved ? $user->id : null,
+                'remark' => $isAutoApproved ? 'Disetujui otomatis (Alur persetujuan dinonaktifkan)' : null,
             ]);
 
-            $this->notify(
-                $user,
-                'KOREKSI ABSEN DIAJUKAN',
-                "Pengajuan koreksi absen Anda untuk tanggal {$attendanceDate} telah dikirim. Menunggu: {$workflowResult['step_label']}.",
-                'info',
-                null,
-                'notif',
-                false
-            );
+            if ($isAutoApproved) {
+                // Apply the correction to the actual attendance record immediately
+                $applyData = [];
+                if ($correctedCheckIn) {
+                    $applyData['check_in'] = $correctedCheckIn;
+                }
+                if ($correctedCheckOut) {
+                    $applyData['check_out'] = $correctedCheckOut;
+                }
+                $attendance->update($applyData);
 
-            foreach ($workflowResult['approvers'] as $approver) {
                 $this->notify(
-                    $approver,
-                    'KOREKSI ABSEN PERLU PERSETUJUAN',
-                    "{$user->name} mengajukan koreksi absen untuk tanggal {$attendanceDate}. Alasan: {$request->reason}",
-                    'warning',
+                    $user,
+                    'KOREKSI ABSEN DISETUJUI OTOMATIS',
+                    "Pengajuan koreksi absen Anda untuk tanggal {$attendanceDate} telah DISETUJUI OTOMATIS dan absensi Anda telah langsung diperbarui.",
+                    'success',
                     '/dashboard/attendance-corrections'
                 );
+            } else {
+                $this->notify(
+                    $user,
+                    'KOREKSI ABSEN DIAJUKAN',
+                    "Pengajuan koreksi absen Anda untuk tanggal {$attendanceDate} telah dikirim. Menunggu: {$workflowResult['step_label']}.",
+                    'info',
+                    null,
+                    'notif',
+                    false
+                );
+
+                foreach ($workflowResult['approvers'] as $approver) {
+                    $this->notify(
+                        $approver,
+                        'KOREKSI ABSEN PERLU PERSETUJUAN',
+                        "{$user->name} mengajukan koreksi absen untuk tanggal {$attendanceDate}. Alasan: {$request->reason}",
+                        'warning',
+                        '/dashboard/attendance-corrections'
+                    );
+                }
             }
         } else {
             // ── Fallback: Default logic ──
@@ -360,6 +383,81 @@ class AttendanceCorrectionController extends Controller
         );
 
         return $this->successResponse(null, 'Koreksi absen ditolak.');
+    }
+
+    public function update(Request $request, $id)
+    {
+        $user = $request->user();
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+
+        $correction = AttendanceCorrection::with('attendance')->findOrFail($id);
+
+        if (!$isSuperAdmin && $correction->user_id !== $user->id) {
+            return $this->errorResponse('Anda tidak berhak mengubah koreksi absen ini.', 403);
+        }
+
+        if (!$isSuperAdmin && $correction->status !== 'pending') {
+            return $this->errorResponse('Koreksi absen yang sudah diproses tidak bisa diubah.', 400);
+        }
+
+        $request->validate([
+            'correction_type' => 'required|in:missing_checkout,wrong_time',
+            'corrected_check_out' => 'required_if:correction_type,missing_checkout|nullable|date_format:H:i',
+            'corrected_check_in' => 'nullable|date_format:H:i',
+            'reason' => 'required|string|max:500',
+        ]);
+
+        $attendanceDate = Carbon::parse($correction->attendance->check_in)->toDateString();
+
+        $correctedCheckIn = null;
+        if ($request->corrected_check_in) {
+            $correctedCheckIn = Carbon::parse($attendanceDate.' '.$request->corrected_check_in);
+        }
+
+        $correctedCheckOut = null;
+        if ($request->corrected_check_out) {
+            $correctedCheckOut = Carbon::parse($attendanceDate.' '.$request->corrected_check_out);
+        }
+
+        $oldValues = $correction->only(['correction_type', 'corrected_check_in', 'corrected_check_out', 'reason']);
+
+        $correction->update([
+            'correction_type' => $request->correction_type,
+            'corrected_check_in' => $correctedCheckIn,
+            'corrected_check_out' => $correctedCheckOut,
+            'reason' => $request->reason,
+        ]);
+
+        $newValues = $correction->only(['correction_type', 'corrected_check_in', 'corrected_check_out', 'reason']);
+
+        $this->logActivity('UPDATE_ATTENDANCE_CORRECTION', "Mengubah koreksi absen #{$correction->id} untuk tanggal {$attendanceDate}", $correction, 'attendance_corrections', $oldValues, $newValues);
+
+        return $this->successResponse($correction, 'Koreksi absen berhasil diperbarui.');
+    }
+
+    public function destroy(Request $request, $id)
+    {
+        $user = $request->user();
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+
+        $correction = AttendanceCorrection::with(['user', 'attendance'])->findOrFail($id);
+
+        if (!$isSuperAdmin && $correction->user_id !== $user->id) {
+            return $this->errorResponse('Anda tidak berhak menghapus koreksi absen ini.', 403);
+        }
+
+        if (!$isSuperAdmin && $correction->status !== 'pending') {
+            return $this->errorResponse('Koreksi absen yang sudah diproses tidak bisa dihapus.', 400);
+        }
+
+        $attendanceDate = $correction->attendance ? Carbon::parse($correction->attendance->check_in)->format('Y-m-d') : '-';
+        $oldValues = $correction->toArray();
+
+        $this->logActivity('DELETE_ATTENDANCE_CORRECTION', "Menghapus pengajuan koreksi absen #{$correction->id} ({$attendanceDate}) oleh " . ($correction->user?->name ?? 'Karyawan'), $correction, 'attendance_corrections', $oldValues, null);
+
+        $correction->delete();
+
+        return $this->successResponse(null, 'Koreksi absen berhasil dihapus.');
     }
 
     public function export(Request $request)

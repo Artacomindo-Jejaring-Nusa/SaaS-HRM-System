@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
 import { 
   Plus, Search, X, Eye, Upload, 
-  ArrowLeft, Printer, Send, FileDown 
+  ArrowLeft, Printer, Send, FileDown,
+  Pencil, Trash2
 } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,7 +20,8 @@ import {
   formatCurrency,
   calculateTotal,
   FundRequestLiveSheet,
-  PrintableSheet
+  PrintableSheet,
+  getRecordItems
 } from "@/components/FundRequestSheet";
 
 const getStorageUrl = (path: string) => {
@@ -92,6 +94,7 @@ export default function FundRequestsPage() {
 
   const [viewMode, setViewMode] = useState<"list" | "create" | "detail">("list");
   const [selectedItem, setSelectedItem] = useState<FundRequestRecord | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -245,11 +248,19 @@ export default function FundRequestsPage() {
         });
       }
 
-      await axiosInstance.post("/fund-requests", payload, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      if (editingId) {
+        await axiosInstance.post(`/fund-requests/${editingId}`, payload, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        toast.success("Pengajuan dana berhasil diperbarui!");
+      } else {
+        await axiosInstance.post("/fund-requests", payload, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        toast.success("Pengajuan dana berhasil dikirim!");
+      }
 
-      toast.success("Pengajuan dana berhasil dikirim!");
+      setEditingId(null);
       setViewMode("list");
       setFormData({
         employee_name: user?.name || "",
@@ -266,7 +277,7 @@ export default function FundRequestsPage() {
       });
       fetchRequests(page);
     } catch (e: any) {
-      toast.error(e.response?.data?.message || "Gagal mengajukan dana.");
+      toast.error(e.response?.data?.message || "Gagal menyimpan pengajuan dana.");
     } finally {
       setIsSubmitting(false);
     }
@@ -286,6 +297,38 @@ export default function FundRequestsPage() {
   const handleViewDetail = (item: FundRequestRecord) => {
     setSelectedItem(item);
     setViewMode("detail");
+  };
+
+  const handleEdit = (item: FundRequestRecord) => {
+    setEditingId(item.id);
+    const parsedItems = getRecordItems(item);
+    setFormData({
+      employee_name: item.employee_name || item.user?.name || user?.name || "",
+      is_custom_employee_name: Boolean(item.is_custom_employee_name),
+      title: item.title || "",
+      reason: item.reason || item.title || "",
+      divisi: item.divisi || "Operasional",
+      tujuan: item.tujuan || "Pengadaan Baru",
+      tujuanLainnya: "",
+      priority: item.priority || "Normal",
+      items: parsedItems.length > 0
+        ? parsedItems.map(it => ({ ...it, tempId: generateUniqueId() }))
+        : [{ tempId: generateUniqueId(), spesifikasi: "", unit: "Pcs", qty: 1, estimasi_harga: 0, keterangan: "" }],
+      signature: item.signature || "",
+      attachments: [],
+    });
+    setViewMode("create");
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus pengajuan dana ini?")) return;
+    try {
+      await axiosInstance.delete(`/fund-requests/${id}`);
+      toast.success("Pengajuan dana berhasil dihapus.");
+      fetchRequests(page);
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || "Gagal menghapus pengajuan dana.");
+    }
   };
 
   const filteredRequests = requests.filter(r => {
@@ -320,7 +363,23 @@ export default function FundRequestsPage() {
           {viewMode === "list" && hasPermission('apply-fund-requests') && (
             <button 
               className="dash-btn dash-btn-primary flex items-center gap-2"
-              onClick={() => setViewMode("create")}
+              onClick={() => {
+                setEditingId(null);
+                setFormData({
+                  employee_name: user?.name || "",
+                  is_custom_employee_name: false,
+                  title: "",
+                  reason: "",
+                  divisi: (user as { department?: string })?.department || "Operasional",
+                  tujuan: "Pengadaan Baru",
+                  tujuanLainnya: "",
+                  priority: "Normal",
+                  items: [{ tempId: generateUniqueId(), spesifikasi: "", unit: "Pcs", qty: 1, estimasi_harga: 0, keterangan: "" }],
+                  signature: "",
+                  attachments: [],
+                });
+                setViewMode("create");
+              }}
             >
               <Plus size={16} />
               Ajukan Dana Baru
@@ -418,13 +477,33 @@ export default function FundRequestsPage() {
                         </td>
                         <td>{getStatusBadge(item)}</td>
                         <td className="text-right">
-                          <button 
-                            className="dash-action-btn view" 
-                            title="Lihat Form Cetak / Detail"
-                            onClick={() => handleViewDetail(item)}
-                          >
-                            <Eye size={16} />
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button 
+                              className="dash-action-btn view" 
+                              title="Lihat Form Cetak / Detail"
+                              onClick={() => handleViewDetail(item)}
+                            >
+                              <Eye size={16} />
+                            </button>
+                            {item.status === 'pending' && (item.user?.id === (user as { id?: number })?.id || (user as { role_id?: number })?.role_id === 1 || item.employee_name === user?.name) && (
+                              <button 
+                                className="dash-action-btn edit text-amber-600 hover:bg-amber-50" 
+                                title="Edit Pengajuan"
+                                onClick={() => handleEdit(item)}
+                              >
+                                <Pencil size={16} />
+                              </button>
+                            )}
+                            {item.status === 'pending' && (item.user?.id === (user as { id?: number })?.id || (user as { role_id?: number })?.role_id === 1 || item.employee_name === user?.name) && (
+                              <button 
+                                className="dash-action-btn delete text-red-600 hover:bg-red-50" 
+                                title="Hapus Pengajuan"
+                                onClick={() => handleDelete(item.id)}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -765,7 +844,10 @@ export default function FundRequestsPage() {
               <div className="flex items-center justify-end gap-3 pt-4 border-t">
                 <button
                   type="button"
-                  onClick={() => setViewMode("list")}
+                  onClick={() => {
+                    setEditingId(null);
+                    setViewMode("list");
+                  }}
                   className="px-4 py-2 border border-gray-300 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50 transition"
                 >
                   Batal
@@ -776,7 +858,7 @@ export default function FundRequestsPage() {
                   className="px-6 py-2 bg-[#8B0000] hover:bg-[#700000] text-white rounded-lg text-xs font-bold shadow-md transition disabled:opacity-50 flex items-center gap-2"
                 >
                   <Send size={14} />
-                  {isSubmitting ? "Mengirim..." : "Kirim Pengajuan Dana"}
+                  {isSubmitting ? "Menyimpan..." : (editingId ? "Perbarui Pengajuan Dana" : "Kirim Pengajuan Dana")}
                 </button>
               </div>
             </form>

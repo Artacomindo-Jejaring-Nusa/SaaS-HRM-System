@@ -135,29 +135,43 @@ class LeaveController extends Controller
         $workflowResult = ApprovalService::initApproval('leave', $companyId, $user);
 
         if ($workflowResult) {
-            // Dynamic workflow is active
+            // Dynamic workflow is active or auto-approved
             $leaveAttributes['status'] = $workflowResult['status'];
             $leaveAttributes['current_approval_step'] = $workflowResult['current_approval_step'];
             
+            if (!empty($workflowResult['auto_approved'])) {
+                $leaveAttributes['remark'] = 'Disetujui otomatis (Alur persetujuan dinonaktifkan)';
+            }
+
             $leave = Leave::create($leaveAttributes);
 
-            // Notify the submitter
-            $this->notify(
-                $user,
-                'Pengajuan Cuti Berhasil',
-                "Halo, permohonan cuti Anda ({$request->type}) untuk tanggal {$request->start_date} s/d {$request->end_date} telah berhasil diajukan. Status: Menunggu {$workflowResult['step_label']}.",
-                'info'
-            );
-
-            // Notify dynamic approvers
-            foreach ($workflowResult['approvers'] as $approver) {
+            if (!empty($workflowResult['auto_approved'])) {
+                self::processLeaveApprovalDeduction();
                 $this->notify(
-                    $approver,
-                    'Persetujuan Cuti Karyawan',
-                    "Halo Bapak/Ibu, ada permohonan cuti baru dari {$user->name} ({$request->type}) untuk tanggal {$request->start_date} s/d {$request->end_date}. Mohon kesediaannya untuk meninjau pengajuan ini. Terima kasih.",
-                    'warning',
-                    self::ROUTE_APPROVALS
+                    $user,
+                    'Pengajuan Cuti Disetujui Otomatis',
+                    "Halo, permohonan cuti Anda ({$request->type}) untuk tanggal {$request->start_date} s/d {$request->end_date} telah DISETUJUI OTOMATIS karena alur persetujuan dinonaktifkan.",
+                    'success'
                 );
+            } else {
+                // Notify the submitter
+                $this->notify(
+                    $user,
+                    'Pengajuan Cuti Berhasil',
+                    "Halo, permohonan cuti Anda ({$request->type}) untuk tanggal {$request->start_date} s/d {$request->end_date} telah berhasil diajukan. Status: Menunggu {$workflowResult['step_label']}.",
+                    'info'
+                );
+
+                // Notify dynamic approvers
+                foreach ($workflowResult['approvers'] as $approver) {
+                    $this->notify(
+                        $approver,
+                        'Persetujuan Cuti Karyawan',
+                        "Halo Bapak/Ibu, ada permohonan cuti baru dari {$user->name} ({$request->type}) untuk tanggal {$request->start_date} s/d {$request->end_date}. Mohon kesediaannya untuk meninjau pengajuan ini. Terima kasih.",
+                        'warning',
+                        self::ROUTE_APPROVALS
+                    );
+                }
             }
         } else {
             // ── Fallback: Default hardcoded logic ──
@@ -495,7 +509,7 @@ class LeaveController extends Controller
         return $this->successResponse(null, 'Permohonan cuti ditolak.');
     }
 
-    public function destroy(Request $request, $id): \Illuminate\Http\JsonResponse
+    public function update(Request $request, $id): \Illuminate\Http\JsonResponse
     {
         $user = $request->user();
         $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
@@ -506,6 +520,77 @@ class LeaveController extends Controller
             }
         })->findOrFail($id);
 
+        if (!$isSuperAdmin && $leave->user_id !== $user->id) {
+            return $this->errorResponse('Anda tidak memiliki akses untuk mengubah pengajuan cuti ini.', 403);
+        }
+
+        if (!$isSuperAdmin && !in_array($leave->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
+            return $this->errorResponse('Hanya permohonan cuti yang masih menunggu persetujuan yang bisa diubah.', 403);
+        }
+
+        $request->validate([
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+            'type' => 'required|string',
+            'reason' => 'nullable|string',
+            'leave_address' => 'nullable|string|max:500',
+            'emergency_phone' => 'nullable|string|max:30',
+            'signature' => 'nullable|string',
+        ]);
+
+        $typeMeta = self::KEMNAKER_LEAVE_TYPES[$request->type] ?? [
+            'days' => 0,
+            'paid' => true,
+            'article' => self::ARTICLE_KEBIJAKAN_PERUSAHAAN,
+            'uses_quota' => false,
+        ];
+        $requestedDays = Carbon::parse($request->start_date)->diffInDays(Carbon::parse($request->end_date)) + 1;
+
+        $validationError = $this->validateLeaveRequest($request, $typeMeta, $requestedDays);
+        if ($validationError !== null) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $validationError,
+            ], 400);
+        }
+
+        $oldValues = $leave->only(['start_date', 'end_date', 'type', 'reason', 'leave_address', 'emergency_phone', 'duration_days']);
+
+        $leave->update([
+            'start_date' => $request->start_date,
+            'end_date' => $request->end_date,
+            'type' => $request->type,
+            'reason' => $request->reason,
+            'leave_address' => $request->leave_address,
+            'emergency_phone' => $request->emergency_phone,
+            'signature' => $request->signature ?? $leave->signature,
+            'duration_days' => $requestedDays,
+            'is_paid' => $typeMeta['paid'] ?? true,
+            'kemnaker_article' => $typeMeta['article'] ?? 'Kebijakan Perusahaan',
+        ]);
+
+        $newValues = $leave->only(['start_date', 'end_date', 'type', 'reason', 'leave_address', 'emergency_phone', 'duration_days']);
+
+        $this->logActivity('UPDATE_LEAVE', "Mengubah pengajuan cuti #{$leave->id} ({$leave->type}) periode {$leave->start_date} s/d {$leave->end_date}", $leave, 'leaves', $oldValues, $newValues);
+
+        return $this->successResponse($leave, 'Permohonan cuti berhasil diperbarui.');
+    }
+
+    public function destroy(Request $request, $id): \Illuminate\Http\JsonResponse
+    {
+        $user = $request->user();
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+
+        $leave = Leave::with('user')->where(function ($q) use ($user, $isSuperAdmin) {
+            if (!$isSuperAdmin && !$user->canAccessAllCompanies()) {
+                $q->where('company_id', $user->company_id);
+            }
+        })->findOrFail($id);
+
+        if (!$isSuperAdmin && $leave->user_id !== $user->id) {
+            return $this->errorResponse('Anda tidak berhak menghapus pengajuan ini.', 403);
+        }
+
         if (! $isSuperAdmin && ! in_array($leave->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
             return $this->errorResponse('Cuti yang sudah diproses tidak bisa dihapus.', 403);
         }
@@ -513,6 +598,9 @@ class LeaveController extends Controller
         if ($leave->status === 'approved') {
             self::processLeaveApprovalRefund();
         }
+
+        $oldValues = $leave->toArray();
+        $this->logActivity('DELETE_LEAVE', "Menghapus pengajuan cuti #{$leave->id} ({$leave->type}) periode {$leave->start_date} s/d {$leave->end_date} oleh {$leave->user?->name}", $leave, 'leaves', $oldValues, null);
 
         $leave->delete();
 

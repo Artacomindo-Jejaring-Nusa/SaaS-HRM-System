@@ -185,11 +185,15 @@ trait HandlesWebAttendance
     }
 
     /**
-     * List Pending Web Attendances for Superadmin / HRD review.
+     * List Pending Web Attendances for Superadmin review.
      */
     public function webPending(Request $request)
     {
         $user = $request->user();
+        if (! $this->isSuperAdminUser($user)) {
+            return $this->errorResponse('Hanya Super Admin yang berhak mengakses antrean persetujuan absen web.', 403);
+        }
+
         $query = Attendance::with(['user:id,name,email,role_id,office_id,nik,profile_photo_path,auto_validate_web_attendance', 'user.role', 'user.office'])
             ->where('company_id', $user->company_id)
             ->where('channel', 'web')
@@ -220,6 +224,10 @@ trait HandlesWebAttendance
     public function webApprove(Request $request, $id)
     {
         $admin = $request->user();
+        if (! $this->isSuperAdminUser($admin)) {
+            return $this->errorResponse('Hanya Super Admin yang berhak menyetujui absensi web.', 403);
+        }
+
         $attendance = Attendance::with('user')->where('company_id', $admin->company_id)->findOrFail($id);
 
         if ($attendance->web_approval_status === 'valid') {
@@ -244,7 +252,7 @@ trait HandlesWebAttendance
         $this->notify(
             $attendance->user,
             'ABSEN WEB DISETUJUI',
-            "Absensi Web Anda pada tanggal " . Carbon::parse($attendance->check_in)->format('d M Y (H:i)') . " telah DISETUJUI oleh Superadmin / HRD. Status: " . strtoupper($status),
+            "Absensi Web Anda pada tanggal " . Carbon::parse($attendance->check_in)->format('d M Y (H:i)') . " telah DISETUJUI oleh Super Admin. Status: " . strtoupper($status),
             'success',
             '/dashboard/attendance'
         );
@@ -258,6 +266,10 @@ trait HandlesWebAttendance
     public function webReject(Request $request, $id)
     {
         $admin = $request->user();
+        if (! $this->isSuperAdminUser($admin)) {
+            return $this->errorResponse('Hanya Super Admin yang berhak menolak absensi web.', 403);
+        }
+
         $attendance = Attendance::with('user')->where('company_id', $admin->company_id)->findOrFail($id);
 
         $request->validate([
@@ -277,7 +289,7 @@ trait HandlesWebAttendance
         $this->notify(
             $attendance->user,
             'ABSEN WEB DITOLAK',
-            "Absensi Web Anda pada tanggal " . Carbon::parse($attendance->check_in)->format('d M Y') . " DITOLAK oleh Superadmin / HRD. Alasan: " . $reason,
+            "Absensi Web Anda pada tanggal " . Carbon::parse($attendance->check_in)->format('d M Y') . " DITOLAK oleh Super Admin. Alasan: " . $reason,
             'danger',
             '/dashboard/attendance'
         );
@@ -286,11 +298,19 @@ trait HandlesWebAttendance
     }
 
     /**
-     * Get Pending Approvals Summary for Superadmin / HR Notifications
+     * Get Pending Approvals Summary for Superadmin Notifications
      */
     public function pendingSummary(Request $request)
     {
         $user = $request->user();
+        if (! $this->isSuperAdminUser($user)) {
+            return $this->successResponse([
+                'web_pending_count' => 0,
+                'dinas_luar_pending_count' => 0,
+                'total_pending' => 0,
+            ], 'Ringkasan persetujuan kehadiran berhasil diambil.');
+        }
+
         $companyId = $user->company_id;
 
         $webPendingCount = Attendance::where('company_id', $companyId)
@@ -310,20 +330,27 @@ trait HandlesWebAttendance
         ], 'Ringkasan persetujuan kehadiran berhasil diambil.');
     }
 
+    private function isSuperAdminUser(User $user): bool
+    {
+        return $user->role_id === 1
+            || $user->canAccessAllCompanies()
+            || str_contains(strtolower($user->role?->name ?? ''), 'super admin')
+            || (method_exists($user, 'hasRole') && $user->hasRole('Super Admin'));
+    }
+
     private function notifyAdminsAboutPendingWebAttendance(User $user, Carbon $now, ?string $anomalyReason = null): void
     {
         $admins = User::where('company_id', $user->company_id)
             ->where(function ($q) {
                 $q->where('role_id', 1)
                   ->orWhereHas('role', function ($r) {
-                      $r->where('name', 'like', '%Super Admin%')
-                        ->orWhere('name', 'like', '%HRD%');
+                      $r->where('name', 'like', '%Super Admin%');
                   });
             })
             ->get();
 
         $title = $anomalyReason ? 'PERINGATAN: ABSEN WEB ANOMALI' : 'PERSETUJUAN ABSEN WEB BARU';
-        $desc = "Karyawan {$user->name} baru saja melakukan Absen Masuk via Web pada pukul {$now->format('H:i')} WIB dan memerlukan persetujuan.";
+        $desc = "Karyawan {$user->name} baru saja melakukan Absen Masuk via Web pada pukul {$now->format('H:i')} WIB dan memerlukan persetujuan Super Admin.";
         if ($anomalyReason) {
             $desc .= " (Catatan: {$anomalyReason})";
         }

@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import { TableSkeleton } from "@/components/Skeleton";
 import Pagination from "@/components/Pagination";
-import { FileDown, Plus, Search, Check, X, Eye, Clock, AlertCircle } from "lucide-react";
+import { FileDown, Plus, Search, Check, X, Eye, Clock, AlertCircle, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function AttendanceCorrectionsPage() {
@@ -23,6 +23,7 @@ export default function AttendanceCorrectionsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // For the submission form
@@ -86,6 +87,7 @@ export default function AttendanceCorrectionsPage() {
   };
 
   const openCreateModal = () => {
+    setEditingId(null);
     setFormData({
       attendance_id: "",
       correction_type: "missing_checkout",
@@ -97,16 +99,46 @@ export default function AttendanceCorrectionsPage() {
     setIsModalOpen(true);
   };
 
+  const handleEdit = (item: any) => {
+    setEditingId(item.id);
+    setFormData({
+      attendance_id: String(item.attendance_id || ""),
+      correction_type: item.correction_type || "missing_checkout",
+      corrected_check_out: item.corrected_check_out_time || item.corrected_check_out || "",
+      corrected_check_in: item.corrected_check_in_time || item.corrected_check_in || "",
+      reason: item.reason || "",
+    });
+    fetchMyAttendance();
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Apakah Anda yakin ingin membatalkan/menghapus pengajuan koreksi absen ini?")) return;
+    try {
+      await axiosInstance.delete(`/attendance-corrections/${id}`);
+      toast.success("Koreksi absen berhasil dihapus.");
+      fetchCorrections(page);
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || "Gagal menghapus koreksi absen.");
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await axiosInstance.post("/attendance-corrections", formData);
-      toast.success("Pengajuan koreksi absen berhasil! Menunggu persetujuan HR/Supervisor.");
+      if (editingId) {
+        await axiosInstance.put(`/attendance-corrections/${editingId}`, formData);
+        toast.success("Koreksi absen berhasil diperbarui!");
+      } else {
+        await axiosInstance.post("/attendance-corrections", formData);
+        toast.success("Pengajuan koreksi absen berhasil! Menunggu persetujuan HR/Supervisor.");
+      }
       setIsModalOpen(false);
+      setEditingId(null);
       fetchCorrections(page);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Gagal mengajukan koreksi absen");
+      toast.error(error.response?.data?.message || "Gagal menyimpan koreksi absen");
     } finally {
       setIsSubmitting(false);
     }
@@ -298,6 +330,24 @@ export default function AttendanceCorrectionsPage() {
                           >
                             <Eye size={16} />
                           </button>
+                          {item.status === 'pending' && (item.user_id === user?.id || user?.role_id === 1 || user?.role?.name?.toLowerCase() === 'super admin') && (
+                            <>
+                              <button
+                                className="dash-action-btn edit text-amber-600 hover:bg-amber-50"
+                                title="Edit Koreksi"
+                                onClick={() => handleEdit(item)}
+                              >
+                                <Pencil size={16} />
+                              </button>
+                              <button
+                                className="dash-action-btn delete text-red-600 hover:bg-red-50"
+                                title="Hapus Koreksi"
+                                onClick={() => handleDelete(item.id)}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          )}
                           {item.status === 'pending' && hasPermission('approve-leaves') && (
                             <>
                               <button
@@ -342,7 +392,7 @@ export default function AttendanceCorrectionsPage() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !isSubmitting && setIsModalOpen(false)} />
           <div className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-bold text-gray-900">Form Koreksi Absen</h2>
+              <h2 className="text-lg font-bold text-gray-900">{editingId ? "Edit Koreksi Absen" : "Form Koreksi Absen"}</h2>
               <button
                 onClick={() => setIsModalOpen(false)}
                 className="p-1 hover:bg-gray-100 rounded-full transition-colors"
@@ -478,7 +528,7 @@ export default function AttendanceCorrectionsPage() {
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? "Mengirim..." : "Kirim Pengajuan Koreksi"}
+                  {isSubmitting ? "Menyimpan..." : (editingId ? "Simpan Perubahan" : "Kirim Pengajuan Koreksi")}
                 </button>
               </div>
             </form>

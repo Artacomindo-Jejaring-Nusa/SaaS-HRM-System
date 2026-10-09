@@ -104,7 +104,7 @@ class RolePermissionSeeder extends Seeder
             // Payroll
             ['name' => 'Lihat Payroll', 'slug' => 'view-salaries', 'group' => 'Payroll'],
             ['name' => 'Kelola Payroll', 'slug' => 'manage-payroll', 'group' => 'Payroll'],
-            ['name' => 'Menyetujui Payroll', 'slug' => 'approve-payroll', 'group' => 'Payroll'],
+            ['name' => 'Setujui Payroll', 'slug' => 'approve-payroll', 'group' => 'Payroll'],
             ['name' => 'Lihat Laporan Payroll', 'slug' => 'view-payroll-reports', 'group' => 'Payroll'],
 
             // Dokumen (SK & Regulasi)

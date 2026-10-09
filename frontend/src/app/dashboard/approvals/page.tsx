@@ -24,7 +24,12 @@ import {
   ClipboardList,
   AlertCircle,
   MapPin,
-  Building2
+  Building2,
+  Trash2,
+  History,
+  Calendar,
+  Filter,
+  ShieldAlert
 } from "lucide-react";
 import { ListPageSkeleton } from "@/components/Skeleton";
 import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
@@ -386,8 +391,24 @@ const renderMemberStatusBadge = (member: TeamMemberAttendance) => {
 export default function ApprovalsPage() {
   const { user: currentUser, hasPermission } = useAuth();
   
-  // Tabs: 'approvals' (Persetujuan) vs 'team' (Kehadiran Tim)
-  const [activeTab, setActiveTab] = useState<"approvals" | "team">("approvals");
+  // Tabs: 'approvals' (Persetujuan) vs 'team' (Kehadiran Tim) vs 'history' (Riwayat & Audit Log)
+  const [activeTab, setActiveTab] = useState<"approvals" | "team" | "history">("approvals");
+
+  // History & Audit Log State
+  const [historyItems, setHistoryItems] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyFilterType, setHistoryFilterType] = useState<string>("all");
+  const [historyFilterStatus, setHistoryFilterStatus] = useState<string>("all");
+  const [historySearchQuery, setHistorySearchQuery] = useState<string>("");
+
+  // Purge Current Month State (Super Admin Only)
+  const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
+  const [purgePeriod, setPurgePeriod] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [purgeConfirmation, setPurgeConfirmation] = useState("");
+  const [isPurging, setIsPurging] = useState(false);
 
   const isSuperAdmin = isSuperAdminUser(currentUser);
   const hasManageApprovals = hasPermission("manage-approvals");
@@ -575,9 +596,55 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
     return () => clearInterval(interval);
   }, [fetchApprovals, fetchTeamAttendance]);
 
+  const fetchHistory = useCallback(async () => {
+    try {
+      setLoadingHistory(true);
+      const params = new URLSearchParams();
+      if (historyFilterType !== "all") params.append("type", historyFilterType);
+      if (historyFilterStatus !== "all") params.append("status", historyFilterStatus);
+      const res = await axiosInstance.get(`/manager/history-requests?${params.toString()}`);
+      setHistoryItems(res.data?.data || []);
+    } catch (e) {
+      console.warn("Could not fetch history:", e);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [historyFilterType, historyFilterStatus]);
+
+  useEffect(() => {
+    if (activeTab === "history") {
+      fetchHistory();
+    }
+  }, [activeTab, fetchHistory]);
+
+  const handleExecutePurge = async () => {
+    if (purgeConfirmation.trim().toUpperCase() !== "HAPUS") {
+      toast.warning('Ketik kata "HAPUS" untuk mengonfirmasi pembersihan.');
+      return;
+    }
+    try {
+      setIsPurging(true);
+      const res = await axiosInstance.post("/manager/purge-current-month", { period: purgePeriod });
+      toast.success(res.data?.message || "Pembersihan data periode berhasil dilakukan.");
+      setIsPurgeModalOpen(false);
+      setPurgeConfirmation("");
+      await handleRefreshAll();
+      if (activeTab === "history") {
+        fetchHistory();
+      }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Gagal melakukan pembersihan data.");
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
   const handleRefreshAll = async () => {
     setRefreshing(true);
     await Promise.all([fetchApprovals(), fetchTeamAttendance()]);
+    if (activeTab === "history") {
+      await fetchHistory();
+    }
     toast.success("Data persetujuan dan kehadiran tim telah diperbarui.");
   };
 
@@ -828,6 +895,16 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
                 <span>Persetujuan Payroll</span>
               </Link>
             )}
+            {isSuperAdmin && (
+              <button
+                onClick={() => setIsPurgeModalOpen(true)}
+                className="px-4 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-sm border border-rose-400/30"
+                title="Hapus transaksi dan berkas fisik bulan ini dari server untuk menghemat storage"
+              >
+                <Trash2 size={14} />
+                <span>Pembersihan Periode Bulan Ini</span>
+              </button>
+            )}
             <button
               onClick={handleRefreshAll}
               disabled={refreshing}
@@ -878,6 +955,18 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
                 {teamMembers.length} Anggota
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("history")}
+            className={`pb-3 px-2 sm:px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+              activeTab === "history"
+                ? "border-[#8B0000] text-[#8B0000]"
+                : "border-transparent text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            <History size={16} />
+            <span>Riwayat & Audit Log</span>
           </button>
         </div>
       </div>
@@ -1442,6 +1531,166 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         </div>
       )}
 
+      {/* TAB 3: RIWAYAT & AUDIT LOG */}
+      {activeTab === "history" && (
+        <div className="space-y-6">
+          {/* Filter Bar */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                <Filter size={14} className="text-slate-400" />
+                <span className="font-bold text-slate-600">Modul:</span>
+                <select
+                  value={historyFilterType}
+                  onChange={(e) => setHistoryFilterType(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-slate-800 outline-none cursor-pointer"
+                >
+                  <option value="all">Semua Modul</option>
+                  <option value="leave">Cuti</option>
+                  <option value="permit">Izin</option>
+                  <option value="overtime">Lembur</option>
+                  <option value="reimbursement">Reimbursement</option>
+                  <option value="fund_request">Pengajuan Dana</option>
+                  <option value="attendance_correction">Koreksi Absen</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                <span className="font-bold text-slate-600">Status:</span>
+                <select
+                  value={historyFilterStatus}
+                  onChange={(e) => setHistoryFilterStatus(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-slate-800 outline-none cursor-pointer"
+                >
+                  <option value="all">Semua Status</option>
+                  <option value="approved">Disetujui</option>
+                  <option value="rejected">Ditolak</option>
+                  <option value="edited">Diedit Pemohon</option>
+                  <option value="deleted">Dihapus Pemohon/Admin</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="relative w-full md:w-72">
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Cari riwayat atau pemohon..."
+                value={historySearchQuery}
+                onChange={(e) => setHistorySearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#8B0000] focus:ring-2 focus:ring-[#8B0000]/10 transition-all"
+              />
+            </div>
+          </div>
+
+          {/* History List */}
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+            {loadingHistory ? (
+              <div className="p-8"><ListPageSkeleton /></div>
+            ) : (() => {
+              const filtered = historyItems.filter((item) => {
+                if (!historySearchQuery.trim()) return true;
+                const q = historySearchQuery.toLowerCase();
+                return (
+                  item.user_name?.toLowerCase().includes(q) ||
+                  item.description?.toLowerCase().includes(q) ||
+                  item.category?.toLowerCase().includes(q) ||
+                  item.actor_name?.toLowerCase().includes(q)
+                );
+              });
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="py-16 text-center">
+                    <History size={36} className="mx-auto text-slate-300 mb-2" />
+                    <p className="text-sm font-bold text-slate-700">Belum ada riwayat aktivitas ditemukan</p>
+                    <p className="text-xs text-slate-400 mt-1">Semua persetujuan, penolakan, perubahan, atau penghapusan akan tercatat di sini</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                        <th className="py-3 px-4">Waktu</th>
+                        <th className="py-3 px-4">Pemohon</th>
+                        <th className="py-3 px-4">Kategori & Tindakan</th>
+                        <th className="py-3 px-4">Deskripsi / Detail</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Diproses Oleh</th>
+                        <th className="py-3 px-4">Catatan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filtered.map((item, idx) => {
+                        const isApproved = item.status === "approved";
+                        const isRejected = item.status === "rejected";
+                        const isDeleted = item.status === "deleted";
+                        const isUpdated = item.status === "updated";
+
+                        return (
+                          <tr key={item.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3 px-4 whitespace-nowrap text-slate-500 font-mono text-[11px]">
+                              {item.created_at ? new Date(item.created_at).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" }) : "-"}
+                            </td>
+                            <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">
+                              {item.user_name}
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
+                                {item.category || item.type}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-slate-700 max-w-xs truncate" title={item.description}>
+                              {item.description}
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              {isApproved && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <CheckCircle2 size={11} /> Disetujui
+                                </span>
+                              )}
+                              {isRejected && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                                  <XCircle size={11} /> Ditolak
+                                </span>
+                              )}
+                              {isDeleted && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                  <Trash2 size={11} /> Dihapus
+                                </span>
+                              )}
+                              {isUpdated && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                  <Clock size={11} /> Diedit
+                                </span>
+                              )}
+                              {!isApproved && !isRejected && !isDeleted && !isUpdated && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                  {item.status}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap text-slate-600 font-medium">
+                              {item.actor_name || "Sistem"}
+                            </td>
+                            <td className="py-3 px-4 text-slate-400 italic text-[11px] max-w-xs truncate" title={item.remark || ""}>
+                              {item.remark || "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* OFFICIAL CORPORATE FORM DOCUMENT SHEET MODAL */}
       {isDetailModalOpen && selectedItem && (
         <OfficialApprovalDocumentSheet
@@ -1561,6 +1810,99 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
                 }`}
               >
                 {isSubmitting ? "Memproses..." : "Konfirmasi"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PEMBERSIHAN PERIODE (SUPER ADMIN ONLY) */}
+      {isPurgeModalOpen && (
+        <div className="fixed inset-0 z-120 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="p-6 border-b border-rose-100 bg-rose-50/60 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                  <ShieldAlert size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base">Pembersihan Periode Server</h3>
+                  <p className="text-[11px] text-rose-700 font-medium">Manajemen Penyimpanan & Database</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsPurgeModalOpen(false)}
+                disabled={isPurging}
+                className="p-1 hover:bg-white rounded-full transition-colors text-slate-400 hover:text-slate-600"
+              >
+                <XCircle size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-amber-900 text-xs leading-relaxed flex items-start gap-2.5">
+                <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Perhatian Penting:</p>
+                  <p className="mt-0.5 text-amber-800">
+                    Fitur ini akan menghapus semua riwayat transaksi pengajuan (cuti, izin, lembur, reimbursement, pengajuan dana, koreksi absen) dan <strong>menghapus berkas fisik/lampiran bukti di server</strong> pada periode yang dipilih agar server tidak penuh.
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Periode Bulan & Tahun (YYYY-MM)
+                </label>
+                <input
+                  type="month"
+                  value={purgePeriod}
+                  onChange={(e) => setPurgePeriod(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/10"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Konfirmasi Tindakan
+                </label>
+                <p className="text-[11px] text-slate-500 mb-1.5">
+                  Ketik kata <span className="font-mono font-bold text-rose-600">HAPUS</span> di bawah untuk melanjutkan:
+                </p>
+                <input
+                  type="text"
+                  placeholder="Ketik HAPUS..."
+                  value={purgeConfirmation}
+                  onChange={(e) => setPurgeConfirmation(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/10 uppercase"
+                />
+              </div>
+            </div>
+
+            <div className="p-5 bg-slate-50 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={() => setIsPurgeModalOpen(false)}
+                disabled={isPurging}
+                className="flex-1 py-2.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleExecutePurge}
+                disabled={isPurging || purgeConfirmation.trim().toUpperCase() !== "HAPUS"}
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {isPurging ? (
+                  <>
+                    <RefreshCw size={13} className="animate-spin" />
+                    <span>Membersihkan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} />
+                    <span>Bersihkan Server</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

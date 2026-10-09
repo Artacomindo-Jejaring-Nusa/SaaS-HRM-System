@@ -1114,7 +1114,7 @@ function WorkflowVariantBar({
                 ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
                 : "bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200"
             }`}
-            title={isWorkflowActive ? "Klik untuk menonaktifkan alur ini" : "Klik untuk mengaktifkan alur ini"}
+            title={isWorkflowActive ? "Klik untuk menonaktifkan alur ini (permohonan akan langsung disetujui otomatis tanpa persetujuan)" : "Klik untuk mengaktifkan alur persetujuan berjenjang"}
           >
             {isWorkflowActive ? (
               <>
@@ -1124,7 +1124,7 @@ function WorkflowVariantBar({
             ) : (
               <>
                 <X size={13} className="text-gray-500" />
-                <span>Alur: Non-Aktif</span>
+                <span>Alur: Non-Aktif (Auto-Approve)</span>
               </>
             )}
           </button>

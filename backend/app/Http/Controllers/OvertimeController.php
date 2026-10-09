@@ -176,6 +176,9 @@ class OvertimeController extends Controller
             if ($workflowResult) {
                 $baseData['status'] = $workflowResult['status'];
                 $baseData['current_approval_step'] = $workflowResult['current_approval_step'];
+                if (!empty($workflowResult['auto_approved'])) {
+                    $baseData['approved_by'] = $user->id;
+                }
             } else {
                 $baseData['status'] = 'pending';
             }
@@ -262,13 +265,15 @@ class OvertimeController extends Controller
         $user = $request->user();
         $overtime = Overtime::findOrFail($id);
 
-        // Only owner can edit, only drafts can be updated
-        if ($overtime->user_id !== $user->id) {
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+
+        // Only owner or super admin can edit
+        if (!$isSuperAdmin && $overtime->user_id !== $user->id) {
             return $this->errorResponse(self::MSG_FORBIDDEN, 403);
         }
 
-        if ($overtime->status !== 'draft') {
-            return $this->errorResponse('Hanya lembur berstatus draf yang bisa diubah.', 403);
+        if (!$isSuperAdmin && !in_array($overtime->status, ['draft', 'pending', 'pending_supervisor', 'pending_hr'])) {
+            return $this->errorResponse('Hanya lembur berstatus draf atau menunggu persetujuan yang bisa diubah.', 403);
         }
 
         $isSubmitting = $request->input('status') === 'pending';
@@ -490,31 +495,25 @@ class OvertimeController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $overtime = Overtime::findOrFail($id);
+        $overtime = Overtime::with(['user', 'items'])->findOrFail($id);
         $user = $request->user();
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
 
-        // Owner can delete their own draft/pending
         $isOwner = $overtime->user_id === $user->id;
         $isManager = $user->hasPermission('delete-overtimes');
 
-        if (! $isOwner && ! $isManager) {
+        if (! $isSuperAdmin && ! $isOwner && ! $isManager) {
             return $this->errorResponse(self::MSG_FORBIDDEN, 403);
         }
 
-        if (! in_array($overtime->status, ['pending', 'draft'])) {
+        if (! $isSuperAdmin && ! in_array($overtime->status, ['pending', 'draft'])) {
             return $this->errorResponse('Lembur yang sudah diproses tidak bisa dihapus.', 403);
         }
 
-        // Log Activity (Before delete)
-        ActivityLog::create([
-            'user_id' => $user->id,
-            'company_id' => $user->company_id,
-            'action' => 'OVERTIME_DELETION',
-            'description' => "Menghapus pengajuan lembur: " . ($overtime->title ?? '-'),
-            'model_type' => self::MODEL_OVERTIME,
-            'model_id' => $overtime->id,
-        ]);
+        $oldValues = $overtime->toArray();
+        $this->logActivity('DELETE_OVERTIME', "Menghapus pengajuan lembur #{$overtime->id} (" . ($overtime->title ?? '-') . ") oleh " . ($overtime->user?->name ?? 'Karyawan'), $overtime, 'overtimes', $oldValues, null);
 
+        $overtime->items()->delete();
         $overtime->delete();
 
         return $this->successResponse(null, 'Permohonan lembur berhasil dihapus.');
@@ -613,12 +612,19 @@ class OvertimeController extends Controller
     {
         $workflowResult = ApprovalService::initApproval('overtime', $companyId, $user);
 
-        if ($workflowResult && isset($workflowResult['approvers'])) {
-            $this->notify($user, self::NOTIFICATION_OVERTIME_SUCCESS, "Permohonan lembur Anda telah diajukan. Menunggu: {$workflowResult['step_label']}.", 'info');
-            foreach ($workflowResult['approvers'] as $approver) {
-                $this->notify($approver, 'PENGAJUAN LEMBUR PERLU PERSETUJUAN', "{$user->name} telah mengajukan lembur. Mohon segera tinjau.", 'warning', self::ROUTE_APPROVALS);
+        if ($workflowResult) {
+            if (!empty($workflowResult['auto_approved'])) {
+                $this->notify($user, self::NOTIFICATION_OVERTIME_SUCCESS, 'Permohonan lembur Anda telah DISETUJUI OTOMATIS karena alur persetujuan dinonaktifkan.', 'success');
+                return true;
             }
-            return true;
+
+            if (isset($workflowResult['approvers'])) {
+                $this->notify($user, self::NOTIFICATION_OVERTIME_SUCCESS, "Permohonan lembur Anda telah diajukan. Menunggu: {$workflowResult['step_label']}.", 'info');
+                foreach ($workflowResult['approvers'] as $approver) {
+                    $this->notify($approver, 'PENGAJUAN LEMBUR PERLU PERSETUJUAN', "{$user->name} telah mengajukan lembur. Mohon segera tinjau.", 'warning', self::ROUTE_APPROVALS);
+                }
+                return true;
+            }
         }
 
         return false;

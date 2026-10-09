@@ -132,6 +132,7 @@ class PermitController extends Controller
             'signature'            => $request->signature,
             'status'               => $workflowResult ? $workflowResult['status'] : 'pending',
             'current_approval_step'=> $workflowResult ? $workflowResult['current_approval_step'] : null,
+            'approved_by'          => (!empty($workflowResult['auto_approved'])) ? $user->id : null,
         ];
 
         return Permit::create($data);
@@ -142,6 +143,16 @@ class PermitController extends Controller
      */
     private function notifyDynamicWorkflow($user, Request $request, string $categoryLabel, string $alphaNote, array $workflowResult): void
     {
+        if (!empty($workflowResult['auto_approved'])) {
+            $this->notify(
+                $user,
+                'Pengajuan Izin Disetujui Otomatis',
+                "Halo, permohonan izin [{$categoryLabel}] ({$request->type}) Anda telah DISETUJUI OTOMATIS karena alur persetujuan dinonaktifkan.{$alphaNote}",
+                'success'
+            );
+            return;
+        }
+
         $this->notify(
             $user,
             'Pengajuan Izin Berhasil',
@@ -400,18 +411,76 @@ class PermitController extends Controller
         return $this->successResponse(null, 'Permohonan izin ditolak.');
     }
 
-    public function destroy(Request $request, $id)
+    public function update(Request $request, $id): \Illuminate\Http\JsonResponse
     {
         $user = $request->user();
-        $permit = Permit::where(function ($q) use ($user) {
-            if ($user->role_id !== 1) {
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+
+        $permit = Permit::where(function ($q) use ($user, $isSuperAdmin) {
+            if (!$isSuperAdmin && !$user->canAccessAllCompanies()) {
                 $q->where('company_id', $user->company_id);
             }
         })->findOrFail($id);
 
-        if ($permit->status !== 'pending' && $user->role_id !== 1) {
+        if (!$isSuperAdmin && $permit->user_id !== $user->id) {
+            return $this->errorResponse('Anda tidak memiliki akses untuk mengubah pengajuan izin ini.', 403);
+        }
+
+        if (!$isSuperAdmin && !in_array($permit->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
+            return $this->errorResponse('Hanya permohonan izin yang masih menunggu persetujuan yang bisa diubah.', 403);
+        }
+
+        $request->validate([
+            'start_date' => 'required|date',
+            'end_date'   => 'nullable|date|after_or_equal:start_date',
+            'type'       => 'required|string',
+            'category'   => 'required|string|in:I,S,L',
+            'reason'     => 'nullable|string',
+            'signature'  => 'nullable|string',
+        ]);
+
+        [$category, $isDeducted] = $this->resolveCategoryAndDeduction($request);
+
+        $oldValues = $permit->only(['start_date', 'end_date', 'type', 'category', 'reason', 'is_deducted']);
+
+        $permit->update([
+            'start_date' => $request->start_date,
+            'end_date' => $request->end_date ?? $request->start_date,
+            'type' => $request->type,
+            'category' => $category,
+            'is_deducted' => $isDeducted,
+            'reason' => $request->reason,
+            'signature' => $request->signature ?? $permit->signature,
+        ]);
+
+        $newValues = $permit->only(['start_date', 'end_date', 'type', 'category', 'reason', 'is_deducted']);
+
+        $this->logActivity('UPDATE_PERMIT', "Mengubah pengajuan izin #{$permit->id} ({$permit->type}) periode {$permit->start_date}", $permit, 'permits', $oldValues, $newValues);
+
+        return $this->successResponse($permit, 'Permohonan izin berhasil diperbarui.');
+    }
+
+    public function destroy(Request $request, $id)
+    {
+        $user = $request->user();
+        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
+
+        $permit = Permit::with('user')->where(function ($q) use ($user, $isSuperAdmin) {
+            if (!$isSuperAdmin && !$user->canAccessAllCompanies()) {
+                $q->where('company_id', $user->company_id);
+            }
+        })->findOrFail($id);
+
+        if (!$isSuperAdmin && $permit->user_id !== $user->id) {
+            return $this->errorResponse('Anda tidak berhak menghapus pengajuan ini.', 403);
+        }
+
+        if (!$isSuperAdmin && !in_array($permit->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
             return $this->errorResponse('Izin yang sudah diproses tidak bisa dihapus.', 403);
         }
+
+        $oldValues = $permit->toArray();
+        $this->logActivity('DELETE_PERMIT', "Menghapus pengajuan izin #{$permit->id} ({$permit->type}) oleh {$permit->user?->name}", $permit, 'permits', $oldValues, null);
 
         $permit->delete();
 

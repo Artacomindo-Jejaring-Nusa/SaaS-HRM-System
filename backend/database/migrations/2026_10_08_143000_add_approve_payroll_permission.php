@@ -15,7 +15,7 @@ return new class extends Migration
         if (Schema::hasTable('permissions')) {
             $perm = Permission::firstOrCreate(
                 ['slug' => 'approve-payroll'],
-                ['name' => 'Menyetujui Payroll', 'group' => 'Payroll']
+                ['name' => 'Setujui Payroll', 'group' => 'Payroll']
             );
 
             // Grant to Super Admin and executive leadership roles if they exist
