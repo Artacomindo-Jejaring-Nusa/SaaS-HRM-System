@@ -14,6 +14,9 @@ use App\Models\Reimbursement;
 use App\Models\Salary;
 use App\Models\User;
 use App\Models\VehicleLog;
+use App\Services\DataPurgeService;
+use App\Services\PendingRequestService;
+use App\Services\RequestHistoryService;
 use App\Traits\Notifiable;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -41,32 +44,7 @@ class ManagerController extends Controller
      */
     private function isExecutiveOrAdmin($user): bool
     {
-        $roleName = strtolower($user->role?->name ?? '');
-        return $user->role_id === 1
-            || $user->is_manager
-            || $user->hasPermission('approve-leaves')
-            || $user->hasPermission('approve-permits')
-            || $user->hasPermission('approve-overtimes')
-            || $user->hasPermission('approve-reimbursements')
-            || $user->hasPermission('approve-fund-requests')
-            || $user->hasPermission('approve-vehicle-logs')
-            || $user->hasPermission('approve-payroll')
-            || $user->hasPermission('approve-shift-swaps')
-            || $user->hasPermission('approve-project-costs')
-            || $user->hasPermission('view-manager-portal')
-            || str_contains($roleName, 'admin')
-            || str_contains($roleName, 'hrd')
-            || str_contains($roleName, 'hr')
-            || str_contains($roleName, 'direktur')
-            || str_contains($roleName, 'director')
-            || str_contains($roleName, 'coo')
-            || str_contains($roleName, 'ceo')
-            || str_contains($roleName, 'boc')
-            || str_contains($roleName, 'management')
-            || str_contains($roleName, 'supervisor')
-            || str_contains($roleName, 'manager')
-            || str_contains($roleName, 'kadiv')
-            || str_contains($roleName, 'lead');
+        return PendingRequestService::isExecutiveOrAdmin($user);
     }
 
     private const TYPE_TEXTS = [
@@ -89,110 +67,15 @@ class ManagerController extends Controller
         'payroll' => '/dashboard/payroll/approval',
     ];
 
-    private function countScopedPending($modelClass, string $type, string|array $pendingStatus, $user, bool $isGlobalAdmin): int
-    {
-        $query = is_array($pendingStatus)
-            ? $modelClass::whereIn('status', $pendingStatus)
-            : $modelClass::where('status', $pendingStatus);
-
-        if (!$isGlobalAdmin) {
-            $query->where('company_id', $user->company_id);
-        }
-
-        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'payroll'])) {
-            $items = $query->with(['user.supervisor', 'user.role'])->get();
-            return $this->filterPendingItems($items, $type, $user)->count();
-        }
-
-        return $query->count();
-    }
-
     /**
      * Get summary count for pending requests
      */
     public function getPendingCount()
     {
-        $user = Auth::user();
-        $isGlobalAdmin = $user->role_id === 1;
-        $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
-
-        $canApprove = function ($t) use ($user, $isGlobalAdmin) {
-            if ($isGlobalAdmin || $user->hasPermission('manage-approvals')) {
-                return true;
-            }
-            return isset(self::PERM_MAP[$t]) && $user->hasPermission(self::PERM_MAP[$t]);
-        };
-
-        $fundRequestStatus = ($isGlobalAdmin || $isCompanyAdmin) ? ['pending', 'approved_by_supervisor'] : 'pending';
-
-        $leaveCount = $canApprove('leave') ? $this->countScopedPending(Leave::class, 'leave', 'pending', $user, $isGlobalAdmin) : 0;
-        $overtimeCount = $canApprove('overtime') ? $this->countScopedPending(Overtime::class, 'overtime', 'pending', $user, $isGlobalAdmin) : 0;
-        $reimbursementCount = $canApprove('reimbursement') ? $this->countScopedPending(Reimbursement::class, 'reimbursement', 'pending', $user, $isGlobalAdmin) : 0;
-        $permitCount = $canApprove('permit') ? $this->countScopedPending(Permit::class, 'permit', 'pending', $user, $isGlobalAdmin) : 0;
-        $vehicleCount = $canApprove('vehicle_log') ? $this->countScopedPending(VehicleLog::class, 'vehicle_log', ['pending', 'completed'], $user, $isGlobalAdmin) : 0;
-        $fundRequestCount = $canApprove('fund_request') ? $this->countScopedPending(FundRequest::class, 'fund_request', $fundRequestStatus, $user, $isGlobalAdmin) : 0;
-        $payrollCount = $canApprove('payroll') ? $this->countScopedPending(PayrollBatch::class, 'payroll', 'pending_approval', $user, $isGlobalAdmin) : 0;
-
         return response()->json([
             'status' => 'success',
-            'data' => [
-                'leave' => $leaveCount,
-                'overtime' => $overtimeCount,
-                'reimbursement' => $reimbursementCount,
-                'permit' => $permitCount,
-                'fund_request' => $fundRequestCount,
-                'vehicle_log' => $vehicleCount,
-                'payroll' => $payrollCount,
-                'total' => $leaveCount + $overtimeCount + $reimbursementCount + $permitCount + $vehicleCount + $fundRequestCount + $payrollCount,
-            ],
+            'data' => PendingRequestService::getPendingCount(Auth::user(), self::PERM_MAP),
         ]);
-    }
-
-    private function resolvePendingBaseQuery(string $type, bool $isGlobalAdmin, bool $isCompanyAdmin)
-    {
-        return match ($type) {
-            'leave' => Leave::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
-            'overtime' => Overtime::with(['user.role', 'user.office', 'user.supervisor', 'items'])->where('status', 'pending'),
-            'reimbursement' => Reimbursement::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
-            'permit' => Permit::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
-            'vehicle_log' => VehicleLog::with(['user.role', 'user.office', 'user.supervisor', 'vehicle'])->whereIn('status', ['pending', 'completed']),
-            'payroll' => PayrollBatch::with(['creator'])->where('status', 'pending_approval'),
-            'fund_request' => FundRequest::with(['user.role', 'user.office', 'user.supervisor', 'supervisor', 'hrd'])->where(function ($q) use ($isGlobalAdmin, $isCompanyAdmin) {
-                if ($isGlobalAdmin || $isCompanyAdmin) {
-                    $q->whereIn('status', ['pending', 'approved_by_supervisor']);
-                } else {
-                    $q->where('status', 'pending');
-                }
-            }),
-            default => null,
-        };
-    }
-
-    private function filterPendingItems($items, string $type, $user)
-    {
-        return $items->filter(function ($item) use ($type, $user) {
-            if (!empty($item->current_approval_step) && $item->user) {
-                return \App\Services\ApprovalService::canApprove(
-                    $type,
-                    $item->company_id ?? $user->company_id,
-                    $user,
-                    $item->user,
-                    $item->current_approval_step
-                );
-            }
-
-            return $this->canHandlePendingItem($item, $user);
-        })->values();
-    }
-
-    private function canHandlePendingItem($item, $user): bool
-    {
-        if ($item->status === 'pending_hr') {
-            return $user->hasPermission('approve-leaves') || $user->hasPermission('approve-permits') || $user->role_id === 1;
-        }
-
-        $isSupervisor = $item->status === 'pending_supervisor' || ($user->supervisor_id && $item->user_id);
-        return $isSupervisor && $item->user?->supervisor_id === $user->id;
     }
 
     /**
@@ -200,42 +83,10 @@ class ManagerController extends Controller
      */
     public function getPendingRequests(Request $request)
     {
-        $user = Auth::user();
-        $isGlobalAdmin = $user->role_id === 1;
-        $isCompanyAdmin = $this->isExecutiveOrAdmin($user);
-        $type = $request->type;
-
-        if (!$isGlobalAdmin && !$user->hasPermission('manage-approvals') && isset(self::PERM_MAP[$type]) && !$user->hasPermission(self::PERM_MAP[$type])) {
-            return response()->json([
-                'status' => 'success',
-                'data' => [],
-            ]);
-        }
-
-        $query = $this->resolvePendingBaseQuery((string)$type, $isGlobalAdmin, $isCompanyAdmin);
-        if (!$query) {
+        $items = PendingRequestService::getPendingRequests($request, Auth::user(), self::PERM_MAP);
+        if ($items === null) {
             return response()->json(['status' => 'error', 'message' => 'Invalid request type'], 400);
         }
-
-        if (!$isGlobalAdmin) {
-            $query->where('company_id', $user->company_id);
-        }
-
-        $items = $query->orderBy('created_at', 'desc')->get();
-
-        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'payroll'])) {
-            $items = $this->filterPendingItems($items, (string)$type, $user);
-        }
-
-        $items->each(function ($item) use ($type, $user) {
-            if (!empty($item->current_approval_step)) {
-                $item->current_step_info = \App\Services\ApprovalService::getCurrentStepInfo(
-                    $type,
-                    $item->company_id ?? $user->company_id,
-                    $item->current_approval_step
-                );
-            }
-        });
 
         return response()->json([
             'status' => 'success',
@@ -567,50 +418,7 @@ class ManagerController extends Controller
      */
     public function getHistoryRequests(Request $request)
     {
-        $user = Auth::user();
-        $isGlobalAdmin = $user->role_id === 1;
-
-        $type = $request->input('type', 'all');
-        $status = $request->input('status', 'all');
-        $month = $request->input('month');
-
-        $companyScope = function ($query) use ($user, $isGlobalAdmin) {
-            if (!$isGlobalAdmin && $user->company_id) {
-                $query->where('company_id', $user->company_id);
-            }
-        };
-
-        $historyItems = collect();
-
-        if (in_array($type, ['all', 'leave'])) {
-            $historyItems = $historyItems->concat($this->fetchHistoryLeaves($companyScope, $status, $month));
-        }
-
-        if (in_array($type, ['all', 'permit'])) {
-            $historyItems = $historyItems->concat($this->fetchHistoryPermits($companyScope, $status, $month));
-        }
-
-        if (in_array($type, ['all', 'overtime'])) {
-            $historyItems = $historyItems->concat($this->fetchHistoryOvertimes($companyScope, $status, $month));
-        }
-
-        if (in_array($type, ['all', 'reimbursement'])) {
-            $historyItems = $historyItems->concat($this->fetchHistoryReimbursements($companyScope, $status, $month));
-        }
-
-        if (in_array($type, ['all', 'fund_request'])) {
-            $historyItems = $historyItems->concat($this->fetchHistoryFundRequests($companyScope, $status, $month));
-        }
-
-        if (in_array($type, ['all', 'attendance_correction'])) {
-            $historyItems = $historyItems->concat($this->fetchHistoryCorrections($companyScope, $status, $month));
-        }
-
-        if (in_array($status, ['all', 'edited', 'deleted'])) {
-            $historyItems = $historyItems->concat($this->fetchHistoryLogs($companyScope, $status, $month));
-        }
-
-        $sorted = $historyItems->sortByDesc('created_at')->values()->take(100);
+        $sorted = RequestHistoryService::getHistoryRequests($request, Auth::user());
 
         return response()->json([
             'status' => 'success',
@@ -618,347 +426,15 @@ class ManagerController extends Controller
         ]);
     }
 
-    private function fetchHistoryLeaves(\Closure $companyScope, string $status, ?string $month)
-    {
-        $q = Leave::with(['user', 'supervisorApprover', 'hrApprover'])->whereIn('status', ['approved', 'rejected']);
-        $companyScope($q);
-        if ($month) {
-            $q->where('start_date', 'like', "{$month}%");
-        }
-        if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
-            $q->where('status', $status);
-        }
-        return $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
-            return [
-                'id' => 'leave-' . $item->id,
-                'record_id' => $item->id,
-                'type' => 'leave',
-                'category' => 'Cuti',
-                'user_name' => $item->user?->name ?? 'Karyawan',
-                'description' => "{$item->type} ({$item->start_date} s/d {$item->end_date})" . ($item->reason ? ": {$item->reason}" : ''),
-                'status' => $item->status,
-                'action_type' => 'processed',
-                'actor_name' => $item->hrApprover?->name ?? $item->supervisorApprover?->name ?? 'Approver',
-                'remark' => $item->remark,
-                'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
-                'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
-            ];
-        });
-    }
-
-    private function fetchHistoryPermits(\Closure $companyScope, string $status, ?string $month)
-    {
-        $q = Permit::with('user')->whereIn('status', ['approved', 'rejected']);
-        $companyScope($q);
-        if ($month) {
-            $q->where('start_date', 'like', "{$month}%");
-        }
-        if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
-            $q->where('status', $status);
-        }
-        return $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
-            return [
-                'id' => 'permit-' . $item->id,
-                'record_id' => $item->id,
-                'type' => 'permit',
-                'category' => 'Izin',
-                'user_name' => $item->user?->name ?? 'Karyawan',
-                'description' => "{$item->type} ({$item->start_date})" . ($item->reason ? ": {$item->reason}" : ''),
-                'status' => $item->status,
-                'action_type' => 'processed',
-                'actor_name' => 'Approver',
-                'remark' => $item->remark,
-                'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
-                'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
-            ];
-        });
-    }
-
-    private function fetchHistoryOvertimes(\Closure $companyScope, string $status, ?string $month)
-    {
-        $q = Overtime::with(['user', 'approver'])->whereIn('status', ['approved', 'rejected']);
-        $companyScope($q);
-        if ($month) {
-            $q->where('created_at', 'like', "{$month}%");
-        }
-        if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
-            $q->where('status', $status);
-        }
-        return $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
-            return [
-                'id' => 'overtime-' . $item->id,
-                'record_id' => $item->id,
-                'type' => 'overtime',
-                'category' => 'Lembur',
-                'user_name' => $item->user?->name ?? 'Karyawan',
-                'description' => ($item->title ?? 'Lembur') . ($item->reason ? ": {$item->reason}" : ''),
-                'status' => $item->status,
-                'action_type' => 'processed',
-                'actor_name' => $item->approver?->name ?? 'Approver',
-                'remark' => $item->remark,
-                'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
-                'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
-            ];
-        });
-    }
-
-    private function fetchHistoryReimbursements(\Closure $companyScope, string $status, ?string $month)
-    {
-        $q = Reimbursement::with('user')->whereIn('status', ['approved', 'rejected']);
-        $companyScope($q);
-        if ($month) {
-            $q->where('created_at', 'like', "{$month}%");
-        }
-        if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
-            $q->where('status', $status);
-        }
-        return $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
-            return [
-                'id' => 'reimbursement-' . $item->id,
-                'record_id' => $item->id,
-                'type' => 'reimbursement',
-                'category' => 'Reimbursement',
-                'user_name' => $item->employee_name ?? $item->user?->name ?? 'Karyawan',
-                'description' => "{$item->title} (Rp " . number_format($item->amount, 0, ',', '.') . ")",
-                'status' => $item->status,
-                'action_type' => 'processed',
-                'actor_name' => 'Approver',
-                'remark' => $item->remark,
-                'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
-                'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
-            ];
-        });
-    }
-
-    private function fetchHistoryFundRequests(\Closure $companyScope, string $status, ?string $month)
-    {
-        $q = FundRequest::with('user')->whereIn('status', ['approved', 'rejected']);
-        $companyScope($q);
-        if ($month) {
-            $q->where('created_at', 'like', "{$month}%");
-        }
-        if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
-            $q->where('status', $status);
-        }
-        return $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
-            return [
-                'id' => 'fund-' . $item->id,
-                'record_id' => $item->id,
-                'type' => 'fund_request',
-                'category' => 'Pengajuan Dana',
-                'user_name' => $item->employee_name ?? $item->user?->name ?? 'Karyawan',
-                'description' => "{$item->title} (Rp " . number_format($item->amount, 0, ',', '.') . ")",
-                'status' => $item->status,
-                'action_type' => 'processed',
-                'actor_name' => 'Approver',
-                'remark' => $item->reject_reason,
-                'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
-                'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
-            ];
-        });
-    }
-
-    private function fetchHistoryCorrections(\Closure $companyScope, string $status, ?string $month)
-    {
-        $q = AttendanceCorrection::with('user')->whereIn('status', ['approved', 'rejected']);
-        $companyScope($q);
-        if ($month) {
-            $q->where('created_at', 'like', "{$month}%");
-        }
-        if ($status !== 'all' && in_array($status, ['approved', 'rejected'])) {
-            $q->where('status', $status);
-        }
-        return $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
-            return [
-                'id' => 'correction-' . $item->id,
-                'record_id' => $item->id,
-                'type' => 'attendance_correction',
-                'category' => 'Koreksi Absen',
-                'user_name' => $item->user?->name ?? 'Karyawan',
-                'description' => "Koreksi {$item->correction_type}: {$item->reason}",
-                'status' => $item->status,
-                'action_type' => 'processed',
-                'actor_name' => 'Approver',
-                'remark' => $item->remark,
-                'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
-                'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
-            ];
-        });
-    }
-
-    private function fetchHistoryLogs(\Closure $companyScope, string $status, ?string $month)
-    {
-        $logQuery = ActivityLog::with('user')
-            ->whereIn('module', ['leaves', 'permits', 'overtimes', 'reimbursements', 'fund_requests', 'attendance_corrections', 'maintenance'])
-            ->where(function ($q) {
-                $q->where('action', 'like', 'UPDATE_%')
-                  ->orWhere('action', 'like', 'DELETE_%')
-                  ->orWhere('action', 'like', 'PURGE_%');
-            });
-
-        $companyScope($logQuery);
-        if ($month) {
-            $logQuery->where('created_at', 'like', "{$month}%");
-        }
-        if ($status === 'edited') {
-            $logQuery->where('action', 'like', 'UPDATE_%');
-        } elseif ($status === 'deleted') {
-            $logQuery->where(function ($q) {
-                $q->where('action', 'like', 'DELETE_%')->orWhere('action', 'like', 'PURGE_%');
-            });
-        }
-
-        return $logQuery->orderBy('created_at', 'desc')->take(50)->get()->map(function ($log) {
-            $isDelete = str_contains($log->action, 'DELETE') || str_contains($log->action, 'PURGE');
-            return [
-                'id' => 'log-' . $log->id,
-                'record_id' => $log->id,
-                'type' => $log->module ?? 'general',
-                'category' => strtoupper(str_replace('_', ' ', $log->module ?? 'Log')),
-                'user_name' => $log->user?->name ?? 'Sistem / Pengguna',
-                'description' => $log->description,
-                'status' => $isDelete ? 'deleted' : 'updated',
-                'action_type' => $isDelete ? 'deleted' : 'updated',
-                'actor_name' => $log->user?->name ?? 'User',
-                'remark' => $log->ip_address ? "IP: {$log->ip_address}" : null,
-                'created_at' => $log->created_at?->toISOString() ?? (string)$log->created_at,
-                'updated_at' => $log->created_at?->toISOString() ?? (string)$log->created_at,
-            ];
-        });
-    }
-
     /**
      * Purge requests and files for the specified/current month (Super Admin only)
      */
     public function purgeCurrentMonth(Request $request)
     {
-        $user = Auth::user();
-        $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
-
-        if (!$isSuperAdmin) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Hanya Super Admin yang berhak melakukan pembersihan data periode.',
-            ], 403);
-        }
-
-        $period = $request->input('period', Carbon::now()->format('Y-m'));
-        $start = Carbon::parse($period . '-01')->startOfMonth();
-        $end = Carbon::parse($period . '-01')->endOfMonth();
-
-        $companyScope = function ($q) use ($user) {
-            if ($user->company_id && ! $user->canAccessAllCompanies()) {
-                $q->where('company_id', $user->company_id);
-            }
-        };
-
-        $reimResult = $this->purgeReimbursements($companyScope, $start, $end);
-        $fundResult = $this->purgeFundRequests($companyScope, $start, $end);
-        $otCount = $this->purgeOvertimes($companyScope, $start, $end);
-
-        $leaveQuery = Leave::whereBetween('created_at', [$start, $end]);
-        $companyScope($leaveQuery);
-        $leavesDeleted = $leaveQuery->delete();
-
-        $permitQuery = Permit::whereBetween('created_at', [$start, $end]);
-        $companyScope($permitQuery);
-        $permitsDeleted = $permitQuery->delete();
-
-        $acQuery = AttendanceCorrection::whereBetween('created_at', [$start, $end]);
-        $companyScope($acQuery);
-        $correctionsDeleted = $acQuery->delete();
-
-        $deletedCounts = [
-            'reimbursements' => $reimResult['count'],
-            'fund_requests' => $fundResult['count'],
-            'leaves' => $leavesDeleted,
-            'permits' => $permitsDeleted,
-            'overtimes' => $otCount,
-            'attendance_corrections' => $correctionsDeleted,
-            'files' => $reimResult['files'] + $fundResult['files'],
-        ];
-
-        $totalRecords = $deletedCounts['reimbursements'] +
-            $deletedCounts['fund_requests'] +
-            $deletedCounts['leaves'] +
-            $deletedCounts['permits'] +
-            $deletedCounts['overtimes'] +
-            $deletedCounts['attendance_corrections'];
-
-        // Audit log
-        $this->logActivity(
-            'PURGE_MONTHLY_DATA',
-            "Pembersihan data periode {$period}: {$totalRecords} transaksi dan {$deletedCounts['files']} berkas server dihapus",
-            null,
-            'maintenance',
-            null,
-            $deletedCounts
+        return DataPurgeService::purgeCurrentMonth(
+            $request,
+            Auth::user(),
+            fn (...$args) => $this->logActivity(...$args)
         );
-
-        return response()->json([
-            'status' => 'success',
-            'message' => "Pembersihan periode {$period} berhasil. {$totalRecords} transaksi dan {$deletedCounts['files']} berkas server berhasil dihapus.",
-            'data' => $deletedCounts,
-        ]);
-    }
-
-    private function deleteStorageFiles(mixed $attachments): int
-    {
-        if (empty($attachments)) {
-            return 0;
-        }
-        $files = is_array($attachments) ? $attachments : [$attachments];
-        $count = 0;
-        foreach ($files as $file) {
-            if ($file && Storage::disk('public')->exists($file)) {
-                Storage::disk('public')->delete($file);
-                $count++;
-            }
-        }
-        return $count;
-    }
-
-    private function purgeReimbursements(\Closure $companyScope, $start, $end): array
-    {
-        $reimQuery = Reimbursement::whereBetween('created_at', [$start, $end]);
-        $companyScope($reimQuery);
-        $reimbursements = $reimQuery->get();
-        $filesCount = 0;
-
-        foreach ($reimbursements as $reim) {
-            $filesCount += $this->deleteStorageFiles($reim->attachment);
-            $reim->delete();
-        }
-
-        return ['count' => $reimbursements->count(), 'files' => $filesCount];
-    }
-
-    private function purgeFundRequests(\Closure $companyScope, $start, $end): array
-    {
-        $fundQuery = FundRequest::whereBetween('created_at', [$start, $end]);
-        $companyScope($fundQuery);
-        $fundRequests = $fundQuery->get();
-        $filesCount = 0;
-
-        foreach ($fundRequests as $fund) {
-            $filesCount += $this->deleteStorageFiles($fund->attachment);
-            $fund->delete();
-        }
-
-        return ['count' => $fundRequests->count(), 'files' => $filesCount];
-    }
-
-    private function purgeOvertimes(\Closure $companyScope, $start, $end): int
-    {
-        $otQuery = Overtime::with('items')->whereBetween('created_at', [$start, $end]);
-        $companyScope($otQuery);
-        $overtimes = $otQuery->get();
-
-        foreach ($overtimes as $ot) {
-            $ot->items()->delete();
-            $ot->delete();
-        }
-
-        return $overtimes->count();
     }
 }
