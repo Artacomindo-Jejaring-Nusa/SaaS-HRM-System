@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 function normalizeAbsoluteUrl(path: string): string {
-  const isBrowser = typeof globalThis.window !== "undefined";
+  const isBrowser = globalThis.window !== undefined;
   const browserLocation = isBrowser ? (globalThis as any).location : undefined;
   const hostname = browserLocation?.hostname;
   const isRemoteHost = Boolean(hostname && hostname !== "localhost" && hostname !== "127.0.0.1");
@@ -44,7 +44,7 @@ function resolveBaseStorageUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/?$/i, "") + "/storage";
   }
-  if (typeof globalThis.window !== "undefined" && (globalThis as any).location?.origin) {
+  if (globalThis.window !== undefined && (globalThis as any).location?.origin) {
     return `${(globalThis as any).location.origin}/storage`;
   }
   return "http://127.0.0.1:8000/storage";

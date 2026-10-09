@@ -29,22 +29,22 @@ function getDistanceFromLatLonInM(lat1: number, lon1: number, lat2: number, lon2
 function findNearestCompanyOffice(lat: number, lng: number, company: any): OfficeTarget | null {
   if (!company?.offices?.length) return null;
 
-  let minDistance = getDistanceFromLatLonInM(lat, lng, parseFloat(company.latitude), parseFloat(company.longitude));
+  let minDistance = getDistanceFromLatLonInM(lat, lng, Number.parseFloat(company.latitude), Number.parseFloat(company.longitude));
   let nearest: OfficeTarget = { 
-    lat: parseFloat(company.latitude), 
-    lng: parseFloat(company.longitude), 
+    lat: Number.parseFloat(company.latitude), 
+    lng: Number.parseFloat(company.longitude), 
     radius: Number(company.default_radius) || 100, 
     name: "Kantor Pusat (HQ)" 
   };
 
   for (const office of company.offices) {
     if (office.is_active) {
-      const d = getDistanceFromLatLonInM(lat, lng, parseFloat(office.latitude), parseFloat(office.longitude));
+      const d = getDistanceFromLatLonInM(lat, lng, Number.parseFloat(office.latitude), Number.parseFloat(office.longitude));
       if (d < minDistance) {
         minDistance = d;
         nearest = { 
-          lat: parseFloat(office.latitude), 
-          lng: parseFloat(office.longitude), 
+          lat: Number.parseFloat(office.latitude), 
+          lng: Number.parseFloat(office.longitude), 
           radius: Number(office.radius) || 100, 
           name: office.name 
         };
@@ -53,6 +53,26 @@ function findNearestCompanyOffice(lat: number, lng: number, company: any): Offic
   }
 
   return nearest;
+}
+
+function getUserOfficeTarget(user: any): OfficeTarget | null {
+  if (!user?.office) return null;
+  return {
+    lat: Number.parseFloat(user.office.latitude),
+    lng: Number.parseFloat(user.office.longitude),
+    radius: Number((user.office as any).radius) || 100,
+    name: user.office.name
+  };
+}
+
+async function fetchCompanyOfficeTarget(lat: number, lng: number): Promise<OfficeTarget | null> {
+  try {
+    const res = await axiosInstance.get('/company');
+    return findNearestCompanyOffice(lat, lng, res.data?.data);
+  } catch (e) {
+    console.error("Error finding nearest office", e);
+    return null;
+  }
 }
 
 function captureWebcamFrame(video: HTMLVideoElement, canvas: HTMLCanvasElement): string {
@@ -69,6 +89,27 @@ function captureWebcamFrame(video: HTMLVideoElement, canvas: HTMLCanvasElement):
   }
 
   return canvas.toDataURL('image/jpeg', 0.7);
+}
+
+function validateAttendanceParams(
+  location: { lat: number; lng: number } | null,
+  video: HTMLVideoElement | null,
+  canvas: HTMLCanvasElement | null,
+  attendanceType: 'office' | 'dinas_luar',
+  distance: number | null,
+  officeConfig: OfficeTarget | null,
+  destination: string
+): string | null {
+  if (!location) return "Menunggu titik koordinat lokasi GPS...";
+  if (!video || !canvas) return "Kamera tidak siap!";
+  const isDinasLuar = attendanceType === 'dinas_luar';
+  if (!isDinasLuar && distance !== null && officeConfig && distance > officeConfig.radius) {
+    return `Akses Ditolak: Anda berada ${Math.round(distance - officeConfig.radius)}m di luar radius kantor!`;
+  }
+  if (isDinasLuar && !destination.trim()) {
+    return "Tujuan Dinas Luar wajib diisi!";
+  }
+  return null;
 }
 
 export default function LiveAttendancePage() {
@@ -88,33 +129,17 @@ export default function LiveAttendancePage() {
   const [notes, setNotes] = useState("");
 
   const resolveTargetOffice = async (lat: number, lng: number): Promise<OfficeTarget | null> => {
-    if (user?.office) {
-      return {
-        lat: parseFloat(user.office.latitude),
-        lng: parseFloat(user.office.longitude),
-        radius: Number((user.office as any).radius) || 100,
-        name: user.office.name
-      };
-    }
-    try {
-      const res = await axiosInstance.get('/company');
-      return findNearestCompanyOffice(lat, lng, res.data?.data);
-    } catch (e) {
-      console.error("Error finding nearest office", e);
-      return null;
-    }
+    const assignedOffice = getUserOfficeTarget(user);
+    if (assignedOffice) return assignedOffice;
+    return fetchCompanyOfficeTarget(lat, lng);
   };
 
   useEffect(() => {
     if (!user) return;
 
-    if (user.office) {
-      setOfficeConfig({
-        lat: parseFloat(user.office.latitude),
-        lng: parseFloat(user.office.longitude),
-        radius: Number((user.office as any).radius) || 100,
-        name: user.office.name
-      });
+    const assignedOffice = getUserOfficeTarget(user);
+    if (assignedOffice) {
+      setOfficeConfig(assignedOffice);
     }
 
     if (navigator.mediaDevices?.getUserMedia) {
@@ -157,31 +182,25 @@ export default function LiveAttendancePage() {
     }
   }, [user]);
 
-  const validateAttendance = (): boolean => {
-    if (!location) {
-      toast.warning("Menunggu titik koordinat lokasi GPS...");
-      return false;
-    }
-    if (!videoRef.current || !canvasRef.current) {
-      toast.error("Kamera tidak siap!");
-      return false;
-    }
-    const isDinasLuar = attendanceType === 'dinas_luar';
-    if (!isDinasLuar && distance !== null && officeConfig && distance > officeConfig.radius) {
-      toast.error(`Akses Ditolak: Anda berada ${Math.round(distance - officeConfig.radius)}m di luar radius kantor!`);
-      return false;
-    }
-    if (isDinasLuar && !destination.trim()) {
-      toast.error("Tujuan Dinas Luar wajib diisi!");
-      return false;
-    }
-    return true;
-  };
-
   const handleAttendance = async (type: 'check-in' | 'check-out') => {
-    if (!validateAttendance() || !location || !videoRef.current || !canvasRef.current) {
+    const validationError = validateAttendanceParams(
+      location,
+      videoRef.current,
+      canvasRef.current,
+      attendanceType,
+      distance,
+      officeConfig,
+      destination
+    );
+
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!location || !video || !canvas) return;
 
     const isDinasLuar = attendanceType === 'dinas_luar';
     setLoading(true);
@@ -189,7 +208,7 @@ export default function LiveAttendancePage() {
 
     setTimeout(async () => {
       try {
-        const selfieBase64 = captureWebcamFrame(videoRef.current!, canvasRef.current!);
+        const selfieBase64 = captureWebcamFrame(video, canvas);
         const payload = {
           latitude: location.lat,
           longitude: location.lng,

@@ -75,6 +75,42 @@ function getStatusBadge(status: string) {
   }
 }
 
+async function fetchUserShiftSchedules(userId: string | number): Promise<Schedule[]> {
+  if (!userId) return [];
+  try {
+    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+    const res = await axiosInstance.get(`/schedules?user_id=${userId}&start_date=${startOfMonth}&per_page=100`);
+    const schedData = res.data.data;
+    const rawList = Array.isArray(schedData) ? schedData : (schedData?.data || []);
+    return rawList.filter((s: any) => s.shift?.name);
+  } catch (e) {
+    console.error("Gagal ambil jadwal shift", e);
+    return [];
+  }
+}
+
+async function fetchEligibleShiftUsers(currentUserId?: number): Promise<WebUser[]> {
+  try {
+    const usersRes = await axiosInstance.get("/employees?attendance_type=shift&per_page=100");
+    const uData = usersRes.data.data;
+    const rawUsers = Array.isArray(uData) ? uData : (uData?.data || []);
+    return rawUsers.filter((u: any) => u.id !== currentUserId && (u.attendance_type === 'shift' || !u.attendance_type));
+  } catch (e) {
+    console.error("Gagal ambil data rekan kerja shift", e);
+    return [];
+  }
+}
+
+function filterSwaps(list: ShiftSwap[], term: string): ShiftSwap[] {
+  if (!term.trim()) return list;
+  const q = term.toLowerCase();
+  return list.filter(s =>
+    s.requester.name.toLowerCase().includes(q) ||
+    s.receiver.name.toLowerCase().includes(q) ||
+    s.reason.toLowerCase().includes(q)
+  );
+}
+
 export default function ShiftSwapPage() {
   const { user, hasPermission } = useAuth();
   const [swaps, setSwaps] = useState<ShiftSwap[]>([]);
@@ -106,6 +142,42 @@ export default function ShiftSwapPage() {
     hasPermission('approve-shift-swaps')
   );
 
+  const fetchSwaps = async (page = 1) => {
+    try {
+      setLoading(true);
+      const res = await axiosInstance.get(`/shift-swap?page=${page}`);
+      const pageData = res.data.data;
+      if (pageData?.data) {
+        setSwaps(pageData.data || []);
+        setCurrentPage(pageData.current_page);
+        setLastPage(pageData.last_page);
+        setTotal(pageData.total);
+      } else {
+        setSwaps(pageData || []);
+        setLastPage(1);
+        setTotal((pageData || []).length);
+      }
+    } catch (e) {
+      console.error("Gagal ambil data tukar shift", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchInitialData = async () => {
+    const shiftUsers = await fetchEligibleShiftUsers(user?.id);
+    setUsers(shiftUsers);
+    if (user?.id) {
+      const schedules = await fetchUserShiftSchedules(user.id);
+      setMySchedules(schedules);
+    }
+  };
+
+  const fetchReceiverSchedules = async (receiverId: string) => {
+    const schedules = await fetchUserShiftSchedules(receiverId);
+    setReceiverSchedules(schedules);
+  };
+
   useEffect(() => {
     fetchSwaps(currentPage);
     if (user?.id) {
@@ -118,70 +190,6 @@ export default function ShiftSwapPage() {
       fetchInitialData();
     }
   }, [isModalOpen, user?.id]);
-
-  const fetchSwaps = async (page = 1) => {
-    try {
-      setLoading(true);
-      const res = await axiosInstance.get(`/shift-swap?page=${page}`);
-      
-      if (res.data.data?.data) {
-        setSwaps(res.data.data.data || []);
-        setCurrentPage(res.data.data.current_page);
-        setLastPage(res.data.data.last_page);
-        setTotal(res.data.data.total);
-      } else {
-        setSwaps(res.data.data || []);
-        setLastPage(1);
-        setTotal((res.data.data || []).length);
-      }
-    } catch (e) {
-      console.error("Gagal ambil data tukar shift", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchInitialData = async () => {
-    try {
-      // Ambil daftar rekan kerja yang sesama memiliki pola shift
-      const usersRes = await axiosInstance.get("/employees?attendance_type=shift&per_page=100");
-      const uData = usersRes.data.data;
-      const rawUsers = Array.isArray(uData) ? uData : (uData?.data || []);
-      // Filter bukan user sendiri & bertipe shift
-      setUsers(rawUsers.filter((u: any) => u.id !== user?.id && (u.attendance_type === 'shift' || !u.attendance_type)));
-    } catch (e) {
-      console.error("Gagal ambil data rekan kerja shift", e);
-    }
-
-    try {
-      // Ambil jadwal saya mulai awal bulan ini
-      if (user?.id) {
-        const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-        const mySchedRes = await axiosInstance.get(`/schedules?user_id=${user.id}&start_date=${startOfMonth}&per_page=100`);
-        const schedData = mySchedRes.data.data;
-        const rawList = Array.isArray(schedData) ? schedData : (schedData?.data || []);
-        setMySchedules(rawList.filter((s: any) => s.shift?.name));
-      }
-    } catch (e) {
-      console.error("Gagal ambil jadwal shift saya", e);
-    }
-  };
-
-  const fetchReceiverSchedules = async (receiverId: string) => {
-    if (!receiverId) {
-      setReceiverSchedules([]);
-      return;
-    }
-    try {
-      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-      const res = await axiosInstance.get(`/schedules?user_id=${receiverId}&start_date=${startOfMonth}&per_page=100`);
-      const resData = res.data.data;
-      const rawList = Array.isArray(resData) ? resData : (resData?.data || []);
-      setReceiverSchedules(rawList.filter((s: any) => s.shift?.name));
-    } catch (e) {
-      console.error("Gagal ambil jadwal rekan penerima", e);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,17 +253,8 @@ export default function ShiftSwapPage() {
   const myRequests = swaps.filter(s => s.requester_id === user?.id || (s.receiver_id === user?.id && s.status === 'pending_receiver'));
   const managerReview = swaps.filter(s => s.status === 'pending_manager');
 
-  const filteredMyRequests = myRequests.filter(s => 
-    s.requester.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.receiver.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.reason.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const filteredManagerReview = managerReview.filter(s => 
-    s.requester.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.receiver.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.reason.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredMyRequests = filterSwaps(myRequests, searchTerm);
+  const filteredManagerReview = filterSwaps(managerReview, searchTerm);
 
   const activeList = (canApprove && activeTab === 'to_review') ? filteredManagerReview : filteredMyRequests;
 
