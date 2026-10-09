@@ -14,6 +14,25 @@ interface OfficeTarget {
   name: string;
 }
 
+interface AttendanceCameraScannerProps {
+  readonly videoRef: RefObject<HTMLVideoElement | null>;
+  readonly canvasRef: RefObject<HTMLCanvasElement | null>;
+  readonly streamActive: boolean;
+  readonly loading: boolean;
+  readonly statusMsg: string;
+}
+
+interface AttendanceGpsSectionProps {
+  readonly distance: number | null;
+  readonly officeConfig: OfficeTarget | null;
+  readonly location: { lat: number; lng: number } | null;
+  readonly attendanceType: string;
+}
+
+interface AttendanceScheduleNoticeProps {
+  readonly user: any;
+}
+
 function getDistanceFromLatLonInM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371; // Radius earth in km
   const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -112,19 +131,19 @@ function validateAttendanceParams(
   return null;
 }
 
-function AttendanceCameraScanner({
-  videoRef,
-  canvasRef,
-  streamActive,
-  loading,
-  statusMsg
-}: {
-  videoRef: RefObject<HTMLVideoElement | null>;
-  canvasRef: RefObject<HTMLCanvasElement | null>;
-  streamActive: boolean;
-  loading: boolean;
-  statusMsg: string;
-}) {
+function renderGpsStatusIcon(distance: number | null, officeConfig: OfficeTarget | null, isWithinRadius: boolean) {
+  if (distance === null || !officeConfig) {
+    return <MapPin className="text-gray-400 animate-bounce" size={24} />;
+  }
+  if (isWithinRadius) {
+    return <CheckCircle className="text-[#107c41]" size={24} />;
+  }
+  return <AlertCircle className="text-[#8B0000]" size={24} />;
+}
+
+function AttendanceCameraScanner(props: AttendanceCameraScannerProps) {
+  const { videoRef, canvasRef, streamActive, loading, statusMsg } = props;
+
   return (
     <div className="bg-black/95 rounded-3xl overflow-hidden shadow-2xl relative border-4 border-gray-900 group aspect-[4/3] flex items-center justify-center">
       <video 
@@ -165,34 +184,17 @@ function AttendanceCameraScanner({
   );
 }
 
-function AttendanceGpsSection({
-  distance,
-  officeConfig,
-  location,
-  attendanceType
-}: {
-  distance: number | null;
-  officeConfig: OfficeTarget | null;
-  location: { lat: number; lng: number } | null;
-  attendanceType: string;
-}) {
-  const isWithinRadius = distance !== null && officeConfig && distance <= officeConfig.radius;
-  const isOutRadius = distance !== null && officeConfig && distance > officeConfig.radius;
+function AttendanceGpsSection(props: AttendanceGpsSectionProps) {
+  const { distance, officeConfig, location, attendanceType } = props;
+  const isWithinRadius = distance !== null && officeConfig !== null && distance <= officeConfig.radius;
+  const isOutRadius = distance !== null && officeConfig !== null && distance > officeConfig.radius;
 
   return (
     <div>
       <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Verifikasi Lokasi (GPS)</h3>
       <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex items-start gap-4">
         <div className="mt-1">
-          {distance !== null && officeConfig ? (
-            isWithinRadius ? (
-              <CheckCircle className="text-[#107c41]" size={24} />
-            ) : (
-              <AlertCircle className="text-[#8B0000]" size={24} />
-            )
-          ) : (
-            <MapPin className="text-gray-400 animate-bounce" size={24} />
-          )}
+          {renderGpsStatusIcon(distance, officeConfig, Boolean(isWithinRadius))}
         </div>
         <div>
           <div className="flex justify-between items-center mb-1">
@@ -230,7 +232,8 @@ function AttendanceGpsSection({
   );
 }
 
-function AttendanceScheduleNotice({ user }: { user: any }) {
+function AttendanceScheduleNotice(props: AttendanceScheduleNoticeProps) {
+  const { user } = props;
   if (user?.role?.id === 1) return null;
   const isNoShift = user?.attendance_type === 'shift' && (!user?.today_shift && (!user?.schedule_label || user?.schedule_label === 'Tidak Ada Shift'));
 

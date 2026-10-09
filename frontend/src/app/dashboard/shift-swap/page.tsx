@@ -57,6 +57,35 @@ interface Schedule {
   shift: { name: string; start_time: string; end_time: string };
 }
 
+interface ShiftSwapStatsProps {
+  readonly canApprove: boolean;
+  readonly managerReviewCount: number;
+  readonly pendingReceiverCount: number;
+  readonly approvedCount: number;
+  readonly requesterPendingCount: number;
+}
+
+interface ShiftSwapRowActionsProps {
+  readonly swap: ShiftSwap;
+  readonly currentUserId?: number;
+  readonly canApprove: boolean;
+  readonly onRespond: (id: number, status: 'approved_by_receiver' | 'rejected') => void;
+  readonly onApprove: (id: number, status: 'approved' | 'rejected') => void;
+}
+
+interface ShiftSwapCreateModalProps {
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
+  readonly onSubmit: (e: React.FormEvent) => void;
+  readonly formData: { receiver_id: string; requester_schedule_id: string; receiver_schedule_id: string; reason: string };
+  readonly setFormData: (val: any) => void;
+  readonly users: WebUser[];
+  readonly mySchedules: Schedule[];
+  readonly receiverSchedules: Schedule[];
+  readonly fetchReceiverSchedules: (id: string) => void;
+  readonly isSubmitLoading: boolean;
+}
+
 function formatScheduleOption(s: Schedule | null | undefined): string {
   if (!s?.date) return "-";
   const d = new Date(s.date);
@@ -82,6 +111,16 @@ function getStatusBadge(status: string) {
     default: 
       return <span className="px-2.5 py-1 bg-gray-50 text-gray-700 rounded-lg text-[11px] font-bold border border-gray-100 flex items-center gap-1.5 w-max">{status}</span>;
   }
+}
+
+function getReceiverSchedulePlaceholder(receiverId: string, schedulesCount: number): string {
+  if (!receiverId) {
+    return "Pilih rekan dulu...";
+  }
+  if (schedulesCount === 0) {
+    return "Rekan ini belum memiliki jadwal shift";
+  }
+  return "Pilih Jadwal Rekan (Pilih Tanggal & Shift)...";
 }
 
 async function fetchUserShiftSchedules(userId: string | number): Promise<Schedule[]> {
@@ -120,19 +159,9 @@ function filterSwaps(list: ShiftSwap[], term: string): ShiftSwap[] {
   );
 }
 
-function ShiftSwapStats({
-  canApprove,
-  managerReviewCount,
-  pendingReceiverCount,
-  approvedCount,
-  requesterPendingCount
-}: {
-  canApprove: boolean;
-  managerReviewCount: number;
-  pendingReceiverCount: number;
-  approvedCount: number;
-  requesterPendingCount: number;
-}) {
+function ShiftSwapStats(props: ShiftSwapStatsProps) {
+  const { canApprove, managerReviewCount, pendingReceiverCount, approvedCount, requesterPendingCount } = props;
+
   if (canApprove) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -200,19 +229,9 @@ function ShiftSwapStats({
   );
 }
 
-function ShiftSwapRowActions({
-  swap,
-  currentUserId,
-  canApprove,
-  onRespond,
-  onApprove
-}: {
-  swap: ShiftSwap;
-  currentUserId?: number;
-  canApprove: boolean;
-  onRespond: (id: number, status: 'approved_by_receiver' | 'rejected') => void;
-  onApprove: (id: number, status: 'approved' | 'rejected') => void;
-}) {
+function ShiftSwapRowActions(props: ShiftSwapRowActionsProps) {
+  const { swap, currentUserId, canApprove, onRespond, onApprove } = props;
+
   if (swap.status === 'pending_receiver' && swap.receiver_id === currentUserId) {
     return (
       <>
@@ -266,29 +285,20 @@ function ShiftSwapRowActions({
   return null;
 }
 
-function ShiftSwapCreateModal({
-  isOpen,
-  onClose,
-  onSubmit,
-  formData,
-  setFormData,
-  users,
-  mySchedules,
-  receiverSchedules,
-  fetchReceiverSchedules,
-  isSubmitLoading
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (e: React.FormEvent) => void;
-  formData: { receiver_id: string; requester_schedule_id: string; receiver_schedule_id: string; reason: string };
-  setFormData: (val: any) => void;
-  users: WebUser[];
-  mySchedules: Schedule[];
-  receiverSchedules: Schedule[];
-  fetchReceiverSchedules: (id: string) => void;
-  isSubmitLoading: boolean;
-}) {
+function ShiftSwapCreateModal(props: ShiftSwapCreateModalProps) {
+  const {
+    isOpen,
+    onClose,
+    onSubmit,
+    formData,
+    setFormData,
+    users,
+    mySchedules,
+    receiverSchedules,
+    fetchReceiverSchedules,
+    isSubmitLoading
+  } = props;
+
   if (!isOpen) return null;
 
   return (
@@ -363,7 +373,7 @@ function ShiftSwapCreateModal({
                       disabled={!formData.receiver_id}
                    >
                       <option value="">
-                        {!formData.receiver_id ? "Pilih rekan dulu..." : (receiverSchedules.length === 0 ? "Rekan ini belum memiliki jadwal shift" : "Pilih Jadwal Rekan (Pilih Tanggal & Shift)...")}
+                        {getReceiverSchedulePlaceholder(formData.receiver_id, receiverSchedules.length)}
                       </option>
                       {receiverSchedules.map(s => (
                         <option key={s.id} value={s.id}>
