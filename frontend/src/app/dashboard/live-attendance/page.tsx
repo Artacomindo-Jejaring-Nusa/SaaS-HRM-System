@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, type RefObject } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
 import { Camera, MapPin, ScanFace, CheckCircle, AlertCircle, ArrowLeft } from "lucide-react";
@@ -60,7 +60,7 @@ function getUserOfficeTarget(user: any): OfficeTarget | null {
   return {
     lat: Number.parseFloat(user.office.latitude),
     lng: Number.parseFloat(user.office.longitude),
-    radius: Number((user.office as any).radius) || 100,
+    radius: Number(user.office.radius) || 100,
     name: user.office.name
   };
 }
@@ -110,6 +110,144 @@ function validateAttendanceParams(
     return "Tujuan Dinas Luar wajib diisi!";
   }
   return null;
+}
+
+function AttendanceCameraScanner({
+  videoRef,
+  canvasRef,
+  streamActive,
+  loading,
+  statusMsg
+}: {
+  videoRef: RefObject<HTMLVideoElement | null>;
+  canvasRef: RefObject<HTMLCanvasElement | null>;
+  streamActive: boolean;
+  loading: boolean;
+  statusMsg: string;
+}) {
+  return (
+    <div className="bg-black/95 rounded-3xl overflow-hidden shadow-2xl relative border-4 border-gray-900 group aspect-[4/3] flex items-center justify-center">
+      <video 
+        ref={videoRef} 
+        autoPlay 
+        playsInline 
+        muted 
+        className="absolute inset-0 w-full h-full object-cover scale-x-[-1]" 
+      />
+      <canvas ref={canvasRef} className="hidden" />
+      
+      {streamActive && (
+        <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center">
+          <div className="w-48 h-64 border-2 border-transparent relative">
+             <div className="absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 border-[#8B0000] rounded-tl-xl transition-all duration-1000 group-hover:scale-110"></div>
+             <div className="absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 border-[#8B0000] rounded-tr-xl transition-all duration-1000 group-hover:scale-110"></div>
+             <div className="absolute bottom-0 left-0 w-12 h-12 border-b-4 border-l-4 border-[#8B0000] rounded-bl-xl transition-all duration-1000 group-hover:scale-110"></div>
+             <div className="absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 border-[#8B0000] rounded-br-xl transition-all duration-1000 group-hover:scale-110"></div>
+             {loading && <div className="absolute top-0 left-0 w-full h-1 bg-[#8B0000] shadow-[0_0_15px_#8B0000] animate-scan"></div>}
+          </div>
+          
+          {loading && (
+            <div className="mt-4 flex items-center gap-2 bg-black/60 px-4 py-2 rounded-full absolute bottom-8">
+              <ScanFace className="text-[#8B0000] animate-pulse" size={20} />
+              <span className="text-white text-xs font-bold uppercase tracking-wider">{statusMsg}</span>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {!streamActive && (
+        <div className="text-white flex flex-col items-center z-20">
+          <Camera size={48} className="mb-4 text-gray-500 animate-pulse" />
+          <p className="text-gray-400 font-medium">Memuat Kamera...</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AttendanceGpsSection({
+  distance,
+  officeConfig,
+  location,
+  attendanceType
+}: {
+  distance: number | null;
+  officeConfig: OfficeTarget | null;
+  location: { lat: number; lng: number } | null;
+  attendanceType: string;
+}) {
+  const isWithinRadius = distance !== null && officeConfig && distance <= officeConfig.radius;
+  const isOutRadius = distance !== null && officeConfig && distance > officeConfig.radius;
+
+  return (
+    <div>
+      <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Verifikasi Lokasi (GPS)</h3>
+      <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex items-start gap-4">
+        <div className="mt-1">
+          {distance !== null && officeConfig ? (
+            isWithinRadius ? (
+              <CheckCircle className="text-[#107c41]" size={24} />
+            ) : (
+              <AlertCircle className="text-[#8B0000]" size={24} />
+            )
+          ) : (
+            <MapPin className="text-gray-400 animate-bounce" size={24} />
+          )}
+        </div>
+        <div>
+          <div className="flex justify-between items-center mb-1">
+            <p className="font-bold text-gray-900 text-sm">Status Radius Kantor</p>
+            <span className="text-xs font-bold bg-white px-2 py-0.5 rounded border border-gray-200">Maks: {officeConfig?.radius || '-'}m</span>
+          </div>
+          
+          {distance !== null && officeConfig ? (
+            <>
+              <p className={`text-sm font-bold ${isWithinRadius ? 'text-[#107c41]' : 'text-[#8B0000]'}`}>
+                Jarak Anda: {distance} meter
+              </p>
+              <p className="text-[10px] text-gray-400 mt-1 font-bold flex items-center gap-1 uppercase tracking-tighter">
+                Terdeteksi Area: <span className="text-gray-600">{officeConfig.name}</span>
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-gray-500">Menghitung jarak koordinat...</p>
+          )}
+          
+          {location && (
+            <p className="text-[10px] text-gray-400 font-medium mt-2 uppercase tracking-wide">
+              Lat: {location.lat.toFixed(5)} | Lng: {location.lng.toFixed(5)}
+            </p>
+          )}
+        </div>
+      </div>
+      
+      {attendanceType === 'office' && isOutRadius && (
+        <p className="text-xs text-[#8B0000] font-bold mt-3 bg-[#fef2f2] p-3 rounded-xl border border-red-200 animate-pulse">
+          <strong>AKSES DIBLOKIR:</strong> Anda terdeteksi berada {Math.round(distance - officeConfig.radius)} meter di luar area Radius Kantor yang diizinkan. Silakan mendekat ke area kantor untuk melakukan absensi.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AttendanceScheduleNotice({ user }: { user: any }) {
+  if (user?.role?.id === 1) return null;
+  const isNoShift = user?.attendance_type === 'shift' && (!user?.today_shift && (!user?.schedule_label || user?.schedule_label === 'Tidak Ada Shift'));
+
+  return (
+    <p className="text-xs text-amber-800 font-bold mt-3 bg-amber-50 p-3 rounded-xl border border-amber-200 flex items-center gap-2">
+      <AlertCircle size={16} className="text-amber-600 shrink-0" />
+      <span>
+        {isNoShift ? (
+          <strong>JADWAL KERJA: Tidak Ada Shift (Libur/Tidak Terjadwal)</strong>
+        ) : (
+          <>
+            <strong>JADWAL KERJA:</strong> {user?.schedule_label || `${user?.work_start_time || '08:30'} - ${user?.work_end_time || '17:30'}`}. Absen pulang dibuka mulai pukul {user?.work_end_time || '17:30'} WIB.
+          </>
+        )}
+      </span>
+    </p>
+  );
 }
 
 export default function LiveAttendancePage() {
@@ -233,6 +371,9 @@ export default function LiveAttendancePage() {
     }, 1500);
   };
 
+  const isBlocked = (attendanceType === 'office' && distance !== null && officeConfig && distance > officeConfig.radius) ||
+    (attendanceType === 'dinas_luar' && !destination.trim());
+
   return (
     <div className="w-full pb-8 px-4 md:px-8 max-w-4xl mx-auto animate-in fade-in duration-500">
       <div className="flex items-center gap-4 mb-8">
@@ -246,53 +387,16 @@ export default function LiveAttendancePage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        
-        {/* Kiri: Video & Face Scanner Overlay */}
-        <div className="bg-black/95 rounded-3xl overflow-hidden shadow-2xl relative border-4 border-gray-900 group aspect-[4/3] flex items-center justify-center">
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            muted 
-            className="absolute inset-0 w-full h-full object-cover scale-x-[-1]" 
-          />
-          <canvas ref={canvasRef} className="hidden" />
-          
-          {/* Scanner Overlay UI */}
-          {streamActive && (
-            <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center">
-              {/* Corner Box Brackets */}
-              <div className="w-48 h-64 border-2 border-transparent relative">
-                 <div className="absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 border-[#8B0000] rounded-tl-xl transition-all duration-1000 group-hover:scale-110"></div>
-                 <div className="absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 border-[#8B0000] rounded-tr-xl transition-all duration-1000 group-hover:scale-110"></div>
-                 <div className="absolute bottom-0 left-0 w-12 h-12 border-b-4 border-l-4 border-[#8B0000] rounded-bl-xl transition-all duration-1000 group-hover:scale-110"></div>
-                 <div className="absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 border-[#8B0000] rounded-br-xl transition-all duration-1000 group-hover:scale-110"></div>
-                 {/* Scanner bar animation */}
-                 {loading && <div className="absolute top-0 left-0 w-full h-1 bg-[#8B0000] shadow-[0_0_15px_#8B0000] animate-scan"></div>}
-              </div>
-              
-              {loading && (
-                <div className="mt-4 flex items-center gap-2 bg-black/60 px-4 py-2 rounded-full absolute bottom-8">
-                  <ScanFace className="text-[#8B0000] animate-pulse" size={20} />
-                  <span className="text-white text-xs font-bold uppercase tracking-wider">{statusMsg}</span>
-                </div>
-              )}
-            </div>
-          )}
-          
-          {!streamActive && (
-            <div className="text-white flex flex-col items-center z-20">
-              <Camera size={48} className="mb-4 text-gray-500 animate-pulse" />
-              <p className="text-gray-400 font-medium">Memuat Kamera...</p>
-            </div>
-          )}
-        </div>
+        <AttendanceCameraScanner
+          videoRef={videoRef}
+          canvasRef={canvasRef}
+          streamActive={streamActive}
+          loading={loading}
+          statusMsg={statusMsg}
+        />
 
-        {/* Kanan: Data Panel */}
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col gap-6">
-            
-            {/* User Info */}
             <div className="flex items-center gap-4">
                <div className="w-16 h-16 rounded-2xl bg-[#fef2f2] text-[#8B0000] flex items-center justify-center text-xl font-bold border border-[#fee2e2]">
                  {user?.name?.charAt(0) || "U"}
@@ -305,75 +409,17 @@ export default function LiveAttendancePage() {
 
             <hr className="border-gray-100" />
 
-            {/* GPS Radius Setting */}
-            <div>
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Verifikasi Lokasi (GPS)</h3>
-              
-              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex items-start gap-4">
-                <div className="mt-1">
-                  {distance !== null && officeConfig ? (
-                    distance <= officeConfig.radius ? (
-                      <CheckCircle className="text-[#107c41]" size={24} />
-                    ) : (
-                      <AlertCircle className="text-[#8B0000]" size={24} />
-                    )
-                  ) : (
-                    <MapPin className="text-gray-400 animate-bounce" size={24} />
-                  )}
-                </div>
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <p className="font-bold text-gray-900 text-sm">Status Radius Kantor</p>
-                    <span className="text-xs font-bold bg-white px-2 py-0.5 rounded border border-gray-200">Maks: {officeConfig?.radius || '-'}m</span>
-                  </div>
-                  
-                  {distance !== null && officeConfig ? (
-                    <>
-                      <p className={`text-sm font-bold ${distance <= officeConfig.radius ? 'text-[#107c41]' : 'text-[#8B0000]'}`}>
-                        Jarak Anda: {distance} meter
-                      </p>
-                      <p className="text-[10px] text-gray-400 mt-1 font-bold flex items-center gap-1 uppercase tracking-tighter">
-                        Terdeteksi Area: <span className="text-gray-600">{officeConfig.name}</span>
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-xs text-gray-500">Menghitung jarak koordinat...</p>
-                  )}
-                  
-                  {location && (
-                    <p className="text-[10px] text-gray-400 font-medium mt-2 uppercase tracking-wide">
-                      Lat: {location.lat.toFixed(5)} | Lng: {location.lng.toFixed(5)}
-                    </p>
-                  )}
-                </div>
-              </div>
-              
-              {attendanceType === 'office' && distance !== null && officeConfig && distance > officeConfig.radius && (
-                  <p className="text-xs text-[#8B0000] font-bold mt-3 bg-[#fef2f2] p-3 rounded-xl border border-red-200 animate-pulse">
-                    <strong>AKSES DIBLOKIR:</strong> Anda terdeteksi berada {Math.round(distance - officeConfig.radius)} meter di luar area Radius Kantor yang diizinkan. Silakan mendekat ke area kantor untuk melakukan absensi.
-                  </p>
-              )}
+            <AttendanceGpsSection
+              distance={distance}
+              officeConfig={officeConfig}
+              location={location}
+              attendanceType={attendanceType}
+            />
 
-              {/* Notice Jam Kerja & Jam Pulang */}
-              {user?.role?.id !== 1 && (
-                <p className="text-xs text-amber-800 font-bold mt-3 bg-amber-50 p-3 rounded-xl border border-amber-200 flex items-center gap-2">
-                  <AlertCircle size={16} className="text-amber-600 shrink-0" />
-                  <span>
-                    {user?.attendance_type === 'shift' && (!user?.today_shift && (!user?.schedule_label || user?.schedule_label === 'Tidak Ada Shift')) ? (
-                      <strong>JADWAL KERJA: Tidak Ada Shift (Libur/Tidak Terjadwal)</strong>
-                    ) : (
-                      <>
-                        <strong>JADWAL KERJA:</strong> {user?.schedule_label || `${user?.work_start_time || '08:30'} - ${user?.work_end_time || '17:30'}`}. Absen pulang dibuka mulai pukul {user?.work_end_time || '17:30'} WIB.
-                      </>
-                    )}
-                  </span>
-                </p>
-              )}
-            </div>
+            <AttendanceScheduleNotice user={user} />
 
             <hr className="border-gray-100" />
 
-            {/* Tipe Absensi Section */}
             <div className="space-y-4">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Tipe Absensi</h3>
               <div className="grid grid-cols-2 gap-2">
@@ -424,11 +470,10 @@ export default function LiveAttendancePage() {
 
             <hr className="border-gray-100" />
 
-            {/* Actions */}
             <div className="grid grid-cols-2 gap-4 mt-auto">
                <button 
                  onClick={() => handleAttendance('check-in')}
-                 disabled={loading || !streamActive || !location || (attendanceType === 'office' && distance !== null && officeConfig && distance > officeConfig.radius) || (attendanceType === 'dinas_luar' && !destination.trim())}
+                 disabled={loading || !streamActive || !location || isBlocked}
                  className="bg-[#107c41] hover:bg-[#0c6130] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex flex-col items-center justify-center gap-2 group"
                >
                  <ScanFace size={24} className="group-hover:scale-110 transition-transform" />
@@ -437,7 +482,7 @@ export default function LiveAttendancePage() {
                
                <button 
                  onClick={() => handleAttendance('check-out')}
-                 disabled={loading || !streamActive || !location || (user?.role?.id !== 1 && new Date().getHours() < 17) || (attendanceType === 'office' && distance !== null && officeConfig && distance > officeConfig.radius) || (attendanceType === 'dinas_luar' && !destination.trim())}
+                 disabled={loading || !streamActive || !location || isBlocked || (user?.role?.id !== 1 && new Date().getHours() < 17)}
                  className="bg-[#8B0000] hover:bg-[#660000] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex flex-col items-center justify-center gap-2 group"
                >
                  <ScanFace size={24} className="group-hover:scale-110 transition-transform" />
@@ -447,9 +492,7 @@ export default function LiveAttendancePage() {
             
           </div>
         </div>
-        
       </div>
-
     </div>
   );
 }

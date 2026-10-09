@@ -6,17 +6,17 @@ import { toast } from "sonner";
 import { 
   ArrowLeftRight, 
   Plus, 
+  Search, 
+  Clock, 
   CheckCircle2, 
   XCircle, 
-  Clock, 
-  AlertCircle,
-  Search,
-  Check,
+  AlertCircle, 
+  Check, 
   X
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { ListPageSkeleton } from "@/components/Skeleton";
 import Pagination from "@/components/Pagination";
+import { ListPageSkeleton } from "@/components/Skeleton";
 
 interface ShiftSwap {
   id: number;
@@ -24,19 +24,28 @@ interface ShiftSwap {
   receiver_id: number;
   requester_schedule_id: number;
   receiver_schedule_id: number;
-  status: 'pending_receiver' | 'pending_manager' | 'approved' | 'rejected' | 'cancelled';
   reason: string;
+  status: 'pending_receiver' | 'pending_manager' | 'approved' | 'rejected';
   remark?: string;
   created_at: string;
-  requester: { name: string };
-  receiver: { name: string };
-  requester_schedule: { date: string; shift: { name: string; start_time: string; end_time: string } };
-  receiver_schedule: { date: string; shift: { name: string; start_time: string; end_time: string } };
+  requester: { id: number; name: string; email: string };
+  receiver: { id: number; name: string; email: string };
+  requester_schedule?: {
+    id: number;
+    date: string;
+    shift?: { name: string; start_time: string; end_time: string };
+  };
+  receiver_schedule?: {
+    id: number;
+    date: string;
+    shift?: { name: string; start_time: string; end_time: string };
+  };
 }
 
 interface WebUser {
   id: number;
   name: string;
+  email: string;
   attendance_type?: string;
   role?: { name: string };
 }
@@ -111,6 +120,305 @@ function filterSwaps(list: ShiftSwap[], term: string): ShiftSwap[] {
   );
 }
 
+function ShiftSwapStats({
+  canApprove,
+  managerReviewCount,
+  pendingReceiverCount,
+  approvedCount,
+  requesterPendingCount
+}: {
+  canApprove: boolean;
+  managerReviewCount: number;
+  pendingReceiverCount: number;
+  approvedCount: number;
+  requesterPendingCount: number;
+}) {
+  if (canApprove) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+            <AlertCircle size={22} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Menunggu Approval Atasan</p>
+            <p className="text-2xl font-extrabold text-gray-900 mt-0.5">{managerReviewCount}</p>
+          </div>
+        </div>
+        <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+          <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
+            <Clock size={22} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Menunggu Respon Rekan</p>
+            <p className="text-2xl font-extrabold text-gray-900 mt-0.5">{pendingReceiverCount}</p>
+          </div>
+        </div>
+        <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+          <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
+            <CheckCircle2 size={22} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Disetujui (Approved)</p>
+            <p className="text-2xl font-extrabold text-gray-900 mt-0.5">{approvedCount}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+        <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
+          <Clock size={22} />
+        </div>
+        <div>
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Permintaan Masuk Ke Saya</p>
+          <p className="text-2xl font-extrabold text-gray-900 mt-0.5">{pendingReceiverCount}</p>
+        </div>
+      </div>
+      <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+        <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center shrink-0">
+          <AlertCircle size={22} />
+        </div>
+        <div>
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Menunggu Diproses</p>
+          <p className="text-2xl font-extrabold text-gray-900 mt-0.5">{requesterPendingCount}</p>
+        </div>
+      </div>
+      <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+        <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
+          <CheckCircle2 size={22} />
+        </div>
+        <div>
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Disetujui (Approved)</p>
+          <p className="text-2xl font-extrabold text-gray-900 mt-0.5">{approvedCount}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShiftSwapRowActions({
+  swap,
+  currentUserId,
+  canApprove,
+  onRespond,
+  onApprove
+}: {
+  swap: ShiftSwap;
+  currentUserId?: number;
+  canApprove: boolean;
+  onRespond: (id: number, status: 'approved_by_receiver' | 'rejected') => void;
+  onApprove: (id: number, status: 'approved' | 'rejected') => void;
+}) {
+  if (swap.status === 'pending_receiver' && swap.receiver_id === currentUserId) {
+    return (
+      <>
+        <button 
+          onClick={() => onRespond(swap.id, 'rejected')} 
+          className="px-2.5 py-1 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition"
+        >
+          Tolak
+        </button>
+        <button 
+          onClick={() => onRespond(swap.id, 'approved_by_receiver')} 
+          className="px-2.5 py-1 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition shadow-sm"
+        >
+          Terima
+        </button>
+      </>
+    );
+  }
+
+  if (swap.status === 'pending_manager' && canApprove) {
+    return (
+      <>
+        <button 
+          onClick={() => onApprove(swap.id, 'rejected')} 
+          className="px-2.5 py-1 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition"
+        >
+          Reject
+        </button>
+        <button 
+          onClick={() => onApprove(swap.id, 'approved')} 
+          className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md transition shadow-sm"
+        >
+          Approve
+        </button>
+      </>
+    );
+  }
+
+  if (swap.status === 'pending_receiver' && swap.requester_id === currentUserId) {
+    return <span className="text-[11px] text-gray-400 font-medium italic">Menunggu respon rekan</span>;
+  }
+  if (swap.status === 'pending_manager' && swap.requester_id === currentUserId) {
+    return <span className="text-[11px] text-orange-500 font-medium italic">Menunggu approval atasan</span>;
+  }
+  if (swap.status === 'approved') {
+    return <span className="text-[11px] text-emerald-600 font-bold uppercase tracking-wider flex items-center gap-1"><Check size={14} /> Sukses</span>;
+  }
+  if (swap.status === 'rejected') {
+    return <span className="text-[11px] text-red-600 font-bold uppercase tracking-wider flex items-center gap-1"><X size={14} /> Ditolak</span>;
+  }
+  return null;
+}
+
+function ShiftSwapCreateModal({
+  isOpen,
+  onClose,
+  onSubmit,
+  formData,
+  setFormData,
+  users,
+  mySchedules,
+  receiverSchedules,
+  fetchReceiverSchedules,
+  isSubmitLoading
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (e: React.FormEvent) => void;
+  formData: { receiver_id: string; requester_schedule_id: string; receiver_schedule_id: string; reason: string };
+  setFormData: (val: any) => void;
+  users: WebUser[];
+  mySchedules: Schedule[];
+  receiverSchedules: Schedule[];
+  fetchReceiverSchedules: (id: string) => void;
+  isSubmitLoading: boolean;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+       <div className="bg-white rounded-[2rem] w-full max-w-2xl overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300">
+          <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+            <div className="flex items-center gap-3">
+               <div className="p-2.5 bg-red-50 text-[#8B0000] rounded-xl shadow-sm">
+                  <ArrowLeftRight size={20} />
+               </div>
+               <div>
+                <h3 className="font-bold text-gray-950 text-lg tracking-tight">Form Pengajuan Tukar Shift</h3>
+                <p className="text-xs text-gray-500 font-medium italic">Pilih rekan kerja shift dan tentukan jadwal yang ingin ditukar.</p>
+               </div>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-gray-150 rounded-full transition-colors">
+              <X size={20} className="text-gray-500" />
+            </button>
+          </div>
+
+          <form onSubmit={onSubmit} className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                   <label htmlFor="receiver-select" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-0.5">1. Pilih Rekan Kerja (Pola Shift)</label>
+                   <select id="receiver-select" 
+                     className="w-full h-11 bg-gray-50 border border-gray-200 rounded-lg px-3 text-sm font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-red-150 focus:border-[#8B0000] transition-all"
+                     value={formData.receiver_id}
+                     onChange={(e) => {
+                       setFormData({...formData, receiver_id: e.target.value, receiver_schedule_id: ""});
+                       fetchReceiverSchedules(e.target.value);
+                     }}
+                     required
+                   >
+                      <option value="">{users.length === 0 ? "Tidak ada rekan shift tersedia..." : "Pilih Rekan Kerja..."}</option>
+                      {users.map((u) => {
+                        const roleDisplay = u.role?.name ? ` (${u.role.name})` : "";
+                        return (
+                          <option key={u.id} value={u.id}>
+                            {u.name}{roleDisplay}
+                          </option>
+                        );
+                      })}
+                   </select>
+                </div>
+
+                <div className="space-y-1.5">
+                   <label htmlFor="requester-schedule-select" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-0.5">2. Jadwal Anda (Dilepas)</label>
+                   <select 
+                      className="w-full h-11 bg-gray-50 border border-gray-200 rounded-lg px-3 text-sm font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-red-150 focus:border-[#8B0000] transition-all"
+                      id="requester-schedule-select"
+                      value={formData.requester_schedule_id}
+                      onChange={(e) => setFormData({...formData, requester_schedule_id: e.target.value})}
+                      required
+                   >
+                      <option value="">{mySchedules.length === 0 ? "Belum ada jadwal shift Anda bulan ini" : "Pilih Jadwal Anda..."}</option>
+                      {mySchedules.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {formatScheduleOption(s)}
+                        </option>
+                      ))}
+                   </select>
+                </div>
+
+                <div className={`space-y-1.5 transition-opacity ${formData.receiver_id ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                   <label htmlFor="receiver-schedule-select" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-0.5">3. Jadwal Rekan (Diambil)</label>
+                   <select 
+                      className="w-full h-11 bg-gray-50 border border-gray-200 rounded-lg px-3 text-sm font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-red-150 focus:border-[#8B0000] transition-all"
+                      id="receiver-schedule-select"
+                      value={formData.receiver_schedule_id}
+                      onChange={(e) => setFormData({...formData, receiver_schedule_id: e.target.value})}
+                      required
+                      disabled={!formData.receiver_id}
+                   >
+                      <option value="">
+                        {!formData.receiver_id ? "Pilih rekan dulu..." : (receiverSchedules.length === 0 ? "Rekan ini belum memiliki jadwal shift" : "Pilih Jadwal Rekan (Pilih Tanggal & Shift)...")}
+                      </option>
+                      {receiverSchedules.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {formatScheduleOption(s)}
+                        </option>
+                      ))}
+                   </select>
+                </div>
+
+                <div className="space-y-1.5">
+                    <label htmlFor="reason-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-0.5">4. Alasan Tukar</label>
+                    <input 
+                      id="reason-input"
+                      type="text"
+                      className="w-full h-11 bg-gray-50 border border-gray-200 rounded-lg px-3 text-sm font-medium text-gray-800 outline-none focus:ring-2 focus:ring-red-150 focus:border-[#8B0000] transition-all"
+                      placeholder="Contoh: Urusan keluarga mendesak..."
+                      value={formData.reason}
+                      onChange={(e) => setFormData({...formData, reason: e.target.value})}
+                      required
+                    />
+                </div>
+             </div>
+
+             <div className="p-4 bg-gray-50 border border-gray-150 rounded-xl flex items-start gap-3">
+                <div className="w-8 h-8 bg-white rounded-lg shadow-sm flex items-center justify-center text-[#8B0000] shrink-0 border border-gray-100">
+                   <AlertCircle size={16} />
+                </div>
+                <div className="space-y-0.5">
+                   <p className="text-xs font-bold text-gray-900 uppercase tracking-wide">Perhatian Penting</p>
+                   <p className="text-[11px] text-gray-500 font-medium leading-relaxed italic">Permintaan ini akan otomatis diperbarui setelah rekan Anda menyetujui DAN mendapat persetujuan akhir dari Super Admin / Manager.</p>
+                </div>
+             </div>
+
+             <div className="pt-2 flex gap-3">
+                <button 
+                  type="button" 
+                  onClick={onClose} 
+                  className="flex-1 h-11 text-sm font-semibold text-gray-600 bg-gray-150 hover:bg-gray-200 rounded-lg transition active:scale-95"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSubmitLoading}
+                  className="flex-2 h-11 text-sm font-bold text-white bg-[#8B0000] hover:bg-[#720000] rounded-lg shadow-md transition disabled:opacity-50 active:scale-95"
+                >
+                  {isSubmitLoading ? "Memproses..." : "Kirim Pengajuan"}
+                </button>
+             </div>
+          </form>
+       </div>
+    </div>
+  );
+}
+
 export default function ShiftSwapPage() {
   const { user, hasPermission } = useAuth();
   const [swaps, setSwaps] = useState<ShiftSwap[]>([]);
@@ -121,7 +429,6 @@ export default function ShiftSwapPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
 
-  // Form State
   const [users, setUsers] = useState<WebUser[]>([]);
   const [mySchedules, setMySchedules] = useState<Schedule[]>([]);
   const [receiverSchedules, setReceiverSchedules] = useState<Schedule[]>([]);
@@ -260,8 +567,6 @@ export default function ShiftSwapPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      
-      {/* Header Section */}
       <div className="dash-page-header">
         <div>
           <h1 className="dash-page-title flex items-center gap-2">
@@ -283,84 +588,14 @@ export default function ShiftSwapPage() {
         </div>
       </div>
 
-      {/* Stats/Quick Glance */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        {canApprove ? (
-          <>
-            <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
-                <AlertCircle size={22} />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Menunggu Approval Atasan</p>
-                <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
-                  {managerReview.length}
-                </p>
-              </div>
-            </div>
-            <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
-                <Clock size={22} />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Menunggu Respon Rekan</p>
-                <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
-                  {swaps.filter(s => s.receiver_id === user?.id && s.status === 'pending_receiver').length}
-                </p>
-              </div>
-            </div>
-            <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
-                <CheckCircle2 size={22} />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Disetujui (Approved)</p>
-                <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
-                  {swaps.filter(s => s.status === 'approved').length}
-                </p>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
-                <Clock size={22} />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Permintaan Masuk Ke Saya</p>
-                <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
-                  {swaps.filter(s => s.receiver_id === user?.id && s.status === 'pending_receiver').length}
-                </p>
-              </div>
-            </div>
-            <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center shrink-0">
-                <AlertCircle size={22} />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Menunggu Diproses</p>
-                <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
-                  {swaps.filter(s => s.requester_id === user?.id && (s.status === 'pending_receiver' || s.status === 'pending_manager')).length}
-                </p>
-              </div>
-            </div>
-            <div className="p-5 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
-                <CheckCircle2 size={22} />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Disetujui (Approved)</p>
-                <p className="text-2xl font-extrabold text-gray-900 mt-0.5">
-                  {swaps.filter(s => (s.requester_id === user?.id || s.receiver_id === user?.id) && s.status === 'approved').length}
-                </p>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+      <ShiftSwapStats
+        canApprove={canApprove}
+        managerReviewCount={managerReview.length}
+        pendingReceiverCount={swaps.filter(s => s.receiver_id === user?.id && s.status === 'pending_receiver').length}
+        approvedCount={canApprove ? swaps.filter(s => s.status === 'approved').length : swaps.filter(s => (s.requester_id === user?.id || s.receiver_id === user?.id) && s.status === 'approved').length}
+        requesterPendingCount={swaps.filter(s => s.requester_id === user?.id && (s.status === 'pending_receiver' || s.status === 'pending_manager')).length}
+      />
 
-      {/* Main Content Tabs & Filters */}
       <div className="space-y-4">
         {canApprove ? (
           <div className="flex border-b border-gray-200 gap-6">
@@ -392,7 +627,6 @@ export default function ShiftSwapPage() {
           </div>
         )}
 
-        {/* Search input */}
         <div className="flex items-center justify-between bg-white p-3 border border-[#ebedf0] rounded-lg">
           <div className="relative w-full max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
@@ -406,7 +640,6 @@ export default function ShiftSwapPage() {
           </div>
         </div>
 
-        {/* Swap Request List Table */}
         {activeList.length === 0 ? (
           <div className="py-20 text-center bg-white rounded-xl border border-gray-100 shadow-sm">
              <div className="w-16 h-16 bg-red-50 text-[#8B0000] rounded-full flex items-center justify-center mx-auto mb-4">
@@ -497,67 +730,13 @@ export default function ShiftSwapPage() {
                       <td>{getStatusBadge(swap.status)}</td>
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Action for Receiver */}
-                          {swap.status === 'pending_receiver' && swap.receiver_id === user?.id && (
-                            <>
-                              <button 
-                                onClick={() => handleRespond(swap.id, 'rejected')} 
-                                className="px-2.5 py-1 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition"
-                                title="Tolak Pertukaran"
-                              >
-                                Tolak
-                              </button>
-                              <button 
-                                onClick={() => handleRespond(swap.id, 'approved_by_receiver')} 
-                                className="px-2.5 py-1 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition shadow-sm"
-                                title="Terima Pertukaran"
-                              >
-                                Terima
-                              </button>
-                            </>
-                          )}
-
-                          {/* Action for Manager / Super Admin */}
-                          {swap.status === 'pending_manager' && canApprove && (
-                            <>
-                              <button 
-                                onClick={() => handleApprove(swap.id, 'rejected')} 
-                                className="px-2.5 py-1 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition"
-                                title="Reject Pengajuan"
-                              >
-                                Reject
-                              </button>
-                              <button 
-                                onClick={() => handleApprove(swap.id, 'approved')} 
-                                className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md transition shadow-sm"
-                                title="Approve Pengajuan"
-                              >
-                                Approve
-                              </button>
-                            </>
-                          )}
-
-                          {/* Status descriptions for Requester */}
-                          {swap.status === 'pending_receiver' && swap.requester_id === user?.id && (
-                            <span className="text-[11px] text-gray-400 font-medium italic">
-                              Menunggu respon rekan
-                            </span>
-                          )}
-                          {swap.status === 'pending_manager' && swap.requester_id === user?.id && (
-                            <span className="text-[11px] text-orange-500 font-medium italic">
-                              Menunggu approval atasan
-                            </span>
-                          )}
-                          {swap.status === 'approved' && (
-                            <span className="text-[11px] text-emerald-600 font-bold uppercase tracking-wider flex items-center gap-1">
-                              <Check size={14} /> Sukses
-                            </span>
-                          )}
-                          {swap.status === 'rejected' && (
-                            <span className="text-[11px] text-red-600 font-bold uppercase tracking-wider flex items-center gap-1">
-                              <X size={14} /> Ditolak
-                            </span>
-                          )}
+                          <ShiftSwapRowActions
+                            swap={swap}
+                            currentUserId={user?.id}
+                            canApprove={canApprove}
+                            onRespond={handleRespond}
+                            onApprove={handleApprove}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -578,145 +757,18 @@ export default function ShiftSwapPage() {
         )}
       </div>
 
-      {/* CREATE MODAL */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-           <div className="bg-white rounded-[2rem] w-full max-w-2xl overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300">
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                <div className="flex items-center gap-3">
-                   <div className="p-2.5 bg-red-50 text-[#8B0000] rounded-xl shadow-sm">
-                      <ArrowLeftRight size={20} />
-                   </div>
-                   <div>
-                    <h3 className="font-bold text-gray-950 text-lg tracking-tight">Form Pengajuan Tukar Shift</h3>
-                    <p className="text-xs text-gray-500 font-medium italic">Pilih rekan kerja shift dan tentukan jadwal yang ingin ditukar.</p>
-                   </div>
-                </div>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-150 rounded-full transition-colors">
-                  <X size={20} className="text-gray-500" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* User Selection */}
-                    <div className="space-y-1.5">
-                       <label htmlFor="receiver-select" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-0.5">1. Pilih Rekan Kerja (Pola Shift)</label>
-                       <select id="receiver-select" 
-                         className="w-full h-11 bg-gray-50 border border-gray-200 rounded-lg px-3 text-sm font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-red-150 focus:border-[#8B0000] transition-all"
-                         value={formData.receiver_id}
-                         onChange={(e) => {
-                           setFormData({...formData, receiver_id: e.target.value, receiver_schedule_id: ""});
-                           fetchReceiverSchedules(e.target.value);
-                         }}
-                         required
-                       >
-                          <option value="">{users.length === 0 ? "Tidak ada rekan shift tersedia..." : "Pilih Rekan Kerja..."}</option>
-                          {users.map((u) => {
-                            const roleDisplay = u.role?.name ? ` (${u.role.name})` : "";
-                            return (
-                              <option key={u.id} value={u.id}>
-                                {u.name}{roleDisplay}
-                              </option>
-                            );
-                          })}
-                       </select>
-                    </div>
-
-                    {/* My Schedule */}
-                    <div className="space-y-1.5">
-                       <label htmlFor="requester-schedule-select" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-0.5">2. Jadwal Anda (Dilepas)</label>
-                       <select 
-                          className="w-full h-11 bg-gray-50 border border-gray-200 rounded-lg px-3 text-sm font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-red-150 focus:border-[#8B0000] transition-all"
-                          id="requester-schedule-select"
-                          value={formData.requester_schedule_id}
-                          onChange={(e) => setFormData({...formData, requester_schedule_id: e.target.value})}
-                          required
-                       >
-                          <option value="">{mySchedules.length === 0 ? "Belum ada jadwal shift Anda bulan ini" : "Pilih Jadwal Anda..."}</option>
-                          {mySchedules.map(s => (
-                            <option key={s.id} value={s.id}>
-                              {formatScheduleOption(s)}
-                            </option>
-                          ))}
-                       </select>
-                    </div>
-
-                    {/* Receiver Schedule */}
-                    <div className={`space-y-1.5 transition-opacity ${formData.receiver_id ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-                       <label htmlFor="receiver-schedule-select" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-0.5">3. Jadwal Rekan (Diambil)</label>
-                       <select 
-                          className="w-full h-11 bg-gray-50 border border-gray-200 rounded-lg px-3 text-sm font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-red-150 focus:border-[#8B0000] transition-all"
-                          id="receiver-schedule-select"
-                          value={formData.receiver_schedule_id}
-                          onChange={(e) => setFormData({...formData, receiver_schedule_id: e.target.value})}
-                          required
-                          disabled={!formData.receiver_id}
-                       >
-                          <option value="">
-                            {(() => {
-                              if (!formData.receiver_id) {
-                                return "Pilih rekan dulu...";
-                              }
-                              if (receiverSchedules.length === 0) {
-                                return "Rekan ini belum memiliki jadwal shift";
-                              }
-                              return "Pilih Jadwal Rekan (Pilih Tanggal & Shift)...";
-                            })()}
-                          </option>
-                          {receiverSchedules.map(s => (
-                            <option key={s.id} value={s.id}>
-                              {formatScheduleOption(s)}
-                            </option>
-                          ))}
-                       </select>
-                    </div>
-
-                    {/* Reason */}
-                    <div className="space-y-1.5">
-                        <label htmlFor="reason-input" className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-0.5">4. Alasan Tukar</label>
-                        <input 
-                          id="reason-input"
-                          type="text"
-                          className="w-full h-11 bg-gray-50 border border-gray-200 rounded-lg px-3 text-sm font-medium text-gray-800 outline-none focus:ring-2 focus:ring-red-150 focus:border-[#8B0000] transition-all"
-                          placeholder="Contoh: Urusan keluarga mendesak..."
-                          value={formData.reason}
-                          onChange={(e) => setFormData({...formData, reason: e.target.value})}
-                          required
-                        />
-                    </div>
-                 </div>
-
-                 <div className="p-4 bg-gray-50 border border-gray-150 rounded-xl flex items-start gap-3">
-                    <div className="w-8 h-8 bg-white rounded-lg shadow-sm flex items-center justify-center text-[#8B0000] shrink-0 border border-gray-100">
-                       <AlertCircle size={16} />
-                    </div>
-                    <div className="space-y-0.5">
-                       <p className="text-xs font-bold text-gray-900 uppercase tracking-wide">Perhatian Penting</p>
-                       <p className="text-[11px] text-gray-500 font-medium leading-relaxed italic">Permintaan ini akan otomatis diperbarui setelah rekan Anda menyetujui DAN mendapat persetujuan akhir dari Super Admin / Manager.</p>
-                    </div>
-                 </div>
-
-                 <div className="pt-2 flex gap-3">
-                    <button 
-                      type="button" 
-                      onClick={() => setIsModalOpen(false)} 
-                      className="flex-1 h-11 text-sm font-semibold text-gray-600 bg-gray-150 hover:bg-gray-200 rounded-lg transition active:scale-95"
-                    >
-                      Batal
-                    </button>
-                    <button 
-                      type="submit" 
-                      disabled={isSubmitLoading}
-                      className="flex-2 h-11 text-sm font-bold text-white bg-[#8B0000] hover:bg-[#720000] rounded-lg shadow-md transition disabled:opacity-50 active:scale-95"
-                    >
-                      {isSubmitLoading ? "Memproses..." : "Kirim Pengajuan"}
-                    </button>
-                 </div>
-              </form>
-           </div>
-        </div>
-      )}
+      <ShiftSwapCreateModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleSubmit}
+        formData={formData}
+        setFormData={setFormData}
+        users={users}
+        mySchedules={mySchedules}
+        receiverSchedules={receiverSchedules}
+        fetchReceiverSchedules={fetchReceiverSchedules}
+        isSubmitLoading={isSubmitLoading}
+      />
     </div>
   );
 }
