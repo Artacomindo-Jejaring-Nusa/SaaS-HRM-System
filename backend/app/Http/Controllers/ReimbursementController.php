@@ -17,6 +17,8 @@ class ReimbursementController extends Controller
 
     private const MSG_FORBIDDEN = 'Akses ditolak.';
     private const URL_DASHBOARD_REIMBURSEMENTS = '/dashboard/reimbursements';
+    private const NOTIF_REIMBURSEMENT_APPROVED = 'REIMBURSEMENT DISETUJUI';
+    private const NOTIF_REIMBURSEMENT_REJECTED = 'REIMBURSEMENT DITOLAK';
 
     public function index(Request $request)
     {
@@ -257,12 +259,12 @@ class ReimbursementController extends Controller
                     $msg .= " Catatan: {$request->remark}";
                 }
 
-                $this->notify($reimbursement->user, 'REIMBURSEMENT DISETUJUI', $msg, 'success', self::URL_DASHBOARD_REIMBURSEMENTS);
+                $this->notify($reimbursement->user, self::NOTIF_REIMBURSEMENT_APPROVED, $msg, 'success', self::URL_DASHBOARD_REIMBURSEMENTS);
                 $this->logActivity('APPROVE_REIMBURSEMENT', "Menyetujui klaim '{$reimbursement->title}' dari {$reimbursement->user->name}", $reimbursement);
 
                 $this->notifySuperAdmins(
                     $reimbursement->company_id,
-                    'REIMBURSEMENT DISETUJUI',
+                    self::NOTIF_REIMBURSEMENT_APPROVED,
                     "Klaim reimbursement '{$reimbursement->title}' dari {$reimbursement->user->name} sebesar Rp ".number_format($reimbursement->amount, 0, ',', '.')." telah DISETUJUI oleh {$user->name}.",
                     'success',
                     self::ROUTE_APPROVALS,
@@ -306,7 +308,7 @@ class ReimbursementController extends Controller
 
         $this->notify(
             $reimbursement->user,
-            'REIMBURSEMENT DISETUJUI',
+            self::NOTIF_REIMBURSEMENT_APPROVED,
             $msg,
             'success',
             self::URL_DASHBOARD_REIMBURSEMENTS
@@ -316,7 +318,7 @@ class ReimbursementController extends Controller
 
         $this->notifySuperAdmins(
             $reimbursement->company_id,
-            'REIMBURSEMENT DISETUJUI',
+            self::NOTIF_REIMBURSEMENT_APPROVED,
             "Klaim reimbursement '{$reimbursement->title}' dari {$reimbursement->user->name} sebesar Rp ".number_format($reimbursement->amount, 0, ',', '.')." telah DISETUJUI oleh {$request->user()->name}.",
             'success',
             self::ROUTE_APPROVALS,
@@ -355,12 +357,12 @@ class ReimbursementController extends Controller
                 $msg .= " Alasan: {$request->remark}";
             }
 
-            $this->notify($reimbursement->user, 'REIMBURSEMENT DITOLAK', $msg, 'danger', self::URL_DASHBOARD_REIMBURSEMENTS);
+            $this->notify($reimbursement->user, self::NOTIF_REIMBURSEMENT_REJECTED, $msg, 'danger', self::URL_DASHBOARD_REIMBURSEMENTS);
             $this->logActivity('REJECT_REIMBURSEMENT', "Menolak klaim '{$reimbursement->title}' dari {$reimbursement->user->name}", $reimbursement);
 
             $this->notifySuperAdmins(
                 $reimbursement->company_id,
-                'REIMBURSEMENT DITOLAK',
+                self::NOTIF_REIMBURSEMENT_REJECTED,
                 "Klaim reimbursement '{$reimbursement->title}' dari {$reimbursement->user->name} telah DITOLAK oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
                 'danger',
                 self::ROUTE_APPROVALS,
@@ -385,7 +387,7 @@ class ReimbursementController extends Controller
 
         $this->notify(
             $reimbursement->user,
-            'REIMBURSEMENT DITOLAK',
+            self::NOTIF_REIMBURSEMENT_REJECTED,
             $msg,
             'danger',
             self::URL_DASHBOARD_REIMBURSEMENTS
@@ -395,7 +397,7 @@ class ReimbursementController extends Controller
 
         $this->notifySuperAdmins(
             $reimbursement->company_id,
-            'REIMBURSEMENT DITOLAK',
+            self::NOTIF_REIMBURSEMENT_REJECTED,
             "Klaim reimbursement '{$reimbursement->title}' dari {$reimbursement->user->name} telah DITOLAK oleh {$request->user()->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
             'danger',
             self::ROUTE_APPROVALS,

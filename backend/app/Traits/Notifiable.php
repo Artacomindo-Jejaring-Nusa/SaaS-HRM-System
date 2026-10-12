@@ -79,10 +79,8 @@ trait Notifiable
      * @param string $type Notification badge/type (info, warning, success, danger)
      * @param string|null $link Link to redirect in dashboard
      * @param int|null $exceptUserId User ID to exclude (e.g. the actor performing the action)
-     * @param bool $sendEmail Whether to send email (default: false to avoid flooding)
-     * @param bool $sendWA Whether to send WhatsApp (default: false to avoid third-party limit exhaustion)
      */
-    public function notifySuperAdmins(?int $companyId, string $title, string $message, string $type = 'info', ?string $link = null, ?int $exceptUserId = null, bool $sendEmail = false, bool $sendWA = false): void
+    public function notifySuperAdmins(?int $companyId, string $title, string $message, string $type = 'info', ?string $link = null, ?int $exceptUserId = null): void
     {
         $query = User::query();
 
@@ -110,7 +108,7 @@ trait Notifiable
         $superAdmins = $query->get()->unique('id');
 
         foreach ($superAdmins as $admin) {
-            $this->notify($admin, $title, $message, $type, $link, 'notif', $sendEmail, $sendWA);
+            $this->notify($admin, $title, $message, $type, $link, 'notif', false, false);
         }
     }
 }

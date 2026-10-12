@@ -16,6 +16,10 @@ class AttendanceCorrectionController extends Controller
 {
     use Notifiable;
 
+    private const NOTIF_CORRECTION_APPROVED = 'KOREKSI ABSEN DISETUJUI';
+    private const NOTIF_CORRECTION_REJECTED = 'KOREKSI ABSEN DITOLAK';
+    private const ROUTE_ATTENDANCE_CORRECTIONS = '/dashboard/attendance-corrections';
+
     /**
      * List corrections: Staff sees own, Manager/Admin sees all company.
      */
@@ -203,7 +207,7 @@ class AttendanceCorrectionController extends Controller
                     'KOREKSI ABSEN BARU',
                     "{$user->name} mengajukan koreksi absen untuk tanggal {$attendanceDate}.",
                     'warning',
-                    '/dashboard/attendance-corrections'
+                    self::ROUTE_ATTENDANCE_CORRECTIONS
                 );
             }
         }
@@ -213,7 +217,7 @@ class AttendanceCorrectionController extends Controller
             'PENGAJUAN KOREKSI ABSEN BARU',
             "Karyawan {$user->name} mengajukan koreksi absen untuk tanggal {$attendanceDate}." . ($request->reason ? " Alasan: {$request->reason}" : ''),
             'warning',
-            '/dashboard/attendance-corrections',
+            self::ROUTE_ATTENDANCE_CORRECTIONS,
             $user->id
         );
 
@@ -270,17 +274,17 @@ class AttendanceCorrectionController extends Controller
                 $attendanceDate = Carbon::parse($attendance->check_in)->format('Y-m-d');
                 $this->notify(
                     $correction->user,
-                    'KOREKSI ABSEN DISETUJUI',
+                    self::NOTIF_CORRECTION_APPROVED,
                     "Pengajuan koreksi absen Anda untuk tanggal {$attendanceDate} telah DISETUJUI oleh {$user->name}.",
                     'success'
                 );
 
                 $this->notifySuperAdmins(
                     $correction->company_id,
-                    'KOREKSI ABSEN DISETUJUI',
+                    self::NOTIF_CORRECTION_APPROVED,
                     "Pengajuan koreksi absen {$correction->user->name} untuk tanggal {$attendanceDate} telah DISETUJUI oleh {$user->name}.",
                     'success',
-                    '/dashboard/attendance-corrections',
+                    self::ROUTE_ATTENDANCE_CORRECTIONS,
                     $user->id
                 );
 
@@ -290,7 +294,7 @@ class AttendanceCorrectionController extends Controller
             // Notify next step
             if (isset($result['approvers'])) {
                 foreach ($result['approvers'] as $nextApprover) {
-                    $this->notify($nextApprover, 'KOREKSI ABSEN MENUNGGU PERSETUJUAN', "Koreksi absen {$correction->user->name} menunggu persetujuan Anda. Tahap: {$result['step_label']}.", 'warning', '/dashboard/attendance-corrections');
+                    $this->notify($nextApprover, 'KOREKSI ABSEN MENUNGGU PERSETUJUAN', "Koreksi absen {$correction->user->name} menunggu persetujuan Anda. Tahap: {$result['step_label']}.", 'warning', self::ROUTE_ATTENDANCE_CORRECTIONS);
                 }
             }
             $this->notify($correction->user, 'KOREKSI ABSEN DALAM PROSES', "Koreksi absen Anda disetujui di tahap sebelumnya. Menunggu: {$result['step_label']}.", 'info');
@@ -300,7 +304,7 @@ class AttendanceCorrectionController extends Controller
                 'PROGRESS KOREKSI ABSEN',
                 "Pengajuan koreksi absen {$correction->user->name} disetujui di tahap sebelumnya oleh {$user->name}. Menunggu: {$result['step_label']}.",
                 'info',
-                '/dashboard/attendance-corrections',
+                self::ROUTE_ATTENDANCE_CORRECTIONS,
                 $user->id
             );
 
@@ -341,17 +345,17 @@ class AttendanceCorrectionController extends Controller
         $attendanceDate = Carbon::parse($attendance->check_in)->format('Y-m-d');
         $this->notify(
             $correction->user,
-            'KOREKSI ABSEN DISETUJUI',
+            self::NOTIF_CORRECTION_APPROVED,
             "Pengajuan koreksi absen Anda untuk tanggal {$attendanceDate} telah DISETUJUI oleh {$request->user()->name}.",
             'success'
         );
 
         $this->notifySuperAdmins(
             $correction->company_id,
-            'KOREKSI ABSEN DISETUJUI',
+            self::NOTIF_CORRECTION_APPROVED,
             "Pengajuan koreksi absen {$correction->user->name} untuk tanggal {$attendanceDate} telah DISETUJUI oleh {$request->user()->name}.",
             'success',
-            '/dashboard/attendance-corrections',
+            self::ROUTE_ATTENDANCE_CORRECTIONS,
             $request->user()->id
         );
 
@@ -389,17 +393,17 @@ class AttendanceCorrectionController extends Controller
             $attendanceDate = Carbon::parse($correction->attendance->check_in)->format('Y-m-d');
             $this->notify(
                 $correction->user,
-                'KOREKSI ABSEN DITOLAK',
+                self::NOTIF_CORRECTION_REJECTED,
                 "Mohon maaf, pengajuan koreksi absen Anda untuk tanggal {$attendanceDate} telah DITOLAK. ".($request->remark ? "Alasan: {$request->remark}" : ''),
                 'danger'
             );
 
             $this->notifySuperAdmins(
                 $correction->company_id,
-                'KOREKSI ABSEN DITOLAK',
+                self::NOTIF_CORRECTION_REJECTED,
                 "Pengajuan koreksi absen {$correction->user->name} untuk tanggal {$attendanceDate} telah DITOLAK oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
                 'danger',
-                '/dashboard/attendance-corrections',
+                self::ROUTE_ATTENDANCE_CORRECTIONS,
                 $user->id
             );
 
@@ -422,17 +426,17 @@ class AttendanceCorrectionController extends Controller
         $attendanceDate = Carbon::parse($correction->attendance->check_in)->format('Y-m-d');
         $this->notify(
             $correction->user,
-            'KOREKSI ABSEN DITOLAK',
+            self::NOTIF_CORRECTION_REJECTED,
             "Mohon maaf, pengajuan koreksi absen Anda untuk tanggal {$attendanceDate} telah DITOLAK. ".($request->remark ? "Alasan: {$request->remark}" : ''),
             'danger'
         );
 
         $this->notifySuperAdmins(
             $correction->company_id,
-            'KOREKSI ABSEN DITOLAK',
+            self::NOTIF_CORRECTION_REJECTED,
             "Pengajuan koreksi absen {$correction->user->name} untuk tanggal {$attendanceDate} telah DITOLAK oleh {$request->user()->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
             'danger',
-            '/dashboard/attendance-corrections',
+            self::ROUTE_ATTENDANCE_CORRECTIONS,
             $request->user()->id
         );
 

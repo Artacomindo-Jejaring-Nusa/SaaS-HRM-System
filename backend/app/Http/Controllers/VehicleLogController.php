@@ -20,6 +20,7 @@ class VehicleLogController extends Controller
     private const URL_FLEET_LOGS = '/dashboard/fleet-logs';
     private const RULE_NULL_NUM = 'nullable|numeric|min:0';
     private const DIR_ODOMETER = 'vehicle-logs/odometer/';
+    private const NOTIF_VEHICLE_APPROVED = 'PEMINJAMAN KENDARAAN DISETUJUI';
 
     /**
      * List all vehicle logs (with data isolation)
@@ -153,7 +154,7 @@ class VehicleLogController extends Controller
 
             $this->notify(
                 $user,
-                'PEMINJAMAN KENDARAAN DISETUJUI',
+                self::NOTIF_VEHICLE_APPROVED,
                 "Peminjaman kendaraan {$log->vehicle_name} ({$log->plate_number}) otomatis disetujui. Unit siap digunakan dan dicatat keberangkatannya.",
                 'success',
                 self::URL_FLEET_LOGS
@@ -378,7 +379,7 @@ class VehicleLogController extends Controller
 
                 $this->notify(
                     $log->user,
-                    'PEMINJAMAN KENDARAAN DISETUJUI',
+                    self::NOTIF_VEHICLE_APPROVED,
                     "Pengajuan peminjaman unit {$log->vehicle_name} ({$log->plate_number}) telah DISETUJUI sepenuhnya. Unit siap diambil & digunakan.",
                     'success',
                     self::URL_FLEET_LOGS
@@ -386,7 +387,7 @@ class VehicleLogController extends Controller
 
                 $this->notifySuperAdmins(
                     $log->company_id,
-                    'PEMINJAMAN KENDARAAN DISETUJUI',
+                    self::NOTIF_VEHICLE_APPROVED,
                     "Pengajuan peminjaman unit {$log->vehicle_name} ({$log->plate_number}) dari {$log->user->name} telah DISETUJUI oleh {$request->user()->name}.",
                     'success',
                     self::URL_FLEET_LOGS,

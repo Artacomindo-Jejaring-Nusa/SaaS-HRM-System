@@ -13,6 +13,8 @@ class ProfileRequestController extends Controller
 {
     use Notifiable;
 
+    private const ROUTE_PROFILE_REQUESTS = '/dashboard/profile-requests';
+
     public function index(Request $request)
     {
         $requests = ProfileRequest::with('user')->where('status', 'pending')
@@ -64,7 +66,7 @@ class ProfileRequestController extends Controller
                 'PERUBAHAN PROFIL BARU',
                 "{$user->name} telah mengajukan perubahan data profil sensitif (NIK/Email/Telepon).",
                 'warning',
-                '/dashboard/profile-requests'
+                self::ROUTE_PROFILE_REQUESTS
             );
         }
 
@@ -73,7 +75,7 @@ class ProfileRequestController extends Controller
             'PERMINTAAN PERUBAHAN PROFIL',
             "{$user->name} telah mengajukan perubahan data profil sensitif (NIK/Email/Telepon).",
             'warning',
-            '/dashboard/profile-requests',
+            self::ROUTE_PROFILE_REQUESTS,
             $user->id
         );
 
@@ -109,7 +111,7 @@ class ProfileRequestController extends Controller
             'PERUBAHAN PROFIL DISETUJUI',
             "Permohonan perubahan data profil {$user->name} telah DISETUJUI oleh {$request->user()->name}.",
             'success',
-            '/dashboard/profile-requests',
+            self::ROUTE_PROFILE_REQUESTS,
             $request->user()->id
         );
 
@@ -143,7 +145,7 @@ class ProfileRequestController extends Controller
             'PERUBAHAN PROFIL DITOLAK',
             "Permohonan perubahan data profil {$user->name} telah DITOLAK oleh {$request->user()->name}.",
             'danger',
-            '/dashboard/profile-requests',
+            self::ROUTE_PROFILE_REQUESTS,
             $request->user()->id
         );
 

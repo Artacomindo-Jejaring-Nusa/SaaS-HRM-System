@@ -15,6 +15,8 @@ class ShiftSwapController extends Controller
 {
     use Notifiable;
 
+    private const ROUTE_SHIFT_SWAP = '/dashboard/shift-swap';
+
     public function index(Request $request)
     {
         $user = $request->user();
@@ -78,7 +80,7 @@ class ShiftSwapController extends Controller
             'PENGAJUAN TUKAR SHIFT',
             "{$user->name} mengajak Anda tukar shift pada tanggal {$reqSched->date} dengan jadwal {$resSched->date}.",
             'info',
-            '/dashboard/shift-swap'
+            self::ROUTE_SHIFT_SWAP
         );
 
         $this->notifySuperAdmins(
@@ -86,7 +88,7 @@ class ShiftSwapController extends Controller
             'PERMINTAAN TUKAR SHIFT BARU',
             "Karyawan {$user->name} mengajukan tukar shift dengan {$receiver->name} untuk tanggal {$reqSched->date}.",
             'info',
-            '/dashboard/shift-swap',
+            self::ROUTE_SHIFT_SWAP,
             $user->id
         );
 
@@ -144,7 +146,7 @@ class ShiftSwapController extends Controller
                 'TUKAR SHIFT MENUNGGU PERSETUJUAN ATASAN',
                 "Permintaan tukar shift antara {$swap->requester->name} dan {$swap->receiver->name} telah disetujui penerima dan menunggu persetujuan Manager/Supervisor.",
                 'warning',
-                '/dashboard/shift-swap'
+                self::ROUTE_SHIFT_SWAP
             );
         }
 
@@ -200,7 +202,7 @@ class ShiftSwapController extends Controller
                 $request->status === 'approved' ? 'TUKAR SHIFT DISETUJUI' : 'TUKAR SHIFT DITOLAK',
                 "Permintaan tukar shift antara {$swap->requester->name} dan {$swap->receiver->name} telah ".($request->status === 'approved' ? 'DISETUJUI' : 'DITOLAK')." oleh {$user->name}.",
                 $request->status === 'approved' ? 'success' : 'danger',
-                '/dashboard/shift-swap',
+                self::ROUTE_SHIFT_SWAP,
                 $user->id
             );
 

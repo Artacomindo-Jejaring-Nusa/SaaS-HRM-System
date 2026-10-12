@@ -28,6 +28,7 @@ class ManagerController extends Controller
     use Notifiable;
 
     private const ROUTE_FUND_REQUESTS = '/dashboard/fund-requests';
+    private const ROUTE_ATTENDANCE = '/dashboard/attendance';
 
     private const PERM_MAP = [
         'leave' => 'approve-leaves',
@@ -67,7 +68,7 @@ class ManagerController extends Controller
         'fund_request' => self::ROUTE_FUND_REQUESTS,
         'vehicle_log' => '/dashboard/fleet-logs',
         'payroll' => '/dashboard/payroll/approval',
-        'early_out' => '/dashboard/attendance',
+        'early_out' => self::ROUTE_ATTENDANCE,
     ];
 
     /**
@@ -125,29 +126,42 @@ class ManagerController extends Controller
     private function sendDynamicApprovalNotifications($item, Request $request, $user, array $result, string $typeText, string $routePath): string
     {
         if ($result['is_final']) {
-            $statusText = strtoupper($result['status'] === 'approved' ? 'DISETUJUI' : 'DITOLAK');
-            if ($item->user) {
-                $this->notify(
-                    $item->user,
-                    "PENGAJUAN {$typeText} {$statusText}",
-                    "Pengajuan {$typeText} Anda telah {$statusText}.".($request->remark ? " Catatan: {$request->remark}" : ''),
-                    $result['status'] === 'approved' ? 'success' : 'danger',
-                    $routePath
-                );
-            }
-
-            $this->notifySuperAdmins(
-                $item->company_id ?? $user->company_id,
-                "PENGAJUAN {$typeText} {$statusText}",
-                "Pengajuan {$typeText} {$item->user?->name} telah {$statusText} oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
-                $result['status'] === 'approved' ? 'success' : 'danger',
-                $routePath,
-                $user->id
-            );
-
-            return "Pengajuan {$typeText} berhasil di-{$request->status} secara final.";
+            return $this->sendFinalDynamicApprovalNotification($item, $request, $user, $result, $typeText, $routePath);
         }
 
+        return $this->sendStepDynamicApprovalNotification($item, $user, $result, $typeText, $routePath);
+    }
+
+    private function sendFinalDynamicApprovalNotification($item, Request $request, $user, array $result, string $typeText, string $routePath): string
+    {
+        $statusText = strtoupper($result['status'] === 'approved' ? 'DISETUJUI' : 'DITOLAK');
+        $remarkSuffix = $request->remark ? " Catatan: {$request->remark}" : '';
+        $notifLevel = $result['status'] === 'approved' ? 'success' : 'danger';
+
+        if ($item->user) {
+            $this->notify(
+                $item->user,
+                "PENGAJUAN {$typeText} {$statusText}",
+                "Pengajuan {$typeText} Anda telah {$statusText}." . $remarkSuffix,
+                $notifLevel,
+                $routePath
+            );
+        }
+
+        $this->notifySuperAdmins(
+            $item->company_id ?? $user->company_id,
+            "PENGAJUAN {$typeText} {$statusText}",
+            "Pengajuan {$typeText} {$item->user?->name} telah {$statusText} oleh {$user->name}." . $remarkSuffix,
+            $notifLevel,
+            $routePath,
+            $user->id
+        );
+
+        return "Pengajuan {$typeText} berhasil di-{$request->status} secara final.";
+    }
+
+    private function sendStepDynamicApprovalNotification($item, $user, array $result, string $typeText, string $routePath): string
+    {
         if (isset($result['approvers'])) {
             foreach ($result['approvers'] as $nextApprover) {
                 $this->notify(
@@ -179,7 +193,7 @@ class ManagerController extends Controller
             $user->id
         );
 
-        return "Persetujuan tahap {$item->current_approval_step} berhasil. Menunggu tahap berikutnya.";
+        return "Pengajuan {$typeText} berhasil disetujui untuk tahap ini.";
     }
 
     private function handleDynamicApproval($item, Request $request, $user)
@@ -421,7 +435,7 @@ class ManagerController extends Controller
                 ? "Permohonan Pulang Awal Anda pada tanggal {$dateStr} telah DISETUJUI oleh Super Admin."
                 : "Permohonan Pulang Awal Anda pada tanggal {$dateStr} DITOLAK oleh Super Admin. Alasan: " . ($request->remark ?? '-'),
             $isApproved ? 'success' : 'danger',
-            '/dashboard/attendance'
+            self::ROUTE_ATTENDANCE
         );
 
         $this->notifySuperAdmins(
@@ -429,7 +443,7 @@ class ManagerController extends Controller
             $isApproved ? 'ABSEN PULANG AWAL DISETUJUI' : 'ABSEN PULANG AWAL DITOLAK',
             "Permohonan Pulang Awal {$attendance->user?->name} tanggal {$dateStr} telah " . ($isApproved ? 'DISETUJUI' : 'DITOLAK') . " oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
             $isApproved ? 'success' : 'danger',
-            '/dashboard/attendance',
+            self::ROUTE_ATTENDANCE,
             $user->id
         );
 
