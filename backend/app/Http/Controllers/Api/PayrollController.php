@@ -218,22 +218,13 @@ class PayrollController extends Controller
         return ['hours' => $totalOvertimeHours, 'amount' => $overtimeAmount];
     }
 
-    private function processEmployeePayroll($user, array $ctx)
-    {
-        $companyId = $ctx['company_id'];
-        $batch = $ctx['batch'];
-        $monthName = $ctx['month_name'];
-        $year = $ctx['year'];
-        $holidays = $ctx['holidays'];
-        $settings = $ctx['settings'];
-        $totalWorkingDays = $ctx['total_working_days'];
-        $startDate = $ctx['start_date'];
-        $endDate = $ctx['end_date'];
-
-        $basicSalary = (float) ($user->basic_salary ?? 0);
-        $totalFixedAllowance = (float) ($user->fixed_allowance ?? 0);
-
-        // Map user schedules by date
+    private function calculateAttendanceMetrics(
+        $user,
+        float $basicSalary,
+        int $totalWorkingDays,
+        float $totalFixedAllowance,
+        $settings
+    ): array {
         $schedulesMap = [];
         if ($user->schedules) {
             foreach ($user->schedules as $sched) {
@@ -249,53 +240,92 @@ class PayrollController extends Controller
             }
         }
 
-        // Khusus Pola Kehadiran Fleksibel (Atasan/Pimpinan):
-        // Tidak wajib absen harian, bebas dari potongan denda terlambat & potongan ketidakhadiran (alfa)
         if ($user->attendance_type === 'flexible') {
-            $attendedDays = $totalWorkingDays;
-            $totalLateDeduction = 0;
-            $lateResult = [
-                'amount' => 0,
-                'total_late_minutes' => 0,
-                'details' => [],
-                'note' => 'Pola Kehadiran Fleksibel (Bebas Denda Keterlambatan)',
+            return [
+                'attended_days' => $totalWorkingDays,
+                'total_actual_work_hours' => $totalActualWorkHours,
+                'absent_days' => 0,
+                'late_deduction' => 0,
+                'absence_deduction' => 0,
+                'late_result' => [
+                    'amount' => 0,
+                    'total_late_minutes' => 0,
+                    'details' => [],
+                    'note' => 'Pola Kehadiran Fleksibel (Bebas Denda Keterlambatan)',
+                ],
+                'absence_result' => [
+                    'amount' => 0,
+                    'details' => [],
+                    'note' => 'Pola Kehadiran Fleksibel (Bebas Potongan Ketidakhadiran)',
+                ],
             ];
-            $totalAbsenceDeduction = 0;
-            $absenceResult = [
-                'amount' => 0,
-                'details' => [],
-                'note' => 'Pola Kehadiran Fleksibel (Bebas Potongan Ketidakhadiran)',
-            ];
-        } else {
-            // Calculate flexible late deduction using PayrollService
-            $lateResult = $this->payrollService->calculateLateDeduction(
-                $user->attendances,
-                $schedulesMap,
-                $basicSalary,
-                $totalWorkingDays,
-                $totalFixedAllowance,
-                $settings
-            );
-            $totalLateDeduction = $lateResult['amount'];
-
-            $paidLeaveDays = 0;
-            foreach ($user->permits as $permit) {
-                if (in_array(strtolower($permit->type), ['sakit', 'sick'])) {
-                    $paidLeaveDays += Carbon::parse($permit->start_date)->diffInDays(Carbon::parse($permit->end_date)) + 1;
-                }
-            }
-
-            $absentDays = max(0, $totalWorkingDays - ($attendedDays + $paidLeaveDays));
-
-            // Calculate flexible absence deduction using PayrollService
-            $absenceResult = $this->payrollService->calculateAbsenceDeduction(
-                $absentDays,
-                $totalWorkingDays,
-                $basicSalary,
-                $settings
-            );
-            $totalAbsenceDeduction = $absenceResult['amount'];
         }
+
+        $lateResult = $this->payrollService->calculateLateDeduction(
+            $user->attendances,
+            $schedulesMap,
+            $basicSalary,
+            $totalWorkingDays,
+            $totalFixedAllowance,
+            $settings
+        );
+
+        $paidLeaveDays = 0;
+        foreach ($user->permits as $permit) {
+            if (in_array(strtolower($permit->type), ['sakit', 'sick'])) {
+                $paidLeaveDays += Carbon::parse($permit->start_date)->diffInDays(Carbon::parse($permit->end_date)) + 1;
+            }
+        }
+
+        $absentDays = max(0, $totalWorkingDays - ($attendedDays + $paidLeaveDays));
+        $absenceResult = $this->payrollService->calculateAbsenceDeduction(
+            $absentDays,
+            $totalWorkingDays,
+            $basicSalary,
+            $settings
+        );
+
+        return [
+            'attended_days' => $attendedDays,
+            'total_actual_work_hours' => $totalActualWorkHours,
+            'absent_days' => $absentDays,
+            'late_deduction' => $lateResult['amount'],
+            'absence_deduction' => $absenceResult['amount'],
+            'late_result' => $lateResult,
+            'absence_result' => $absenceResult,
+        ];
+    }
+
+    private function processEmployeePayroll($user, array $ctx)
+    {
+        $companyId = $ctx['company_id'];
+        $batch = $ctx['batch'];
+        $monthName = $ctx['month_name'];
+        $year = $ctx['year'];
+        $holidays = $ctx['holidays'];
+        $settings = $ctx['settings'];
+        $totalWorkingDays = $ctx['total_working_days'];
+        $startDate = $ctx['start_date'];
+        $endDate = $ctx['end_date'];
+
+        $basicSalary = (float) ($user->basic_salary ?? 0);
+        $totalFixedAllowance = (float) ($user->fixed_allowance ?? 0);
+
+        $attMetrics = $this->calculateAttendanceMetrics(
+            $user,
+            $basicSalary,
+            $totalWorkingDays,
+            $totalFixedAllowance,
+            $settings
+        );
+
+        $attendedDays = $attMetrics['attended_days'];
+        $totalActualWorkHours = $attMetrics['total_actual_work_hours'];
+        $absentDays = $attMetrics['absent_days'];
+        $totalLateDeduction = $attMetrics['late_deduction'];
+        $totalAbsenceDeduction = $attMetrics['absence_deduction'];
+        $lateResult = $attMetrics['late_result'];
+        $absenceResult = $attMetrics['absence_result'];
 
         $regularRate = $settings->overtime_rate_per_hour ?? 30000;
         $holidayRate = $settings->overtime_rate_holiday_per_hour ?? 50000;

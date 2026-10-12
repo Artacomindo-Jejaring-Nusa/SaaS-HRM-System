@@ -1825,6 +1825,13 @@ function EmployeeViewModal({
 }: EmployeeViewModalProps) {
   if (!isOpen || !employee) return null;
 
+  let attendanceTypeLabel = "Office Hour";
+  if (employee.attendance_type === "flexible") {
+    attendanceTypeLabel = "Fleksibel (Atasan)";
+  } else if (employee.attendance_type === "shift") {
+    attendanceTypeLabel = "Shift";
+  }
+
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -1895,7 +1902,7 @@ function EmployeeViewModal({
               <div><p className="text-xs text-gray-400">Tanggal Gabung</p><p className="text-sm font-semibold">{formatDate(employee.join_date)}</p></div>
               <div><p className="text-xs text-gray-400">Sisa Cuti</p><p className="text-sm font-semibold">{employee.leave_balance ?? 0} Hari</p></div>
               <div><p className="text-xs text-gray-400">Atasan Lgsg.</p><p className="text-sm font-semibold">{employee.supervisor?.name || '-'}</p></div>
-              <div><p className="text-xs text-gray-400">Pola Kehadiran</p><p className="text-sm font-semibold">{employee.attendance_type === "flexible" ? "Fleksibel (Atasan)" : employee.attendance_type === "shift" ? "Shift" : "Office Hour"}</p></div>
+              <div><p className="text-xs text-gray-400">Pola Kehadiran</p><p className="text-sm font-semibold">{attendanceTypeLabel}</p></div>
               <div className="col-span-2 border-l pl-4 border-gray-100">
                 <p className="text-xs text-red-400">Kontak Darurat</p>
                 <p className="text-sm font-semibold">{employee.emergency_contact_name || '-'} ({employee.emergency_contact_phone || '-'})</p>
