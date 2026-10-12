@@ -283,11 +283,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     "5. DATA PENGGAJIAN & KEUANGAN\n"
                     "• Informasi nomor rekening bank, rincian komponen gaji, dan pemotongan pajak PPh 21 dikelola secara ketat dengan protokol enkripsi enterprise dan hanya dapat diakses oleh bagian Finance & HRD yang berwenang.\n\n"
                     "6. HAK AKSES DAN PENGHAPUSAN DATA\n"
-                    "• Karyawan berhak meninjau seluruh data riwayat kehadiran, dokumen pengajuan, dan mengajukan pembaruan data profil atau pendaftaran ulang biometrik wajah melalui Super Admin perusahaan.\n\n"
-                    "7. KONTAK & BANTUAN\n"
-                    "• Jam Operasional: Senin – Jumat (08:30 – 17:30 WIB)\n"
-                    "• Email Support: support@artacomindo.com\n"
-                    "• PT. Artacomindo Jejaring Nusa",
+                    "• Karyawan berhak meninjau seluruh data riwayat kehadiran, dokumen pengajuan, dan mengajukan pembaruan data profil atau pendaftaran ulang biometrik wajah melalui Super Admin perusahaan.\n\n\n"
+                    "PT. Artacomindo Jejaring Nusa",
                     style: GoogleFonts.outfit(
                       fontSize: 13,
                       height: 1.65,

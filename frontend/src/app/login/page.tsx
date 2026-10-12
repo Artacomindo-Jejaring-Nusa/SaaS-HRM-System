@@ -543,13 +543,9 @@ export default function LoginPage() {
                   • Karyawan berhak meninjau seluruh data riwayat kehadiran, dokumen pengajuan, dan mengajukan pembaruan data profil atau pendaftaran ulang biometrik wajah melalui Super Admin perusahaan.
                 </p>
               </div>
-              <div className="login-privacy-section">
-                <h4>7. KONTAK &amp; BANTUAN</h4>
-                <p>
-                  • Jam Operasional: Senin – Jumat (08:30 – 17:30 WIB)<br />
-                  • Email Support: support@artacomindo.com<br />
-                  • PT. Artacomindo Jejaring Nusa
-                </p>
+
+              <div style={{ marginTop: "1rem", textAlign: "right", fontWeight: 600, color: "#1E293B", fontSize: "0.85rem" }}>
+                PT. Artacomindo Jejaring Nusa
               </div>
             </div>
 
