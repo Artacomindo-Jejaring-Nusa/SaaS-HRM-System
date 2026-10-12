@@ -789,8 +789,8 @@
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: rgba(153, 27, 27, 0.1);
-  color: #991B1B;
+  background-color: #FEE2E2;
+  color: #7F1D1D;
   display: flex;
   align-items: center;
   justify-content: center;
