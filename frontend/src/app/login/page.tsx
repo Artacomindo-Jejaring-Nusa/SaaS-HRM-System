@@ -137,8 +137,8 @@ export default function LoginPage() {
         setShowPrivacyModal(false);
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    globalThis.addEventListener("keydown", handleKeyDown);
+    return () => globalThis.removeEventListener("keydown", handleKeyDown);
   }, [showPrivacyModal]);
 
   const renderSuggestionsContent = () => {
