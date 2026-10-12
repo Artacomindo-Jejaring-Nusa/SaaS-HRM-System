@@ -129,6 +129,50 @@ export default function LoginPage() {
     setShowSuggestions(false);
   };
 
+  // Close modal on Escape key
+  useEffect(() => {
+    if (!showPrivacyModal) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowPrivacyModal(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showPrivacyModal]);
+
+  const renderSuggestionsContent = () => {
+    if (isSearching) {
+      return (
+        <li className="login-suggestion-empty">
+          <Loader2 size={16} className="login-spinner" style={{ display: 'inline-block', marginRight: 6 }} />
+          Mencari...
+        </li>
+      );
+    }
+
+    if (suggestions.length > 0) {
+      return suggestions.map((company) => (
+        <li key={company.id} className="login-suggestion-item-wrapper">
+          <button
+            type="button"
+            className="login-suggestion-item"
+            onClick={() => handleSelectSuggestion(company.name)}
+          >
+            <Building2 className="login-suggestion-icon" size={16} />
+            <span>{company.name}</span>
+          </button>
+        </li>
+      ));
+    }
+
+    return (
+      <li className="login-suggestion-empty">
+        Perusahaan tidak ditemukan
+      </li>
+    );
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -290,27 +334,7 @@ export default function LoginPage() {
                 />
                 {showSuggestions && (
                   <ul className="login-suggestions">
-                    {isSearching ? (
-                      <div className="login-suggestion-empty">
-                        <Loader2 size={16} className="login-spinner" style={{ display: 'inline-block', marginRight: 6 }} />
-                        Mencari...
-                      </div>
-                    ) : suggestions.length > 0 ? (
-                      suggestions.map((company) => (
-                        <li
-                          key={company.id}
-                          className="login-suggestion-item"
-                          onClick={() => handleSelectSuggestion(company.name)}
-                        >
-                          <Building2 className="login-suggestion-icon" size={16} />
-                          <span>{company.name}</span>
-                        </li>
-                      ))
-                    ) : (
-                      <div className="login-suggestion-empty">
-                        Perusahaan tidak ditemukan
-                      </div>
-                    )}
+                    {renderSuggestionsContent()}
                   </ul>
                 )}
               </div>
@@ -469,15 +493,17 @@ export default function LoginPage() {
 
       {/* Privacy Policy Modal */}
       {showPrivacyModal && (
-        <div
-          className="login-privacy-modal-overlay"
-          onClick={() => setShowPrivacyModal(false)}
-        >
-          <div
+        <div className="login-privacy-modal-overlay">
+          <button
+            type="button"
+            className="login-privacy-modal-backdrop"
+            onClick={() => setShowPrivacyModal(false)}
+            aria-label="Tutup kebijakan privasi"
+          />
+          <dialog
+            open
             className="login-privacy-modal-dialog"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
+            aria-labelledby="privacy-modal-title"
           >
             <div className="login-privacy-modal-header">
               <div className="login-privacy-modal-header-left">
@@ -485,7 +511,7 @@ export default function LoginPage() {
                   <Shield size={20} />
                 </div>
                 <div>
-                  <h3 className="login-privacy-modal-title">
+                  <h3 id="privacy-modal-title" className="login-privacy-modal-title">
                     Kebijakan Privasi &amp; Perlindungan Data
                   </h3>
                   <p className="login-privacy-modal-subtitle">
@@ -561,7 +587,7 @@ export default function LoginPage() {
                 Setuju &amp; Mengerti
               </button>
             </div>
-          </div>
+          </dialog>
         </div>
       )}
     </div>
