@@ -313,8 +313,8 @@ export default function PrivacyPolicyDashboardPage() {
         section.summary.toLowerCase().includes(query) ||
         section.badge.toLowerCase().includes(query) ||
         section.content.some((c) => c.toLowerCase().includes(query)) ||
-        (section.keyPoints && section.keyPoints.some((kp) => kp.toLowerCase().includes(query))) ||
-        (section.adminNotes && section.adminNotes.some((an) => an.toLowerCase().includes(query)));
+        Boolean(section.keyPoints?.some((kp) => kp.toLowerCase().includes(query))) ||
+        Boolean(section.adminNotes?.some((an) => an.toLowerCase().includes(query)));
 
       return matchesTab && matchesSearch;
     });
@@ -581,8 +581,8 @@ export default function PrivacyPolicyDashboardPage() {
 
                   {/* Paragraphs */}
                   <div className="space-y-2.5 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                    {sec.content.map((p, pIdx) => (
-                      <p key={pIdx}>{p}</p>
+                    {sec.content.map((p) => (
+                      <p key={`${sec.id}-p-${p.slice(0, 32)}`}>{p}</p>
                     ))}
                   </div>
 
@@ -594,8 +594,8 @@ export default function PrivacyPolicyDashboardPage() {
                         <span>Poin Perlindungan Utama bagi Karyawan:</span>
                       </div>
                       <ul className="space-y-1 text-xs text-emerald-950 dark:text-emerald-200 list-disc list-inside">
-                        {sec.keyPoints.map((kp, kpIdx) => (
-                          <li key={kpIdx} className="leading-relaxed">
+                        {sec.keyPoints.map((kp) => (
+                          <li key={`${sec.id}-kp-${kp.slice(0, 32)}`} className="leading-relaxed">
                             {kp}
                           </li>
                         ))}
@@ -611,8 +611,8 @@ export default function PrivacyPolicyDashboardPage() {
                         <span>Kewajiban Tata Kelola bagi Super Admin:</span>
                       </div>
                       <ul className="space-y-1 text-xs text-amber-950 dark:text-amber-200 list-disc list-inside">
-                        {sec.adminNotes.map((an, anIdx) => (
-                          <li key={anIdx} className="leading-relaxed">
+                        {sec.adminNotes.map((an) => (
+                          <li key={`${sec.id}-an-${an.slice(0, 32)}`} className="leading-relaxed">
                             {an}
                           </li>
                         ))}
