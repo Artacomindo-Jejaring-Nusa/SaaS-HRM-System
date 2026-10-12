@@ -18,7 +18,7 @@ interface TokenPayload {
 
 function storeAuthSession(tokenData: TokenPayload, keepLoggedIn: boolean): void {
   const { access_token, refresh_token, expires_in } = tokenData;
-  const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
+  const isSecure = typeof globalThis.window !== "undefined" && globalThis.location?.protocol === "https:";
   const accessExpiryDays = expires_in ? expires_in / 86400 : 1;
 
   Cookies.set("token", access_token, {
