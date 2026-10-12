@@ -249,34 +249,53 @@ class PayrollController extends Controller
             }
         }
 
-        // Calculate flexible late deduction using PayrollService
-        $lateResult = $this->payrollService->calculateLateDeduction(
-            $user->attendances,
-            $schedulesMap,
-            $basicSalary,
-            $totalWorkingDays,
-            $totalFixedAllowance,
-            $settings
-        );
-        $totalLateDeduction = $lateResult['amount'];
+        // Khusus Pola Kehadiran Fleksibel (Atasan/Pimpinan):
+        // Tidak wajib absen harian, bebas dari potongan denda terlambat & potongan ketidakhadiran (alfa)
+        if ($user->attendance_type === 'flexible') {
+            $attendedDays = $totalWorkingDays;
+            $totalLateDeduction = 0;
+            $lateResult = [
+                'amount' => 0,
+                'total_late_minutes' => 0,
+                'details' => [],
+                'note' => 'Pola Kehadiran Fleksibel (Bebas Denda Keterlambatan)',
+            ];
+            $totalAbsenceDeduction = 0;
+            $absenceResult = [
+                'amount' => 0,
+                'details' => [],
+                'note' => 'Pola Kehadiran Fleksibel (Bebas Potongan Ketidakhadiran)',
+            ];
+        } else {
+            // Calculate flexible late deduction using PayrollService
+            $lateResult = $this->payrollService->calculateLateDeduction(
+                $user->attendances,
+                $schedulesMap,
+                $basicSalary,
+                $totalWorkingDays,
+                $totalFixedAllowance,
+                $settings
+            );
+            $totalLateDeduction = $lateResult['amount'];
 
-        $paidLeaveDays = 0;
-        foreach ($user->permits as $permit) {
-            if (in_array(strtolower($permit->type), ['sakit', 'sick'])) {
-                $paidLeaveDays += Carbon::parse($permit->start_date)->diffInDays(Carbon::parse($permit->end_date)) + 1;
+            $paidLeaveDays = 0;
+            foreach ($user->permits as $permit) {
+                if (in_array(strtolower($permit->type), ['sakit', 'sick'])) {
+                    $paidLeaveDays += Carbon::parse($permit->start_date)->diffInDays(Carbon::parse($permit->end_date)) + 1;
+                }
             }
+
+            $absentDays = max(0, $totalWorkingDays - ($attendedDays + $paidLeaveDays));
+
+            // Calculate flexible absence deduction using PayrollService
+            $absenceResult = $this->payrollService->calculateAbsenceDeduction(
+                $absentDays,
+                $totalWorkingDays,
+                $basicSalary,
+                $settings
+            );
+            $totalAbsenceDeduction = $absenceResult['amount'];
         }
-
-        $absentDays = max(0, $totalWorkingDays - ($attendedDays + $paidLeaveDays));
-
-        // Calculate flexible absence deduction using PayrollService
-        $absenceResult = $this->payrollService->calculateAbsenceDeduction(
-            $absentDays,
-            $totalWorkingDays,
-            $basicSalary,
-            $settings
-        );
-        $totalAbsenceDeduction = $absenceResult['amount'];
 
         $regularRate = $settings->overtime_rate_per_hour ?? 30000;
         $holidayRate = $settings->overtime_rate_holiday_per_hour ?? 50000;

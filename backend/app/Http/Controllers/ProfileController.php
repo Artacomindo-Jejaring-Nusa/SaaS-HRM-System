@@ -146,6 +146,12 @@ class ProfileController extends Controller
             $shiftName = 'Tidak Ada Shift';
             $scheduleLabel = 'Tidak Ada Shift';
             $hasShiftToday = false;
+        } elseif ($user->attendance_type === 'flexible') {
+            $workStartTime = null;
+            $workEndTime = null;
+            $shiftName = 'Fleksibel';
+            $scheduleLabel = 'Jam Fleksibel (Atasan)';
+            $hasShiftToday = true;
         } else {
             $rawStart = !empty($user->office?->work_start_time) ? $user->office->work_start_time : ($user->company?->work_start_time ?? '08:30:00');
             $rawEnd = !empty($user->office?->work_end_time) ? $user->office->work_end_time : ($user->company?->work_end_time ?? '17:30:00');

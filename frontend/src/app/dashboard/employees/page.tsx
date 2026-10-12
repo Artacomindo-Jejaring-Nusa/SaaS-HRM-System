@@ -1160,6 +1160,11 @@ function EmployeeTableRow({
               Atasan: {emp.supervisor.name}
             </span>
           )}
+          {emp.attendance_type === "flexible" && (
+            <span className="text-[9px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md w-fit border border-purple-100">
+              Fleksibel (Atasan)
+            </span>
+          )}
         </div>
       </td>
       <td className="px-3.5 py-3 text-center whitespace-nowrap">
@@ -1649,8 +1654,9 @@ function EmployeeAddEditModal({
                       value={formData.attendance_type || "office_hour"}
                       onChange={(e) => setFormData({...formData, attendance_type: e.target.value})}
                     >
-                      <option value="office_hour">Office Hour</option>
+                      <option value="office_hour">Office Hour (Jam Kantor Normal)</option>
                       <option value="shift">Shift / Jadwal Khusus</option>
+                      <option value="flexible">Fleksibel (Khusus Atasan - Bebas Jam & Bebas Potongan)</option>
                     </select>
                   </div>
                   <div className="space-y-1.5">
@@ -1889,7 +1895,7 @@ function EmployeeViewModal({
               <div><p className="text-xs text-gray-400">Tanggal Gabung</p><p className="text-sm font-semibold">{formatDate(employee.join_date)}</p></div>
               <div><p className="text-xs text-gray-400">Sisa Cuti</p><p className="text-sm font-semibold">{employee.leave_balance ?? 0} Hari</p></div>
               <div><p className="text-xs text-gray-400">Atasan Lgsg.</p><p className="text-sm font-semibold">{employee.supervisor?.name || '-'}</p></div>
-              <div><p className="text-xs text-gray-400">Pola Kehadiran</p><p className="text-sm font-semibold">{employee.attendance_type === "shift" ? "Shift" : "Office Hour"}</p></div>
+              <div><p className="text-xs text-gray-400">Pola Kehadiran</p><p className="text-sm font-semibold">{employee.attendance_type === "flexible" ? "Fleksibel (Atasan)" : employee.attendance_type === "shift" ? "Shift" : "Office Hour"}</p></div>
               <div className="col-span-2 border-l pl-4 border-gray-100">
                 <p className="text-xs text-red-400">Kontak Darurat</p>
                 <p className="text-sm font-semibold">{employee.emergency_contact_name || '-'} ({employee.emergency_contact_phone || '-'})</p>

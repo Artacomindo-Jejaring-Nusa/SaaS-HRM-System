@@ -15,6 +15,11 @@ trait HandlesAttendanceProcessing
 {
     private function determineCheckInStatus(User $user, ?Schedule $schedule, Carbon $now): string
     {
+        // Pola kehadiran fleksibel khusus atasan/pimpinan: tidak ada batasan jam & bebas status terlambat
+        if ($user->attendance_type === 'flexible') {
+            return 'present';
+        }
+
         $lateToleranceMinutes = (int) ($user->company?->late_tolerance_minutes ?? 0);
         $dateKey = $now->toDateString();
 
