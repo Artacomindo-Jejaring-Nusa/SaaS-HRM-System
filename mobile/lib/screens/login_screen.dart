@@ -187,16 +187,18 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showPrivacyPolicyModal() {
+    FocusScope.of(context).unfocus();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (context) => Container(
+      builder: (modalContext) => Container(
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-        height: MediaQuery.of(context).size.height * 0.85,
+        height: MediaQuery.of(modalContext).size.height * 0.85,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -247,7 +249,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.close, color: Colors.grey),
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.pop(modalContext),
                 ),
               ],
             ),
@@ -299,7 +301,7 @@ class _LoginScreenState extends State<LoginScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(modalContext),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: maroon,
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -319,6 +321,42 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrivacyPolicyButton({bool compact = false}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: _showPrivacyPolicyModal,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 8 : 16,
+            vertical: compact ? 6 : 10,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.shield_outlined,
+                size: compact ? 15 : 17,
+                color: maroon,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                compact ? "Kebijakan Privasi" : "Kebijakan Privasi & Perlindungan Data",
+                style: GoogleFonts.outfit(
+                  fontSize: compact ? 12 : 13,
+                  fontWeight: FontWeight.w600,
+                  color: maroon,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -430,25 +468,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 16),
             Center(
-              child: GestureDetector(
-                onTap: _showPrivacyPolicyModal,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.shield_outlined, size: 14, color: maroon),
-                    const SizedBox(width: 6),
-                    Text(
-                      "Kebijakan Privasi & Perlindungan Data",
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: maroon,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              child: _buildPrivacyPolicyButton(),
             ),
             const SizedBox(height: 20),
           ],
@@ -678,6 +698,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(width: 8),
                   GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () => setState(() => _keepLoggedIn = !_keepLoggedIn),
                     child: Text(
                       "Tetap masuk",
@@ -688,6 +709,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
+                  const Spacer(),
+                  _buildPrivacyPolicyButton(compact: true),
                 ],
               ),
               const SizedBox(height: 22),
@@ -781,25 +804,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 16),
               Center(
-                child: GestureDetector(
-                  onTap: _showPrivacyPolicyModal,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.shield_outlined, size: 14, color: maroon),
-                      const SizedBox(width: 6),
-                      Text(
-                        "Kebijakan Privasi & Perlindungan Data",
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: maroon,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                child: _buildPrivacyPolicyButton(),
               ),
               const SizedBox(height: 30),
             ],

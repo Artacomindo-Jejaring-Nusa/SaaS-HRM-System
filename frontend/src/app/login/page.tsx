@@ -8,7 +8,7 @@ import axiosInstance from "@/lib/axios";
 import Cookies from "js-cookie";
 import axios from "axios";
 import Image from "next/image";
-import { Eye, EyeOff, Loader2, Building2, Globe, Sparkles } from "lucide-react";
+import { Eye, EyeOff, Loader2, Building2, Globe, Sparkles, Shield, X } from "lucide-react";
 
 interface TokenPayload {
   access_token: string;
@@ -62,6 +62,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [keepLoggedIn, setKeepLoggedIn] = useState(true);
   const [agreePrivacy, setAgreePrivacy] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   
   const [selectedFromSuggestion, setSelectedFromSuggestion] = useState(false);
   
@@ -383,6 +384,7 @@ export default function LoginPage() {
               <div className="login-privacy-row">
                 <input
                   type="checkbox"
+                  id="agree-privacy-checkbox"
                   className="login-privacy-checkbox"
                   checked={agreePrivacy}
                   onChange={(e) => setAgreePrivacy(e.target.checked)}
@@ -390,9 +392,16 @@ export default function LoginPage() {
                 />
                 <span className="login-privacy-text">
                   I agree and accept the{" "}
-                  <a href="#" className="login-privacy-link">
+                  <button
+                    type="button"
+                    className="login-privacy-link-btn"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setShowPrivacyModal(true);
+                    }}
+                  >
                     Privacy Policy
-                  </a>
+                  </button>
                 </span>
               </div>
 
@@ -457,6 +466,108 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* Privacy Policy Modal */}
+      {showPrivacyModal && (
+        <div
+          className="login-privacy-modal-overlay"
+          onClick={() => setShowPrivacyModal(false)}
+        >
+          <div
+            className="login-privacy-modal-dialog"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="login-privacy-modal-header">
+              <div className="login-privacy-modal-header-left">
+                <div className="login-privacy-modal-badge">
+                  <Shield size={20} />
+                </div>
+                <div>
+                  <h3 className="login-privacy-modal-title">
+                    Kebijakan Privasi &amp; Perlindungan Data
+                  </h3>
+                  <p className="login-privacy-modal-subtitle">
+                    Ketentuan Perlindungan Data OnTime HRMS (PT. Artacomindo Jejaring Nusa)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="login-privacy-modal-close"
+                onClick={() => setShowPrivacyModal(false)}
+                aria-label="Tutup"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="login-privacy-modal-body">
+              <div className="login-privacy-section">
+                <h4>1. PENGUMPULAN DATA BIOMETRIK WAJAH</h4>
+                <p>
+                  • Foto selfie yang diambil saat pendaftaran wajah dan proses absensi diubah menjadi representasi vektor numerik 128-dimensi terenkripsi.<br />
+                  • Data biometrik hanya digunakan untuk memverifikasi keaslian dan kesesuaian identitas karyawan saat melakukan absensi masuk &amp; pulang.<br />
+                  • Kami tidak pernah membagikan atau menjual data biometrik Anda kepada pihak ketiga mana pun.
+                </p>
+              </div>
+              <div className="login-privacy-section">
+                <h4>2. DATA LOKASI GEOGRAFIS (GPS &amp; BACKGROUND TRACKING)</h4>
+                <p>
+                  • Koordinat GPS dikumpulkan pada saat absensi untuk memastikan kehadiran berada dalam radius kantor cabang yang sah (Geofencing).<br />
+                  • Layanan Lokasi Latar Belakang (Background Location) hanya aktif selama shift kerja berlangsung bagi teknisi/lapangan yang bertugas dengan indikator notifikasi aktif di bilah status. Pelacakan otomatis berhenti saat absen pulang.
+                </p>
+              </div>
+              <div className="login-privacy-section">
+                <h4>3. DATA TRANSAKSI &amp; DOKUMEN LAMPIRAN</h4>
+                <p>
+                  • Foto nota klaim pengeluaran, surat keterangan dokter, foto odometer kendaraan, dan tanda tangan digital disimpan dengan aman di server internal perusahaan untuk keperluan audit dan persetujuan operasional.
+                </p>
+              </div>
+              <div className="login-privacy-section">
+                <h4>4. DATA PERANGKAT (DEVICE ID) &amp; KEAMANAN</h4>
+                <p>
+                  • Pengidentifikasi unik perangkat smartphone (Device ID) dicatat untuk mencegah manipulasi, penggunaan akun ganda, atau pemasangan lokasi palsu (Fake GPS / Mock Location).
+                </p>
+              </div>
+              <div className="login-privacy-section">
+                <h4>5. DATA PENGGAJIAN &amp; KEUANGAN</h4>
+                <p>
+                  • Informasi nomor rekening bank, rincian komponen gaji, dan pemotongan pajak PPh 21 dikelola secara ketat dengan protokol enkripsi enterprise dan hanya dapat diakses oleh bagian Finance &amp; HRD yang berwenang.
+                </p>
+              </div>
+              <div className="login-privacy-section">
+                <h4>6. HAK AKSES DAN PENGHAPUSAN DATA</h4>
+                <p>
+                  • Karyawan berhak meninjau seluruh data riwayat kehadiran, dokumen pengajuan, dan mengajukan pembaruan data profil atau pendaftaran ulang biometrik wajah melalui Super Admin perusahaan.
+                </p>
+              </div>
+              <div className="login-privacy-section">
+                <h4>7. KONTAK &amp; BANTUAN</h4>
+                <p>
+                  • Jam Operasional: Senin – Jumat (08:30 – 17:30 WIB)<br />
+                  • Email Support: support@artacomindo.com<br />
+                  • PT. Artacomindo Jejaring Nusa
+                </p>
+              </div>
+            </div>
+
+            <div className="login-privacy-modal-footer">
+              <button
+                type="button"
+                className="login-privacy-modal-accept-btn"
+                onClick={() => {
+                  setAgreePrivacy(true);
+                  setShowPrivacyModal(false);
+                }}
+              >
+                Setuju &amp; Mengerti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
