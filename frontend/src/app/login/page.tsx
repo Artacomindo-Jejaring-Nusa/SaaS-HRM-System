@@ -99,6 +99,7 @@ export default function LoginPage() {
         email,
         password,
         company_name: companyName,
+        keep_logged_in: keepLoggedIn,
       });
       if (response.data.data && response.data.data.access_token) {
         const { access_token, refresh_token, expires_in } = response.data.data;
@@ -115,14 +116,20 @@ export default function LoginPage() {
           sameSite: "strict",
         });
         
-        // Save refresh token (long-lived, 30 days)
+        // Save refresh token (long-lived 30 days if keepLoggedIn, otherwise session cookie)
         if (refresh_token) {
           Cookies.set("refresh_token", refresh_token, {
-            expires: 30,
+            expires: keepLoggedIn ? 30 : undefined,
             secure: isSecure,
             sameSite: "strict",
           });
         }
+
+        Cookies.set("keep_logged_in", keepLoggedIn ? "true" : "false", {
+          expires: keepLoggedIn ? 30 : undefined,
+          secure: isSecure,
+          sameSite: "strict",
+        });
         router.push("/dashboard");
       } else {
         setError("Gagal mendapatkan token auth.");
@@ -174,6 +181,7 @@ export default function LoginPage() {
       const response = await axiosInstance.post("/login-google", {
         id_token: googleIdToken,
         company_name: companyName,
+        keep_logged_in: keepLoggedIn,
       });
 
       if (response.data.data && response.data.data.access_token) {
@@ -190,11 +198,17 @@ export default function LoginPage() {
 
         if (refresh_token) {
           Cookies.set("refresh_token", refresh_token, {
-            expires: 30,
+            expires: keepLoggedIn ? 30 : undefined,
             secure: isSecure,
             sameSite: "strict",
           });
         }
+
+        Cookies.set("keep_logged_in", keepLoggedIn ? "true" : "false", {
+          expires: keepLoggedIn ? 30 : undefined,
+          secure: isSecure,
+          sameSite: "strict",
+        });
 
         router.push("/dashboard");
       } else {

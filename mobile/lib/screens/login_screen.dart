@@ -21,6 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _companyController = TextEditingController();
   bool _isLoading = false;
   bool _obscureText = true;
+  bool _keepLoggedIn = true;
   List<dynamic> _companySuggestions = [];
   bool _showCompanySuggestions = false;
   bool _isSearching = false;
@@ -101,6 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _emailController.text,
       _passwordController.text,
       _companyController.text,
+      keepLoggedIn: _keepLoggedIn,
     );
 
     if (!mounted) {
@@ -144,6 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final result = await ApiService.loginWithGoogle(
         idToken: idToken,
         companyName: _companyController.text,
+        keepLoggedIn: _keepLoggedIn,
       );
 
       if (!mounted) return;
@@ -655,7 +658,39 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-              SizedBox(height: 35),
+              const SizedBox(height: 14),
+              // Keep me logged in checkbox
+              Row(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Checkbox(
+                      value: _keepLoggedIn,
+                      activeColor: maroon,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      onChanged: (val) {
+                        setState(() => _keepLoggedIn = val ?? true);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => setState(() => _keepLoggedIn = !_keepLoggedIn),
+                    child: Text(
+                      "Keep me logged in",
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF334155),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 22),
               SizedBox(
                 width: double.infinity,
                 height: 55,

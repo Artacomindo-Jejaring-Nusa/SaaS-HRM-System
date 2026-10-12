@@ -55,8 +55,14 @@ void main() async {
     final secureStorage = await SecureStorageService.getInstance().timeout(const Duration(seconds: 3));
     await secureStorage.migrateFromPlainPrefs().timeout(const Duration(seconds: 2));
     
-    // Check for valid token (encrypted)
-    hasToken = await secureStorage.hasValidToken().timeout(const Duration(seconds: 2));
+    // Check for valid token (encrypted) with Keep Me Logged In preference
+    final isKeepLoggedIn = await secureStorage.isKeepLoggedIn();
+    if (!isKeepLoggedIn) {
+      await secureStorage.clearTokens();
+      hasToken = false;
+    } else {
+      hasToken = await secureStorage.hasValidToken().timeout(const Duration(seconds: 2));
+    }
     
     if (hasToken) {
       AttendanceAlarmService().start();

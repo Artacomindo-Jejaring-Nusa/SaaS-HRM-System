@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -20,6 +19,7 @@ class SecureStorageService {
   static const String _accessTokenKey = '${_prefix}access_token';
   static const String _refreshTokenKey = '${_prefix}refresh_token';
   static const String _tokenExpiryKey = '${_prefix}token_expiry';
+  static const String _keepLoggedInKey = '${_prefix}keep_logged_in';
 
   SecureStorageService._();
 
@@ -199,11 +199,24 @@ class SecureStorageService {
     await saveTokenExpiry(expiresIn);
   }
 
+  /// Save user preference for keeping session active across app restarts.
+  Future<void> setKeepLoggedIn(bool value) async {
+    await setSecure(_keepLoggedInKey, value ? '1' : '0');
+  }
+
+  /// Check whether user chose to keep logged in (defaults to true if unset).
+  Future<bool> isKeepLoggedIn() async {
+    final value = await getSecure(_keepLoggedInKey);
+    if (value == null) return true; // Default behavior
+    return value == '1';
+  }
+
   /// Clear all tokens (on logout).
   Future<void> clearTokens() async {
     await removeSecure(_accessTokenKey);
     await removeSecure(_refreshTokenKey);
     await removeSecure(_tokenExpiryKey);
+    await removeSecure(_keepLoggedInKey);
   }
 
   /// Check if user has any stored token (for auto-login check).

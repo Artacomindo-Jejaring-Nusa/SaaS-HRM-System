@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api_client.dart';
 import '../../services/secure_storage_service.dart';
@@ -11,8 +10,9 @@ class AuthRepository {
   static Future<Map<String, dynamic>> login(
     String email,
     String password,
-    String companyName,
-  ) async {
+    String companyName, {
+    bool keepLoggedIn = true,
+  }) async {
     try {
       String deviceId = await ApiClient.getDeviceId();
       final response = await ApiClient.client.post(
@@ -26,6 +26,7 @@ class AuthRepository {
           'password': password,
           'company_name': companyName,
           'device_id': deviceId,
+          'keep_logged_in': keepLoggedIn,
         }),
       );
 
@@ -34,6 +35,8 @@ class AuthRepository {
       if (response.statusCode == 200) {
         final tokenData = data['data'];
         final secureStorage = await SecureStorageService.getInstance();
+
+        await secureStorage.setKeepLoggedIn(keepLoggedIn);
 
         // Save tokens encrypted with device key
         await secureStorage.saveTokens(
@@ -60,6 +63,7 @@ class AuthRepository {
   static Future<Map<String, dynamic>> loginWithGoogle({
     required String idToken,
     required String companyName,
+    bool keepLoggedIn = true,
   }) async {
     try {
       String deviceId = await ApiClient.getDeviceId();
@@ -77,6 +81,7 @@ class AuthRepository {
           'company_name': companyName,
           'device_id': deviceId,
           'fcm_token': fcmToken,
+          'keep_logged_in': keepLoggedIn,
         }),
       );
 
@@ -85,6 +90,8 @@ class AuthRepository {
       if (response.statusCode == 200) {
         final tokenData = data['data'];
         final secureStorage = await SecureStorageService.getInstance();
+
+        await secureStorage.setKeepLoggedIn(keepLoggedIn);
 
         await secureStorage.saveTokens(
           accessToken: tokenData['access_token'],

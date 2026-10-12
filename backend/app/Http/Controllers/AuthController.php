@@ -103,12 +103,15 @@ class AuthController extends Controller
             RefreshToken::revokeForDevice($user->id, $request->device_id);
         }
 
+        $keepLoggedIn = $request->boolean('keep_logged_in', true);
+        $refreshDays = $keepLoggedIn ? self::REFRESH_TOKEN_DAYS : 1;
+
         $refreshTokenData = RefreshToken::generateFor(
             $user,
             $request->device_id,
             $request->ip(),
             $request->userAgent(),
-            self::REFRESH_TOKEN_DAYS
+            $refreshDays
         );
 
         ActivityLog::create([
@@ -125,7 +128,7 @@ class AuthController extends Controller
             'refresh_token' => $refreshTokenData['plain_token'],
             'token_type' => 'Bearer',
             'expires_in' => self::ACCESS_TOKEN_MINUTES * 60, // in seconds
-            'refresh_expires_in' => self::REFRESH_TOKEN_DAYS * 86400, // in seconds
+            'refresh_expires_in' => $refreshDays * 86400, // in seconds
             'user' => $user->load(['role.permissions', 'office']),
         ], 'Login berhasil');
     }
@@ -410,12 +413,15 @@ class AuthController extends Controller
                 RefreshToken::revokeForDevice($user->id, $request->device_id);
             }
 
+            $keepLoggedIn = $request->boolean('keep_logged_in', true);
+            $refreshDays = $keepLoggedIn ? self::REFRESH_TOKEN_DAYS : 1;
+
             $refreshTokenData = RefreshToken::generateFor(
                 $user,
                 $request->device_id,
                 $request->ip(),
                 $request->userAgent(),
-                self::REFRESH_TOKEN_DAYS
+                $refreshDays
             );
 
             ActivityLog::create([
@@ -432,7 +438,7 @@ class AuthController extends Controller
                 'refresh_token' => $refreshTokenData['plain_token'],
                 'token_type' => 'Bearer',
                 'expires_in' => self::ACCESS_TOKEN_MINUTES * 60,
-                'refresh_expires_in' => self::REFRESH_TOKEN_DAYS * 86400,
+                'refresh_expires_in' => $refreshDays * 86400,
                 'user' => $user->load(['role.permissions', 'office']),
             ], 'Login berhasil');
 

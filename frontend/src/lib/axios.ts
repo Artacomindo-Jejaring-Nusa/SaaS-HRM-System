@@ -81,6 +81,7 @@ axiosInstance.interceptors.response.use(
         isRefreshing = false;
         Cookies.remove("token");
         Cookies.remove("refresh_token");
+        Cookies.remove("keep_logged_in");
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }
@@ -104,16 +105,17 @@ axiosInstance.interceptors.response.use(
 
         // Calculate expiry in days for cookies
         const expiryDays = expires_in ? expires_in / 86400 : 1;
+        const isKeepLoggedIn = Cookies.get("keep_logged_in") !== "false";
 
         // Save new tokens with secure flags
         Cookies.set("token", access_token, {
-          expires: expiryDays,
+          expires: isKeepLoggedIn ? expiryDays : undefined,
           secure: window.location.protocol === "https:",
           sameSite: "strict",
         });
 
         Cookies.set("refresh_token", newRefreshToken, {
-          expires: 30, // Refresh token lasts 30 days
+          expires: isKeepLoggedIn ? 30 : undefined,
           secure: window.location.protocol === "https:",
           sameSite: "strict",
         });
@@ -129,6 +131,7 @@ axiosInstance.interceptors.response.use(
         // Refresh failed — clear tokens and redirect to login
         Cookies.remove("token");
         Cookies.remove("refresh_token");
+        Cookies.remove("keep_logged_in");
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }

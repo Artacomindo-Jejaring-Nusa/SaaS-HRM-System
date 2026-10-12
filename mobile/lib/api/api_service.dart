@@ -64,13 +64,19 @@ class ApiService {
   // ============ AUTH ============
 
   static Future<Map<String, dynamic>> login(
-          String email, String password, String companyName) =>
-      AuthRepository.login(email, password, companyName);
+          String email, String password, String companyName,
+          {bool keepLoggedIn = true}) =>
+      AuthRepository.login(email, password, companyName,
+          keepLoggedIn: keepLoggedIn);
 
   static Future<Map<String, dynamic>> loginWithGoogle(
-          {required String idToken, required String companyName}) =>
+          {required String idToken,
+          required String companyName,
+          bool keepLoggedIn = true}) =>
       AuthRepository.loginWithGoogle(
-          idToken: idToken, companyName: companyName);
+          idToken: idToken,
+          companyName: companyName,
+          keepLoggedIn: keepLoggedIn);
 
   static Future<List<dynamic>> searchCompanies(String query) =>
       AuthRepository.searchCompanies(query);

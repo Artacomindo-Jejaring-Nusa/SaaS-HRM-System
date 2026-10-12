@@ -140,6 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (e?.response?.status === 401) {
         Cookies.remove("token");
         Cookies.remove("refresh_token");
+        Cookies.remove("keep_logged_in");
         setUser(null);
         setPermissions([]);
         router.replace("/login");
@@ -158,6 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     Cookies.remove("token");
     Cookies.remove("refresh_token");
+    Cookies.remove("keep_logged_in");
     router.push("/login");
   };
 
