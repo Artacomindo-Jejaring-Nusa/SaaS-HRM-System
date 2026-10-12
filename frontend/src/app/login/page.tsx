@@ -3,6 +3,7 @@
 import "./login.css";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import axiosInstance from "@/lib/axios";
 import Cookies from "js-cookie";
@@ -576,6 +577,13 @@ export default function LoginPage() {
             </div>
 
             <div className="login-privacy-modal-footer">
+              <Link
+                href="/privacy-policy"
+                target="_blank"
+                className="login-privacy-modal-full-link"
+              >
+                Buka Halaman Lengkap ↗
+              </Link>
               <button
                 type="button"
                 className="login-privacy-modal-accept-btn"

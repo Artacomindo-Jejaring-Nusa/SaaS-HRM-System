@@ -112,6 +112,7 @@ export const translations = {
     face_approval: "Persetujuan Wajah",
     live_tracking: "Pantau Lokasi (Live)",
     help_center: "Pusat Bantuan",
+    privacy_policy: "Kebijakan Privasi",
 
     // Common Messages
     failed_to_fetch: "Gagal memuat data",
@@ -230,6 +231,7 @@ export const translations = {
     face_approval: "Face Approval",
     live_tracking: "Live Tracking",
     help_center: "Help Center",
+    privacy_policy: "Privacy Policy",
 
     // Common Messages
     failed_to_fetch: "Failed to fetch data",

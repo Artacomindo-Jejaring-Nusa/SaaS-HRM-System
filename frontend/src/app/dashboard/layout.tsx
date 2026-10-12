@@ -235,6 +235,11 @@ const sidebarLinks: SidebarLink[] = [
     name: "help_center",
     href: "/dashboard/help-center",
     icon: HelpCircle,
+  },
+  {
+    name: "privacy_policy",
+    href: "/dashboard/privacy-policy",
+    icon: ShieldCheck,
   }
 ];
 

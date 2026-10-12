@@ -357,6 +357,13 @@ export default function HelpCenterPage() {
                 <span>Dokumen SOP & Regulasi</span>
                 <ExternalLink size={13} className="text-slate-400" />
               </Link>
+              <Link
+                href="/dashboard/privacy-policy"
+                className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-slate-200"
+              >
+                <span>Kebijakan Privasi & Data</span>
+                <ExternalLink size={13} className="text-slate-400" />
+              </Link>
             </div>
           </div>
         </div>

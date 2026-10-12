@@ -864,8 +864,22 @@
   padding: 1rem 1.5rem;
   border-top: 1px solid #E2E8F0;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   background: #FAFAFA;
+}
+
+.login-privacy-modal-full-link {
+  font-size: 0.82rem;
+  color: #7F1D1D;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.login-privacy-modal-full-link:hover {
+  text-decoration: underline;
+  color: #991B1B;
 }
 
 .login-privacy-modal-accept-btn {
