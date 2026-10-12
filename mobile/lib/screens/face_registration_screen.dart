@@ -164,7 +164,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
     } catch (e) {
       debugPrint("Error initializing camera: $e");
       if (mounted) {
-        _showDialog('Error Kamera', 'Gagal menginisialisasi kamera: ${e.toString()}');
+        _showDialog('Kamera Bermasalah', 'Gagal membuka kamera: ${e.toString()}');
       }
     }
   }
@@ -465,7 +465,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
-        title: Text('Pendaftaran Wajah (AI)',
+        title: Text('Pendaftaran Wajah',
             style: GoogleFonts.inter(
                 fontWeight: FontWeight.w600, color: Colors.white)),
         backgroundColor: const Color(0xFF1E293B),
@@ -499,7 +499,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
                                   color: Colors.greenAccent),
                               const SizedBox(height: 20),
                               Text(
-                                "Mengekstrak 128-d Vektor Wajah AI...",
+                                "Memproses Data Wajah...",
                                 style: GoogleFonts.inter(
                                     color: Colors.white,
                                     fontSize: 15,
@@ -508,7 +508,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                "Memproses biometrik ke ML Model HRMS",
+                                "Sedang menyimpan ke sistem",
                                 style: GoogleFonts.inter(
                                     color: Colors.white60, fontSize: 12),
                               ),
@@ -848,7 +848,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
                           color: Colors.white70, size: 16),
                       const SizedBox(width: 8),
                       Text(
-                        "Perekaman Wajah AI Otomatis",
+                        "Perekaman Wajah Otomatis",
                         style: GoogleFonts.inter(
                             color: Colors.white,
                             fontSize: 12,

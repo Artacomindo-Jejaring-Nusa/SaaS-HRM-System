@@ -91,7 +91,7 @@ const sidebarLinks: SidebarLink[] = [
     permission: 'view-employees',
     submenus: [
       { name: "employees", href: "/dashboard/employees", permission: 'view-employees' },
-      { name: "Approval Wajah (AI)", href: "/dashboard/face-approval", permission: 'view-employees' },
+      { name: "face_approval", href: "/dashboard/face-approval", permission: 'view-employees' },
       { name: "company_profile", href: "/dashboard/company", permission: 'manage-company' },
       { name: "offices", href: "/dashboard/offices", permission: 'manage-offices' },
       { name: "kpi_reviews", href: "/dashboard/performance", permission: 'view-kpis' },
@@ -103,7 +103,7 @@ const sidebarLinks: SidebarLink[] = [
     icon: Clock,
     permission: 'view-attendances',
     submenus: [
-      { name: "Live Tracking", href: "/dashboard/live-tracking", permission: 'view-live-tracking' },
+      { name: "live_tracking", href: "/dashboard/live-tracking", permission: 'view-live-tracking' },
       { name: "attendance_map", href: "/dashboard/attendance/map", permission: 'view-attendance-map' },
       { name: "attendance_history", href: "/dashboard/attendance", permission: 'view-attendances' },
       { name: "schedules", href: "/dashboard/schedules", permission: 'manage-schedules' },
@@ -232,7 +232,7 @@ const sidebarLinks: SidebarLink[] = [
   },
   { name: "help_center", isHeading: true },
   {
-    name: "Pusat Bantuan",
+    name: "help_center",
     href: "/dashboard/help-center",
     icon: HelpCircle,
   }

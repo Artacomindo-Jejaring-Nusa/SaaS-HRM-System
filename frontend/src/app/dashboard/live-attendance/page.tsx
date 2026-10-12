@@ -550,7 +550,7 @@ export default function LiveAttendancePage() {
                 <AlertCircle size={22} />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900">Bypass Pulang Lebih Awal</h3>
+                <h3 className="text-base font-bold text-slate-900">Izin Pulang Lebih Awal</h3>
                 <p className="text-xs text-slate-500">Jam pulang terjadwal belum tercapai</p>
               </div>
             </div>
@@ -560,7 +560,7 @@ export default function LiveAttendancePage() {
                 {earlyOutPromptData?.message || "Waktu kepulangan Anda belum tercapai."}
               </p>
               <p className="text-amber-800 text-[11px] leading-relaxed">
-                Jika fitur Auto-Validasi aktif, absen akan langsung disetujui otomatis. Jika tidak, pengajuan ini akan dikirim ke Super Admin / HRD untuk persetujuan.
+                Jika pengaturan persetujuan otomatis aktif, absen akan langsung disetujui. Jika tidak, pengajuan ini akan dikirim ke Atasan / HRD untuk persetujuan.
               </p>
             </div>
 

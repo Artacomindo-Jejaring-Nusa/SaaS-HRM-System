@@ -294,10 +294,10 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       // 4. Ambil Device ID
       String deviceId = await ApiService.getDeviceId();
 
-      // 5. Kirim ke Backend (Ekstraksi Vektor Wajah AI & Cosine Similarity)
+      // 5. Kirim ke Backend (Verifikasi Wajah)
       setState(() {
-        _statusMessage = "Mengekstraksi & Memverifikasi Wajah (AI)...";
-        _statusIcon = Icons.smart_toy;
+        _statusMessage = "Memverifikasi Wajah Anda...";
+        _statusIcon = Icons.face;
         _statusColor = Colors.cyanAccent;
       });
 
@@ -466,7 +466,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  "Bypass Pulang Lebih Awal",
+                  "Izin Pulang Lebih Awal",
                   style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
@@ -496,7 +496,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          "Jika Auto-Validasi aktif, absen akan langsung diverifikasi. Jika tidak, pengajuan ini akan diteruskan ke Super Admin / HRD untuk persetujuan.",
+                          "Jika Validasi Otomatis aktif, absen akan langsung diverifikasi. Jika tidak, pengajuan ini akan diteruskan ke Admin / HRD untuk persetujuan.",
                           style: GoogleFonts.outfit(color: Colors.amber[100], fontSize: 11),
                         ),
                       ),
@@ -574,14 +574,14 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           backgroundColor: const Color(0xFF1E293B),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(
-            "Alasan Bypass Wajah",
+            "Alasan Lewati Verifikasi Wajah",
             style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                "Bypass verifikasi wajah akan menandai absen ini sebagai 'Mencurigakan' dan butuh persetujuan manual Superadmin.",
+                "Melewati verifikasi wajah akan menandai absen ini sebagai 'Mencurigakan' dan butuh persetujuan manual dari Admin.",
                 style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13),
               ),
               const SizedBox(height: 16),
@@ -613,7 +613,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 final reason = reasonController.text.trim();
                 if (reason.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Alasan bypass wajib diisi")),
+                    const SnackBar(content: Text("Alasan wajib diisi")),
                   );
                   return;
                 }
@@ -624,7 +624,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 });
                 _retryAttendance();
               },
-              child: Text("Lanjutkan Bypass", style: GoogleFonts.outfit(color: Colors.white)),
+              child: Text("Lanjutkan", style: GoogleFonts.outfit(color: Colors.white)),
             ),
           ],
         );
@@ -1036,7 +1036,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                   ),
                   onPressed: () => _showEarlyOutDialog(initialMessage: _resultMessage),
                   icon: const Icon(Icons.timer_off_outlined, color: Colors.white),
-                  label: Text("Bypass Pulang Lebih Awal",
+                  label: Text("Izin Pulang Lebih Awal",
                       style: GoogleFonts.outfit(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -1054,7 +1054,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 ),
                 onPressed: _bypassAttendance,
                 icon: const Icon(Icons.warning_amber_rounded, color: Colors.white),
-                label: Text("Bypass Wajah (Mencurigakan)",
+                label: Text("Lewati Verifikasi Wajah",
                     style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,

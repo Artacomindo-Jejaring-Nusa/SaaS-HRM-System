@@ -745,7 +745,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               BottomNavigationBarItem(
                 icon: const Icon(Icons.smart_toy_outlined),
                 activeIcon: const Icon(Icons.smart_toy),
-                label: "Bot",
+                label: "Asisten",
               ),
               BottomNavigationBarItem(
                 icon: const Icon(Icons.list_alt_outlined),
@@ -761,12 +761,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 BottomNavigationBarItem(
                   icon: const Icon(Icons.admin_panel_settings_outlined),
                   activeIcon: const Icon(Icons.admin_panel_settings),
-                  label: "Manager",
+                  label: "Manajer",
                 ),
               BottomNavigationBarItem(
                 icon: const Icon(Icons.settings_outlined),
                 activeIcon: const Icon(Icons.settings),
-                label: "Setting",
+                label: "Pengaturan",
               ),
             ],
           ),
@@ -1044,7 +1044,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       SizedBox(height: 25),
                       Text(
-                        "Under Development",
+                        "Dalam Pengembangan",
                         style: GoogleFonts.outfit(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -1053,7 +1053,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       SizedBox(height: 15),
                       Text(
-                        "Project Management Under Devlop and Optimize by Ahmad Rizki",
+                        "Fitur Manajemen Proyek sedang dalam pengembangan",
                         textAlign: TextAlign.center,
                         style: GoogleFonts.outfit(
                           fontSize: 15,

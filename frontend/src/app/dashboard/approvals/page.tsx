@@ -329,7 +329,7 @@ const normalizeEarlyOut = (rawAttendances: any[]): ApprovalItem[] =>
     user_email: a.user?.email,
     user_role: a.user?.role?.name || a.user?.role,
     description: `Alasan Pulang Awal: ${a.early_out_reason || a.suspicious_reason || 'Tidak ada keterangan'}`,
-    category: "Pulang Awal (Bypass)",
+    category: "Izin Pulang Lebih Awal",
     start_date: a.check_in ? new Date(a.check_in).toLocaleString('id-ID') : (a.date || undefined),
     end_date: a.check_out ? new Date(a.check_out).toLocaleString('id-ID') : undefined,
     status: a.early_out_status || "pending",
@@ -1173,7 +1173,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
                   </span>
                 </div>
                 <div className="text-xs font-bold text-slate-800">Pulang Awal</div>
-                <div className="text-[10px] text-slate-400">Bypass Jam Pulang</div>
+                <div className="text-[10px] text-slate-400">Sebelum Waktu Shift</div>
               </button>
             )}
           </div>

@@ -531,7 +531,7 @@ class _FleetLogScreenState extends State<FleetLogScreen>
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  driverType == 'driver' ? "Supir: $driverName" : "Driver Sendiri",
+                                  driverType == 'driver' ? "Supir: $driverName" : "Bawa Sendiri",
                                   style: GoogleFonts.outfit(
                                     fontSize: 11,
                                     color: Colors.grey[600],

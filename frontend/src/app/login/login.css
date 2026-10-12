@@ -260,7 +260,7 @@
 }
 
 .login-logo {
-  width: 52px;
+  width: 46px;
   height: auto;
   object-fit: contain;
 }
@@ -746,6 +746,11 @@
   .login-logo-wrapper {
     width: 56px;
     height: 56px;
+    border-radius: 16px;
+  }
+
+  .login-logo {
+    width: 34px;
   }
 
   .login-title {

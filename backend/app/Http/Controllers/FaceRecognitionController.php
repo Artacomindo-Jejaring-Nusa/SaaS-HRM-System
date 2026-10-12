@@ -141,7 +141,7 @@ class FaceRecognitionController extends Controller
         $user = User::findOrFail($id);
 
         if (empty($user->face_embedding)) {
-            return $this->errorResponse('Karyawan belum memiliki data vektor wajah untuk disetujui.', 422);
+            return $this->errorResponse('Karyawan belum memiliki foto wajah untuk disetujui.', 422);
         }
 
         $user->update([

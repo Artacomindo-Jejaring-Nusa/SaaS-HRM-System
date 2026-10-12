@@ -129,7 +129,7 @@ class AttendanceCorrectionController extends Controller
                     'KOREKSI ABSEN DISETUJUI OTOMATIS',
                     "Pengajuan koreksi absen Anda untuk tanggal {$attendanceDate} telah DISETUJUI OTOMATIS dan absensi Anda telah langsung diperbarui.",
                     'success',
-                    '/dashboard/attendance-corrections'
+                    self::ROUTE_ATTENDANCE_CORRECTIONS
                 );
             } else {
                 $this->notify(
@@ -148,7 +148,7 @@ class AttendanceCorrectionController extends Controller
                         'KOREKSI ABSEN PERLU PERSETUJUAN',
                         "{$user->name} mengajukan koreksi absen untuk tanggal {$attendanceDate}. Alasan: {$request->reason}",
                         'warning',
-                        '/dashboard/attendance-corrections'
+                        self::ROUTE_ATTENDANCE_CORRECTIONS
                     );
                 }
             }
@@ -185,7 +185,7 @@ class AttendanceCorrectionController extends Controller
                         'KOREKSI ABSEN BAWAHAN',
                         "{$user->name} mengajukan koreksi absen untuk tanggal {$attendanceDate}. Alasan: {$request->reason}",
                         'warning',
-                        '/dashboard/attendance-corrections'
+                        self::ROUTE_ATTENDANCE_CORRECTIONS
                     );
                 }
             }

@@ -333,7 +333,7 @@ export default function ActivityLogsPage() {
                                       </div>
                                       <div>
                                           <p className="text-sm font-bold text-gray-800">{selectedLog.model_type.split('\\').pop()}</p>
-                                          <p className="text-[11px] text-gray-400 font-medium">Internal System Reference</p>
+                                          <p className="text-[11px] text-gray-400 font-medium">Referensi Sistem Internal</p>
                                       </div>
                                   </div>
                                   <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase italic">ID: #{selectedLog.model_id}</span>

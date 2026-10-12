@@ -190,10 +190,10 @@ export default function FaceApprovalPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-                Approval Wajah Karyawan (AI Engine)
+                Persetujuan Wajah Karyawan
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Review foto biometrik pendaftaran mandiri dari HP karyawan untuk aktivasi absensi presensi wajah.
+                Tinjau pendaftaran foto wajah dari aplikasi karyawan untuk mengaktifkan absen wajah.
               </p>
             </div>
           </div>
@@ -207,7 +207,7 @@ export default function FaceApprovalPage() {
             className="gap-2"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+            Segarkan
           </Button>
         </div>
       </div>
@@ -216,7 +216,7 @@ export default function FaceApprovalPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Menunggu Approval</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Menunggu Persetujuan</p>
             <h3 className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{pendingCount}</h3>
           </div>
           <div className="p-3 bg-amber-500/10 rounded-xl text-amber-500">
@@ -246,9 +246,9 @@ export default function FaceApprovalPage() {
 
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">AI Model Pipeline</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Teknologi Pengenalan</p>
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mt-1 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-purple-500" /> YOLOv11 + 128-d
+              <Sparkles className="w-4 h-4 text-purple-500" /> Pengenalan Wajah Otomatis
             </h3>
           </div>
           <div className="p-3 bg-purple-500/10 rounded-xl text-purple-500">
@@ -312,7 +312,7 @@ export default function FaceApprovalPage() {
               <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs uppercase font-semibold">
                 <tr>
                   <th className="px-6 py-4">Karyawan</th>
-                  <th className="px-6 py-4">Foto Pendaftaran (AI)</th>
+                  <th className="px-6 py-4">Foto Pendaftaran</th>
                   <th className="px-6 py-4">Status Verifikasi</th>
                   <th className="px-6 py-4">Tanggal Pengajuan / Approve</th>
                   <th className="px-6 py-4 text-right">Aksi</th>
@@ -359,7 +359,7 @@ export default function FaceApprovalPage() {
                                 <Eye className="w-4 h-4 text-white" />
                               </div>
                             </button>
-                            <span className="text-xs text-slate-500">128-d Vector Diekstrak</span>
+                            <span className="text-xs text-slate-500">Wajah Terpindai</span>
                           </div>
                         ) : (
                           <span className="text-xs text-slate-400 italic">Belum ada foto</span>
@@ -375,7 +375,7 @@ export default function FaceApprovalPage() {
                         )}
                         {item.face_status === "pending" && (
                           <Badge className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                            <Clock className="w-3.5 h-3.5 mr-1" /> Menunggu Approval Admin
+                            <Clock className="w-3.5 h-3.5 mr-1" /> Menunggu Persetujuan Admin
                           </Badge>
                         )}
                         {item.face_status === "rejected" && (
@@ -420,7 +420,7 @@ export default function FaceApprovalPage() {
                                 disabled={isSubmitting}
                                 className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 text-xs h-8"
                               >
-                                <CheckCircle className="w-3.5 h-3.5" /> Approve
+                                <CheckCircle className="w-3.5 h-3.5" /> Setujui
                               </Button>
                               <Button
                                 size="sm"
@@ -445,7 +445,7 @@ export default function FaceApprovalPage() {
                               disabled={isSubmitting}
                               className="text-slate-600 dark:text-slate-400 hover:text-red-600 text-xs h-8 gap-1"
                             >
-                              <RotateCcw className="w-3.5 h-3.5" /> Reset Wajah
+                              <RotateCcw className="w-3.5 h-3.5" /> Atur Ulang Wajah
                             </Button>
                           )}
 
@@ -460,7 +460,7 @@ export default function FaceApprovalPage() {
                               disabled={isSubmitting}
                               className="text-blue-600 border-blue-200 hover:bg-blue-50 dark:hover:bg-blue-950/30 text-xs h-8 gap-1"
                             >
-                              <Upload className="w-3.5 h-3.5" /> Upload Foto
+                              <Upload className="w-3.5 h-3.5" /> Unggah Foto
                             </Button>
                           )}
                         </div>
@@ -487,7 +487,7 @@ export default function FaceApprovalPage() {
             className="relative z-10 bg-white dark:bg-slate-900 p-4 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800"
           >
             <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-slate-900 dark:text-white text-sm">Preview Foto Pendaftaran Wajah</h3>
+              <h3 className="font-bold text-slate-900 dark:text-white text-sm">Pratinjau Foto Pendaftaran Wajah</h3>
               <button
                 type="button"
                 onClick={() => setPreviewPhotoUrl(null)}
@@ -499,7 +499,7 @@ export default function FaceApprovalPage() {
             <img src={previewPhotoUrl} alt="Preview" className="w-full h-80 object-cover rounded-xl" />
             <div className="mt-3 text-center">
               <Button size="sm" onClick={() => setPreviewPhotoUrl(null)} className="w-full">
-                Tutup Preview
+                Tutup Pratinjau
               </Button>
             </div>
           </div>
@@ -591,7 +591,7 @@ export default function FaceApprovalPage() {
             </div>
 
             <p className="text-xs text-slate-500">
-              Upload foto wajah resmi untuk <strong>{selectedItem.name}</strong>. Wajah akan langsung diekstrak oleh AI dan diaktifkan.
+              Unggah foto wajah resmi untuk <strong>{selectedItem.name}</strong>. Wajah akan langsung didaftarkan dan diaktifkan.
             </p>
 
             <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-6 text-center">
@@ -629,7 +629,7 @@ export default function FaceApprovalPage() {
                 disabled={isSubmitting || !directUploadFile}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
               >
-                {isSubmitting ? "Mengekstrak AI..." : "Upload & Aktifkan"}
+                {isSubmitting ? "Menyimpan..." : "Unggah & Aktifkan"}
               </Button>
             </div>
           </div>

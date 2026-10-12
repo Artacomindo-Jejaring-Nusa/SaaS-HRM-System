@@ -355,7 +355,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 SizedBox(width: 8),
                 Flexible(
                   child: Text(
-                    "HRMS - SaaS Solution",
+                    "Sistem Manajemen SDM",
                     style: GoogleFonts.outfit(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -387,9 +387,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   color: Colors.black,
                 ),
                 children: [
-                  TextSpan(text: "Optimize "),
+                  TextSpan(text: "Kelola "),
                   TextSpan(
-                    text: "Workers",
+                    text: "Karyawan",
                     style: TextStyle(color: maroon),
                   ),
                 ],
@@ -397,7 +397,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             SizedBox(height: 12),
             Text(
-              "Management SDM menjadi lebih mudah,\natur rurinitas harian dengan efisien.",
+              "Pengelolaan SDM jadi lebih mudah,\natur rutinitas harian dengan efisien.",
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(
                 color: Colors.grey[600],
@@ -420,7 +420,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   elevation: 3,
                 ),
                 child: Text(
-                  "Sign in",
+                  "Masuk",
                   style: GoogleFonts.outfit(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -476,7 +476,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      "Login Portal",
+                      "Halaman Masuk",
                       style: GoogleFonts.outfit(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -494,7 +494,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 30),
               Text(
-                "Sign in",
+                "Masuk",
                 style: GoogleFonts.outfit(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
@@ -503,7 +503,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               SizedBox(height: 8),
               Text(
-                "Masukan kredensial akun Anda",
+                "Masukkan email dan kata sandi Anda",
                 style: GoogleFonts.outfit(
                   color: Colors.grey[500],
                   fontSize: 14,
@@ -525,7 +525,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       onChanged: _onCompanyChanged,
                       style: TextStyle(color: Colors.black),
                       decoration: InputDecoration(
-                        hintText: "Nama Perusahaan (Misal: Narwasthu)",
+                        hintText: "Ketik nama perusahaan Anda",
                         hintStyle: TextStyle(color: Colors.grey[400]),
                         prefixIcon: Icon(
                           Icons.business_outlined,
@@ -569,7 +569,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ? Padding(
                               padding: const EdgeInsets.all(15.0),
                               child: Text(
-                                "Tidak Ada Perusahaan tersebut",
+                                "Perusahaan tidak ditemukan",
                                 textAlign: TextAlign.center,
                                 style: GoogleFonts.outfit(
                                   color: Colors.grey[500],
@@ -613,7 +613,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   keyboardType: TextInputType.emailAddress,
                   style: TextStyle(color: Colors.black),
                   decoration: InputDecoration(
-                    hintText: "Email",
+                    hintText: "Alamat email",
                     hintStyle: TextStyle(color: Colors.grey[400]),
                     prefixIcon: Icon(Icons.mail_outline, color: maroon),
                     border: InputBorder.none,
@@ -637,7 +637,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   obscureText: _obscureText,
                   style: TextStyle(color: Colors.black),
                   decoration: InputDecoration(
-                    hintText: "Password",
+                    hintText: "Kata sandi",
                     hintStyle: TextStyle(color: Colors.grey[400]),
                     prefixIcon: Icon(Icons.lock_outline, color: maroon),
                     suffixIcon: IconButton(
@@ -680,7 +680,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   GestureDetector(
                     onTap: () => setState(() => _keepLoggedIn = !_keepLoggedIn),
                     child: Text(
-                      "Keep me logged in",
+                      "Tetap masuk",
                       style: GoogleFonts.outfit(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
@@ -708,7 +708,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: _isLoading
                       ? SpinKitThreeBounce(color: Colors.white, size: 20)
                       : Text(
-                          "Sign in",
+                          "Masuk",
                           style: GoogleFonts.outfit(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -757,7 +757,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       SizedBox(width: 12),
                       Text(
-                        "Login with Google",
+                        "Masuk dengan Google",
                         style: GoogleFonts.outfit(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -771,7 +771,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 35),
               Center(
                 child: Text(
-                  "Lupa password atau kendala login?\nHubungi Admin Perusahaan Anda.",
+                  "Lupa kata sandi atau ada kendala?\nHubungi Admin Perusahaan Anda.",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.outfit(
                     fontSize: 12,

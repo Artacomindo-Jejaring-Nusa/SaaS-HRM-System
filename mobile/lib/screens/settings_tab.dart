@@ -74,7 +74,7 @@ class _SettingsTabState extends State<SettingsTab> {
                       if (newController.text.length < 8) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
                           const SnackBar(
-                            content: Text("Password baru minimal 8 karakter"),
+                            content: Text("Kata sandi baru minimal 8 karakter"),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -355,7 +355,7 @@ class _SettingsTabState extends State<SettingsTab> {
           _buildSection("Akun & Keamanan"),
           _buildSettingItem(
             Icons.face_retouching_natural,
-            "Pendaftaran Wajah (AI)",
+            "Pendaftaran Wajah",
             "Daftarkan atau cek status verifikasi wajah",
             onTap: () {
               Navigator.push(
@@ -369,7 +369,7 @@ class _SettingsTabState extends State<SettingsTab> {
           _buildSettingItem(
             Icons.lock_reset_outlined,
             "Ganti Kata Sandi",
-            "Perbarui password akun Anda",
+            "Perbarui kata sandi akun Anda",
             onTap: _showChangePasswordDialog,
           ),
           _buildSettingItem(
@@ -443,39 +443,38 @@ class _SettingsTabState extends State<SettingsTab> {
             "FAQ dan panduan fitur aplikasi",
             onTap: () => _showInfoModal(
               "Pusat Bantuan",
-              "Selamat datang di Pusat Bantuan OnTime HRMS Enterprise!\n\n"
-                  "1. ABSENSI WAJAH AI & GEOFENCING (GPS)\n"
-                  "• Pastikan GPS perangkat aktif dengan akurasi tinggi dan Anda berada dalam radius kantor cabang yang sah.\n"
-                  "• Posisikan wajah & mata tegak lurus menghadap lingkaran kamera. Kamera akan mendeteksi kestabilan wajah dan mengambil foto secara otomatis (Auto-Capture).\n"
-                  "• Begitu foto berhasil tertangkap, tampilan kamera otomatis membeku (Freeze Snapshot) sehingga Anda boleh langsung melepas posisi wajah sementara sistem memproses ekstraksi vektor biometrik AI dan memvalidasi koordinat GPS.\n"
+              "Selamat datang di Pusat Bantuan OnTime HRMS!\n\n"
+                  "1. ABSENSI WAJAH & LOKASI (GPS)\n"
+                  "• Pastikan GPS perangkat aktif dengan akurasi tinggi dan Anda berada dalam radius kantor yang terdaftar.\n"
+                  "• Posisikan wajah & mata tegak lurus menghadap lingkaran kamera. Kamera akan mendeteksi kestabilan wajah dan mengambil foto secara otomatis.\n"
+                  "• Begitu foto berhasil ditangkap, tampilan kamera otomatis berhenti sehingga Anda boleh langsung melepas posisi wajah sementara sistem memproses dan memvalidasi data.\n"
                   "• Absen Dinas Luar: Karyawan yang bertugas di luar kantor wajib memilih tipe 'Dinas Luar' serta mengisi tujuan dan keterangan aktivitas dinas.\n\n"
-                  "2. PENGAJUAN FORM & WORKFLOW PERSETUJUAN\n"
-                  "• Cuti (Leave): Mengurangi saldo cuti tahunan atau hak cuti khusus Kemnaker otomatis setelah disetujui.\n"
-                  "• Izin (Permit): Untuk keperluan izin datang terlambat, pulang awal, atau izin sakit (bisa melampirkan surat dokter).\n"
-                  "• Klaim Biaya (Reimbursement): Pengajuan klaim pengeluaran operasional yang telah dikeluarkan, wajib melampirkan foto nota/struk kwitansi pembayaran.\n"
-                  "• Pengajuan Dana / Kasbon (Fund Request): Pengajuan dana operasional di muka sebelum transaksi dilakukan (tidak memerlukan nota).\n"
-                  "• Lembur (Overtime): Mengisi estimasi waktu lembur dan rincian pekerjaan yang dilakukan.\n"
-                  "• Tukar Shift (Shift Swap): Ajukan pergantian jadwal kerja langsung ke rekan satu tim lalu diverifikasi atasan.\n\n"
-                  "3. PORTAL MANAGER & PUSAT PERSETUJUAN\n"
-                  "• Menu khusus bagi atasan/manager yang diberi wewenang persetujuan oleh Super Admin.\n"
-                  "• Menyetujui atau menolak permohonan bawahan secara berjenjang (Level 1 Atasan Langsung, Level 2 HRD/Manager).\n"
-                  "• Memantau kehadiran dan live tracking anggota tim secara real-time.\n\n"
-                  "4. LIVE TRACKING & LOG ARMADA KENDARAAN (FLEET)\n"
-                  "• Pelacakan lokasi otomatis aktif saat jam shift kerja teknisi/lapangan berlangsung. Notifikasi 'Live Tracking Aktif' pada sistem Android berfungsi sebagai indikator transparansi privasi.\n"
-                  "• Log Kendaraan: Catat perjalanan dinas kendaraan kantor dengan mencantumkan tujuan dan foto odometer keberangkatan serta kepulangan.\n\n"
-                  "5. PENGGAJIAN & SLIP GAJI DIGITAL\n"
-                  "• Rincian gaji bulanan terintegrasi potongan BPJS Ketenagakerjaan/Kesehatan dan perhitungan pajak PPh 21 TER.\n"
-                  "• Unduh slip gaji resmi dalam format PDF standar A4 langsung dari menu Slip Gaji.\n\n"
-                  "6. KEAMANAN PERANGKAT (SINGLE DEVICE BINDING)\n"
-                  "• Satu akun karyawan terikat pada 1 Device ID fisik smartphone guna mencegah kecurangan titip absen.\n"
-                  "• Apabila Anda mengganti perangkat baru, ajukan permohonan reset Device ID kepada Super Admin atau tim IT Support perusahaan.\n\n"
-                  "7. LAYANAN BANTUAN & IT HELPDESK\n"
+                  "2. PENGAJUAN & PERSETUJUAN\n"
+                  "• Cuti: Mengurangi saldo cuti tahunan atau hak cuti khusus secara otomatis setelah disetujui.\n"
+                  "• Izin: Untuk keperluan izin datang terlambat, pulang awal, atau izin sakit (bisa melampirkan surat dokter).\n"
+                  "• Klaim Biaya: Pengajuan klaim pengeluaran operasional, wajib melampirkan foto nota/struk pembayaran.\n"
+                  "• Pengajuan Dana / Kasbon: Pengajuan dana operasional di muka sebelum transaksi dilakukan (tidak memerlukan nota).\n"
+                  "• Lembur: Mengisi estimasi waktu lembur dan rincian pekerjaan yang dilakukan.\n"
+                  "• Tukar Shift: Ajukan pergantian jadwal kerja langsung ke rekan satu tim lalu diverifikasi atasan.\n\n"
+                  "3. MENU MANAJER\n"
+                  "• Menu khusus bagi atasan/manajer yang diberi wewenang persetujuan oleh Admin.\n"
+                  "• Menyetujui atau menolak permohonan bawahan secara berjenjang.\n"
+                  "• Memantau kehadiran dan lokasi anggota tim secara langsung.\n\n"
+                  "4. PELACAKAN LOKASI & KENDARAAN DINAS\n"
+                  "• Pelacakan lokasi otomatis aktif saat jam shift kerja berlangsung.\n"
+                  "• Log Kendaraan: Catat perjalanan dinas kendaraan kantor dengan mencantumkan tujuan dan foto odometer.\n\n"
+                  "5. SLIP GAJI DIGITAL\n"
+                  "• Rincian gaji bulanan terintegrasi potongan BPJS dan perhitungan pajak PPh 21.\n"
+                  "• Unduh slip gaji dalam format PDF langsung dari menu Slip Gaji.\n\n"
+                  "6. KEAMANAN PERANGKAT\n"
+                  "• Satu akun karyawan terikat pada 1 perangkat untuk mencegah kecurangan.\n"
+                  "• Apabila Anda mengganti perangkat baru, hubungi Admin atau tim IT perusahaan Anda.\n\n"
+                  "7. BANTUAN & DUKUNGAN\n"
                   "• Jam Operasional: Senin – Jumat (08:30 – 17:30 WIB)\n"
-                  "• Email Support: support@artacomindo.com\n"
-                  "• Helpdesk HRD: hrd@artacomindo.com\n"
+                  "• Email: support@artacomindo.com\n"
                   "• PT. Artacomindo Jejaring Nusa",
               icon: Icons.help_outline_rounded,
-              subtitle: "Panduan Penggunaan & FAQ OnTime HRMS",
+              subtitle: "Panduan Penggunaan & FAQ",
             ),
           ),
           _buildSettingItem(
@@ -511,18 +510,18 @@ class _SettingsTabState extends State<SettingsTab> {
             "Versi 2.1 Enterprise",
             onTap: () => _showInfoModal(
               "Tentang Aplikasi",
-              "OnTime HRMS Mobile Enterprise\n"
-                  "Versi 2.1 (Stable Release)\n\n"
-                  "Aplikasi Human Resource Management System (HRMS) Enterprise modern berbasis multi-tenant dengan fitur:\n"
-                  "• AI Face Recognition & Liveness Auto-Capture (Freeze Snapshot)\n"
-                  "• Geofencing Multi-Office & Anti-Mock GPS\n"
-                  "• Dynamic Multi-Level Approval Workflows (Cuti, Izin, Lembur, Klaim, Kasbon)\n"
-                  "• Background Location Live Tracking & Fleet Management\n"
-                  "• Shift Swap Engine & Kalender Kerja Tim\n"
-                  "• Slip Gaji Digital Terintegrasi PPh 21 TER & BPJS\n"
-                  "• Single Device ID Binding Security\n\n"
-                  "Developed by Engineering Team.\n"
-                  "Copyright © 2026 PT. Artacomindo Jejaring Nusa.\n"
+              "OnTime HRMS\n"
+                  "Versi 2.1\n\n"
+                  "Aplikasi Manajemen SDM modern dengan fitur:\n"
+                  "• Absensi dengan Pengenalan Wajah Otomatis\n"
+                  "• Validasi Lokasi Kantor (GPS)\n"
+                  "• Alur Persetujuan Bertingkat (Cuti, Izin, Lembur, Klaim, Kasbon)\n"
+                  "• Pelacakan Lokasi & Manajemen Kendaraan Dinas\n"
+                  "• Tukar Shift & Kalender Kerja Tim\n"
+                  "• Slip Gaji Digital (PPh 21 & BPJS)\n"
+                  "• Keamanan Perangkat Tunggal\n\n"
+                  "Dikembangkan oleh Tim Pengembang.\n"
+                  "Hak Cipta © 2026 PT. Artacomindo Jejaring Nusa.\n"
                   "Seluruh hak cipta dilindungi undang-undang.",
               icon: Icons.info_outline_rounded,
               subtitle: "Informasi Sistem & Versi Aplikasi",

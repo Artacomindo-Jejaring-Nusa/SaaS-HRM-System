@@ -453,7 +453,7 @@ export default function AttendancePage() {
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
-                    <span>Check In</span>
+                    <span>Absen Masuk</span>
                     <span className="text-emerald-600 font-black">{item.check_in_time || "-"}</span>
                   </div>
                   <div className="aspect-video bg-slate-100 rounded-xl overflow-hidden border border-slate-200 relative">
@@ -467,7 +467,7 @@ export default function AttendancePage() {
 
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
-                    <span>Check Out</span>
+                    <span>Absen Pulang</span>
                     <span className="text-orange-600 font-black">{item.check_out_time || "-"}</span>
                   </div>
                   <div className="aspect-video bg-slate-100 rounded-xl overflow-hidden border border-slate-200 relative">
@@ -733,7 +733,7 @@ export default function AttendancePage() {
                 {/* Check In Side */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Check In</span>
+                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Absen Masuk</span>
                     <span className="text-sm font-black text-emerald-600">{selectedRecord.check_in_time || "-"}</span>
                   </div>
                   
@@ -758,7 +758,7 @@ export default function AttendancePage() {
                 {/* Check Out Side */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Check Out</span>
+                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Absen Pulang</span>
                     <span className="text-sm font-black text-orange-600">{selectedRecord.check_out_time || "-"}</span>
                   </div>
 
@@ -834,7 +834,7 @@ export default function AttendancePage() {
                   <div className="flex items-center justify-between text-orange-800 font-bold text-xs">
                     <div className="flex items-center gap-2">
                       <Clock size={15} className="text-orange-600" />
-                      <span>Informasi Pulang Lebih Awal (Bypass)</span>
+                      <span>Informasi Izin Pulang Lebih Awal</span>
                     </div>
                     <div>
                       {selectedRecord.early_out_status === 'approved' && (

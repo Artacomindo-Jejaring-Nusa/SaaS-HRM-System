@@ -102,7 +102,7 @@ class AttendanceController extends Controller
         if ($isBypass) {
             $bypassReason = $request->input('bypass_reason', 'Lingkungan tidak mendukung');
             $attendanceData['is_suspicious'] = true;
-            $attendanceData['suspicious_reason'] = "Bypass pengenalan wajah: {$bypassReason}";
+            $attendanceData['suspicious_reason'] = "Tanpa verifikasi wajah: {$bypassReason}";
         }
 
         // Add dinas luar specific fields
@@ -188,7 +188,7 @@ class AttendanceController extends Controller
                 'requires_early_out_reason' => true,
                 'min_checkout_time' => $minCheckOutTime->format('H:i'),
                 'time_remaining' => $timeRemaining,
-                'message' => "Belum saatnya pulang! Jam pulang Anda adalah pukul {$minCheckOutTime->format('H:i')} WIB (Kurang {$timeRemaining} lagi). Silakan gunakan opsi bypass dan sertakan alasan jika Anda harus pulang lebih awal.",
+                'message' => "Belum saatnya pulang! Jam pulang Anda adalah pukul {$minCheckOutTime->format('H:i')} WIB (Kurang {$timeRemaining} lagi). Silakan ajukan izin pulang awal dan sertakan alasan jika Anda harus pulang lebih awal.",
             ], 400);
         } elseif ($securityError = $this->validateDeviceAndSecurity($user, $request, 'out')) {
             $response = $this->errorResponse($securityError['message'], $securityError['code']);
@@ -217,7 +217,7 @@ class AttendanceController extends Controller
         if ($isFaceBypass) {
             $bypassFaceReason = $request->input('bypass_reason', 'Lingkungan tidak mendukung');
             $updateData['is_suspicious'] = true;
-            $updateData['suspicious_reason'] = trim($attendance->suspicious_reason . " | Bypass pengenalan wajah saat check-out: {$bypassFaceReason}", ' |');
+            $updateData['suspicious_reason'] = trim($attendance->suspicious_reason . " | Tanpa verifikasi wajah saat pulang: {$bypassFaceReason}", ' |');
         }
 
         if ($isEarly && !empty($earlyOutReason)) {

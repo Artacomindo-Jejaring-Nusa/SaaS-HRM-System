@@ -10,6 +10,45 @@ import axios from "axios";
 import Image from "next/image";
 import { Eye, EyeOff, Loader2, Building2, Globe, Sparkles } from "lucide-react";
 
+interface TokenPayload {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+}
+
+function storeAuthSession(tokenData: TokenPayload, keepLoggedIn: boolean): void {
+  const { access_token, refresh_token, expires_in } = tokenData;
+  const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
+  const accessExpiryDays = expires_in ? expires_in / 86400 : 1;
+
+  Cookies.set("token", access_token, {
+    expires: keepLoggedIn ? accessExpiryDays : undefined,
+    secure: isSecure,
+    sameSite: "strict",
+  });
+
+  if (refresh_token) {
+    Cookies.set("refresh_token", refresh_token, {
+      expires: keepLoggedIn ? 30 : undefined,
+      secure: isSecure,
+      sameSite: "strict",
+    });
+  }
+
+  Cookies.set("keep_logged_in", keepLoggedIn ? "true" : "false", {
+    expires: keepLoggedIn ? 30 : undefined,
+    secure: isSecure,
+    sameSite: "strict",
+  });
+}
+
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err)) {
+    return err.response?.data?.message || fallback;
+  }
+  return "Terjadi kesalahan yang tidak terduga.";
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -101,48 +140,16 @@ export default function LoginPage() {
         company_name: companyName,
         keep_logged_in: keepLoggedIn,
       });
-      if (response.data.data && response.data.data.access_token) {
-        const { access_token, refresh_token, expires_in } = response.data.data;
-        
-        const isSecure = window.location.protocol === "https:";
-        
-        // Calculate access token expiry in days
-        const accessExpiryDays = expires_in ? expires_in / 86400 : 1;
-        
-        // Save access token with secure flags
-        Cookies.set("token", access_token, {
-          expires: keepLoggedIn ? accessExpiryDays : undefined, // session cookie if not "keep logged in"
-          secure: isSecure,
-          sameSite: "strict",
-        });
-        
-        // Save refresh token (long-lived 30 days if keepLoggedIn, otherwise session cookie)
-        if (refresh_token) {
-          Cookies.set("refresh_token", refresh_token, {
-            expires: keepLoggedIn ? 30 : undefined,
-            secure: isSecure,
-            sameSite: "strict",
-          });
-        }
 
-        Cookies.set("keep_logged_in", keepLoggedIn ? "true" : "false", {
-          expires: keepLoggedIn ? 30 : undefined,
-          secure: isSecure,
-          sameSite: "strict",
-        });
+      const tokenData = response.data?.data;
+      if (tokenData?.access_token) {
+        storeAuthSession(tokenData, keepLoggedIn);
         router.push("/dashboard");
       } else {
         setError("Gagal mendapatkan token auth.");
       }
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        setError(
-          err.response?.data?.message ||
-            "Kredensial tidak valid atau terjadi kesalahan server."
-        );
-      } else {
-        setError("Terjadi kesalahan yang tidak terduga.");
-      }
+      setError(extractErrorMessage(err, "Kredensial tidak valid atau terjadi kesalahan server."));
     } finally {
       setLoading(false);
     }
@@ -158,15 +165,11 @@ export default function LoginPage() {
     setError("");
 
     try {
-      // 1. Import Firebase secara dynamic (agar tidak memberat initial load)
       const { auth, googleProvider } = await import("@/lib/firebase");
       const { signInWithPopup } = await import("firebase/auth");
-
-      // 2. Tampilkan popup Google Sign-In
       const result = await signInWithPopup(auth, googleProvider);
-      
-      // 3. Ambil Google ID Token dari credential
-      const credential = await import("firebase/auth").then(m => 
+
+      const credential = await import("firebase/auth").then((m) =>
         m.GoogleAuthProvider.credentialFromResult(result)
       );
       const googleIdToken = credential?.idToken;
@@ -177,51 +180,24 @@ export default function LoginPage() {
         return;
       }
 
-      // 4. Kirim Google ID Token ke backend
       const response = await axiosInstance.post("/login-google", {
         id_token: googleIdToken,
         company_name: companyName,
         keep_logged_in: keepLoggedIn,
       });
 
-      if (response.data.data && response.data.data.access_token) {
-        const { access_token, refresh_token, expires_in } = response.data.data;
-
-        const isSecure = window.location.protocol === "https:";
-        const accessExpiryDays = expires_in ? expires_in / 86400 : 1;
-
-        Cookies.set("token", access_token, {
-          expires: keepLoggedIn ? accessExpiryDays : undefined,
-          secure: isSecure,
-          sameSite: "strict",
-        });
-
-        if (refresh_token) {
-          Cookies.set("refresh_token", refresh_token, {
-            expires: keepLoggedIn ? 30 : undefined,
-            secure: isSecure,
-            sameSite: "strict",
-          });
-        }
-
-        Cookies.set("keep_logged_in", keepLoggedIn ? "true" : "false", {
-          expires: keepLoggedIn ? 30 : undefined,
-          secure: isSecure,
-          sameSite: "strict",
-        });
-
+      const tokenData = response.data?.data;
+      if (tokenData?.access_token) {
+        storeAuthSession(tokenData, keepLoggedIn);
         router.push("/dashboard");
       } else {
-        setError(response.data.message || "Gagal login dengan Google.");
+        setError(response.data?.message || "Gagal login dengan Google.");
       }
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.message || "Gagal login dengan Google.");
-      } else if (err instanceof Error && err.message.includes("popup-closed")) {
-        // User menutup popup Google — tidak perlu tampilkan error
+      if (err instanceof Error && err.message.includes("popup-closed")) {
         setError("");
       } else {
-        setError("Gagal login dengan Google. Silakan coba lagi.");
+        setError(extractErrorMessage(err, "Gagal login dengan Google. Silakan coba lagi."));
       }
     } finally {
       setLoading(false);

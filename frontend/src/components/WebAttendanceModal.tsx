@@ -447,7 +447,7 @@ export default function WebAttendanceModal({
               <div className="flex items-center justify-between mb-1.5">
                 <label htmlFor="early-out-reason-input" className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                   <Clock size={13} className={requiresEarlyOutReason ? 'text-amber-600' : 'text-slate-500'} />
-                  {requiresEarlyOutReason ? "Alasan Pulang Lebih Awal (Wajib Diisi):" : "Alasan Pulang Lebih Awal (Bypass):"}
+                  {requiresEarlyOutReason ? "Alasan Pulang Lebih Awal (Wajib Diisi):" : "Alasan Pulang Lebih Awal (Izin Khusus):"}
                 </label>
                 {requiresEarlyOutReason && (
                   <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-200/80 px-2 py-0.5 rounded-full">

@@ -549,7 +549,7 @@ function OfficialApprovalFormDetails({ item, numericAmount }: OfficialApprovalFo
                   <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Jenis Permohonan</th>
                   <td className="p-2.5 font-black text-slate-900">
                     <span className="px-2 py-0.5 bg-orange-100 text-orange-900 font-bold rounded mr-2 border border-orange-300">
-                      Bypass Jam Pulang
+                      Izin Pulang Lebih Awal
                     </span>
                     <span>Pulang Sebelum Waktu Shift Berakhir</span>
                   </td>

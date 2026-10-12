@@ -89,7 +89,7 @@ class FaceRecognitionService
                 'success' => false,
                 'is_match' => false,
                 'similarity' => 0.0,
-                'message' => 'Data vektor wajah karyawan tidak valid atau belum terdaftar.',
+                'message' => 'Data wajah karyawan belum terdaftar atau tidak valid.',
             ];
         }
 
@@ -199,7 +199,7 @@ class FaceRecognitionService
             Log::error("[FaceRecognitionService CLI Extract Error]: " . $process->getErrorOutput() . " (Exit Code: " . $process->getExitCode() . ", Binary: $pythonBin, Script: $scriptPath)");
             return [
                 'success' => false,
-                'message' => 'Gagal memproses ekstraksi wajah AI (CLI error).',
+                'message' => 'Gagal mengenali wajah pada foto.',
                 'error' => $process->getErrorOutput()
             ];
         }
@@ -256,7 +256,7 @@ class FaceRecognitionService
                 'success' => false,
                 'is_match' => false,
                 'similarity' => 0.0,
-                'message' => 'Gagal memverifikasi wajah AI (CLI error).',
+                'message' => 'Gagal memverifikasi kecocokan wajah.',
             ];
         }
 

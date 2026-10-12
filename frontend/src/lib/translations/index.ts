@@ -109,6 +109,9 @@ export const translations = {
     company_documents: "SK & Regulasi",
     whatsapp_settings: "WhatsApp Gateway",
     api_tokens: "API Integrasi",
+    face_approval: "Persetujuan Wajah",
+    live_tracking: "Pantau Lokasi (Live)",
+    help_center: "Pusat Bantuan",
 
     // Common Messages
     failed_to_fetch: "Gagal memuat data",
@@ -224,6 +227,9 @@ export const translations = {
     company_documents: "Documents & SK",
     whatsapp_settings: "WhatsApp Gateway",
     api_tokens: "API Integration",
+    face_approval: "Face Approval",
+    live_tracking: "Live Tracking",
+    help_center: "Help Center",
 
     // Common Messages
     failed_to_fetch: "Failed to fetch data",
