@@ -54,6 +54,7 @@ export const translations = {
     
     // Sidebar
     main_menu: "Menu Utama",
+    approvals_portal: "Portal Persetujuan (Manager)",
     human_resources: "Manajemen SDM",
     administration: "Administrasi",
     reports: "Laporan",
@@ -168,6 +169,7 @@ export const translations = {
     
     // Sidebar
     main_menu: "Main Menu",
+    approvals_portal: "Approvals Portal (Manager)",
     human_resources: "Human Resources",
     administration: "Administration",
     reports: "Reports",

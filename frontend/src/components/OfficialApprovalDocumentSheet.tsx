@@ -20,7 +20,8 @@ export type ApprovalType =
   | "permit" 
   | "dinas_luar" 
   | "fund_request"
-  | "vehicle_log";
+  | "vehicle_log"
+  | "early_out";
 
 export interface OvertimeItemDetail {
   id?: number;
@@ -533,6 +534,46 @@ function OfficialApprovalFormDetails({ item, numericAmount }: OfficialApprovalFo
             <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Laporan / Catatan Pelaksanaan Tugas:</p>
             <p className="text-xs text-slate-800 italic leading-relaxed">
               &ldquo;{item.dinas_luar_notes || item.description || "Melaksanakan kunjungan dan instalasi teknis di lokasi klien."}&rdquo;
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* H. FORMULIR PULANG AWAL (EARLY OUT BYPASS) */}
+      {item.type === "early_out" && (
+        <div className="space-y-3">
+          <div className="border border-slate-300 rounded overflow-hidden">
+            <table className="w-full text-xs border-collapse">
+              <tbody>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Jenis Permohonan</th>
+                  <td className="p-2.5 font-black text-slate-900">
+                    <span className="px-2 py-0.5 bg-orange-100 text-orange-900 font-bold rounded mr-2 border border-orange-300">
+                      Bypass Jam Pulang
+                    </span>
+                    Pulang Sebelum Waktu Shift Berakhir
+                  </td>
+                </tr>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Masuk & Pulang</th>
+                  <td className="p-2.5 font-semibold text-slate-900">
+                    {item.start_date || "-"} <span className="text-slate-400 font-normal">s/d</span> {item.end_date || "-"}
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Status Verifikasi</th>
+                  <td className="p-2.5 font-bold">
+                    <span className="text-orange-700">Menunggu Persetujuan Super Admin / HRD</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Alasan Pulang Lebih Awal:</p>
+            <p className="text-xs text-slate-800 italic leading-relaxed">
+              &ldquo;{item.description || "Meeting diluar sampai jam pulang sebenarnya"}&rdquo;
             </p>
           </div>
         </div>

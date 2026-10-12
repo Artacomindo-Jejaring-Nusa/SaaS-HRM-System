@@ -65,6 +65,7 @@ class PendingRequestService
         $vehicleCount = $canApprove('vehicle_log') ? self::countScopedPending(VehicleLog::class, 'vehicle_log', ['pending', 'completed'], $user, $isGlobalAdmin) : 0;
         $fundRequestCount = $canApprove('fund_request') ? self::countScopedPending(FundRequest::class, 'fund_request', $fundRequestStatus, $user, $isGlobalAdmin) : 0;
         $payrollCount = $canApprove('payroll') ? self::countScopedPending(PayrollBatch::class, 'payroll', 'pending_approval', $user, $isGlobalAdmin) : 0;
+        $earlyOutCount = $canApprove('early_out') ? \App\Models\Attendance::where('is_early_out', true)->where('early_out_status', 'pending')->when(!$isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))->count() : 0;
 
         return [
             'leave' => $leaveCount,
@@ -74,7 +75,8 @@ class PendingRequestService
             'fund_request' => $fundRequestCount,
             'vehicle_log' => $vehicleCount,
             'payroll' => $payrollCount,
-            'total' => $leaveCount + $overtimeCount + $reimbursementCount + $permitCount + $vehicleCount + $fundRequestCount + $payrollCount,
+            'early_out' => $earlyOutCount,
+            'total' => $leaveCount + $overtimeCount + $reimbursementCount + $permitCount + $vehicleCount + $fundRequestCount + $payrollCount + $earlyOutCount,
         ];
     }
 
@@ -99,7 +101,7 @@ class PendingRequestService
 
         $items = $query->orderBy('created_at', 'desc')->get();
 
-        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'payroll'])) {
+        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'payroll', 'early_out'])) {
             $items = self::filterPendingItems($items, (string)$type, $user);
         }
 
@@ -126,7 +128,7 @@ class PendingRequestService
             $query->where('company_id', $user->company_id);
         }
 
-        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'payroll'])) {
+        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'payroll', 'early_out'])) {
             $items = $query->with(['user.supervisor', 'user.role'])->get();
             return self::filterPendingItems($items, $type, $user)->count();
         }
@@ -143,6 +145,7 @@ class PendingRequestService
             'permit' => Permit::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
             'vehicle_log' => VehicleLog::with(['user.role', 'user.office', 'user.supervisor', 'vehicle'])->whereIn('status', ['pending', 'completed']),
             'payroll' => PayrollBatch::with(['creator'])->where('status', 'pending_approval'),
+            'early_out' => \App\Models\Attendance::with(['user.role', 'user.office', 'user.supervisor'])->where('is_early_out', true)->where('early_out_status', 'pending'),
             'fund_request' => FundRequest::with(['user.role', 'user.office', 'user.supervisor', 'supervisor', 'hrd'])->where(function ($q) use ($isGlobalAdmin, $isCompanyAdmin) {
                 if ($isGlobalAdmin || $isCompanyAdmin) {
                     $q->whereIn('status', ['pending', 'approved_by_supervisor']);

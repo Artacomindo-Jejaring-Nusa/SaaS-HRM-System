@@ -83,6 +83,7 @@ class AttendanceRepository {
     bool isMocked = false,
     bool bypassFaceRecognition = false,
     String? bypassReason,
+    String? earlyOutReason,
   }) async {
     return _submitAttendance(
       '${ApiClient.baseUrl}/attendance/check-out',
@@ -93,6 +94,7 @@ class AttendanceRepository {
       isMocked: isMocked,
       bypassFaceRecognition: bypassFaceRecognition,
       bypassReason: bypassReason,
+      earlyOutReason: earlyOutReason,
     );
   }
 
@@ -109,6 +111,7 @@ class AttendanceRepository {
     String? dinasLuarNotes,
     bool bypassFaceRecognition = false,
     String? bypassReason,
+    String? earlyOutReason,
   }) async {
     try {
       final headers = await ApiClient.getHeaders();
@@ -138,6 +141,9 @@ class AttendanceRepository {
         if (bypassReason != null && bypassReason.isNotEmpty) {
           request.fields['bypass_reason'] = bypassReason;
         }
+      }
+      if (earlyOutReason != null && earlyOutReason.isNotEmpty) {
+        request.fields['early_out_reason'] = earlyOutReason;
       }
 
       // Add image file if provided

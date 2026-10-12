@@ -77,6 +77,32 @@ const getWebApprovalBadge = (webStatus?: string) => {
   return null;
 };
 
+const getEarlyOutBadge = (record: any) => {
+  if (!record.is_early_out) return null;
+  if (record.early_out_status === 'pending') {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-200 mt-0.5">
+        <Clock size={9} /> Pulang Awal (Pending)
+      </span>
+    );
+  }
+  if (record.early_out_status === 'approved') {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 mt-0.5">
+        <CheckCircle size={9} /> Pulang Awal (Disetujui)
+      </span>
+    );
+  }
+  if (record.early_out_status === 'rejected') {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-100 text-rose-800 border border-rose-200 mt-0.5">
+        <XCircle size={9} /> Pulang Awal (Ditolak)
+      </span>
+    );
+  }
+  return null;
+};
+
 export default function AttendancePage() {
   const { hasPermission, user } = useAuth();
   const isSuperAdmin = isSuperAdminUser(user);
@@ -346,8 +372,11 @@ export default function AttendancePage() {
                 <td className="px-4 py-3 whitespace-nowrap font-black text-emerald-600">
                   {record.check_in_time || "-"}
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap font-black text-orange-600">
-                  {record.check_out_time || "-"}
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <div className="flex flex-col items-start">
+                    <span className="font-black text-orange-600">{record.check_out_time || "-"}</span>
+                    {getEarlyOutBadge(record)}
+                  </div>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   {getLocationBadge(record)}
@@ -795,6 +824,53 @@ export default function AttendancePage() {
                       <span className="text-[10px] uppercase font-bold text-rose-700 block">Catatan / Keperluan</span>
                       <span className="text-slate-700">{selectedRecord.dinas_luar_notes || "-"}</span>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Early Clock-Out Specific Details */}
+              {selectedRecord.is_early_out && (
+                <div className="p-4 bg-orange-50/70 border border-orange-200 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between text-orange-800 font-bold text-xs">
+                    <div className="flex items-center gap-2">
+                      <Clock size={15} className="text-orange-600" />
+                      <span>Informasi Pulang Lebih Awal (Bypass)</span>
+                    </div>
+                    <div>
+                      {selectedRecord.early_out_status === 'approved' && (
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          Disetujui
+                        </span>
+                      )}
+                      {selectedRecord.early_out_status === 'pending' && (
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                          Menunggu Persetujuan
+                        </span>
+                      )}
+                      {selectedRecord.early_out_status === 'rejected' && (
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-200">
+                          Ditolak
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-orange-700 block">Alasan Pulang Lebih Awal</span>
+                      <span className="font-bold text-slate-800">{selectedRecord.early_out_reason || "-"}</span>
+                    </div>
+                    {selectedRecord.early_out_approver && (
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-orange-700 block">Ditinjau Oleh</span>
+                        <span className="text-slate-700 font-medium">{selectedRecord.early_out_approver?.name || "-"}</span>
+                      </div>
+                    )}
+                    {selectedRecord.early_out_rejection_reason && (
+                      <div className="md:col-span-2 bg-rose-50 p-2.5 rounded-xl border border-rose-200">
+                        <span className="text-[10px] uppercase font-bold text-rose-700 block">Alasan Penolakan</span>
+                        <span className="text-rose-900 font-semibold">{selectedRecord.early_out_rejection_reason}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

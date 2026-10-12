@@ -20,6 +20,7 @@ interface AttendanceCameraScannerProps {
   readonly streamActive: boolean;
   readonly loading: boolean;
   readonly statusMsg: string;
+  readonly capturedImage: string | null;
 }
 
 interface AttendanceGpsSectionProps {
@@ -142,33 +143,48 @@ function renderGpsStatusIcon(distance: number | null, officeConfig: OfficeTarget
 }
 
 function AttendanceCameraScanner(props: AttendanceCameraScannerProps) {
-  const { videoRef, canvasRef, streamActive, loading, statusMsg } = props;
+  const { videoRef, canvasRef, streamActive, loading, statusMsg, capturedImage } = props;
 
   return (
     <div className="bg-black/95 rounded-3xl overflow-hidden shadow-2xl relative border-4 border-gray-900 group aspect-[4/3] flex items-center justify-center">
-      <video 
-        ref={videoRef} 
-        autoPlay 
-        playsInline 
-        muted 
-        className="absolute inset-0 w-full h-full object-cover scale-x-[-1]" 
-      />
+      {capturedImage ? (
+        <img
+          src={capturedImage}
+          alt="Frozen Capture Snapshot"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      ) : (
+        <video 
+          ref={videoRef} 
+          autoPlay 
+          playsInline 
+          muted 
+          className="absolute inset-0 w-full h-full object-cover scale-x-[-1]" 
+        />
+      )}
       <canvas ref={canvasRef} className="hidden" />
       
       {streamActive && (
         <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center">
           <div className="w-48 h-64 border-2 border-transparent relative">
-             <div className="absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 border-[#8B0000] rounded-tl-xl transition-all duration-1000 group-hover:scale-110"></div>
-             <div className="absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 border-[#8B0000] rounded-tr-xl transition-all duration-1000 group-hover:scale-110"></div>
-             <div className="absolute bottom-0 left-0 w-12 h-12 border-b-4 border-l-4 border-[#8B0000] rounded-bl-xl transition-all duration-1000 group-hover:scale-110"></div>
-             <div className="absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 border-[#8B0000] rounded-br-xl transition-all duration-1000 group-hover:scale-110"></div>
-             {loading && <div className="absolute top-0 left-0 w-full h-1 bg-[#8B0000] shadow-[0_0_15px_#8B0000] animate-scan"></div>}
+             <div className={`absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 ${capturedImage ? 'border-emerald-400' : 'border-[#8B0000]'} rounded-tl-xl transition-all duration-1000 group-hover:scale-110`}></div>
+             <div className={`absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 ${capturedImage ? 'border-emerald-400' : 'border-[#8B0000]'} rounded-tr-xl transition-all duration-1000 group-hover:scale-110`}></div>
+             <div className={`absolute bottom-0 left-0 w-12 h-12 border-b-4 border-l-4 ${capturedImage ? 'border-emerald-400' : 'border-[#8B0000]'} rounded-bl-xl transition-all duration-1000 group-hover:scale-110`}></div>
+             <div className={`absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 ${capturedImage ? 'border-emerald-400' : 'border-[#8B0000]'} rounded-br-xl transition-all duration-1000 group-hover:scale-110`}></div>
+             {loading && <div className="absolute top-0 left-0 w-full h-1 bg-emerald-400 shadow-[0_0_15px_#34d399] animate-scan"></div>}
           </div>
           
           {loading && (
-            <div className="mt-4 flex items-center gap-2 bg-black/60 px-4 py-2 rounded-full absolute bottom-8">
-              <ScanFace className="text-[#8B0000] animate-pulse" size={20} />
-              <span className="text-white text-xs font-bold uppercase tracking-wider">{statusMsg}</span>
+            <div className="flex flex-col items-center gap-1.5 absolute bottom-6 max-w-[90%] text-center">
+              <div className="flex items-center gap-2 bg-black/80 backdrop-blur-md px-4 py-2 rounded-full border border-emerald-500/30">
+                <ScanFace className="text-emerald-400 animate-pulse shrink-0" size={18} />
+                <span className="text-white text-xs font-bold uppercase tracking-wider">{statusMsg}</span>
+              </div>
+              {capturedImage && (
+                <span className="text-emerald-300 text-[11px] font-semibold bg-emerald-950/80 backdrop-blur-md px-3 py-1 rounded-full border border-emerald-400/40">
+                  📸 Wajah Tertangkap — Anda boleh melepas posisi wajah
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -264,10 +280,14 @@ export default function LiveAttendancePage() {
   const [distance, setDistance] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState("Menyiapkan Sistem...");
   const [loading, setLoading] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [officeConfig, setOfficeConfig] = useState<OfficeTarget | null>(null);
   const [attendanceType, setAttendanceType] = useState<'office' | 'dinas_luar'>('office');
   const [destination, setDestination] = useState("");
   const [notes, setNotes] = useState("");
+  const [showEarlyOutModal, setShowEarlyOutModal] = useState(false);
+  const [earlyOutReason, setEarlyOutReason] = useState("");
+  const [earlyOutPromptData, setEarlyOutPromptData] = useState<{ message: string; timeRemaining?: string } | null>(null);
 
   const resolveTargetOffice = async (lat: number, lng: number): Promise<OfficeTarget | null> => {
     const assignedOffice = getUserOfficeTarget(user);
@@ -323,7 +343,7 @@ export default function LiveAttendancePage() {
     }
   }, [user]);
 
-  const handleAttendance = async (type: 'check-in' | 'check-out') => {
+  const handleAttendance = async (type: 'check-in' | 'check-out', customEarlyReason?: string) => {
     const validationError = validateAttendanceParams(
       location,
       videoRef.current,
@@ -343,35 +363,53 @@ export default function LiveAttendancePage() {
     const canvas = canvasRef.current;
     if (!location || !video || !canvas) return;
 
-    const isDinasLuar = attendanceType === 'dinas_luar';
+    // 1. Ambil snapshot seketika & FREEZE preview kamera
+    const selfieBase64 = captureWebcamFrame(video, canvas);
+    setCapturedImage(selfieBase64);
     setLoading(true);
-    setStatusMsg("Menganalisis Wajah (Face Recognition)...");
+    setStatusMsg("Mengekstraksi & Menganalisis Wajah (Face AI)...");
 
-    setTimeout(async () => {
-      try {
-        const selfieBase64 = captureWebcamFrame(video, canvas);
-        const payload = {
-          latitude: location.lat,
-          longitude: location.lng,
-          image: selfieBase64,
-          attendance_type: attendanceType,
-          dinas_luar_destination: isDinasLuar ? destination : null,
-          dinas_luar_notes: isDinasLuar ? notes : null,
-        };
+    const isDinasLuar = attendanceType === 'dinas_luar';
 
-        const res = await axiosInstance.post(`/attendance/${type}`, payload);
-        setStatusMsg(`Berhasil ${type === 'check-in' ? 'Absen Masuk' : 'Absen Keluar'}!`);
-        toast.success(res.data.message || `Berhasil ${type === 'check-in' ? 'Check-in' : 'Check-out'}!`);
-        router.push('/dashboard');
-      } catch (error: any) {
-        setStatusMsg("Gagal melakukan absensi.");
-        const errData = error.response?.data;
+    try {
+      const payload: any = {
+        latitude: location.lat,
+        longitude: location.lng,
+        image: selfieBase64,
+        attendance_type: attendanceType,
+        dinas_luar_destination: isDinasLuar ? destination : null,
+        dinas_luar_notes: isDinasLuar ? notes : null,
+      };
+
+      if (type === 'check-out') {
+        const reason = customEarlyReason ?? earlyOutReason;
+        if (reason && reason.trim()) {
+          payload.early_out_reason = reason.trim();
+        }
+      }
+
+      const res = await axiosInstance.post(`/attendance/${type}`, payload);
+      setStatusMsg(`Berhasil ${type === 'check-in' ? 'Absen Masuk' : 'Absen Keluar'}!`);
+      toast.success(res.data.message || `Berhasil ${type === 'check-in' ? 'Check-in' : 'Check-out'}!`);
+      setShowEarlyOutModal(false);
+      router.push('/dashboard');
+    } catch (error: any) {
+      setCapturedImage(null);
+      setStatusMsg("Gagal melakukan absensi.");
+      const errData = error.response?.data;
+      if (type === 'check-out' && (errData?.requires_early_out_reason || errData?.can_bypass)) {
+        setEarlyOutPromptData({
+          message: errData?.message || "Belum saatnya pulang. Harap masukkan alasan jika harus pulang lebih awal.",
+          timeRemaining: errData?.time_remaining,
+        });
+        setShowEarlyOutModal(true);
+      } else {
         const fieldErrors = errData?.errors ? Object.values(errData.errors).flat().join(', ') : null;
         toast.error(fieldErrors || errData?.message || "Terjadi kesalahan sistem.");
-      } finally {
-        setLoading(false);
       }
-    }, 1500);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const isBlocked = (attendanceType === 'office' && distance !== null && officeConfig && distance > officeConfig.radius) ||
@@ -396,6 +434,7 @@ export default function LiveAttendancePage() {
           streamActive={streamActive}
           loading={loading}
           statusMsg={statusMsg}
+          capturedImage={capturedImage}
         />
 
         <div className="space-y-6">
@@ -485,7 +524,7 @@ export default function LiveAttendancePage() {
                
                <button 
                  onClick={() => handleAttendance('check-out')}
-                 disabled={loading || !streamActive || !location || isBlocked || (user?.role?.id !== 1 && new Date().getHours() < 17)}
+                 disabled={loading || !streamActive || !location || isBlocked}
                  className="bg-[#8B0000] hover:bg-[#660000] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex flex-col items-center justify-center gap-2 group"
                >
                  <ScanFace size={24} className="group-hover:scale-110 transition-transform" />
@@ -496,6 +535,75 @@ export default function LiveAttendancePage() {
           </div>
         </div>
       </div>
+
+      {/* Modal Dialog for Early Clock-out Reason */}
+      {showEarlyOutModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
+                <AlertCircle size={22} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Bypass Pulang Lebih Awal</h3>
+                <p className="text-xs text-slate-500">Jam pulang terjadwal belum tercapai</p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900">
+              <p className="font-semibold mb-1">
+                {earlyOutPromptData?.message || "Waktu kepulangan Anda belum tercapai."}
+              </p>
+              <p className="text-amber-800 text-[11px] leading-relaxed">
+                Jika fitur Auto-Validasi aktif, absen akan langsung disetujui otomatis. Jika tidak, pengajuan ini akan dikirim ke Super Admin / HRD untuk persetujuan.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="modal_early_out_reason" className="block text-xs font-bold text-slate-700">
+                Alasan Pulang Lebih Awal <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                id="modal_early_out_reason"
+                rows={3}
+                value={earlyOutReason}
+                onChange={(e) => setEarlyOutReason(e.target.value)}
+                placeholder="Contoh: Ada meeting di luar kantor sampai jam pulang selesai..."
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8B0000] focus:bg-white text-slate-800"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEarlyOutModal(false);
+                  setEarlyOutReason("");
+                }}
+                disabled={loading}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-xl transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!earlyOutReason.trim()) {
+                    toast.error("Alasan pulang lebih awal wajib diisi.");
+                    return;
+                  }
+                  handleAttendance('check-out', earlyOutReason.trim());
+                }}
+                disabled={loading || !earlyOutReason.trim()}
+                className="px-5 py-2.5 bg-gradient-to-r from-[#8B0000] to-[#6a0000] hover:from-[#a10000] hover:to-[#7a0000] disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+              >
+                {loading ? "Memproses..." : "Lanjutkan Pulang"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

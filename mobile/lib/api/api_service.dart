@@ -128,9 +128,9 @@ class ApiService {
           bypassReason: bypassReason);
 
   static Future<Map<String, dynamic>?> checkOut(double lat, double lng,
-          {String? imagePath, String? deviceId, bool isMocked = false, bool bypassFaceRecognition = false, String? bypassReason}) =>
+          {String? imagePath, String? deviceId, bool isMocked = false, bool bypassFaceRecognition = false, String? bypassReason, String? earlyOutReason}) =>
       AttendanceRepository.checkOut(lat, lng,
-          imagePath: imagePath, deviceId: deviceId, isMocked: isMocked, bypassFaceRecognition: bypassFaceRecognition, bypassReason: bypassReason);
+          imagePath: imagePath, deviceId: deviceId, isMocked: isMocked, bypassFaceRecognition: bypassFaceRecognition, bypassReason: bypassReason, earlyOutReason: earlyOutReason);
 
   // ============ NOTIFICATIONS ============
 

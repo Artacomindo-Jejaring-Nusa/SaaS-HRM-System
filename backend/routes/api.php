@@ -547,24 +547,24 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::post('/projects/{projectId}/cash-flows', [ProjectController::class, 'storeCashFlow']);
     Route::delete('/projects/{projectId}/cash-flows/{cashFlowId}', [ProjectController::class, 'destroyCashFlow']);
 
-    Route::middleware('permission:view-vehicle-logs')->group(function () {
+    Route::middleware('permission:view-vehicle-logs,manage-company')->group(function () {
         Route::get('/vehicle-logs/report', [VehicleLogController::class, 'report']);
         Route::get('/vehicle-logs/vehicles', [VehicleLogController::class, 'vehicles']);
         Route::get('/vehicle-logs', [VehicleLogController::class, 'index']);
         Route::get('/vehicle-logs/{id}', [VehicleLogController::class, 'show']);
     });
-    Route::middleware('permission:apply-vehicle-logs')->group(function () {
+    Route::middleware('permission:apply-vehicle-logs,manage-company,approve-vehicle-logs')->group(function () {
         Route::post('/vehicle-logs/vehicles', [VehicleLogController::class, 'storeVehicle']);
         Route::post('/vehicle-logs/request', [VehicleLogController::class, 'storeRequest']);
         Route::post('/vehicle-logs/departure', [VehicleLogController::class, 'storeDeparture']);
         Route::post('/vehicle-logs/{id}/departure', [VehicleLogController::class, 'storeDeparture']);
         Route::post('/vehicle-logs/{id}/return', [VehicleLogController::class, 'storeReturn']);
     });
-    Route::middleware('permission:approve-vehicle-logs')->group(function () {
+    Route::middleware('permission:approve-vehicle-logs,manage-company')->group(function () {
         Route::post('/vehicle-logs/{id}/approve', [VehicleLogController::class, 'approve']);
         Route::post('/vehicle-logs/{id}/reject', [VehicleLogController::class, 'reject']);
     });
-    Route::middleware('permission:view-vehicle-logs')->delete('/vehicle-logs/{id}', [VehicleLogController::class, 'destroy']);
+    Route::middleware('permission:view-vehicle-logs,manage-company')->delete('/vehicle-logs/{id}', [VehicleLogController::class, 'destroy']);
 
     // Employee Tracking (Live Location)
     Route::post('/tracking/update', [TrackingController::class, 'store']);

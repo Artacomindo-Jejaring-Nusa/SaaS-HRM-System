@@ -82,6 +82,7 @@ type SidebarLink = {
 const sidebarLinks: SidebarLink[] = [
   { name: "main_menu", isHeading: true },
   { name: "dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "approvals_portal", href: "/dashboard/approvals", icon: CheckSquare, permission: 'view-approvals' },
   
   { name: "human_resources", isHeading: true, permission: 'view-employees' },
   { 

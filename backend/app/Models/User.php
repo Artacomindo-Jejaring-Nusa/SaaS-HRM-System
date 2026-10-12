@@ -103,40 +103,22 @@ class User extends Authenticatable
             return (bool) $this->attributes['can_access_manager_portal'];
         }
 
-        // 2. Default: evaluate role permissions, subordinates, or keywords
+        // 2. Default: evaluate role permissions or subordinates
         return $this->hasApprovalPermissions()
-            || $this->subordinates()->exists()
-            || $this->hasManagerRoleKeyword();
+            || $this->subordinates()->exists();
     }
 
     private function hasApprovalPermissions(): bool
     {
         $permissions = [
-            'view-manager-portal', 'manage-approvals', 'approve-leaves', 'approve-permits',
+            'view-manager-portal', 'manage-approvals', 'view-approvals', 'approve-leaves', 'approve-permits',
             'approve-overtimes', 'approve-reimbursements', 'approve-fund-requests',
-            'approve-vehicle-logs', 'approve-shift-swaps', 'approve-project-costs',
+            'approve-vehicle-logs', 'approve-shift-swaps', 'approve-project-costs', 'approve-payroll',
             'manage-attendance-corrections', 'approve-attendance-corrections',
         ];
 
         foreach ($permissions as $perm) {
             if ($this->hasPermission($perm)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function hasManagerRoleKeyword(): bool
-    {
-        $roleName = $this->relationLoaded('role') ? strtolower($this->role?->name ?? '') : '';
-        if (!$roleName) {
-            return false;
-        }
-
-        $keywords = ['manager', 'supervisor', 'admin', 'hrd', 'hr', 'lead', 'kadiv', 'head', 'atasan', 'spv', 'direktur', 'director', 'coo', 'ceo', 'boc', 'management'];
-        foreach ($keywords as $keyword) {
-            if (str_contains($roleName, $keyword)) {
                 return true;
             }
         }

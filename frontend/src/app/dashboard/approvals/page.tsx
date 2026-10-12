@@ -45,7 +45,8 @@ type ApprovalType =
   | "permit" 
   | "dinas_luar" 
   | "fund_request"
-  | "vehicle_log";
+  | "vehicle_log"
+  | "early_out";
 
 type FilterType = "all" | ApprovalType;
 type ActionType = "approve" | "reject";
@@ -138,6 +139,7 @@ const typeLabel: Record<ApprovalType, string> = {
   dinas_luar: "Dinas Luar",
   fund_request: "Pengajuan Dana",
   vehicle_log: "Log Armada",
+  early_out: "Pulang Awal",
 };
 
 const typeColor: Record<ApprovalType, string> = {
@@ -148,6 +150,7 @@ const typeColor: Record<ApprovalType, string> = {
   dinas_luar: "bg-rose-50 text-rose-700 border-rose-200",
   fund_request: "bg-teal-50 text-teal-700 border-teal-200",
   vehicle_log: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  early_out: "bg-orange-50 text-orange-700 border-orange-200",
 };
 
 const extractStoragePath = (url?: string): string | undefined => {
@@ -318,6 +321,23 @@ const normalizeDinas = (rawDinas: any[]): ApprovalItem[] =>
     target_supervisor_id: d.user?.supervisor_id
   }));
 
+const normalizeEarlyOut = (rawAttendances: any[]): ApprovalItem[] =>
+  rawAttendances.map((a: any) => ({
+    id: a.id,
+    type: "early_out",
+    user_name: a.user?.name || "Karyawan",
+    user_email: a.user?.email,
+    user_role: a.user?.role?.name || a.user?.role,
+    description: `Alasan Pulang Awal: ${a.early_out_reason || a.suspicious_reason || 'Tidak ada keterangan'}`,
+    category: "Pulang Awal (Bypass)",
+    start_date: a.check_in ? new Date(a.check_in).toLocaleString('id-ID') : (a.date || undefined),
+    end_date: a.check_out ? new Date(a.check_out).toLocaleString('id-ID') : undefined,
+    status: a.early_out_status || "pending",
+    attachment: extractStoragePath(a.image_out_url || a.image_out || a.image_in_url || a.image_in),
+    created_at: a.created_at || a.check_out || a.check_in,
+    target_supervisor_id: a.user?.supervisor_id
+  }));
+
 const dispatchApprovalRequest = async (
   item: ApprovalItem,
   action: ActionType,
@@ -430,6 +450,8 @@ export default function ApprovalsPage() {
         return hasPermission("approve-vehicle-logs");
       case "dinas_luar":
         return hasPermission("approve-leaves") || hasPermission("view-attendances");
+      case "early_out":
+        return hasPermission("approve-attendances") || hasPermission("view-attendances") || isSuperAdmin;
       default:
         return false;
     }
@@ -444,7 +466,8 @@ export default function ApprovalsPage() {
     canApprove("reimbursement") ||
     canApprove("fund_request") ||
     canApprove("vehicle_log") ||
-    canApprove("dinas_luar");
+    canApprove("dinas_luar") ||
+    canApprove("early_out");
 
   // Approval state
   const [items, setItems] = useState<ApprovalItem[]>([]);
@@ -455,6 +478,7 @@ export default function ApprovalsPage() {
     permit: number;
     fund_request: number;
     vehicle_log: number;
+    early_out?: number;
     total: number;
   }>({
     leave: 0,
@@ -463,6 +487,7 @@ export default function ApprovalsPage() {
     permit: 0,
     fund_request: 0,
     vehicle_log: 0,
+    early_out: 0,
     total: 0,
   });
 
@@ -547,7 +572,8 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         permitData,
         fundData,
         vehicleData,
-        dinasData
+        dinasData,
+        earlyOutData
       ] = await Promise.all([
         fetchCategoryData(canApprove("leave"), "/manager/pending-requests?type=leave"),
         fetchCategoryData(canApprove("reimbursement"), "/manager/pending-requests?type=reimbursement"),
@@ -556,6 +582,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         fetchCategoryData(canApprove("fund_request"), "/manager/pending-requests?type=fund_request"),
         fetchCategoryData(canApprove("vehicle_log"), "/manager/pending-requests?type=vehicle_log"),
         fetchCategoryData(canApprove("dinas_luar"), "/attendance/dinas-luar/pending"),
+        fetchCategoryData(canApprove("early_out"), "/manager/pending-requests?type=early_out"),
       ]);
 
       const allMerged = [
@@ -565,7 +592,8 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         ...normalizePermits(permitData),
         ...normalizeFunds(fundData),
         ...normalizeVehicles(vehicleData),
-        ...normalizeDinas(dinasData)
+        ...normalizeDinas(dinasData),
+        ...normalizeEarlyOut(earlyOutData)
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setItems(allMerged);
@@ -853,6 +881,26 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
     ));
   };
 
+  if (!hasAnyApprovalPermission) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
+        <div className="w-16 h-16 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mb-4 border border-rose-100 shadow-sm">
+          <ShieldAlert size={32} />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Akses Ditolak</h2>
+        <p className="text-sm text-gray-500 max-w-md mb-6">
+          Anda tidak memiliki hak akses persetujuan manajerial. Silakan hubungi Super Admin untuk mendapatkan izin akses.
+        </p>
+        <Link
+          href="/dashboard"
+          className="px-5 py-2.5 bg-gray-900 text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition-colors shadow-sm"
+        >
+          Kembali ke Dashboard
+        </Link>
+      </div>
+    );
+  }
+
   if (loading && items.length === 0) {
     return <ListPageSkeleton />;
   }
@@ -1105,6 +1153,29 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
                 <div className="text-[10px] text-slate-400">Peminjaman Mobil</div>
               </button>
             )}
+
+            {/* Pulang Awal (Bypass) */}
+            {canApprove("early_out") && (
+              <button
+                onClick={() => setFilter(filter === "early_out" ? "all" : "early_out")}
+                className={`p-4 rounded-2xl border text-left transition-all ${
+                  filter === "early_out"
+                    ? "bg-orange-50/80 border-orange-300 ring-2 ring-orange-500/20 shadow-sm"
+                    : "bg-white border-slate-200 hover:border-slate-300 shadow-xs"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-8 h-8 rounded-xl bg-orange-100 text-orange-800 flex items-center justify-center">
+                    <Clock size={16} />
+                  </div>
+                  <span className="text-base font-black text-orange-900">
+                    {pendingCounts.early_out || items.filter(i => i.type === "early_out").length}
+                  </span>
+                </div>
+                <div className="text-xs font-bold text-slate-800">Pulang Awal</div>
+                <div className="text-[10px] text-slate-400">Bypass Jam Pulang</div>
+              </button>
+            )}
           </div>
 
           {/* Search and Category Filter Pills */}
@@ -1215,6 +1286,18 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
                   }`}
                 >
                   Dinas Luar
+                </button>
+              )}
+              {canApprove("early_out") && (
+                <button
+                  onClick={() => setFilter("early_out")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    filter === "early_out"
+                      ? "bg-orange-600 text-white shadow-sm"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Pulang Awal
                 </button>
               )}
             </div>

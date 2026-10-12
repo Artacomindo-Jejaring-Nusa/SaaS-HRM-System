@@ -1,21 +1,37 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import axiosInstance from "@/lib/axios";
 import {
   Plus, Search, Check, X, Eye, Car, MapPin, Fuel, Route,
-  Upload, XCircle, ArrowRight, Calendar, Gauge, Clock,
-  BarChart3, Receipt, ChevronDown, FileText, Download, Info, Shield
+  Upload, XCircle, ArrowRight, Gauge,
+  BarChart3, Receipt, FileText, Download, Info, Shield,
+  Layers, Wrench, UserCheck, AlertCircle
 } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import { useAuth } from "@/contexts/AuthContext";
 import { TableSkeleton } from "@/components/Skeleton";
 import { toast } from "sonner";
 
+interface VehicleItem {
+  vehicle_name: string;
+  plate_number: string;
+  is_available: boolean;
+  status_code: string;
+  status_label: string;
+  current_user?: string | null;
+  destination?: string | null;
+  purpose?: string | null;
+  notes?: string | null;
+  until?: string | null;
+  departure_date?: string | null;
+}
+
 function FleetLogsContent() {
   const { hasPermission } = useAuth();
   const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<"logs" | "catalog">("logs");
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -23,8 +39,10 @@ function FleetLogsContent() {
     current_page: 1, last_page: 1, total: 0
   });
   const [statusFilter, setStatusFilter] = useState("all");
+  const [catalogFilter, setCatalogFilter] = useState("all");
 
   // Modals
+  const [isAddVehicleModalOpen, setIsAddVehicleModalOpen] = useState(false);
   const [isDepartureModalOpen, setIsDepartureModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -33,6 +51,15 @@ function FleetLogsContent() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
+
+  // Add Vehicle Form
+  const [addVehicleForm, setAddVehicleForm] = useState({
+    vehicle_name: "",
+    plate_number: "",
+    vehicle_type: "Mobil Penumpang",
+    initial_status: "available",
+    notes: "",
+  });
 
   // Departure Form
   const [departureForm, setDepartureForm] = useState<any>({
@@ -53,8 +80,8 @@ function FleetLogsContent() {
   const [report, setReport] = useState<any>(null);
   const [reportLoading, setReportLoading] = useState(false);
 
-  // Known vehicles (autocomplete)
-  const [knownVehicles, setKnownVehicles] = useState<any[]>([]);
+  // Known vehicles (autocomplete & catalog)
+  const [knownVehicles, setKnownVehicles] = useState<VehicleItem[]>([]);
 
   const getStorageUrl = (path: string) => {
     const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:8000";
@@ -69,22 +96,7 @@ function FleetLogsContent() {
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 
-  // Auto-open report modal when navigating from sidebar
-  useEffect(() => {
-    if (searchParams.get('tab') === 'report') {
-      setIsReportModalOpen(true);
-      fetchReport();
-    }
-  }, [searchParams]);
-
-  useEffect(() => {
-    fetchLogs(page);
-    fetchVehicles();
-    const interval = setInterval(() => fetchLogs(page), 30000);
-    return () => clearInterval(interval);
-  }, [page, statusFilter]);
-
-  const fetchLogs = async (pageNumber: number) => {
+  const fetchLogs = useCallback(async (pageNumber: number) => {
     try {
       setLoading(true);
       const params = new URLSearchParams({ page: String(pageNumber) });
@@ -103,14 +115,16 @@ function FleetLogsContent() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
 
-  const fetchVehicles = async () => {
+  const fetchVehicles = useCallback(async () => {
     try {
       const res = await axiosInstance.get("/vehicle-logs/vehicles");
       setKnownVehicles(res.data.data || []);
-    } catch (e) {}
-  };
+    } catch (e) {
+      console.error("Gagal memuat katalog armada", e);
+    }
+  }, []);
 
   const fetchReport = async () => {
     setReportLoading(true);
@@ -121,6 +135,63 @@ function FleetLogsContent() {
       console.error("Gagal memuat laporan", e);
     } finally {
       setReportLoading(false);
+    }
+  };
+
+  // Auto-open report modal when navigating from sidebar
+  useEffect(() => {
+    if (searchParams.get('tab') === 'report') {
+      setIsReportModalOpen(true);
+      fetchReport();
+    } else if (searchParams.get('tab') === 'catalog') {
+      setActiveTab('catalog');
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    fetchLogs(page);
+    fetchVehicles();
+    const interval = setInterval(() => {
+      fetchLogs(page);
+      fetchVehicles();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [page, statusFilter, fetchLogs, fetchVehicles]);
+
+  // ─── Add Vehicle Submit ────────────────────
+  const handleAddVehicleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      await axiosInstance.post("/vehicle-logs/vehicles", {
+        vehicle_name: addVehicleForm.vehicle_name.trim(),
+        plate_number: addVehicleForm.plate_number.trim().toUpperCase(),
+        vehicle_type: addVehicleForm.vehicle_type,
+        initial_status: addVehicleForm.initial_status,
+        notes: addVehicleForm.notes.trim() || undefined,
+      });
+
+      toast.success("Armada kendaraan berhasil ditambahkan ke katalog!");
+      setIsAddVehicleModalOpen(false);
+      setAddVehicleForm({
+        vehicle_name: "",
+        plate_number: "",
+        vehicle_type: "Mobil Penumpang",
+        initial_status: "available",
+        notes: "",
+      });
+      fetchVehicles();
+      fetchLogs(page);
+    } catch (e: any) {
+      if (e.response?.status === 422) {
+        const errors = Object.values(e.response.data.errors || {}).map((er: any) => er[0]).join("\n");
+        toast.error(`Validasi gagal: ${errors}`);
+      } else {
+        toast.error(e.response?.data?.message || "Gagal menambahkan armada kendaraan.");
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -209,8 +280,6 @@ function FleetLogsContent() {
     }
   };
 
-
-
   const handleDelete = async (id: number) => {
     toast("Hapus log kendaraan ini?", {
       action: {
@@ -241,11 +310,21 @@ function FleetLogsContent() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "departure": return <span className="dash-badge dash-badge-warning">Dalam Perjalanan</span>;
-      case "completed": return <span className="dash-badge" style={{ background: "#dbeafe", color: "#1e40af" }}>Menunggu Validasi</span>;
-      case "approved": return <span className="dash-badge dash-badge-success">Divalidasi</span>;
-      case "rejected": return <span className="dash-badge dash-badge-danger">Ditolak</span>;
-      default: return <span className="dash-badge dash-badge-neutral">{status}</span>;
+      case "departure": 
+      case "in_use":
+        return <span className="dash-badge dash-badge-warning">Dalam Perjalanan</span>;
+      case "pending": 
+        return <span className="dash-badge" style={{ background: "#fef3c7", color: "#92400e" }}>Menunggu Approval</span>;
+      case "completed": 
+        return <span className="dash-badge" style={{ background: "#dbeafe", color: "#1e40af" }}>Menunggu Validasi</span>;
+      case "approved": 
+        return <span className="dash-badge dash-badge-success">Divalidasi</span>;
+      case "rejected": 
+        return <span className="dash-badge dash-badge-danger">Ditolak</span>;
+      case "maintenance":
+        return <span className="dash-badge dash-badge-danger">Perawatan</span>;
+      default: 
+        return <span className="dash-badge dash-badge-neutral">{status}</span>;
     }
   };
 
@@ -253,14 +332,36 @@ function FleetLogsContent() {
     setDepartureForm({ ...departureForm, vehicle_name: v.vehicle_name, plate_number: v.plate_number });
   };
 
+  const startDepartureWithVehicle = (v: VehicleItem) => {
+    setDepartureForm({
+      ...departureForm,
+      vehicle_name: v.vehicle_name,
+      plate_number: v.plate_number,
+    });
+    setIsDepartureModalOpen(true);
+  };
+
+  // Filtered Catalog
+  const filteredVehicles = knownVehicles.filter((v) => {
+    if (catalogFilter === "all") return true;
+    if (catalogFilter === "available") return v.is_available || v.status_code === "available";
+    if (catalogFilter === "in_use") return v.status_code === "in_use" || v.status_code === "booked";
+    if (catalogFilter === "maintenance") return v.status_code === "maintenance";
+    return true;
+  });
+
+  const countAvailable = knownVehicles.filter((v) => v.is_available || v.status_code === "available").length;
+  const countInUse = knownVehicles.filter((v) => v.status_code === "in_use" || v.status_code === "booked").length;
+  const countMaintenance = knownVehicles.filter((v) => v.status_code === "maintenance").length;
+
   return (
     <div>
       <div className="dash-page-header">
         <div>
-          <h1 className="dash-page-title">Log Kendaraan & Travel Expense</h1>
-          <p className="dash-page-desc">Pencatatan penggunaan kendaraan operasional, odometer (KM), dan biaya perjalanan dinas.</p>
+          <h1 className="dash-page-title">Manajemen Armada & Log Kendaraan</h1>
+          <p className="dash-page-desc">Pencatatan penggunaan kendaraan operasional, katalog armada, odometer (KM), dan travel expense.</p>
         </div>
-        <div className="dash-page-actions">
+        <div className="dash-page-actions flex flex-wrap gap-2">
           <button className="dash-btn" style={{ background: "#eff6ff", color: "#1e40af", border: "1px solid #bfdbfe" }} onClick={() => setIsSOPModalOpen(true)}>
             <FileText size={15} /> Baca SOP Kendaraan
           </button>
@@ -269,123 +370,397 @@ function FleetLogsContent() {
               <BarChart3 size={15} /> Laporan Mileage
             </button>
           )}
+          <button
+            className="dash-btn"
+            style={{ background: "#fdf2f8", color: "#9d174d", border: "1px solid #fbcfe8" }}
+            onClick={() => setIsAddVehicleModalOpen(true)}
+          >
+            <Plus size={15} /> Tambah Armada
+          </button>
           {hasPermission("apply-vehicle-logs") && (
             <button className="dash-btn dash-btn-primary" onClick={() => setIsDepartureModalOpen(true)}>
-              <Plus size={15} /> Catat Keberangkatan
+              <Car size={15} /> Catat Keberangkatan
             </button>
           )}
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center justify-between mb-4 bg-white p-3 border border-[#ebedf0] rounded-lg gap-3 flex-wrap">
-        <div className="relative w-full max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-          <input type="text" placeholder="Cari berdasarkan nama karyawan..." className="w-full h-9 pl-9 pr-4 text-sm bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors" />
-        </div>
-        <div className="flex gap-2">
-          {["all", "departure", "completed", "approved", "rejected"].map((s) => (
-            <button key={s} onClick={() => { setStatusFilter(s); setPage(1); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === s ? "bg-gray-900 text-white shadow-md" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-              {s === "all" ? "Semua" : s === "departure" ? "Perjalanan" : s === "completed" ? "Menunggu" : s === "approved" ? "Divalidasi" : "Ditolak"}
-            </button>
-          ))}
-        </div>
+      {/* Tabs Switcher */}
+      <div className="flex items-center gap-2 mb-4 border-b border-gray-200 pb-2">
+        <button
+          onClick={() => setActiveTab("logs")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === "logs" ? "bg-gray-900 text-white shadow-sm" : "bg-white text-gray-600 hover:bg-gray-100"}`}
+        >
+          <Layers size={16} /> Log Perjalanan & Peminjaman
+          <span className={`px-2 py-0.5 rounded-full text-xs ${activeTab === "logs" ? "bg-gray-700 text-white" : "bg-gray-100 text-gray-700"}`}>
+            {pagination.total || logs.length}
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab("catalog")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === "catalog" ? "bg-gray-900 text-white shadow-sm" : "bg-white text-gray-600 hover:bg-gray-100"}`}
+        >
+          <Car size={16} /> Katalog Armada Kendaraan
+          <span className={`px-2 py-0.5 rounded-full text-xs ${activeTab === "catalog" ? "bg-gray-700 text-white" : "bg-gray-100 text-gray-700"}`}>
+            {knownVehicles.length}
+          </span>
+        </button>
       </div>
 
-      {/* Table */}
-      <div className="dash-table-container">
-        {loading ? (
-          <div className="p-6"><TableSkeleton rows={6} cols={8} /></div>
-        ) : logs.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 text-sm">
-            <Car size={40} className="mx-auto mb-3 text-gray-300" />
-            <p className="font-semibold">Belum ada log kendaraan.</p>
-            <p className="text-xs text-gray-400 mt-1">Klik "Catat Keberangkatan" untuk mulai.</p>
+      {activeTab === "logs" ? (
+        <>
+          {/* Filters */}
+          <div className="flex items-center justify-between mb-4 bg-white p-3 border border-[#ebedf0] rounded-lg gap-3 flex-wrap">
+            <div className="relative w-full max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <input type="text" placeholder="Cari berdasarkan nama karyawan..." className="w-full h-9 pl-9 pr-4 text-sm bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:border-gray-400 transition-colors" />
+            </div>
+            <div className="flex gap-2">
+              {["all", "departure", "completed", "approved", "rejected"].map((s) => (
+                <button key={s} onClick={() => { setStatusFilter(s); setPage(1); }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === s ? "bg-gray-900 text-white shadow-md" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                  {s === "all" ? "Semua" : s === "departure" ? "Perjalanan" : s === "completed" ? "Menunggu" : s === "approved" ? "Divalidasi" : "Ditolak"}
+                </button>
+              ))}
+            </div>
           </div>
-        ) : (
-          <div className="dash-table-wrapper">
-            <table className="dash-table">
-              <thead>
-                <tr>
-                  <th>Karyawan</th>
-                  <th>Kendaraan</th>
-                  <th>Tujuan</th>
-                  <th>Tanggal</th>
-                  <th>KM Awal</th>
-                  <th>KM Akhir</th>
-                  <th>Jarak</th>
-                  <th>Total Biaya</th>
-                  <th>Status</th>
-                  <th className="text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map((item) => (
-                  <tr key={item.id}>
-                    <td><span className="font-semibold text-gray-900">{item.user?.name || "—"}</span></td>
-                    <td>
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium text-gray-700">{item.vehicle_name}</span>
-                        <span className="text-[11px] text-gray-400 font-mono">{item.plate_number}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="text-sm text-gray-700 flex items-center gap-1">
-                        <MapPin size={12} className="text-gray-400 shrink-0" />
-                        <span className="truncate max-w-[120px]" title={item.destination}>{item.destination}</span>
-                      </span>
-                    </td>
-                    <td>
-                      <span className="text-xs text-gray-600">{formatDate(item.departure_date)}</span>
-                    </td>
-                    <td><span className="font-mono text-sm">{Number(item.odometer_start).toLocaleString("id-ID")}</span></td>
-                    <td><span className="font-mono text-sm">{item.odometer_end ? Number(item.odometer_end).toLocaleString("id-ID") : "—"}</span></td>
-                    <td>
-                      {item.distance ? (
-                        <span className="font-bold text-emerald-700 text-sm">{Number(item.distance).toLocaleString("id-ID")} KM</span>
-                      ) : <span className="text-gray-400 text-xs">—</span>}
-                    </td>
-                    <td>
-                      {parseFloat(item.total_cost) > 0 ? (
-                        <span className="font-semibold text-gray-900 text-sm">{formatCurrency(item.total_cost)}</span>
-                      ) : <span className="text-gray-400 text-xs">—</span>}
-                    </td>
-                    <td>{getStatusBadge(item.status)}</td>
-                    <td className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {item.status === "departure" && item.user_id && (
-                          <button className="dash-action-btn edit" title="Catat Kepulangan" onClick={() => openReturnModal(item)}>
-                            <ArrowRight size={16} />
-                          </button>
-                        )}
 
-                        <button className="dash-action-btn view" title="Detail" onClick={() => { setSelectedItem(item); setIsDetailModalOpen(true); }}>
-                          <Eye size={16} />
-                        </button>
-                        {(item.status === "departure" || item.status === "rejected") && (
-                          <button className="dash-action-btn delete" title="Hapus" onClick={() => handleDelete(item.id)}>
-                            <X size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Table */}
+          <div className="dash-table-container">
+            {loading ? (
+              <div className="p-6"><TableSkeleton rows={6} cols={8} /></div>
+            ) : logs.length === 0 ? (
+              <div className="p-8 text-center text-gray-500 text-sm">
+                <Car size={40} className="mx-auto mb-3 text-gray-300" />
+                <p className="font-semibold">Belum ada log kendaraan.</p>
+                <p className="text-xs text-gray-400 mt-1">Klik &quot;Catat Keberangkatan&quot; atau daftarkan kendaraan di &quot;Tambah Armada&quot;.</p>
+              </div>
+            ) : (
+              <div className="dash-table-wrapper">
+                <table className="dash-table">
+                  <thead>
+                    <tr>
+                      <th>Karyawan</th>
+                      <th>Kendaraan</th>
+                      <th>Tujuan</th>
+                      <th>Tanggal</th>
+                      <th>KM Awal</th>
+                      <th>KM Akhir</th>
+                      <th>Jarak</th>
+                      <th>Total Biaya</th>
+                      <th>Status</th>
+                      <th className="text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logs.map((item) => (
+                      <tr key={item.id}>
+                        <td><span className="font-semibold text-gray-900">{item.user?.name || "—"}</span></td>
+                        <td>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-gray-700">{item.vehicle_name}</span>
+                            <span className="text-[11px] text-gray-400 font-mono">{item.plate_number}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <span className="text-sm text-gray-700 flex items-center gap-1">
+                            <MapPin size={12} className="text-gray-400 shrink-0" />
+                            <span className="truncate max-w-[120px]" title={item.destination}>{item.destination}</span>
+                          </span>
+                        </td>
+                        <td>
+                          <span className="text-xs text-gray-600">{formatDate(item.departure_date)}</span>
+                        </td>
+                        <td><span className="font-mono text-sm">{Number(item.odometer_start || 0).toLocaleString("id-ID")}</span></td>
+                        <td><span className="font-mono text-sm">{item.odometer_end ? Number(item.odometer_end).toLocaleString("id-ID") : "—"}</span></td>
+                        <td>
+                          {item.distance ? (
+                            <span className="font-bold text-emerald-700 text-sm">{Number(item.distance).toLocaleString("id-ID")} KM</span>
+                          ) : <span className="text-gray-400 text-xs">—</span>}
+                        </td>
+                        <td>
+                          {parseFloat(item.total_cost) > 0 ? (
+                            <span className="font-semibold text-gray-900 text-sm">{formatCurrency(item.total_cost)}</span>
+                          ) : <span className="text-gray-400 text-xs">—</span>}
+                        </td>
+                        <td>{getStatusBadge(item.status)}</td>
+                        <td className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {(item.status === "departure" || item.status === "in_use") && (
+                              <button className="dash-action-btn edit" title="Catat Kepulangan" onClick={() => openReturnModal(item)}>
+                                <ArrowRight size={16} />
+                              </button>
+                            )}
+
+                            <button className="dash-action-btn view" title="Detail" onClick={() => { setSelectedItem(item); setIsDetailModalOpen(true); }}>
+                              <Eye size={16} />
+                            </button>
+                            {(item.status === "departure" || item.status === "rejected" || item.status === "pending") && (
+                              <button className="dash-action-btn delete" title="Hapus" onClick={() => handleDelete(item.id)}>
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {pagination.last_page > 1 && (
+              <Pagination
+                currentPage={pagination.current_page}
+                lastPage={pagination.last_page}
+                total={pagination.total}
+                onPageChange={setPage}
+              />
+            )}
           </div>
-        )}
+        </>
+      ) : (
+        /* KATALOG ARMADA TAB */
+        <div>
+          <div className="flex items-center justify-between mb-4 bg-white p-4 border border-[#ebedf0] rounded-xl gap-3 flex-wrap">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900">Katalog Unit Kendaraan Operasional</h2>
+              <p className="text-xs text-gray-500">Daftar kendaraan resmi yang terdaftar dan status ketersediaannya saat ini.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+                <button
+                  onClick={() => setCatalogFilter("all")}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${catalogFilter === "all" ? "bg-white text-gray-900 shadow-xs" : "text-gray-600 hover:text-gray-900"}`}
+                >
+                  Semua ({knownVehicles.length})
+                </button>
+                <button
+                  onClick={() => setCatalogFilter("available")}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${catalogFilter === "available" ? "bg-emerald-600 text-white shadow-xs" : "text-gray-600 hover:text-gray-900"}`}
+                >
+                  Tersedia ({countAvailable})
+                </button>
+                <button
+                  onClick={() => setCatalogFilter("in_use")}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${catalogFilter === "in_use" ? "bg-blue-600 text-white shadow-xs" : "text-gray-600 hover:text-gray-900"}`}
+                >
+                  Digunakan ({countInUse})
+                </button>
+                <button
+                  onClick={() => setCatalogFilter("maintenance")}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${catalogFilter === "maintenance" ? "bg-red-600 text-white shadow-xs" : "text-gray-600 hover:text-gray-900"}`}
+                >
+                  Perawatan ({countMaintenance})
+                </button>
+              </div>
+              <button
+                onClick={() => setIsAddVehicleModalOpen(true)}
+                className="dash-btn dash-btn-primary"
+              >
+                <Plus size={15} /> Tambah Armada Baru
+              </button>
+            </div>
+          </div>
 
-        {pagination.last_page > 1 && (
-          <Pagination
-            currentPage={pagination.current_page}
-            lastPage={pagination.last_page}
-            total={pagination.total}
-            onPageChange={setPage}
-          />
-        )}
-      </div>
+          {filteredVehicles.length === 0 ? (
+            <div className="bg-white p-12 text-center rounded-2xl border border-gray-200">
+              <Car size={48} className="mx-auto text-gray-300 mb-3" />
+              <p className="font-bold text-gray-700">Belum Ada Armada Sesuai Filter</p>
+              <p className="text-xs text-gray-400 mt-1 mb-4">Tambahkan armada baru untuk mulai mengelola katalog kendaraan operasional.</p>
+              <button
+                onClick={() => setIsAddVehicleModalOpen(true)}
+                className="dash-btn dash-btn-primary mx-auto inline-flex items-center gap-1.5"
+              >
+                <Plus size={15} /> Daftarkan Armada Sekarang
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredVehicles.map((v, idx) => {
+                const isAvail = v.is_available || v.status_code === "available";
+                const isMaint = v.status_code === "maintenance";
+                const isUsed = v.status_code === "in_use" || v.status_code === "booked";
+
+                return (
+                  <div key={idx} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${isAvail ? "bg-emerald-50 text-emerald-600" : isMaint ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"}`}>
+                            <Car size={24} />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-gray-900 text-base">{v.vehicle_name}</h3>
+                            <span className="inline-block px-2 py-0.5 bg-gray-100 border border-gray-200 rounded-md font-mono text-xs font-bold text-gray-700">
+                              {v.plate_number}
+                            </span>
+                          </div>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${isAvail ? "bg-emerald-100 text-emerald-800" : isMaint ? "bg-red-100 text-red-800" : "bg-blue-100 text-blue-800"}`}>
+                          {v.status_label || (isAvail ? "Tersedia" : isMaint ? "Perawatan" : "Digunakan")}
+                        </span>
+                      </div>
+
+                      {v.notes && (
+                        <p className="text-xs text-gray-500 italic mb-3 line-clamp-2">&quot;{v.notes}&quot;</p>
+                      )}
+
+                      {isUsed && (
+                        <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 text-xs space-y-1.5 mb-3">
+                          {v.current_user && (
+                            <div className="flex items-center gap-1.5 text-gray-700">
+                              <UserCheck size={13} className="text-blue-600 shrink-0" />
+                              <span>Peminjam: <strong>{v.current_user}</strong></span>
+                            </div>
+                          )}
+                          {v.destination && (
+                            <div className="flex items-center gap-1.5 text-gray-700">
+                              <MapPin size={13} className="text-blue-600 shrink-0" />
+                              <span>Tujuan: <strong>{v.destination}</strong></span>
+                            </div>
+                          )}
+                          {v.until && (
+                            <div className="flex items-center gap-1.5 text-blue-800 font-semibold">
+                              <AlertCircle size={13} className="text-blue-600 shrink-0" />
+                              <span>Est. Kembali: {v.until}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {isMaint && (
+                        <div className="p-3 bg-red-50/60 rounded-xl border border-red-100 text-xs text-red-700 flex items-center gap-2 mb-3">
+                          <Wrench size={14} className="shrink-0" />
+                          <span>Unit sedang dalam servis rutin / perbaikan bengkel.</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-3 border-t border-gray-100 mt-2">
+                      <button
+                        onClick={() => startDepartureWithVehicle(v)}
+                        disabled={isMaint}
+                        className="w-full py-2 px-3 text-xs font-bold rounded-lg border border-gray-300 hover:border-blue-500 hover:bg-blue-50 text-gray-700 hover:text-blue-700 disabled:opacity-40 disabled:pointer-events-none transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Car size={14} /> Gunakan Unit Ini
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ ADD VEHICLE MODAL ═══ */}
+      {isAddVehicleModalOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsAddVehicleModalOpen(false)} />
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b bg-linear-to-r from-rose-50 to-pink-50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center"><Car size={16} /></div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Tambah Armada Baru</h2>
+                  <p className="text-xs text-gray-500">Daftarkan armada ke katalog kendaraan operasional kantor</p>
+                </div>
+              </div>
+              <button onClick={() => setIsAddVehicleModalOpen(false)} className="p-1 hover:bg-gray-100 rounded-full transition-colors"><X size={20} className="text-gray-500" /></button>
+            </div>
+
+            <form onSubmit={handleAddVehicleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Nama / Merk Kendaraan *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="mis. Toyota Avanza 1.5 G"
+                    className="w-full h-10 px-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm"
+                    value={addVehicleForm.vehicle_name}
+                    onChange={(e) => setAddVehicleForm({ ...addVehicleForm, vehicle_name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Nomor Polisi (Plat) *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="mis. B 1234 ABC"
+                    className="w-full h-10 px-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm uppercase font-mono"
+                    value={addVehicleForm.plate_number}
+                    onChange={(e) => setAddVehicleForm({ ...addVehicleForm, plate_number: e.target.value.toUpperCase() })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Tipe Kendaraan</label>
+                  <select
+                    className="w-full h-10 px-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm"
+                    value={addVehicleForm.vehicle_type}
+                    onChange={(e) => setAddVehicleForm({ ...addVehicleForm, vehicle_type: e.target.value })}
+                  >
+                    <option value="Mobil Penumpang">Mobil Penumpang (MPV/SUV/Sedan)</option>
+                    <option value="Minibus / HiAce">Minibus / HiAce / Elf</option>
+                    <option value="Motor Operasional">Sepeda Motor Operasional</option>
+                    <option value="Pickup / Truk Logistik">Pickup / Truk Logistik</option>
+                    <option value="Kendaraan Khusus">Kendaraan Khusus / Proyek</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Status Awal</label>
+                  <select
+                    className="w-full h-10 px-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm"
+                    value={addVehicleForm.initial_status}
+                    onChange={(e) => setAddVehicleForm({ ...addVehicleForm, initial_status: e.target.value })}
+                  >
+                    <option value="available">Tersedia (Siap Digunakan)</option>
+                    <option value="maintenance">Dalam Perawatan / Bengkel</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Catatan Tambahan / Spesifikasi</label>
+                <textarea
+                  rows={3}
+                  placeholder="mis. Unit Cabang Pusat, Odometer awal 45.000 KM, Transmisi Otomatis..."
+                  className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm resize-none"
+                  value={addVehicleForm.notes}
+                  onChange={(e) => setAddVehicleForm({ ...addVehicleForm, notes: e.target.value })}
+                />
+              </div>
+
+              <div className="pt-3 flex gap-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsAddVehicleModalOpen(false)}
+                  className="flex-1 h-10 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex-2 h-10 text-sm font-semibold text-white bg-rose-700 hover:bg-rose-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-md transition-all flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Plus size={15} /> Daftarkan Armada
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ═══ DEPARTURE MODAL ═══ */}
       {isDepartureModalOpen && (
@@ -404,7 +779,7 @@ function FleetLogsContent() {
               {/* Vehicle Selection */}
               {knownVehicles.length > 0 && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Kendaraan Tercatat</label>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Pilih dari Katalog Armada</label>
                   <div className="flex gap-2 flex-wrap">
                     {knownVehicles.map((v: any, i: number) => (
                       <button key={i} type="button"
@@ -511,7 +886,7 @@ function FleetLogsContent() {
               {/* Summary Card */}
               <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
                 <div className="grid grid-cols-3 gap-3 text-center">
-                  <div><p className="text-[10px] font-bold text-gray-400 uppercase">KM Awal</p><p className="text-sm font-bold font-mono">{Number(selectedItem.odometer_start).toLocaleString("id-ID")}</p></div>
+                  <div><p className="text-[10px] font-bold text-gray-400 uppercase">KM Awal</p><p className="text-sm font-bold font-mono">{Number(selectedItem.odometer_start || 0).toLocaleString("id-ID")}</p></div>
                   <div><p className="text-[10px] font-bold text-gray-400 uppercase">Tujuan</p><p className="text-sm font-semibold truncate">{selectedItem.destination}</p></div>
                   <div><p className="text-[10px] font-bold text-gray-400 uppercase">Berangkat</p><p className="text-sm font-semibold">{formatDate(selectedItem.departure_date)}</p></div>
                 </div>
@@ -527,7 +902,7 @@ function FleetLogsContent() {
                   <label className="block text-xs font-semibold text-gray-700 mb-1">KM Akhir (Odometer) *</label>
                   <div className="relative">
                     <Gauge size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input type="number" required min={selectedItem.odometer_start} placeholder={String(selectedItem.odometer_start)} className="w-full h-10 pl-10 pr-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-mono"
+                    <input type="number" required min={selectedItem.odometer_start || 0} placeholder={String(selectedItem.odometer_start || 0)} className="w-full h-10 pl-10 pr-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-mono"
                       value={returnForm.odometer_end} onChange={(e) => setReturnForm({ ...returnForm, odometer_end: e.target.value })} />
                   </div>
                 </div>
@@ -536,7 +911,7 @@ function FleetLogsContent() {
               {returnForm.odometer_end && (
                 <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-center">
                   <p className="text-[10px] font-bold text-emerald-500 uppercase">Estimasi Jarak Tempuh</p>
-                  <p className="text-2xl font-black text-emerald-700">{(parseInt(returnForm.odometer_end) - selectedItem.odometer_start).toLocaleString("id-ID")} KM</p>
+                  <p className="text-2xl font-black text-emerald-700">{(parseInt(returnForm.odometer_end) - (selectedItem.odometer_start || 0)).toLocaleString("id-ID")} KM</p>
                 </div>
               )}
 
@@ -552,7 +927,6 @@ function FleetLogsContent() {
                     <><Upload size={16} className="text-gray-400 mb-0.5" /><span className="text-xs text-gray-500">Foto odometer saat kembali</span></>
                   )}
                 </label>
-
               </div>
 
               {/* Biaya Perjalanan */}
@@ -647,7 +1021,7 @@ function FleetLogsContent() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 border rounded-2xl">
                     <p className="text-[10px] uppercase font-black text-gray-400 mb-1">KM AWAL</p>
-                    <p className="text-base font-black font-mono">{Number(selectedItem.odometer_start).toLocaleString("id-ID")}</p>
+                    <p className="text-base font-black font-mono">{Number(selectedItem.odometer_start || 0).toLocaleString("id-ID")}</p>
                     <p className="text-xs text-gray-400 mt-0.5">{formatDate(selectedItem.departure_date)}</p>
                   </div>
                   <div className="p-3 border rounded-2xl">
@@ -723,7 +1097,7 @@ function FleetLogsContent() {
                   <div>
                     <p className="text-[10px] uppercase font-black text-gray-400 mb-2 px-1">CATATAN</p>
                     <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                      <p className="text-sm text-gray-600 leading-relaxed font-medium">"{selectedItem.notes}"</p>
+                      <p className="text-sm text-gray-600 leading-relaxed font-medium">&quot;{selectedItem.notes}&quot;</p>
                     </div>
                   </div>
                 )}
@@ -735,7 +1109,7 @@ function FleetLogsContent() {
                       {selectedItem.status === 'rejected' ? 'ALASAN PENOLAKAN' : 'CATATAN VALIDASI'}
                     </p>
                     <div className={`p-4 rounded-2xl border ${selectedItem.status === 'rejected' ? 'bg-red-50 border-red-100 text-red-700' : 'bg-emerald-50 border-emerald-100 text-emerald-700'}`}>
-                      <p className="text-sm font-bold italic">"{selectedItem.remark}"</p>
+                      <p className="text-sm font-bold italic">&quot;{selectedItem.remark}&quot;</p>
                     </div>
                   </div>
                 )}
@@ -775,15 +1149,15 @@ function FleetLogsContent() {
                   <div className="grid grid-cols-3 gap-3">
                     <div className="p-4 bg-linear-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 text-center">
                       <p className="text-[10px] uppercase font-black text-blue-400 mb-1">Total Perjalanan</p>
-                      <p className="text-2xl font-black text-blue-700">{report.summary.total_trips}</p>
+                      <p className="text-2xl font-black text-blue-700">{report.summary?.total_trips || 0}</p>
                     </div>
                     <div className="p-4 bg-linear-to-br from-emerald-50 to-teal-50 rounded-2xl border border-emerald-100 text-center">
                       <p className="text-[10px] uppercase font-black text-emerald-400 mb-1">Total Jarak</p>
-                      <p className="text-2xl font-black text-emerald-700">{Number(report.summary.total_distance || 0).toLocaleString("id-ID")} <span className="text-sm">KM</span></p>
+                      <p className="text-2xl font-black text-emerald-700">{Number(report.summary?.total_distance || 0).toLocaleString("id-ID")} <span className="text-sm">KM</span></p>
                     </div>
                     <div className="p-4 bg-linear-to-br from-amber-50 to-orange-50 rounded-2xl border border-amber-100 text-center">
                       <p className="text-[10px] uppercase font-black text-amber-400 mb-1">Total Biaya</p>
-                      <p className="text-lg font-black text-amber-700">{formatCurrency(report.summary.total_cost)}</p>
+                      <p className="text-lg font-black text-amber-700">{formatCurrency(report.summary?.total_cost || 0)}</p>
                     </div>
                   </div>
 
@@ -791,10 +1165,10 @@ function FleetLogsContent() {
                   <div>
                     <p className="text-xs font-black text-gray-700 uppercase mb-2">Rincian Biaya</p>
                     <div className="border rounded-2xl overflow-hidden">
-                      <div className="flex justify-between p-3 border-b"><span className="text-sm text-gray-600">BBM</span><span className="text-sm font-bold">{formatCurrency(report.summary.total_fuel_cost)}</span></div>
-                      <div className="flex justify-between p-3 border-b"><span className="text-sm text-gray-600">Tol</span><span className="text-sm font-bold">{formatCurrency(report.summary.total_toll_cost)}</span></div>
-                      <div className="flex justify-between p-3 border-b"><span className="text-sm text-gray-600">Parkir</span><span className="text-sm font-bold">{formatCurrency(report.summary.total_parking_cost)}</span></div>
-                      <div className="flex justify-between p-3"><span className="text-sm text-gray-600">Lainnya</span><span className="text-sm font-bold">{formatCurrency(report.summary.total_other_cost)}</span></div>
+                      <div className="flex justify-between p-3 border-b"><span className="text-sm text-gray-600">BBM</span><span className="text-sm font-bold">{formatCurrency(report.summary?.total_fuel_cost || 0)}</span></div>
+                      <div className="flex justify-between p-3 border-b"><span className="text-sm text-gray-600">Tol</span><span className="text-sm font-bold">{formatCurrency(report.summary?.total_toll_cost || 0)}</span></div>
+                      <div className="flex justify-between p-3 border-b"><span className="text-sm text-gray-600">Parkir</span><span className="text-sm font-bold">{formatCurrency(report.summary?.total_parking_cost || 0)}</span></div>
+                      <div className="flex justify-between p-3"><span className="text-sm text-gray-600">Lainnya</span><span className="text-sm font-bold">{formatCurrency(report.summary?.total_other_cost || 0)}</span></div>
                     </div>
                   </div>
 
@@ -856,6 +1230,7 @@ function FleetLogsContent() {
           </div>
         </div>
       )}
+
       {/* ═══ SOP KENDARAAN MODAL ═══ */}
       {isSOPModalOpen && (
         <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">

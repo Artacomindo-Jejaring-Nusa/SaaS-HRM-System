@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:carousel_slider/carousel_slider.dart';
 import 'package:geolocator/geolocator.dart';
 import '../api/api_service.dart';
 import 'profile_screen.dart';
@@ -331,7 +330,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // Determine Manager Portal access:
         if (userData['can_access_manager_portal'] == false) {
           _isManager = false;
-        } else if (userData['can_access_manager_portal'] == true || userData['is_manager'] == true) {
+        } else if (userData['can_access_manager_portal'] == true) {
           _isManager = true;
         } else if (userData['role_id'] == 1 ||
             (userData['role'] != null && userData['role']['id'] == 1) ||
@@ -349,6 +348,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _hasPermission('approve-vehicle-logs') ||
               _hasPermission('approve-shift-swaps') ||
               _hasPermission('approve-project-costs') ||
+              _hasPermission('approve-payroll') ||
               _hasPermission('manage-attendance-corrections');
         }
 

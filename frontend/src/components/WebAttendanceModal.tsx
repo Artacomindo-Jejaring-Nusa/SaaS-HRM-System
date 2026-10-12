@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { 
   Camera, 
-  Upload, 
   CheckCircle2, 
   AlertCircle, 
   Clock, 
@@ -34,7 +33,6 @@ export default function WebAttendanceModal({
   isAutoValidated = false,
 }: WebAttendanceModalProps) {
   const [type, setType] = useState<"in" | "out">(defaultType);
-  const [useCamera, setUseCamera] = useState<boolean>(true);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
@@ -43,10 +41,12 @@ export default function WebAttendanceModal({
   const [locationStatus, setLocationStatus] = useState<"loading" | "success" | "error">("loading");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<string>("");
+  const [earlyOutReason, setEarlyOutReason] = useState<string>("");
+  const [requiresEarlyOutReason, setRequiresEarlyOutReason] = useState<boolean>(false);
+  const [earlyOutMessage, setEarlyOutMessage] = useState<string>("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setType(defaultType);
@@ -112,8 +112,7 @@ export default function WebAttendanceModal({
       }
     } catch (err: any) {
       console.warn("Camera access failed:", err);
-      setCameraError("Kamera tidak dapat diakses atau izin ditolak. Silakan gunakan opsi unggah foto.");
-      setUseCamera(false);
+      setCameraError("Kamera tidak dapat diakses atau izin ditolak oleh browser. Pastikan izin kamera telah diizinkan.");
     }
   }, [cameraStream]);
 
@@ -126,7 +125,7 @@ export default function WebAttendanceModal({
   }, [cameraStream]);
 
   useEffect(() => {
-    if (isOpen && useCamera && !capturedImage) {
+    if (isOpen && !capturedImage) {
       startCamera();
     } else {
       stopCamera();
@@ -134,7 +133,7 @@ export default function WebAttendanceModal({
     return () => {
       stopCamera();
     };
-  }, [isOpen, useCamera, capturedImage]);
+  }, [isOpen, capturedImage]);
 
   // Capture snapshot from webcam
   const handleCapture = () => {
@@ -166,30 +165,20 @@ export default function WebAttendanceModal({
     }
   };
 
-  // Handle file picker
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setCapturedFile(file);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setCapturedImage(event.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleRetake = () => {
     setCapturedImage(null);
     setCapturedFile(null);
-    if (useCamera) {
-      startCamera();
-    }
+    startCamera();
   };
 
   const handleSubmit = async () => {
     if (!capturedFile && !capturedImage) {
-      toast.error("Foto selfie wajib diambil atau diunggah.");
+      toast.error("Foto selfie wajib diambil secara langsung menggunakan kamera.");
+      return;
+    }
+
+    if (type === "out" && requiresEarlyOutReason && !earlyOutReason.trim()) {
+      toast.error("Alasan pulang lebih awal wajib diisi.");
       return;
     }
 
@@ -205,6 +194,10 @@ export default function WebAttendanceModal({
       if (location) {
         formData.append("latitude", location.lat.toString());
         formData.append("longitude", location.lng.toString());
+      }
+
+      if (type === "out" && earlyOutReason.trim()) {
+        formData.append("early_out_reason", earlyOutReason.trim());
       }
 
       const endpoint = type === "in" ? "/attendance/web-check-in" : "/attendance/web-check-out";
@@ -229,11 +222,28 @@ export default function WebAttendanceModal({
       handleClose();
     } catch (err: any) {
       console.error("Web attendance error:", err);
-      const msg = err.response?.data?.message || err.message || "Gagal melakukan absensi via web.";
-      toast.error(msg);
+      const errData = err.response?.data;
+      if (errData?.requires_early_out_reason || errData?.can_bypass) {
+        setRequiresEarlyOutReason(true);
+        setEarlyOutMessage(errData?.message || "Jam pulang kerja belum tercapai. Harap masukkan alasan kenapa Anda pulang lebih awal.");
+        toast.warning("Harap isi alasan pulang lebih awal untuk melanjutkan.");
+      } else {
+        const msg = errData?.message || err.message || "Gagal melakukan absensi via web.";
+        toast.error(msg);
+      }
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleClose = () => {
+    stopCamera();
+    setCapturedImage(null);
+    setCapturedFile(null);
+    setEarlyOutReason("");
+    setRequiresEarlyOutReason(false);
+    setEarlyOutMessage("");
+    onClose();
   };
 
   const renderMediaContent = () => {
@@ -247,7 +257,7 @@ export default function WebAttendanceModal({
           />
           <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-medium text-white flex items-center gap-1.5 border border-white/20">
             <CheckCircle2 size={12} className="text-emerald-400" />
-            Foto Siap Dikirim
+            Foto Kamera Siap Dikirim
           </div>
           <button
             type="button"
@@ -261,79 +271,45 @@ export default function WebAttendanceModal({
       );
     }
 
-    if (useCamera) {
-      return (
-        <div className="relative w-full h-full flex items-center justify-center">
-          {cameraError ? (
-            <div className="p-6 text-center text-slate-300 text-xs max-w-xs space-y-2">
-              <AlertCircle size={28} className="mx-auto text-rose-400" />
-              <p>{cameraError}</p>
-              <button
-                type="button"
-                onClick={() => setUseCamera(false)}
-                className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-md text-white font-semibold mt-2"
-              >
-                Beralih ke Unggah File
-              </button>
-            </div>
-          ) : (
-            <>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-36 h-48 border-2 border-dashed border-white/50 rounded-full shadow-sm" />
-              </div>
-              <button
-                type="button"
-                onClick={handleCapture}
-                className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-[#8B0000] hover:bg-[#a10000] text-white text-xs font-bold px-5 py-2.5 rounded-full shadow-xl flex items-center gap-2 transition-all transform active:scale-95 border-2 border-white/40"
-              >
-                <Camera size={15} />
-                Ambil Foto Selfie
-              </button>
-            </>
-          )}
-        </div>
-      );
-    }
-
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center text-slate-300 space-y-3">
-        <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white">
-          <Upload size={22} />
-        </div>
-        <div>
-          <p className="text-xs font-bold text-white">Pilih Foto Diri / Selfie</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Mendukung format JPG, JPEG, PNG (Maks 5MB)</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="px-4 py-2 bg-white text-slate-900 hover:bg-slate-100 rounded-lg text-xs font-bold transition-colors shadow-md"
-        >
-          Pilih dari Komputer / HP
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleFileChange}
-          className="hidden"
-        />
+      <div className="relative w-full h-full flex items-center justify-center">
+        {cameraError ? (
+          <div className="p-6 text-center text-slate-300 text-xs max-w-xs space-y-2">
+            <AlertCircle size={28} className="mx-auto text-rose-400" />
+            <p>{cameraError}</p>
+            <button
+              type="button"
+              onClick={startCamera}
+              className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-md text-white font-semibold mt-2 flex items-center gap-1.5 mx-auto"
+            >
+              <RefreshCw size={12} />
+              Coba Lagi Akses Kamera
+            </button>
+          </div>
+        ) : (
+          <>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-36 h-48 border-2 border-dashed border-white/50 rounded-full shadow-sm" />
+            </div>
+            <button
+              type="button"
+              onClick={handleCapture}
+              className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-[#8B0000] hover:bg-[#a10000] text-white text-xs font-bold px-5 py-2.5 rounded-full shadow-xl flex items-center gap-2 transition-all transform active:scale-95 border-2 border-white/40"
+            >
+              <Camera size={15} />
+              Ambil Foto Selfie
+            </button>
+          </>
+        )}
       </div>
     );
-  };
-
-  const handleClose = () => {
-    stopCamera();
-    setCapturedImage(null);
-    setCapturedFile(null);
-    onClose();
   };
 
   if (!isOpen) return null;
@@ -349,10 +325,10 @@ export default function WebAttendanceModal({
             </div>
             <div>
               <h2 className="text-base font-bold tracking-tight text-white flex items-center gap-2">
-                Absensi via Web (Browser)
+                Absensi via Web (Kamera Langsung)
               </h2>
               <p className="text-xs text-white/80">
-                Jalur Fallback Karyawan OnTime HRMS v2.1
+                Verifikasi Selfie Live & Lokasi GPS
               </p>
             </div>
           </div>
@@ -407,51 +383,14 @@ export default function WebAttendanceModal({
             )}
           </div>
 
-          {/* Info Card according to Spec v2.1 */}
-          <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-3 text-xs text-blue-900 flex items-start gap-2.5">
-            <Info size={16} className="text-blue-600 shrink-0 mt-0.5" />
+          {/* Info Card - Anti Fraud Camera-Only Notice */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 flex items-start gap-2.5">
+            <Info size={16} className="text-amber-600 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold mb-0.5">Alur Absensi Web Disederhanakan:</p>
-              <p className="text-blue-800 leading-relaxed">
-                Cukup ambil satu foto diri. Tanpa perlu pengenalan wajah ML. Waktu server ({currentTime}) dan IP Address otomatis tersimpan sebagai metadata kehadiran.
+              <p className="font-semibold mb-0.5">Wajib Kamera Langsung (Anti-Kecurangan):</p>
+              <p className="text-amber-800 leading-relaxed">
+                Pengambilan foto wajib dilakukan langsung secara <em>real-time</em> melalui kamera browser. Opsi unggah file dinonaktifkan demi menjaga keaslian kehadiran.
               </p>
-            </div>
-          </div>
-
-          {/* Source Toggle: Webcam vs File Upload */}
-          <div className="flex items-center justify-between text-xs font-medium border-b border-slate-200 pb-2">
-            <span className="text-slate-600">Metode Pengambilan Foto:</span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setUseCamera(true);
-                  setCapturedImage(null);
-                }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-colors ${
-                  useCamera
-                    ? "bg-slate-900 text-white font-semibold"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                <Camera size={13} />
-                Kamera Laptop/HP
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setUseCamera(false);
-                  stopCamera();
-                }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-colors ${
-                  useCamera
-                    ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    : "bg-slate-900 text-white font-semibold"
-                }`}
-              >
-                <Upload size={13} />
-                Unggah File
-              </button>
             </div>
           </div>
 
@@ -487,6 +426,41 @@ export default function WebAttendanceModal({
               </div>
             </div>
           </div>
+
+          {/* Early Out Reason Section */}
+          {type === "out" && (
+            <div className={`p-3.5 rounded-xl border transition-all ${requiresEarlyOutReason ? 'bg-amber-50/90 border-amber-300' : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="early-out-reason-input" className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Clock size={13} className={requiresEarlyOutReason ? 'text-amber-600' : 'text-slate-500'} />
+                  {requiresEarlyOutReason ? "Alasan Pulang Lebih Awal (Wajib Diisi):" : "Alasan Pulang Lebih Awal (Bypass):"}
+                </label>
+                {requiresEarlyOutReason && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-200/80 px-2 py-0.5 rounded-full">
+                    Wajib
+                  </span>
+                )}
+              </div>
+              {requiresEarlyOutReason && earlyOutMessage && (
+                <p className="text-xs text-amber-900 mb-2 leading-snug">
+                  {earlyOutMessage}
+                </p>
+              )}
+              <textarea
+                id="early-out-reason-input"
+                rows={2}
+                value={earlyOutReason}
+                onChange={(e) => setEarlyOutReason(e.target.value)}
+                placeholder="Contoh: Ada meeting di luar kantor sampai jam pulang sebenarnya..."
+                className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#8B0000] focus:border-transparent bg-white text-slate-800 placeholder:text-slate-400"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">
+                {isAutoValidated 
+                  ? "✓ Fitur Auto-Validasi Aktif: Absen pulang awal akan langsung disetujui otomatis." 
+                  : "ℹ Absen pulang sebelum jam kerja selesai akan diteruskan ke Super Admin / HRD untuk persetujuan."}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Footer Actions */}

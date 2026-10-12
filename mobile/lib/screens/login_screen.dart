@@ -183,6 +183,144 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  void _showPrivacyPolicyModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+        height: MediaQuery.of(context).size.height * 0.85,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: maroon.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(Icons.shield_outlined, color: maroon, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Kebijakan Privasi",
+                        style: GoogleFonts.outfit(
+                          fontSize: 19,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1E293B),
+                        ),
+                      ),
+                      Text(
+                        "Ketentuan Perlindungan Data OnTime HRMS",
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.grey),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 16),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Text(
+                    "Kebijakan Privasi Aplikasi OnTime HRMS (PT. Artacomindo Jejaring Nusa)\n\n"
+                    "Kerahasiaan dan keamanan data pribadi Anda merupakan komitmen utama kami. Dokumen ini menjelaskan pengumpulan, penggunaan, dan perlindungan data pada ekosistem OnTime HRMS:\n\n"
+                    "1. PENGUMPULAN DATA BIOMETRIK WAJAH\n"
+                    "• Foto selfie yang diambil saat pendaftaran wajah dan proses absensi diubah menjadi representasi vektor numerik 128-dimensi terenkripsi.\n"
+                    "• Data biometrik hanya digunakan untuk memverifikasi keaslian dan kesesuaian identitas karyawan saat melakukan absensi masuk & pulang.\n"
+                    "• Kami tidak pernah membagikan atau menjual data biometrik Anda kepada pihak ketiga mana pun.\n\n"
+                    "2. DATA LOKASI GEOGRAFIS (GPS & BACKGROUND TRACKING)\n"
+                    "• Koordinat GPS dikumpulkan pada saat absensi untuk memastikan kehadiran berada dalam radius kantor cabang yang sah (Geofencing).\n"
+                    "• Layanan Lokasi Latar Belakang (Background Location) hanya aktif selama shift kerja berlangsung bagi teknisi/lapangan yang bertugas dengan indikator notifikasi aktif di bilah status. Pelacakan otomatis berhenti saat absen pulang.\n\n"
+                    "3. DATA TRANSAKSI & DOKUMEN LAMPIRAN\n"
+                    "• Foto nota klaim pengeluaran, surat keterangan dokter, foto odometer kendaraan, dan tanda tangan digital disimpan dengan aman di server internal perusahaan untuk keperluan audit dan persetujuan operasional.\n\n"
+                    "4. DATA PERANGKAT (DEVICE ID) & KEAMANAN\n"
+                    "• Pengidentifikasi unik perangkat smartphone (Device ID) dicatat untuk mencegah manipulasi, penggunaan akun ganda, atau pemasangan lokasi palsu (Fake GPS / Mock Location).\n\n"
+                    "5. DATA PENGGAJIAN & KEUANGAN\n"
+                    "• Informasi nomor rekening bank, rincian komponen gaji, dan pemotongan pajak PPh 21 dikelola secara ketat dengan protokol enkripsi enterprise dan hanya dapat diakses oleh bagian Finance & HRD yang berwenang.\n\n"
+                    "6. HAK AKSES DAN PENGHAPUSAN DATA\n"
+                    "• Karyawan berhak meninjau seluruh data riwayat kehadiran, dokumen pengajuan, dan mengajukan pembaruan data profil atau pendaftaran ulang biometrik wajah melalui Super Admin perusahaan.\n\n"
+                    "7. KONTAK & BANTUAN\n"
+                    "• Jam Operasional: Senin – Jumat (08:30 – 17:30 WIB)\n"
+                    "• Email Support: support@artacomindo.com\n"
+                    "• PT. Artacomindo Jejaring Nusa",
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      height: 1.65,
+                      color: const Color(0xFF334155),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: maroon,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 0,
+                ),
+                child: Text(
+                  "Mengerti",
+                  style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -287,7 +425,29 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
             ),
-            SizedBox(height: 25),
+            const SizedBox(height: 16),
+            Center(
+              child: GestureDetector(
+                onTap: _showPrivacyPolicyModal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.shield_outlined, size: 14, color: maroon),
+                    const SizedBox(width: 6),
+                    Text(
+                      "Kebijakan Privasi & Perlindungan Data",
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: maroon,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -302,7 +462,7 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(height: 30),
+              const SizedBox(height: 24),
               Row(
                 children: [
                   IconButton(
@@ -310,8 +470,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: _goToOnboarding,
                   ),
                   Icon(Icons.business, color: maroon, size: 24),
-                  SizedBox(width: 8),
-                  Flexible(
+                  const SizedBox(width: 8),
+                  Expanded(
                     child: Text(
                       "Login Portal",
                       style: GoogleFonts.outfit(
@@ -322,9 +482,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  IconButton(
+                    tooltip: "Kebijakan Privasi",
+                    icon: Icon(Icons.shield_outlined, color: maroon),
+                    onPressed: _showPrivacyPolicyModal,
+                  ),
                 ],
               ),
-              SizedBox(height: 40),
+              const SizedBox(height: 30),
               Text(
                 "Sign in",
                 style: GoogleFonts.outfit(
@@ -568,7 +733,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-              SizedBox(height: 40),
+              const SizedBox(height: 35),
               Center(
                 child: Text(
                   "Lupa password atau kendala login?\nHubungi Admin Perusahaan Anda.",
@@ -579,7 +744,29 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-              SizedBox(height: 30),
+              const SizedBox(height: 16),
+              Center(
+                child: GestureDetector(
+                  onTap: _showPrivacyPolicyModal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.shield_outlined, size: 14, color: maroon),
+                      const SizedBox(width: 6),
+                      Text(
+                        "Kebijakan Privasi & Perlindungan Data",
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: maroon,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 30),
             ],
           ),
         ),

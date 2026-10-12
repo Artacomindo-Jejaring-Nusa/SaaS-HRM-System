@@ -58,6 +58,10 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   Color _statusColor = Colors.white70;
   IconData _statusIcon = Icons.face;
 
+  // Snapshot freeze state
+  String? _capturedImagePath;
+  bool _showShutterFlash = false;
+
   // Counter agar tidak capture terlalu cepat (butuh beberapa frame stabil)
   int _stableFaceFrames = 0;
   static const int _requiredStableFrames = 8; // ~1 detik (8 × 120ms)
@@ -71,6 +75,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   String _resultMessage = "";
   bool _isBypassMode = false;
   String? _bypassReason;
+  String? _earlyOutReason;
 
   @override
   void initState() {
@@ -82,7 +87,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
   Future<void> _setMaxBrightness() async {
     try {
-      await ScreenBrightness().setScreenBrightness(1.0);
+      await ScreenBrightness().setApplicationScreenBrightness(1.0);
     } catch (e) {
       debugPrint("Failed to set brightness: $e");
     }
@@ -90,7 +95,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
   Future<void> _resetBrightness() async {
     try {
-      await ScreenBrightness().resetScreenBrightness();
+      await ScreenBrightness().resetApplicationScreenBrightness();
     } catch (e) {
       debugPrint("Failed to reset brightness: $e");
     }
@@ -233,32 +238,46 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   }
 
   /// Auto-capture foto, ambil GPS, kirim ke backend.
-  /// Backend akan memverifikasi wajah menggunakan AI Service (YOLOv11 + 128-d cosine similarity).
+  /// Begitu wajah terdeteksi frontal & stabil → langsung jepret & FREEZE kamera,
+  /// sehingga karyawan tidak perlu menahan wajah di depan kamera lagi saat ekstraksi/verifikasi AI berlangsung.
   Future<void> _autoCaptureAndSubmit() async {
-    if (_isProcessing) return;
-
-    // 1. Stop stream & beri jeda stabilisasi kamera
-    await _stopStreamSafe();
-    await Future.delayed(const Duration(milliseconds: 500));
+    if (_isProcessing || _isCapturing) return;
 
     if (!mounted || _controller == null || !_controller!.value.isInitialized) {
       _handleFailure("Kamera tidak tersedia. Silakan coba lagi.");
       return;
     }
 
-    setState(() => _isProcessing = true);
+    setState(() {
+      _isCapturing = true;
+      _showShutterFlash = true;
+    });
 
     try {
-      // 2. Ambil foto
+      // 1. Ambil foto snapshot seketika saat posisi wajah valid
       debugPrint("[Attendance] Taking picture...");
       final XFile image = await _controller!.takePicture();
       debugPrint("[Attendance] Photo saved: ${image.path}");
 
-      // Validasi file
+      // Validasi file hasil jepretan
       final file = File(image.path);
       if (!await file.exists() || await file.length() < 1000) {
         throw Exception("Foto tidak valid, silakan coba lagi.");
       }
+
+      // 2. STOP image stream & FREEZE tampilan kamera dengan foto yang tertangkap
+      await _stopStreamSafe();
+
+      if (!mounted) return;
+      setState(() {
+        _showShutterFlash = false;
+        _isCapturing = false;
+        _isProcessing = true;
+        _capturedImagePath = image.path;
+        _statusMessage = "📸 Wajah Berhasil Tertangkap!";
+        _statusColor = Colors.greenAccent;
+        _statusIcon = Icons.check_circle_rounded;
+      });
 
       // 3. Ambil lokasi GPS
       setState(() {
@@ -275,9 +294,9 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       // 4. Ambil Device ID
       String deviceId = await ApiService.getDeviceId();
 
-      // 5. Kirim ke Backend (Backend → AI Service untuk verifikasi wajah)
+      // 5. Kirim ke Backend (Ekstraksi Vektor Wajah AI & Cosine Similarity)
       setState(() {
-        _statusMessage = "Memverifikasi Wajah (AI)...";
+        _statusMessage = "Mengekstraksi & Memverifikasi Wajah (AI)...";
         _statusIcon = Icons.smart_toy;
         _statusColor = Colors.cyanAccent;
       });
@@ -305,12 +324,13 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           isMocked: position.isMocked,
           bypassFaceRecognition: _isBypassMode,
           bypassReason: _bypassReason,
+          earlyOutReason: _earlyOutReason,
         );
       }
 
       if (!mounted) return;
 
-      // 6. Cek hasil
+      // 6. Evaluasi hasil
       if (result != null &&
           (result['status'] == 'success' || result['status'] == true)) {
         // SUKSES — Auto-track jika check-in
@@ -364,6 +384,17 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 .join('\n');
           }
         }
+
+        // If backend reports early out bypass required
+        if (!widget.isCheckIn && (result?['requires_early_out_reason'] == true || result?['can_bypass'] == true)) {
+          _handleFailure(errMsg);
+          _showEarlyOutDialog(
+            initialMessage: errMsg,
+            timeRemaining: result?['time_remaining']?.toString(),
+          );
+          return;
+        }
+
         _handleFailure(errMsg);
       }
     } catch (e) {
@@ -373,7 +404,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     }
   }
 
-  /// Tampilkan pesan gagal dan beri opsi retry
+  /// Tampilkan pesan gagal dan unfreeze untuk retry
   void _handleFailure(String message) {
     if (!mounted) return;
     setState(() {
@@ -381,10 +412,12 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       _isSuccess = false;
       _resultMessage = message;
       _isProcessing = false;
+      _isCapturing = false;
+      _showShutterFlash = false;
     });
   }
 
-  /// Reset semua state untuk retry
+  /// Reset semua state untuk retry & unfreeze kamera
   void _retryAttendance() {
     setState(() {
       _showResult = false;
@@ -393,6 +426,8 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       _hasAutoCaptured = false;
       _isCapturing = false;
       _isProcessing = false;
+      _capturedImagePath = null;
+      _showShutterFlash = false;
       _stableFaceFrames = 0;
       _statusMessage = "Arahkan Wajah ke Kamera";
       _statusColor = Colors.white70;
@@ -409,6 +444,126 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     });
   }
 
+  void _showEarlyOutDialog({String? initialMessage, String? timeRemaining}) {
+    TextEditingController reasonController = TextEditingController(text: _earlyOutReason ?? "");
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orangeAccent.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.timer_off_outlined, color: Colors.orangeAccent, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  "Bypass Pulang Lebih Awal",
+                  style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  initialMessage ?? "Waktu kepulangan Anda belum tercapai${timeRemaining != null ? ' (Kurang $timeRemaining)' : ''}. Untuk melakukan checkout sekarang, Anda wajib mengisi alasan.",
+                  style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.info_outline, color: Colors.amberAccent, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Jika Auto-Validasi aktif, absen akan langsung diverifikasi. Jika tidak, pengajuan ini akan diteruskan ke Super Admin / HRD untuk persetujuan.",
+                          style: GoogleFonts.outfit(color: Colors.amber[100], fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  "Alasan Pulang Lebih Awal *",
+                  style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: reasonController,
+                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: "Contoh: Ada meeting di luar kantor sampai jam pulang selesai...",
+                    hintStyle: GoogleFonts.outfit(color: Colors.white38, fontSize: 12),
+                    filled: true,
+                    fillColor: Colors.black26,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Colors.orangeAccent),
+                    ),
+                  ),
+                  maxLines: 3,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text("Batal", style: GoogleFonts.outfit(color: Colors.white60)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orangeAccent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              ),
+              onPressed: () {
+                final reason = reasonController.text.trim();
+                if (reason.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Alasan pulang lebih awal wajib diisi")),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext);
+                setState(() {
+                  _earlyOutReason = reason;
+                });
+                _retryAttendance();
+              },
+              child: Text("Simpan & Lanjutkan", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _bypassAttendance() {
     TextEditingController reasonController = TextEditingController();
     showDialog(
@@ -419,14 +574,14 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           backgroundColor: const Color(0xFF1E293B),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(
-            "Alasan Bypass",
+            "Alasan Bypass Wajah",
             style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                "Bypass akan menandai absen ini sebagai 'Mencurigakan' dan butuh persetujuan manual Superadmin.",
+                "Bypass verifikasi wajah akan menandai absen ini sebagai 'Mencurigakan' dan butuh persetujuan manual Superadmin.",
                 style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13),
               ),
               const SizedBox(height: 16),
@@ -546,34 +701,41 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
   Widget _buildCameraView(Size size) {
     final circleSize = size.width * 0.78;
+    final isFrozen = _capturedImagePath != null && File(_capturedImagePath!).existsSync();
 
     return Stack(
       children: [
-        // Camera Preview
-        if (_isCameraReady && _controller != null)
-          Center(
-            child: ClipOval(
-              child: SizedBox(
-                width: circleSize,
-                height: circleSize,
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: _controller!.value.previewSize != null
-                        ? _controller!.value.previewSize!.height
-                        : size.width,
-                    height: _controller!.value.previewSize != null
-                        ? _controller!.value.previewSize!.width
-                        : size.height,
-                    child: CameraPreview(_controller!),
-                  ),
-                ),
-              ),
+        // Camera Preview (Frozen Captured Image or Live Preview)
+        Center(
+          child: ClipOval(
+            child: SizedBox(
+              width: circleSize,
+              height: circleSize,
+              child: isFrozen
+                  ? Image.file(
+                      File(_capturedImagePath!),
+                      fit: BoxFit.cover,
+                      width: circleSize,
+                      height: circleSize,
+                    )
+                  : (_isCameraReady && _controller != null)
+                      ? FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width: _controller!.value.previewSize != null
+                                ? _controller!.value.previewSize!.height
+                                : size.width,
+                            height: _controller!.value.previewSize != null
+                                ? _controller!.value.previewSize!.width
+                                : size.height,
+                            child: CameraPreview(_controller!),
+                          ),
+                        )
+                      : const Center(
+                          child: CircularProgressIndicator(color: Colors.white)),
             ),
-          )
-        else
-          const Center(
-              child: CircularProgressIndicator(color: Colors.white)),
+          ),
+        ),
 
         // Animated circle border
         Center(
@@ -583,13 +745,13 @@ class _AttendanceScreenState extends State<AttendanceScreen>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: _statusColor,
-                width: _stableFaceFrames > 0 ? 5 : 3,
+                color: isFrozen ? Colors.greenAccent : _statusColor,
+                width: (_stableFaceFrames > 0 || isFrozen) ? 5 : 3,
               ),
-              boxShadow: _stableFaceFrames > 2
+              boxShadow: (_stableFaceFrames > 2 || isFrozen)
                   ? [
                       BoxShadow(
-                        color: _statusColor.withValues(alpha: 0.4),
+                        color: (isFrozen ? Colors.greenAccent : _statusColor).withValues(alpha: 0.4),
                         blurRadius: 20,
                         spreadRadius: 3,
                       )
@@ -598,6 +760,14 @@ class _AttendanceScreenState extends State<AttendanceScreen>
             ),
           ),
         ),
+
+        // Shutter Flash Animation
+        if (_showShutterFlash)
+          Positioned.fill(
+            child: Container(
+              color: Colors.white.withValues(alpha: 0.85),
+            ),
+          ),
 
         // Status indicator (top)
         Positioned(
@@ -610,20 +780,27 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 padding: const EdgeInsets.symmetric(
                     horizontal: 20, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.black54,
+                  color: Colors.black87,
                   borderRadius: BorderRadius.circular(25),
+                  border: Border.all(
+                    color: isFrozen ? Colors.greenAccent.withValues(alpha: 0.4) : Colors.white12,
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(_statusIcon, color: _statusColor, size: 22),
+                    Icon(
+                      isFrozen ? Icons.check_circle_rounded : _statusIcon,
+                      color: isFrozen ? Colors.greenAccent : _statusColor,
+                      size: 22,
+                    ),
                     const SizedBox(width: 10),
                     Flexible(
                       child: Text(
                         _statusMessage,
                         style: GoogleFonts.outfit(
                           color: Colors.white,
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -632,7 +809,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 ),
               ),
               const SizedBox(height: 8),
-              // Progress dots
+              // Progress dots (when detecting face before capture)
               if (_stableFaceFrames > 0 && !_hasAutoCaptured)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -654,86 +831,111 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           ),
         ),
 
-        // Bottom info text
+        // Bottom info / Processing Banner
         Positioned(
-          bottom: 50,
-          left: 30,
-          right: 30,
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.black45,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    Icon(Icons.auto_awesome,
-                        color: Colors.cyanAccent, size: 28),
-                    const SizedBox(height: 8),
-                    Text(
-                      "Foto Otomatis",
-                      style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Posisikan wajah di dalam lingkaran.\nFoto diambil otomatis oleh sistem.",
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.outfit(
-                          color: Colors.white60, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Processing overlay
-        if (_isProcessing)
-          Container(
-            color: Colors.black87,
-            child: Center(
-              child: Card(
-                color: const Color(0xFF1E293B),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20)),
-                child: Padding(
-                  padding: const EdgeInsets.all(28),
+          bottom: 40,
+          left: 24,
+          right: 24,
+          child: _isProcessing
+              ? Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B).withValues(alpha: 0.95),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.5)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const SizedBox(
-                          width: 50,
-                          height: 50,
-                          child: CircularProgressIndicator(
-                              color: Colors.cyanAccent, strokeWidth: 3)),
-                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.cyanAccent,
+                              strokeWidth: 2.5,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Flexible(
+                            child: Text(
+                              _statusMessage,
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.greenAccent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 15),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                "Wajah tertangkap! Anda boleh melepas posisi wajah.",
+                                style: GoogleFonts.outfit(
+                                  color: Colors.greenAccent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.auto_awesome,
+                          color: Colors.cyanAccent, size: 28),
+                      const SizedBox(height: 8),
                       Text(
-                        _statusMessage,
+                        "Foto Otomatis",
                         style: GoogleFonts.outfit(
                             color: Colors.white,
                             fontSize: 16,
-                            fontWeight: FontWeight.w600),
-                        textAlign: TextAlign.center,
+                            fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
                       Text(
-                        "Sedang memverifikasi wajah Anda\ndengan AI Machine Learning...",
+                        "Posisikan wajah & mata lurus ke dalam lingkaran.\nFoto diambil otomatis setelah posisi stabil.",
+                        textAlign: TextAlign.center,
                         style: GoogleFonts.outfit(
                             color: Colors.white60, fontSize: 13),
-                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
                 ),
-              ),
-            ),
-          ),
+        ),
       ],
     );
   }
@@ -822,6 +1024,25 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                         fontWeight: FontWeight.bold,
                         fontSize: 16)),
               ),
+              if (!widget.isCheckIn) ...[
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber[800],
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 28, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: () => _showEarlyOutDialog(initialMessage: _resultMessage),
+                  icon: const Icon(Icons.timer_off_outlined, color: Colors.white),
+                  label: Text("Bypass Pulang Lebih Awal",
+                      style: GoogleFonts.outfit(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16)),
+                ),
+              ],
               const SizedBox(height: 12),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
@@ -833,7 +1054,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 ),
                 onPressed: _bypassAttendance,
                 icon: const Icon(Icons.warning_amber_rounded, color: Colors.white),
-                label: Text("Bypass (Butuh Persetujuan)",
+                label: Text("Bypass Wajah (Mencurigakan)",
                     style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,

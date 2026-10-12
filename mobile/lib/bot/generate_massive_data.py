@@ -43,7 +43,7 @@ def process_riddles(tebak_data, caklontong_data, asahotak_data):
         d = item.get('deskripsi', '').strip()
         if q and a and q not in seen_q:
             seen_q.add(q)
-            ans = f"{a}\\n\\nAlasan: {d}" if d else a
+            ans = f"{a}\n\nAlasan: {d}" if d else a
             massive_riddles.append(f"  {{'q': '{escape_dart_string(q)}', 'a': '{escape_dart_string(ans)}'}}")
 
     for item in asahotak_data:

@@ -167,22 +167,28 @@ class _SettingsTabState extends State<SettingsTab> {
 
   // --- SHOW INFO MODALS ---
 
-  void _showInfoModal(String title, String content) {
+  void _showInfoModal(
+    String title,
+    String content, {
+    IconData icon = Icons.info_outline_rounded,
+    String? subtitle,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (context) => Container(
-        padding: const EdgeInsets.all(25),
-        height: MediaQuery.of(context).size.height * 0.7,
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+        height: MediaQuery.of(context).size.height * 0.82,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
               child: Container(
-                width: 40,
+                width: 44,
                 height: 5,
                 decoration: BoxDecoration(
                   color: Colors.grey[300],
@@ -190,34 +196,92 @@ class _SettingsTabState extends State<SettingsTab> {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            Text(
-              title,
-              style: GoogleFonts.outfit(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: maroon.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: maroon, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.outfit(
+                          fontSize: 19,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1E293B),
+                        ),
+                      ),
+                      if (subtitle != null)
+                        Text(
+                          subtitle,
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.grey),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 16),
             Expanded(
               child: SingleChildScrollView(
-                child: Text(content, style: const TextStyle(height: 1.6)),
+                physics: const BouncingScrollPhysics(),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Text(
+                    content,
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      height: 1.65,
+                      color: const Color(0xFF334155),
+                    ),
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: maroon,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
+                  elevation: 0,
                 ),
-                child: const Text(
+                child: Text(
                   "Tutup",
-                  style: TextStyle(color: Colors.white),
+                  style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
                 ),
               ),
             ),
@@ -330,10 +394,11 @@ class _SettingsTabState extends State<SettingsTab> {
             showSwitch: true,
             switchValue: _alarmEnabled,
             onSwitchChanged: (val) async {
+              final messenger = ScaffoldMessenger.of(context);
               await AttendanceAlarmService().setEnabled(val);
               if (!mounted) return;
               setState(() => _alarmEnabled = val);
-              ScaffoldMessenger.of(context).showSnackBar(
+              messenger.showSnackBar(
                 SnackBar(
                   content: Text(val
                       ? "Alarm jam absensi diaktifkan"
@@ -350,9 +415,10 @@ class _SettingsTabState extends State<SettingsTab> {
               "Uji Coba Dering Alarm",
               "Bunyikan sampel suara & notifikasi alarm",
               onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
                 await AttendanceAlarmService().testAlarm();
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     const SnackBar(
                       content: Text("Memutar sampel dering alarm..."),
                       duration: Duration(seconds: 2),
@@ -370,19 +436,6 @@ class _SettingsTabState extends State<SettingsTab> {
             onTap: _showLanguageSelector,
           ),
 
-          // _buildSettingItem(
-          //   Icons.dark_mode_outlined,
-          //   "Tema Gelap",
-          //   "Gunakan tampilan gelap",
-          //   showSwitch: true,
-          //   switchValue: themeNotifier.value == ThemeMode.dark,
-          //   onSwitchChanged: (val) async {
-          //     themeNotifier.value = val ? ThemeMode.dark : ThemeMode.light;
-          //     final prefs = await SharedPreferences.getInstance();
-          //     await prefs.setBool('dark_mode', val);
-          //     setState(() {});
-          //   },
-          // ),
           _buildSection("Informasi"),
           _buildSettingItem(
             Icons.help_outline_rounded,
@@ -390,54 +443,89 @@ class _SettingsTabState extends State<SettingsTab> {
             "FAQ dan panduan fitur aplikasi",
             onTap: () => _showInfoModal(
               "Pusat Bantuan",
-              "Selamat datang di Pusat Bantuan OnTime HRMS!\n\n"
-                  "1. LOGIN AKUN\n"
-                  "• Anda dapat masuk menggunakan email & password terdaftar atau via Google Sign-In.\n\n"
-                  "2. ABSENSI GEOFENCING & LIVENESS\n"
-                  "• Pastikan GPS perangkat Anda aktif dan memiliki akurasi yang baik.\n"
-                  "• Anda harus berada dalam radius kantor cabang yang telah ditentukan.\n"
-                  "• Pengenalan wajah (Liveness) digunakan untuk memverifikasi keaslian kehadiran.\n\n"
-                  "3. LIVE TRACKING TEKNISI\n"
-                  "• Notifikasi 'Live Tracking Aktif' muncul di bilah status karena sistem Android mewajibkan layanan latar belakang (Foreground Service) menampilkan indikator aktif demi privasi dan keamanan data Anda.\n"
-                  "• Lokasi Anda hanya akan dicatat saat shift kerja berlangsung untuk keperluan rute perjalanan dinas teknisi.\n\n"
-                  "4. ALUR PERSETUJUAN DINAMIS (APPROVALS)\n"
-                  "• Pengajuan Cuti, Izin, Lembur, Koreksi Absen, Reimbursement, dan Pengajuan Dana kini diproses melalui alur persetujuan dinamis sesuai kebijakan perusahaan Anda (Atasan Langsung, Role tertentu, atau Manager).\n\n"
-                  "5. TUKAR SHIFT & KENDARAAN\n"
-                  "• Shift Swap: Ajukan pertukaran jadwal kerja langsung ke rekan kerja Anda lalu tunggu persetujuan atasan.\n"
-                  "• Fleet Log: Catat perjalanan kendaraan dinas dengan mengunggah foto odometer keberangkatan & kepulangan.\n\n"
-                  "Hubungi tim pengembang jika ada kendala teknis:\n"
-                  "• ahmad@ajnusa.com\n"
-                  "• abbas@ajnusa.com",
+              "Selamat datang di Pusat Bantuan OnTime HRMS Enterprise!\n\n"
+                  "1. ABSENSI WAJAH AI & GEOFENCING (GPS)\n"
+                  "• Pastikan GPS perangkat aktif dengan akurasi tinggi dan Anda berada dalam radius kantor cabang yang sah.\n"
+                  "• Posisikan wajah & mata tegak lurus menghadap lingkaran kamera. Kamera akan mendeteksi kestabilan wajah dan mengambil foto secara otomatis (Auto-Capture).\n"
+                  "• Begitu foto berhasil tertangkap, tampilan kamera otomatis membeku (Freeze Snapshot) sehingga Anda boleh langsung melepas posisi wajah sementara sistem memproses ekstraksi vektor biometrik AI dan memvalidasi koordinat GPS.\n"
+                  "• Absen Dinas Luar: Karyawan yang bertugas di luar kantor wajib memilih tipe 'Dinas Luar' serta mengisi tujuan dan keterangan aktivitas dinas.\n\n"
+                  "2. PENGAJUAN FORM & WORKFLOW PERSETUJUAN\n"
+                  "• Cuti (Leave): Mengurangi saldo cuti tahunan atau hak cuti khusus Kemnaker otomatis setelah disetujui.\n"
+                  "• Izin (Permit): Untuk keperluan izin datang terlambat, pulang awal, atau izin sakit (bisa melampirkan surat dokter).\n"
+                  "• Klaim Biaya (Reimbursement): Pengajuan klaim pengeluaran operasional yang telah dikeluarkan, wajib melampirkan foto nota/struk kwitansi pembayaran.\n"
+                  "• Pengajuan Dana / Kasbon (Fund Request): Pengajuan dana operasional di muka sebelum transaksi dilakukan (tidak memerlukan nota).\n"
+                  "• Lembur (Overtime): Mengisi estimasi waktu lembur dan rincian pekerjaan yang dilakukan.\n"
+                  "• Tukar Shift (Shift Swap): Ajukan pergantian jadwal kerja langsung ke rekan satu tim lalu diverifikasi atasan.\n\n"
+                  "3. PORTAL MANAGER & PUSAT PERSETUJUAN\n"
+                  "• Menu khusus bagi atasan/manager yang diberi wewenang persetujuan oleh Super Admin.\n"
+                  "• Menyetujui atau menolak permohonan bawahan secara berjenjang (Level 1 Atasan Langsung, Level 2 HRD/Manager).\n"
+                  "• Memantau kehadiran dan live tracking anggota tim secara real-time.\n\n"
+                  "4. LIVE TRACKING & LOG ARMADA KENDARAAN (FLEET)\n"
+                  "• Pelacakan lokasi otomatis aktif saat jam shift kerja teknisi/lapangan berlangsung. Notifikasi 'Live Tracking Aktif' pada sistem Android berfungsi sebagai indikator transparansi privasi.\n"
+                  "• Log Kendaraan: Catat perjalanan dinas kendaraan kantor dengan mencantumkan tujuan dan foto odometer keberangkatan serta kepulangan.\n\n"
+                  "5. PENGGAJIAN & SLIP GAJI DIGITAL\n"
+                  "• Rincian gaji bulanan terintegrasi potongan BPJS Ketenagakerjaan/Kesehatan dan perhitungan pajak PPh 21 TER.\n"
+                  "• Unduh slip gaji resmi dalam format PDF standar A4 langsung dari menu Slip Gaji.\n\n"
+                  "6. KEAMANAN PERANGKAT (SINGLE DEVICE BINDING)\n"
+                  "• Satu akun karyawan terikat pada 1 Device ID fisik smartphone guna mencegah kecurangan titip absen.\n"
+                  "• Apabila Anda mengganti perangkat baru, ajukan permohonan reset Device ID kepada Super Admin atau tim IT Support perusahaan.\n\n"
+                  "7. LAYANAN BANTUAN & IT HELPDESK\n"
+                  "• Jam Operasional: Senin – Jumat (08:30 – 17:30 WIB)\n"
+                  "• Email Support: support@artacomindo.com\n"
+                  "• Helpdesk HRD: hrd@artacomindo.com\n"
+                  "• PT. Artacomindo Jejaring Nusa",
+              icon: Icons.help_outline_rounded,
+              subtitle: "Panduan Penggunaan & FAQ OnTime HRMS",
             ),
           ),
           _buildSettingItem(
             Icons.policy_outlined,
             "Kebijakan Privasi",
-            "Syarat dan ketentuan layanan",
+            "Syarat dan ketentuan perlindungan data",
             onTap: () => _showInfoModal(
               "Kebijakan Privasi",
-              "Kebijakan Privasi Aplikasi OnTime HRMS.\n\n"
-                  "Kerahasiaan data Anda adalah prioritas utama kami. Kami mengumpulkan data lokasi latar belakang (background location) hanya ketika fitur Live Tracking diaktifkan untuk melacak rute perjalanan teknisi.\n\n"
-                  "Data absensi (wajah dan GPS) hanya digunakan untuk keperluan verifikasi kehadiran di area kantor yang valid.",
+              "Kebijakan Privasi Aplikasi OnTime HRMS (PT. Artacomindo Jejaring Nusa)\n\n"
+                  "Kerahasiaan dan keamanan data pribadi Anda merupakan komitmen utama kami. Dokumen ini menjelaskan pengumpulan, penggunaan, dan perlindungan data pada ekosistem OnTime HRMS:\n\n"
+                  "1. PENGUMPULAN DATA BIOMETRIK WAJAH\n"
+                  "• Foto selfie yang diambil saat pendaftaran wajah dan proses absensi diubah menjadi representasi vektor numerik 128-dimensi terenkripsi.\n"
+                  "• Data biometrik hanya digunakan untuk memverifikasi keaslian dan kesesuaian identitas karyawan saat melakukan absensi masuk & pulang.\n"
+                  "• Kami tidak pernah membagikan atau menjual data biometrik Anda kepada pihak ketiga mana pun.\n\n"
+                  "2. DATA LOKASI GEOGRAFIS (GPS & BACKGROUND TRACKING)\n"
+                  "• Koordinat GPS dikumpulkan pada saat absensi untuk memastikan kehadiran berada dalam radius kantor cabang yang sah (Geofencing).\n"
+                  "• Layanan Lokasi Latar Belakang (Background Location) hanya aktif selama shift kerja berlangsung bagi teknisi/lapangan yang bertugas dengan indikator notifikasi aktif di bilah status. Pelacakan otomatis berhenti saat absen pulang.\n\n"
+                  "3. DATA TRANSAKSI & DOKUMEN LAMPIRAN\n"
+                  "• Foto nota klaim pengeluaran, surat keterangan dokter, foto odometer kendaraan, dan tanda tangan digital disimpan dengan aman di server internal perusahaan untuk keperluan audit dan persetujuan operasional.\n\n"
+                  "4. DATA PERANGKAT (DEVICE ID) & KEAMANAN\n"
+                  "• Pengidentifikasi unik perangkat smartphone (Device ID) dicatat untuk mencegah manipulasi, penggunaan akun ganda, atau pemasangan lokasi palsu (Fake GPS / Mock Location).\n\n"
+                  "5. DATA PENGGAJIAN & KEUANGAN\n"
+                  "• Informasi nomor rekening bank, rincian komponen gaji, dan pemotongan pajak PPh 21 dikelola secara ketat dengan protokol enkripsi enterprise dan hanya dapat diakses oleh bagian Finance & HRD yang berwenang.\n\n"
+                  "6. HAK AKSES DAN PENGHAPUSAN DATA\n"
+                  "• Karyawan berhak meninjau seluruh data riwayat kehadiran, dokumen pengajuan, dan mengajukan pembaruan data profil atau pendaftaran ulang biometrik wajah melalui Super Admin perusahaan.",
+              icon: Icons.shield_outlined,
+              subtitle: "Ketentuan Perlindungan & Keamanan Data",
             ),
           ),
           _buildSettingItem(
             Icons.info_outline_rounded,
             "Tentang Aplikasi",
-            "Versi 2.0",
+            "Versi 2.1 Enterprise",
             onTap: () => _showInfoModal(
               "Tentang Aplikasi",
-              "OnTime HRMS Mobile App\n"
-                  "Versi 1.9.2 (Stable)\n\n"
-                  "Aplikasi HRMS Enterprise berbasis multi-tenant dengan fitur modern:\n"
-                  "• Dynamic Approval Workflows (6 Modul Utama)\n"
-                  "• Geofencing & Face Verification (Multi-Office)\n"
-                  "• Background Location Live Tracking\n"
-                  "• Shift Swap Engine & Fleet Logging\n"
-                  "• Form Leave, Claim, and Overtime ajust module\n"
-                  "• Slip Gaji Digital Terintegrasi PPh 21 TER\n\n"
-                  "Developed by Ahmad Rizki & Team Engineer.\n"
-                  "Copyright © 2026 PT. Artacomindo Jejaring Nusa.",
+              "OnTime HRMS Mobile Enterprise\n"
+                  "Versi 2.1 (Stable Release)\n\n"
+                  "Aplikasi Human Resource Management System (HRMS) Enterprise modern berbasis multi-tenant dengan fitur:\n"
+                  "• AI Face Recognition & Liveness Auto-Capture (Freeze Snapshot)\n"
+                  "• Geofencing Multi-Office & Anti-Mock GPS\n"
+                  "• Dynamic Multi-Level Approval Workflows (Cuti, Izin, Lembur, Klaim, Kasbon)\n"
+                  "• Background Location Live Tracking & Fleet Management\n"
+                  "• Shift Swap Engine & Kalender Kerja Tim\n"
+                  "• Slip Gaji Digital Terintegrasi PPh 21 TER & BPJS\n"
+                  "• Single Device ID Binding Security\n\n"
+                  "Developed by Engineering Team.\n"
+                  "Copyright © 2026 PT. Artacomindo Jejaring Nusa.\n"
+                  "Seluruh hak cipta dilindungi undang-undang.",
+              icon: Icons.info_outline_rounded,
+              subtitle: "Informasi Sistem & Versi Aplikasi",
             ),
           ),
 

@@ -187,7 +187,7 @@ class RolePermissionSeeder extends Seeder
 
         // HRD Permissions
         $hrdPermissions = Permission::whereIn('group', [
-            'Pegawai', 'Cuti', 'Perizinan', 'Reimbursement', 'Lembur', 'Operasional', 'Performa', 'Kehadiran', 'Tukar Shift', 'Payroll', 'Dokumen', 'Keuangan',
+            'Pegawai', 'Cuti', 'Perizinan', 'Reimbursement', 'Lembur', 'Operasional', 'Performa', 'Kehadiran', 'Tukar Shift', 'Kendaraan', 'Payroll', 'Dokumen', 'Keuangan',
         ])->whereNotIn('slug', $superAdminOnlySlugs)->pluck('id');
         $hrd->permissions()->sync($hrdPermissions);
 

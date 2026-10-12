@@ -74,7 +74,7 @@ export const isSuperAdminUser = (u: any): boolean => {
 export const isManagerUser = (u: any, permissions: string[] = []): boolean => {
   if (!u) return false;
   if (isSuperAdminUser(u)) {
-    return Boolean(u.can_access_manager_portal);
+    return Boolean(u.can_access_manager_portal ?? true);
   }
 
   // 1. Explicit override in database: false = force disabled
@@ -82,12 +82,12 @@ export const isManagerUser = (u: any, permissions: string[] = []): boolean => {
     return false;
   }
 
-  // 2. Explicit override or backend computed manager flag: true = force enabled
-  if (u.can_access_manager_portal === true || u.is_manager === true) {
+  // 2. Explicit override in database: true = force enabled
+  if (u.can_access_manager_portal === true) {
     return true;
   }
 
-  // 2. Dynamic permissions assigned to role/user (Super Admin configured)
+  // 3. Dynamic permissions assigned to role/user (Super Admin configured)
   const approvalPerms = new Set([
     'view-manager-portal',
     'manage-approvals',
@@ -101,17 +101,11 @@ export const isManagerUser = (u: any, permissions: string[] = []): boolean => {
     'approve-shift-swaps',
     'approve-attendance-corrections',
     'approve-project-costs',
+    'approve-payroll',
     'manage-attendance-corrections'
   ]);
-  if (permissions.some(p => approvalPerms.has(p))) return true;
   
-  // 3. Fallback to role name keyword
-  const roleName = (u.role?.name || '').toLowerCase();
-  const managerKeywords = [
-    'manager', 'supervisor', 'direktur', 'director', 'lead', 
-    'kadiv', 'hrd', 'head', 'atasan', 'spv', 'coo', 'ceo', 'vp', 'management'
-  ];
-  return managerKeywords.some(k => roleName.includes(k));
+  return permissions.some(p => approvalPerms.has(p));
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

@@ -78,7 +78,7 @@ class ArtacomBotEngine {
         _activeRiddleAnswer = riddle['a'];
         return BotResponse(
           mood: 'curious',
-          message: riddle['q'] ?? 'Coba tebak!',
+          message: cleanText(riddle['q'] ?? 'Coba tebak!'),
           intentName: 'joke_riddle',
           actionButtons: [
             BotAction(label: '🤔 Lihat Jawaban', actionCode: 'joke_riddle_answer'),
@@ -91,7 +91,7 @@ class ArtacomBotEngine {
       _activeRiddleAnswer = null;
       return BotResponse(
         mood: 'happy',
-        message: 'Jawabannya adalah:\n\n$ans',
+        message: cleanText('Jawabannya adalah:\n\n$ans'),
         intentName: 'joke_riddle_answer',
         actionButtons: [
           BotAction(label: '🔄 Main Lagi', actionCode: 'joke_riddle'),
@@ -208,19 +208,23 @@ class ArtacomBotEngine {
 
   ConversationNode? _findNode(String id) => conversationTree[id];
 
+  static String cleanText(String text) {
+    return text.replaceAll(r'\r\n', '\n').replaceAll(r'\n', '\n');
+  }
+
   String _enrichMessage(
     String msg,
     Map<String, dynamic>? payload,
     Map<String, dynamic>? userData,
   ) {
-    if (payload == null) return msg;
+    String result = cleanText(msg);
+    if (payload == null) return result;
 
     // Replace placeholders
-    String result = msg;
     payload.forEach((key, value) {
       result = result.replaceAll('{$key}', value.toString());
     });
-    return result;
+    return cleanText(result);
   }
 
   Map<String, dynamic>? _resolveDataPayload(

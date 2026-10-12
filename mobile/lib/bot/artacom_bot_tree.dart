@@ -15,7 +15,7 @@ final Map<String, ConversationNode> conversationTree = {
       'Ada yang bisa aku bantu? Pilih salah satu opsi di bawah ya! 😊',
       'Halo! Mau ngapain hari ini? Aku siap membantu! 🤗',
       'Hai! Pilih menu di bawah sesuai kebutuhanmu ya! ✨',
-      'Yo! Artacom Bot ready to help! Mau ke mana nih? 🚀',
+      'Yo! HR Assistant ready to help! Mau ke mana nih? 🚀',
       'Selamat datang kembali! Mari selesaikan target hari ini bersamaku! 🎯',
       'Beep boop! 🤖 Bot HR kesayanganmu siap melayani. Ada yang bisa dibantu?',
       'Hari yang cerah untuk produktif! Butuh info absen atau mau main game bentar? ☀️',
@@ -23,7 +23,7 @@ final Map<String, ConversationNode> conversationTree = {
       'Halo pekerja keras! Jangan lupa tarik napas. Mau cek status cuti atau sekadar curhat? 🌴',
 
       'Halo! Ada yang bisa aku bantu untuk mempercepat pekerjaanmu hari ini? ⚡',
-      'Hai! Aku Artacom Bot. Jangan sungkan untuk bertanya atau menggunakan layananku kapan saja. 🤖',
+      'Hai! Aku HR Assistant. Jangan sungkan untuk bertanya atau menggunakan layananku kapan saja. 🤖',
       'Selamat datang di portal HRMS interaktif! Mau cek apa hari ini? 📊',
       'Hai! Tetap semangat ya. Kalau butuh bantuan operasional, klik aja menu di bawah ini. 👇',
       'Halo! Gimana harimu? Semoga selalu produktif! Mari selesaikan tugas-tugas HR-mu. 🌟',
@@ -41,7 +41,7 @@ final Map<String, ConversationNode> conversationTree = {
       'Pagi, siang, sore, malam... Aku siap sedia! Ada yang bisa aku bantu? 🕰️',
       'Selamat beraktivitas! Jangan lupa minum air putih yang banyak. Mau urus apa sekarang? 💧',
       'Hai! Aku sudah me-refresh data terbarumu. Pilih fitur yang ingin kamu akses! 🔄',
-      'Halo! Aku Artacom Bot, sahabat setia HR-mu. Apa agenda kita hari ini? 🗓️',
+      'Halo! Aku HR Assistant, sahabat setia HR-mu. Apa agenda kita hari ini? 🗓️',
     ],
     chips: [
       ChipOption(
@@ -393,7 +393,7 @@ final Map<String, ConversationNode> conversationTree = {
     id: 'salary_tips',
     mood: 'excited',
     messages: [
-      '💡 Tips Kelola Gaji Ala Artacom Bot:\n\n'
+      '💡 Tips Kelola Gaji ala HR Assistant:\n\n'
           '1️⃣ Terapkan aturan 50/30/20:\n'
           '   • 50% kebutuhan pokok\n'
           '   • 30% keinginan\n'
@@ -867,7 +867,7 @@ final Map<String, ConversationNode> conversationTree = {
     id: 'task_tips',
     mood: 'excited',
     messages: [
-      '💡 Tips Produktivitas ala Artacom Bot:\n\n'
+      '💡 Tips Produktivitas ala HR Assistant:\n\n'
           '1️⃣ Teknik Pomodoro: Kerja fokus 25 menit → istirahat 5 menit 🍅\n'
           '2️⃣ Kerjakan tugas terberat di pagi hari (eat the frog! 🐸)\n'
           '3️⃣ Matikan notifikasi HP saat fokus kerja.\n'
@@ -2654,7 +2654,7 @@ final Map<String, ConversationNode> conversationTree = {
     id: 'daily_fortune',
     mood: 'excited',
     messages: [
-      '🥠 Selamat datang di Fortune Cookie Artacom!\nPilih elemen energi kamu hari ini untuk melihat ramalan keberuntungan kerjamu! ✨',
+      '🥠 Selamat datang di Fortune Cookie!\nPilih elemen energi kamu hari ini untuk melihat ramalan keberuntungan kerjamu! ✨',
     ],
     chips: [
       ChipOption(
@@ -3017,7 +3017,7 @@ final Map<String, ConversationNode> conversationTree = {
     messages: [
       '🏆 LUAR BIASA! KAMU MENANG! 🏆\n\n'
           'Jawabannya adalah PETA (Map)!\n\n'
-          'Kamu berhasil menamatkan ketiga level teka-teki Artacom Bot! Daya logika dan intuisimu sungguh tajam! 🌟👏',
+          'Kamu berhasil menamatkan ketiga level teka-teki HR Assistant! Daya logika dan intuisimu sungguh tajam! 🌟👏',
     ],
     chips: [
       ChipOption(
@@ -3309,7 +3309,7 @@ final Map<String, ConversationNode> conversationTree = {
     id: 'mini_game_rps',
     mood: 'excited',
     messages: [
-      '✊✌️✋ SUIT MELAWAN ARTACOM BOT!\n\n'
+      '✊✌️✋ SUIT MELAWAN HR ASSISTANT!\n\n'
           'Ayo tes siapa yang lebih hoki hari ini! Aku sudah menentukan pilihanku dalam memori rahasia... 🤫\n\n'
           'Sekarang giliranmu, pilih senjatamu di bawah:',
       '🎮 GAME BATU GUNTING KERTAS 🎮\n\n'
@@ -3367,7 +3367,7 @@ final Map<String, ConversationNode> conversationTree = {
           '🔥 KAMU MENANG! Mantap betul insting dan refleksmu! 💯',
       '🤖 Aku pilih: BATU 🪨!\n\n'
           '🪨 Batuku meremukkan guntingmu!\n\n'
-          '😎 AKU MENANG! Poin untuk Artacom Bot! Mau adu sekali lagi? 🤖✨',
+          '😎 AKU MENANG! Poin untuk HR Assistant! Mau adu sekali lagi? 🤖✨',
       '🤖 Aku pilih: GUNTING ✂️!\n\n'
           '✂️ vs ✂️\n\n'
           '🤝 HASIL SERI! Sama-sama gunting! Gregetan kan? Ayo lempar pilihan lagi! 😆',
@@ -3768,39 +3768,6 @@ final Map<String, ConversationNode> conversationTree = {
     ],
   ),
 
-  // ┌─────────────────────────────────────────────┐
-  // │  FUN & GAMES MENU                           │
-  // └─────────────────────────────────────────────┘
-  'menu_fun': ConversationNode(
-    id: 'menu_fun',
-    mood: 'happy',
-    messages: [
-      'Waktunya bersenang-senang! 🎉 Pilih hiburan yang kamu mau.',
-      'Bosan kerja? Yuk main sebentar! 🎮',
-      'Otak butuh istirahat! Mau pilih hiburan apa nih? 🎪',
-    ],
-    chips: [
-      ChipOption(emoji: '🤓', label: 'Tebak-tebakan', targetNodeId: 'joke_riddle'),
-      ChipOption(emoji: '😂', label: 'Jokes / Plesetan', targetNodeId: 'joke_tech'),
-      ChipOption(emoji: '🔥', label: 'Tantangan Harian', targetNodeId: 'tantangan_harian'),
-      ChipOption(emoji: '🧊', label: 'Ice Breaker Seru', targetNodeId: 'ice_breaker'),
-      ChipOption(emoji: '🏠', label: 'Menu Utama', targetNodeId: 'root'),
-    ],
-  ),
-
-  'menu_food_coffee': ConversationNode(
-    id: 'menu_food_coffee',
-    mood: 'happy',
-    messages: [
-      'Laper atau ngantuk? Aku punya rekomendasinya! 🍔☕',
-    ],
-    chips: [
-      ChipOption(emoji: '☕', label: 'Rekomendasi Ngopi', targetNodeId: 'rekomendasi_ngopi'),
-      ChipOption(emoji: '🍽️', label: 'Makan Siang', targetNodeId: 'rekomendasi_makan'),
-      ChipOption(emoji: '🍩', label: 'Cemilan Sore', targetNodeId: 'cemilan_sore'),
-      ChipOption(emoji: '🏠', label: 'Menu Utama', targetNodeId: 'root'),
-    ],
-  ),
 
   'rekomendasi_ngopi': ConversationNode(
     id: 'rekomendasi_ngopi',
@@ -3835,15 +3802,6 @@ final Map<String, ConversationNode> conversationTree = {
     messages: [], // di-inject oleh massive_data
     chips: [
       ChipOption(emoji: '🔄', label: 'Cari Lain', targetNodeId: 'ramalan_harian'),
-      ChipOption(emoji: '🏠', label: 'Menu Utama', targetNodeId: 'root'),
-    ]
-  ),
-  'daily_fortune': ConversationNode( // Alias for root
-    id: 'daily_fortune',
-    mood: 'happy',
-    messages: ['Mau baca ramalan harianmu? 🔮'],
-    chips: [
-      ChipOption(emoji: '🥠', label: 'Buka Ramalan', targetNodeId: 'ramalan_harian'),
       ChipOption(emoji: '🏠', label: 'Menu Utama', targetNodeId: 'root'),
     ]
   ),
@@ -3892,8 +3850,8 @@ final Map<String, ConversationNode> conversationTree = {
       ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
     ]
   ),
-  'relax_breath_start': ConversationNode(
-    id: 'relax_breath_start',
+  'relax_breath_tips': ConversationNode(
+    id: 'relax_breath_tips',
     mood: 'calm',
     messages: [
       '🧘 Yuk ikuti panduan: Tarik napas 4 detik... Tahan 4 detik... Hembuskan perlahan 6 detik. Ulangi 3 kali ya.',
@@ -3901,7 +3859,7 @@ final Map<String, ConversationNode> conversationTree = {
       '😌 Tutup matamu sejenak (kalau aman). Hitung mundur dari 10 sambil tarik dan buang napas perlahan. Kamu pasti merasa lebih baik.',
     ],
     chips: [
-      ChipOption(emoji: '🔄', label: 'Teknik Lain', targetNodeId: 'relax_breath_start'),
+      ChipOption(emoji: '🔄', label: 'Teknik Lain', targetNodeId: 'relax_breath_tips'),
       ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
     ]
   ),
@@ -3972,8 +3930,8 @@ final Map<String, ConversationNode> conversationTree = {
       ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
     ]
   ),
-  'quiz_menu': ConversationNode(
-    id: 'quiz_menu',
+  'quiz_trivia_quick': ConversationNode(
+    id: 'quiz_trivia_quick',
     mood: 'excited',
     messages: [
       '🧠 Quiz Trivia: Hewan apa yang tidak bisa melompat?\nJawaban: Gajah! 🐘',
@@ -3981,7 +3939,7 @@ final Map<String, ConversationNode> conversationTree = {
       '💡 Quiz Trivia: Apa nama tulang terpanjang di tubuh manusia?\nJawaban: Tulang Paha (Femur)! 🦴',
     ],
     chips: [
-      ChipOption(emoji: '🔄', label: 'Quiz Lain', targetNodeId: 'quiz_menu'),
+      ChipOption(emoji: '🔄', label: 'Quiz Lain', targetNodeId: 'quiz_trivia_quick'),
       ChipOption(emoji: '◀️', label: 'Kembali', targetNodeId: 'menu_fun'),
     ]
   ),

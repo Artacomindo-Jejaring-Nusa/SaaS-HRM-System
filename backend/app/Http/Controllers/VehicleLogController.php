@@ -32,6 +32,8 @@ class VehicleLogController extends Controller
         if ($user->is_manager) {
             if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
+            } elseif ($request->has('company_id') && $request->company_id) {
+                $query->where('company_id', $request->company_id);
             }
         } else {
             $query->where('user_id', $user->id);
@@ -87,10 +89,14 @@ class VehicleLogController extends Controller
             'driver_type' => 'nullable|in:self,driver',
             'driver_name' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
+            'company_id' => 'nullable|integer|exists:companies,id',
         ]);
 
         $user = $request->user();
-        $companyId = $user->company_id;
+        $companyId = $request->input('company_id') ?: $user->company_id;
+        if (! $companyId && $user->canAccessAllCompanies()) {
+            $companyId = \App\Models\Company::first()?->id;
+        }
 
         // Check dynamic approval workflow
         $workflowResult = \App\Services\ApprovalService::initApproval('vehicle_log', $companyId, $user);
@@ -218,6 +224,7 @@ class VehicleLogController extends Controller
             'odometer_start' => 'required|integer|min:0',
             'odometer_start_photo' => 'nullable|image|max:10240',
             'notes' => 'nullable|string',
+            'company_id' => 'nullable|integer|exists:companies,id',
         ]);
 
         $photoPath = null;
@@ -230,8 +237,13 @@ class VehicleLogController extends Controller
             Storage::disk('public')->put($photoPath, (string) $img->encodeUsingFileExtension('jpg', 80));
         }
 
+        $companyId = $request->input('company_id') ?: $request->user()->company_id;
+        if (! $companyId && $request->user()->canAccessAllCompanies()) {
+            $companyId = \App\Models\Company::first()?->id;
+        }
+
         $log = VehicleLog::create([
-            'company_id' => $request->user()->company_id,
+            'company_id' => $companyId,
             'user_id' => $request->user()->id,
             'vehicle_name' => $request->vehicle_name,
             'plate_number' => strtoupper($request->plate_number),
@@ -514,8 +526,11 @@ class VehicleLogController extends Controller
         $query = VehicleLog::with('user')
             ->whereIn('status', ['approved', 'completed']);
 
+        $companyId = $request->input('company_id') ?: $request->user()->company_id;
         if ($request->user()->company_id && ! $request->user()->canAccessAllCompanies()) {
             $query->where('company_id', $request->user()->company_id);
+        } elseif ($companyId) {
+            $query->where('company_id', $companyId);
         }
 
         if ($request->has('from') && $request->from) {
@@ -561,21 +576,35 @@ class VehicleLogController extends Controller
      */
     public function vehicles(Request $request)
     {
-        $companyId = $request->user()->company_id;
+        $user = $request->user();
+        $companyId = $request->query('company_id') ?: $user->company_id;
+        if (! $companyId && $user->canAccessAllCompanies()) {
+            $companyId = \App\Models\Company::first()?->id;
+        }
+
+        $vehiclesQuery = VehicleLog::query();
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
+            $vehiclesQuery->where('company_id', $user->company_id);
+        } elseif ($companyId) {
+            $vehiclesQuery->where('company_id', $companyId);
+        }
 
         // Distinct fleet
-        $rawVehicles = VehicleLog::where('company_id', $companyId)
+        $rawVehicles = $vehiclesQuery
             ->select('plate_number', 'vehicle_name')
             ->distinct()
             ->orderBy('vehicle_name')
             ->get();
 
         // Check currently active / in-use trips
-        $activeTrips = VehicleLog::with('user:id,name')
-            ->where('company_id', $companyId)
-            ->whereIn('status', ['in_use', 'departure', 'approved', 'maintenance'])
-            ->get()
-            ->keyBy('plate_number');
+        $tripsQuery = VehicleLog::with('user:id,name')
+            ->whereIn('status', ['in_use', 'departure', 'approved', 'maintenance']);
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
+            $tripsQuery->where('company_id', $user->company_id);
+        } elseif ($companyId) {
+            $tripsQuery->where('company_id', $companyId);
+        }
+        $activeTrips = $tripsQuery->get()->keyBy('plate_number');
 
         $result = $rawVehicles->map(function ($v) use ($activeTrips) {
             $active = $activeTrips->get($v->plate_number);
@@ -626,10 +655,19 @@ class VehicleLogController extends Controller
             'vehicle_type' => 'nullable|string|max:50',
             'initial_status' => 'nullable|string|in:available,maintenance',
             'notes' => 'nullable|string',
+            'company_id' => 'nullable|integer|exists:companies,id',
         ]);
 
         $user = $request->user();
-        $companyId = $user->company_id;
+        $companyId = $request->input('company_id') ?: $user->company_id;
+        if (! $companyId && $user->canAccessAllCompanies()) {
+            $companyId = \App\Models\Company::first()?->id;
+        }
+
+        if (! $companyId) {
+            return $this->errorResponse('Perusahaan (company_id) tidak ditemukan.', 422);
+        }
+
         $plateNumber = strtoupper(trim($request->plate_number));
         $vehicleName = trim($request->vehicle_name);
         $initialStatus = $request->initial_status ?? 'available';

@@ -37,6 +37,7 @@ class ManagerController extends Controller
         'vehicle_log' => 'approve-vehicle-logs',
         'fund_request' => 'approve-fund-requests',
         'payroll' => 'approve-payroll',
+        'early_out' => 'approve-attendances',
     ];
 
     /**
@@ -55,6 +56,7 @@ class ManagerController extends Controller
         'fund_request' => 'Pengajuan Dana',
         'vehicle_log' => 'Peminjaman Kendaraan',
         'payroll' => 'Payroll',
+        'early_out' => 'Pulang Awal',
     ];
 
     private const ROUTE_PATHS = [
@@ -65,6 +67,7 @@ class ManagerController extends Controller
         'fund_request' => self::ROUTE_FUND_REQUESTS,
         'vehicle_log' => '/dashboard/fleet-logs',
         'payroll' => '/dashboard/payroll/approval',
+        'early_out' => '/dashboard/attendance',
     ];
 
     /**
@@ -318,7 +321,7 @@ class ManagerController extends Controller
     public function updateRequestStatus(Request $request)
     {
         $request->validate([
-            'type' => 'required|in:leave,overtime,reimbursement,permit,vehicle_log,fund_request,payroll',
+            'type' => 'required|in:leave,overtime,reimbursement,permit,vehicle_log,fund_request,payroll,early_out',
             'id' => 'required|integer',
             'status' => 'required|in:approved,rejected',
             'remark' => 'nullable|string',
@@ -342,7 +345,50 @@ class ManagerController extends Controller
             return $this->handlePayrollApproval($request, $user, $isGlobalAdmin);
         }
 
+        if ($request->type === 'early_out') {
+            return $this->handleEarlyOutApproval($request, $user, $isGlobalAdmin);
+        }
+
         return $this->handleGeneralRequestApproval($request, $user, $isGlobalAdmin, $isCompanyAdmin);
+    }
+
+    private function handleEarlyOutApproval(Request $request, $user, bool $isGlobalAdmin)
+    {
+        $attendance = Attendance::with('user')
+            ->where('id', $request->id)
+            ->when(!$isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))
+            ->first();
+
+        if (!$attendance) {
+            return response()->json(['status' => 'error', 'message' => 'Data absensi pulang awal tidak ditemukan.'], 404);
+        }
+
+        $isApproved = $request->status === 'approved';
+
+        $attendance->update([
+            'early_out_status' => $request->status,
+            'early_out_approved_by' => $user->id,
+            'early_out_approved_at' => now(),
+            'early_out_rejection_reason' => $isApproved ? null : ($request->remark ?? 'Ditolak oleh Admin/Manager'),
+            'is_suspicious' => $isApproved ? false : $attendance->is_suspicious,
+        ]);
+
+        $dateStr = Carbon::parse($attendance->check_out ?? $attendance->check_in)->format('d M Y');
+        $this->notify(
+            $attendance->user,
+            $isApproved ? 'ABSEN PULANG AWAL DISETUJUI' : 'ABSEN PULANG AWAL DITOLAK',
+            $isApproved
+                ? "Permohonan Pulang Awal Anda pada tanggal {$dateStr} telah DISETUJUI oleh Super Admin."
+                : "Permohonan Pulang Awal Anda pada tanggal {$dateStr} DITOLAK oleh Super Admin. Alasan: " . ($request->remark ?? '-'),
+            $isApproved ? 'success' : 'danger',
+            '/dashboard/attendance'
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $isApproved ? 'Absensi pulang awal berhasil disetujui.' : 'Absensi pulang awal berhasil ditolak.',
+            'data' => $attendance->fresh(),
+        ]);
     }
 
     private function handlePayrollApproval(Request $request, $user, bool $isGlobalAdmin)

@@ -168,10 +168,13 @@ class _ArtacomBotScreenState extends State<ArtacomBotScreen>
   }
 
   void _addBotMessage(BotResponse response) {
+    final cleanText = response.message
+        .replaceAll(r'\r\n', '\n')
+        .replaceAll(r'\n', '\n');
     setState(() {
       _currentMood = response.mood;
       _messages.add(_ChatMessage(
-        text: response.message,
+        text: cleanText,
         isUser: false,
         response: response,
         timestamp: DateTime.now(),
@@ -181,9 +184,12 @@ class _ArtacomBotScreenState extends State<ArtacomBotScreen>
   }
 
   void _addUserMessage(String text) {
+    final cleanText = text
+        .replaceAll(r'\r\n', '\n')
+        .replaceAll(r'\n', '\n');
     setState(() {
       _messages.add(_ChatMessage(
-        text: text,
+        text: cleanText,
         isUser: true,
         timestamp: DateTime.now(),
       ));
@@ -321,7 +327,7 @@ class _ArtacomBotScreenState extends State<ArtacomBotScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Artacom Bot',
+                  'HR Assistant',
                   style: GoogleFonts.outfit(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
@@ -358,7 +364,7 @@ class _ArtacomBotScreenState extends State<ArtacomBotScreen>
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              'RBS v2.0',
+              'AI Assistant',
               style: GoogleFonts.inter(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
@@ -442,7 +448,7 @@ class _ArtacomBotScreenState extends State<ArtacomBotScreen>
           _buildBotAvatar(size: 60),
           const SizedBox(height: 20),
           Text(
-            'Artacom Bot sedang mempersiapkan data...',
+            'HR Assistant sedang mempersiapkan data...',
             style: GoogleFonts.inter(color: Colors.grey[600]),
           ),
           const SizedBox(height: 12),
@@ -514,7 +520,9 @@ class _ArtacomBotScreenState extends State<ArtacomBotScreen>
                 ],
               ),
               child: Text(
-                message.text,
+                message.text
+                    .replaceAll(r'\r\n', '\n')
+                    .replaceAll(r'\n', '\n'),
                 style: GoogleFonts.inter(
                   color: Colors.white,
                   fontSize: 14,
@@ -565,7 +573,9 @@ class _ArtacomBotScreenState extends State<ArtacomBotScreen>
                     ),
                   ),
                   child: Text(
-                    message.text,
+                    message.text
+                        .replaceAll(r'\r\n', '\n')
+                        .replaceAll(r'\n', '\n'),
                     style: GoogleFonts.inter(
                       fontSize: 14,
                       height: 1.5,

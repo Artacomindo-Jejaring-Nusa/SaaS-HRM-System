@@ -172,27 +172,38 @@ class AttendanceController extends Controller
             $minCheckOutTime = Carbon::parse($today . ' ' . $workEndTime);
         }
 
+        $isEarly = $now->lt($minCheckOutTime);
+        $earlyOutReason = $request->input('early_out_reason') ?: $request->input('bypass_reason');
+
         if (! $attendance) {
             $response = $this->errorResponse('Anda belum check-in atau sudah check-out.', 400);
-        } elseif ($now->lt($minCheckOutTime)) {
+        } elseif ($isEarly && empty($earlyOutReason)) {
             $diffMinutes = $now->diffInMinutes($minCheckOutTime);
             $hours = floor($diffMinutes / 60);
             $mins = $diffMinutes % 60;
             $timeRemaining = ($hours > 0 ? $hours . ' jam ' : '') . $mins . ' menit';
-            $response = $this->errorResponse("Belum saatnya pulang! Jam pulang Anda adalah pukul {$minCheckOutTime->format('H:i')} WIB (Kurang {$timeRemaining} lagi).", 400);
+            $response = response()->json([
+                'status' => 'error',
+                'can_bypass' => true,
+                'requires_early_out_reason' => true,
+                'min_checkout_time' => $minCheckOutTime->format('H:i'),
+                'time_remaining' => $timeRemaining,
+                'message' => "Belum saatnya pulang! Jam pulang Anda adalah pukul {$minCheckOutTime->format('H:i')} WIB (Kurang {$timeRemaining} lagi). Silakan gunakan opsi bypass dan sertakan alasan jika Anda harus pulang lebih awal.",
+            ], 400);
         } elseif ($securityError = $this->validateDeviceAndSecurity($user, $request, 'out')) {
             $response = $this->errorResponse($securityError['message'], $securityError['code']);
         } else {
-            $response = $this->processCheckOut($attendance, $user, $request);
+            $response = $this->processCheckOut($attendance, $user, $request, $isEarly, $earlyOutReason, $minCheckOutTime);
         }
 
         return $response;
     }
 
-    private function processCheckOut(Attendance $attendance, User $user, StoreAttendanceRequest $request)
+    private function processCheckOut(Attendance $attendance, User $user, StoreAttendanceRequest $request, bool $isEarly = false, ?string $earlyOutReason = null, ?Carbon $minCheckOutTime = null)
     {
         $imageName = $this->saveCompressedAttendanceImage($request, 'out');
-        $isBypass = $request->boolean('bypass_face_recognition');
+        $isFaceBypass = $request->boolean('bypass_face_recognition');
+        $isAutoValidated = $user->isWebAttendanceAutoValidated();
 
         $updateData = [
             'check_out' => now(),
@@ -203,10 +214,25 @@ class AttendanceController extends Controller
             'is_face_verified_out' => (bool) $request->attributes->get('is_face_verified_out', false),
         ];
 
-        if ($isBypass) {
-            $bypassReason = $request->input('bypass_reason', 'Lingkungan tidak mendukung');
+        if ($isFaceBypass) {
+            $bypassFaceReason = $request->input('bypass_reason', 'Lingkungan tidak mendukung');
             $updateData['is_suspicious'] = true;
-            $updateData['suspicious_reason'] = trim($attendance->suspicious_reason . " | Bypass pengenalan wajah saat check-out: {$bypassReason}", ' |');
+            $updateData['suspicious_reason'] = trim($attendance->suspicious_reason . " | Bypass pengenalan wajah saat check-out: {$bypassFaceReason}", ' |');
+        }
+
+        if ($isEarly && !empty($earlyOutReason)) {
+            $updateData['is_early_out'] = true;
+            $updateData['early_out_reason'] = $earlyOutReason;
+
+            if ($isAutoValidated) {
+                $updateData['early_out_status'] = 'approved';
+                $updateData['early_out_approved_at'] = now();
+            } else {
+                $updateData['early_out_status'] = 'pending';
+                $updateData['is_suspicious'] = true;
+                $schedEndTimeStr = $minCheckOutTime ? " ({$minCheckOutTime->format('H:i')} WIB)" : '';
+                $updateData['suspicious_reason'] = trim(($updateData['suspicious_reason'] ?? $attendance->suspicious_reason) . " | Pulang Awal{$schedEndTimeStr}: {$earlyOutReason}", ' |');
+            }
         }
 
         $attendance->update($updateData);
@@ -226,6 +252,56 @@ class AttendanceController extends Controller
             \Illuminate\Support\Facades\Log::warning('Auto track on checkOut failed: '.$e->getMessage());
         }
 
+        $score = $request->attributes->get('face_similarity_score_out');
+        $scorePercent = $score !== null ? round($score * 100, 1) : null;
+        $scoreText = $scorePercent !== null ? " (Kemiripan Wajah: {$scorePercent}%)" : '';
+
+        if ($isEarly && !empty($earlyOutReason)) {
+            if ($isAutoValidated) {
+                $this->notify(
+                    $user,
+                    'ABSEN PULANG AWAL DISETUJUI (AUTO-VALIDASI)',
+                    "Anda telah berhasil absen keluar lebih awal pada pukul " . now()->format('H:i') . " WIB dengan Validasi Otomatis Aktif. Alasan: {$earlyOutReason}",
+                    'success',
+                    null,
+                    'notif',
+                    false
+                );
+                return $this->successResponse($attendance->fresh(), "Absen pulang awal berhasil dicatat & divalidasi otomatis (Fitur Auto-Validasi Aktif).{$scoreText}");
+            }
+
+            // Notify Admins
+            $admins = User::where('company_id', $user->company_id)
+                ->where(function ($q) {
+                    $q->where('role_id', 1)
+                      ->orWhereHas('role', fn($r) => $r->where('name', 'like', '%super admin%')->orWhere('name', 'like', '%hrd%'));
+                })->get();
+
+            foreach ($admins as $admin) {
+                $this->notify(
+                    $admin,
+                    'PERMOHONAN PULANG AWAL BUTUH PERSETUJUAN',
+                    "Karyawan {$user->name} melakukan absen pulang lebih awal pada pukul " . now()->format('H:i') . " WIB. Alasan: \"{$earlyOutReason}\". Membutuhkan persetujuan Anda.",
+                    'warning',
+                    '/dashboard/approvals',
+                    'notif',
+                    false
+                );
+            }
+
+            $this->notify(
+                $user,
+                'ABSEN PULANG AWAL TERCATAT (MENUNGGU PERSETUJUAN)',
+                "Absen keluar lebih awal Anda pada pukul " . now()->format('H:i') . " WIB telah dicatat dan sedang menunggu persetujuan Super Admin.",
+                'info',
+                null,
+                'notif',
+                false
+            );
+
+            return $this->successResponse($attendance->fresh(), "Absen pulang awal berhasil dicatat. Menunggu persetujuan Super Admin.{$scoreText}");
+        }
+
         $this->notify(
             $user,
             'BERHASIL ABSEN KELUAR',
@@ -236,11 +312,7 @@ class AttendanceController extends Controller
             false
         );
 
-        $score = $request->attributes->get('face_similarity_score_out');
-        $scorePercent = $score !== null ? round($score * 100, 1) : null;
-        $scoreText = $scorePercent !== null ? " (Kemiripan Wajah: {$scorePercent}%)" : '';
-
-        return $this->successResponse($attendance, "Check-out berhasil{$scoreText}.");
+        return $this->successResponse($attendance->fresh(), "Check-out berhasil{$scoreText}.");
     }
 
     public function today(Request $request)

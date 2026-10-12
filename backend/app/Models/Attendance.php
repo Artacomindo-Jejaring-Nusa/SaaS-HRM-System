@@ -24,10 +24,13 @@ class Attendance extends Model
         'approved_by_hr', 'approved_at_hr', 'rejection_reason',
         'channel', 'ip_address', 'user_agent',
         'web_approval_status', 'web_approved_by', 'web_approved_at', 'web_rejection_reason',
+        'is_early_out', 'early_out_reason', 'early_out_status',
+        'early_out_approved_by', 'early_out_approved_at', 'early_out_rejection_reason',
     ];
 
     protected $casts = [
         'is_suspicious' => 'boolean',
+        'is_early_out' => 'boolean',
         'is_face_verified_in' => 'boolean',
         'is_face_verified_out' => 'boolean',
         'face_similarity_score_in' => 'float',
@@ -35,6 +38,7 @@ class Attendance extends Model
         'approved_at_spv' => 'datetime',
         'approved_at_hr' => 'datetime',
         'web_approved_at' => 'datetime',
+        'early_out_approved_at' => 'datetime',
     ];
 
     protected $appends = ['date', 'check_in_time', 'check_out_time', 'check_in_location', 'image_in_url', 'image_out_url', 'is_web_attendance'];
@@ -67,6 +71,11 @@ class Attendance extends Model
     public function webApprover()
     {
         return $this->belongsTo(User::class, 'web_approved_by');
+    }
+
+    public function earlyOutApprover()
+    {
+        return $this->belongsTo(User::class, 'early_out_approved_by');
     }
 
     public function getIsWebAttendanceAttribute(): bool
