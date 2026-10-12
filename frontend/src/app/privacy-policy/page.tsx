@@ -279,15 +279,15 @@ const policySections: PolicySection[] = [
       "Apabila Anda memiliki pertanyaan, klarifikasi, keluhan, atau ingin melaksanakan hak-hak subjek data sehubungan dengan Kebijakan Privasi ini, silakan menghubungi Petugas Pelindungan Data (Data Protection Officer / DPO) kami melalui saluran resmi berikut:",
       "• Nama Pengembang & Penyedia Layanan: PT. Artacomindo Jejaring Nusa",
       "• Produk Platform: OnTime HRMS (Enterprise SaaS Edition)",
-      "• Surel Khusus Pelindungan Data: privacy@artacomindo.com",
-      "• Surel Layanan & Bantuan Teknis: support@artacomindo.com",
-      "• Jam Operasional Layanan: Senin – Jumat (08:30 – 17:30 WIB, tidak termasuk hari libur nasional)",
-      "• Lokasi Kantor: Jakarta, Indonesia",
+      // "• Surel Khusus Pelindungan Data: privacy@artacomindo.com",
+      // "• Surel Layanan & Bantuan Teknis: support@artacomindo.com",
+      // "• Jam Operasional Layanan: Senin – Jumat (08:30 – 17:30 WIB, tidak termasuk hari libur nasional)",
+      // "• Lokasi Kantor: Jakarta, Indonesia",
       "Perubahan Kebijakan: Kebijakan Privasi ini dapat diperbarui sewaktu-waktu seiring penyempurnaan fitur sistem atau perubahan regulasi pemerintah. Pembaruan signifikan akan diumumkan melalui bilah pengumuman di dashboard aplikasi."
     ],
     keyPoints: [
       "Karyawan dapat berkonsultasi terlebih dahulu dengan Admin HRD perusahaan masing-masing terkait data internal kepegawaian.",
-      "DPO PT. Artacomindo Jejaring Nusa siap melayani penyelidikan teknis dan kepatuhan sistem keamanan."
+      // "DPO PT. Artacomindo Jejaring Nusa siap melayani penyelidikan teknis dan kepatuhan sistem keamanan."
     ]
   }
 ];
