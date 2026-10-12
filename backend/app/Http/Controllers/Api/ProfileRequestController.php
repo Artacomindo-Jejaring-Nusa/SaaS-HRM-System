@@ -68,6 +68,15 @@ class ProfileRequestController extends Controller
             );
         }
 
+        $this->notifySuperAdmins(
+            $user->company_id,
+            'PERMINTAAN PERUBAHAN PROFIL',
+            "{$user->name} telah mengajukan perubahan data profil sensitif (NIK/Email/Telepon).",
+            'warning',
+            '/dashboard/profile-requests',
+            $user->id
+        );
+
         return response()->json([
             'success' => true,
             'message' => 'Permintaan update profil berhasil dikirim dan menunggu persetujuan.',
@@ -95,6 +104,15 @@ class ProfileRequestController extends Controller
             'success'
         );
 
+        $this->notifySuperAdmins(
+            $profileRequest->company_id,
+            'PERUBAHAN PROFIL DISETUJUI',
+            "Permohonan perubahan data profil {$user->name} telah DISETUJUI oleh {$request->user()->name}.",
+            'success',
+            '/dashboard/profile-requests',
+            $request->user()->id
+        );
+
         return response()->json([
             'success' => true,
             'message' => 'Update profil disetujui dan data karyawan telah diperbarui.',
@@ -118,6 +136,15 @@ class ProfileRequestController extends Controller
             'PERUBAHAN PROFIL DITOLAK',
             'Permohonan perubahan data profil Anda ditolak oleh admin.',
             'danger'
+        );
+
+        $this->notifySuperAdmins(
+            $profileRequest->company_id,
+            'PERUBAHAN PROFIL DITOLAK',
+            "Permohonan perubahan data profil {$user->name} telah DITOLAK oleh {$request->user()->name}.",
+            'danger',
+            '/dashboard/profile-requests',
+            $request->user()->id
         );
 
         return response()->json([

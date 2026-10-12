@@ -147,6 +147,15 @@ class ReimbursementController extends Controller
             }
         }
 
+        $this->notifySuperAdmins(
+            $companyId,
+            'PENGAJUAN REIMBURSEMENT BARU',
+            "Karyawan {$user->name} mengajukan klaim reimbursement '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'.',
+            'warning',
+            self::ROUTE_APPROVALS,
+            $user->id
+        );
+
         return $reimbursement;
     }
 
@@ -201,6 +210,15 @@ class ReimbursementController extends Controller
             );
         }
 
+        $this->notifySuperAdmins(
+            $companyId,
+            'PENGAJUAN REIMBURSEMENT BARU',
+            "Karyawan {$user->name} mengajukan klaim reimbursement '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'.',
+            'warning',
+            self::ROUTE_APPROVALS,
+            $user->id
+        );
+
         return $reimbursement;
     }
 
@@ -242,6 +260,15 @@ class ReimbursementController extends Controller
                 $this->notify($reimbursement->user, 'REIMBURSEMENT DISETUJUI', $msg, 'success', self::URL_DASHBOARD_REIMBURSEMENTS);
                 $this->logActivity('APPROVE_REIMBURSEMENT', "Menyetujui klaim '{$reimbursement->title}' dari {$reimbursement->user->name}", $reimbursement);
 
+                $this->notifySuperAdmins(
+                    $reimbursement->company_id,
+                    'REIMBURSEMENT DISETUJUI',
+                    "Klaim reimbursement '{$reimbursement->title}' dari {$reimbursement->user->name} sebesar Rp ".number_format($reimbursement->amount, 0, ',', '.')." telah DISETUJUI oleh {$user->name}.",
+                    'success',
+                    self::ROUTE_APPROVALS,
+                    $user->id
+                );
+
                 return $this->successResponse($reimbursement, 'Klaim disetujui.');
             }
 
@@ -251,6 +278,15 @@ class ReimbursementController extends Controller
                 }
             }
             $this->notify($reimbursement->user, 'REIMBURSEMENT DALAM PROSES', "Klaim '{$reimbursement->title}' Anda disetujui di tahap sebelumnya. Menunggu: {$result['step_label']}.", 'info');
+
+            $this->notifySuperAdmins(
+                $reimbursement->company_id,
+                'PROGRESS REIMBURSEMENT',
+                "Klaim reimbursement '{$reimbursement->title}' dari {$reimbursement->user->name} disetujui di tahap sebelumnya oleh {$user->name}. Menunggu: {$result['step_label']}.",
+                'info',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
 
             return $this->successResponse($reimbursement, "Di-approve. Menunggu: {$result['step_label']}.");
         }
@@ -277,6 +313,15 @@ class ReimbursementController extends Controller
         );
 
         $this->logActivity('APPROVE_REIMBURSEMENT', "Menyetujui klaim '{$reimbursement->title}' dari {$reimbursement->user->name}", $reimbursement);
+
+        $this->notifySuperAdmins(
+            $reimbursement->company_id,
+            'REIMBURSEMENT DISETUJUI',
+            "Klaim reimbursement '{$reimbursement->title}' dari {$reimbursement->user->name} sebesar Rp ".number_format($reimbursement->amount, 0, ',', '.')." telah DISETUJUI oleh {$request->user()->name}.",
+            'success',
+            self::ROUTE_APPROVALS,
+            $request->user()->id
+        );
 
         return $this->successResponse($reimbursement, 'Klaim disetujui.');
     }
@@ -313,6 +358,15 @@ class ReimbursementController extends Controller
             $this->notify($reimbursement->user, 'REIMBURSEMENT DITOLAK', $msg, 'danger', self::URL_DASHBOARD_REIMBURSEMENTS);
             $this->logActivity('REJECT_REIMBURSEMENT', "Menolak klaim '{$reimbursement->title}' dari {$reimbursement->user->name}", $reimbursement);
 
+            $this->notifySuperAdmins(
+                $reimbursement->company_id,
+                'REIMBURSEMENT DITOLAK',
+                "Klaim reimbursement '{$reimbursement->title}' dari {$reimbursement->user->name} telah DITOLAK oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+                'danger',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
+
             return $this->successResponse($reimbursement, 'Klaim ditolak.');
         }
 
@@ -338,6 +392,15 @@ class ReimbursementController extends Controller
         );
 
         $this->logActivity('REJECT_REIMBURSEMENT', "Menolak klaim '{$reimbursement->title}' dari {$reimbursement->user->name}", $reimbursement);
+
+        $this->notifySuperAdmins(
+            $reimbursement->company_id,
+            'REIMBURSEMENT DITOLAK',
+            "Klaim reimbursement '{$reimbursement->title}' dari {$reimbursement->user->name} telah DITOLAK oleh {$request->user()->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            'danger',
+            self::ROUTE_APPROVALS,
+            $request->user()->id
+        );
 
         return $this->successResponse($reimbursement, 'Klaim ditolak.');
     }

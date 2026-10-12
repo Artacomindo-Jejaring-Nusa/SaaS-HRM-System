@@ -343,6 +343,23 @@ export default function LiveAttendancePage() {
     }
   }, [user]);
 
+  const handleAttendanceError = (error: unknown, type: 'check-in' | 'check-out') => {
+    setCapturedImage(null);
+    setStatusMsg("Gagal melakukan absensi.");
+    const axiosErr = error as { response?: { data?: { requires_early_out_reason?: boolean; can_bypass?: boolean; message?: string; time_remaining?: string; errors?: Record<string, string[]> } }; message?: string };
+    const errData = axiosErr?.response?.data;
+    if (type === 'check-out' && (errData?.requires_early_out_reason || errData?.can_bypass)) {
+      setEarlyOutPromptData({
+        message: errData?.message || "Belum saatnya pulang. Harap masukkan alasan jika harus pulang lebih awal.",
+        timeRemaining: errData?.time_remaining,
+      });
+      setShowEarlyOutModal(true);
+      return;
+    }
+    const fieldErrors = errData?.errors ? Object.values(errData.errors).flat().join(', ') : null;
+    toast.error(fieldErrors || errData?.message || axiosErr?.message || "Terjadi kesalahan sistem.");
+  };
+
   const handleAttendance = async (type: 'check-in' | 'check-out', customEarlyReason?: string) => {
     const validationError = validateAttendanceParams(
       location,
@@ -383,7 +400,7 @@ export default function LiveAttendancePage() {
 
       if (type === 'check-out') {
         const reason = customEarlyReason ?? earlyOutReason;
-        if (reason && reason.trim()) {
+        if (reason?.trim()) {
           payload.early_out_reason = reason.trim();
         }
       }
@@ -394,19 +411,7 @@ export default function LiveAttendancePage() {
       setShowEarlyOutModal(false);
       router.push('/dashboard');
     } catch (error: any) {
-      setCapturedImage(null);
-      setStatusMsg("Gagal melakukan absensi.");
-      const errData = error.response?.data;
-      if (type === 'check-out' && (errData?.requires_early_out_reason || errData?.can_bypass)) {
-        setEarlyOutPromptData({
-          message: errData?.message || "Belum saatnya pulang. Harap masukkan alasan jika harus pulang lebih awal.",
-          timeRemaining: errData?.time_remaining,
-        });
-        setShowEarlyOutModal(true);
-      } else {
-        const fieldErrors = errData?.errors ? Object.values(errData.errors).flat().join(', ') : null;
-        toast.error(fieldErrors || errData?.message || "Terjadi kesalahan sistem.");
-      }
+      handleAttendanceError(error, type);
     } finally {
       setLoading(false);
     }

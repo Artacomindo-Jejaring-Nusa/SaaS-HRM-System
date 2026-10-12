@@ -221,85 +221,18 @@ class AttendanceController extends Controller
         }
 
         if ($isEarly && !empty($earlyOutReason)) {
-            $updateData['is_early_out'] = true;
-            $updateData['early_out_reason'] = $earlyOutReason;
-
-            if ($isAutoValidated) {
-                $updateData['early_out_status'] = 'approved';
-                $updateData['early_out_approved_at'] = now();
-            } else {
-                $updateData['early_out_status'] = 'pending';
-                $updateData['is_suspicious'] = true;
-                $schedEndTimeStr = $minCheckOutTime ? " ({$minCheckOutTime->format('H:i')} WIB)" : '';
-                $updateData['suspicious_reason'] = trim(($updateData['suspicious_reason'] ?? $attendance->suspicious_reason) . " | Pulang Awal{$schedEndTimeStr}: {$earlyOutReason}", ' |');
-            }
+            $this->applyEarlyOutData($updateData, $attendance, $earlyOutReason, $isAutoValidated, $minCheckOutTime);
         }
 
         $attendance->update($updateData);
-
-        // Record checkout position into employee_tracks & broadcast live location
-        try {
-            $track = EmployeeTrack::create([
-                'user_id' => $user->id,
-                'latitude' => $request->latitude,
-                'longitude' => $request->longitude,
-                'accuracy' => 10.0,
-                'battery_level' => 100,
-                'recorded_at' => now(),
-            ]);
-            broadcast(new EmployeeLocationUpdated($track))->toOthers();
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Auto track on checkOut failed: '.$e->getMessage());
-        }
+        $this->recordCheckOutTrack($user, $request);
 
         $score = $request->attributes->get('face_similarity_score_out');
         $scorePercent = $score !== null ? round($score * 100, 1) : null;
         $scoreText = $scorePercent !== null ? " (Kemiripan Wajah: {$scorePercent}%)" : '';
 
         if ($isEarly && !empty($earlyOutReason)) {
-            if ($isAutoValidated) {
-                $this->notify(
-                    $user,
-                    'ABSEN PULANG AWAL DISETUJUI (AUTO-VALIDASI)',
-                    "Anda telah berhasil absen keluar lebih awal pada pukul " . now()->format('H:i') . " WIB dengan Validasi Otomatis Aktif. Alasan: {$earlyOutReason}",
-                    'success',
-                    null,
-                    'notif',
-                    false
-                );
-                return $this->successResponse($attendance->fresh(), "Absen pulang awal berhasil dicatat & divalidasi otomatis (Fitur Auto-Validasi Aktif).{$scoreText}");
-            }
-
-            // Notify Admins
-            $admins = User::where('company_id', $user->company_id)
-                ->where(function ($q) {
-                    $q->where('role_id', 1)
-                      ->orWhereHas('role', fn($r) => $r->where('name', 'like', '%super admin%')->orWhere('name', 'like', '%hrd%'));
-                })->get();
-
-            foreach ($admins as $admin) {
-                $this->notify(
-                    $admin,
-                    'PERMOHONAN PULANG AWAL BUTUH PERSETUJUAN',
-                    "Karyawan {$user->name} melakukan absen pulang lebih awal pada pukul " . now()->format('H:i') . " WIB. Alasan: \"{$earlyOutReason}\". Membutuhkan persetujuan Anda.",
-                    'warning',
-                    '/dashboard/approvals',
-                    'notif',
-                    false
-                );
-            }
-
-            $this->notify(
-                $user,
-                'ABSEN PULANG AWAL TERCATAT (MENUNGGU PERSETUJUAN)',
-                "Absen keluar lebih awal Anda pada pukul " . now()->format('H:i') . " WIB telah dicatat dan sedang menunggu persetujuan Super Admin.",
-                'info',
-                null,
-                'notif',
-                false
-            );
-
-            return $this->successResponse($attendance->fresh(), "Absen pulang awal berhasil dicatat. Menunggu persetujuan Super Admin.{$scoreText}");
+            return $this->handleEarlyOutNotifications($attendance, $user, $earlyOutReason, $isAutoValidated, $scoreText);
         }
 
         $this->notify(
@@ -313,6 +246,94 @@ class AttendanceController extends Controller
         );
 
         return $this->successResponse($attendance->fresh(), "Check-out berhasil{$scoreText}.");
+    }
+
+    private function applyEarlyOutData(array &$updateData, Attendance $attendance, string $earlyOutReason, bool $isAutoValidated, ?Carbon $minCheckOutTime): void
+    {
+        $updateData['is_early_out'] = true;
+        $updateData['early_out_reason'] = $earlyOutReason;
+
+        if ($isAutoValidated) {
+            $updateData['early_out_status'] = 'approved';
+            $updateData['early_out_approved_at'] = now();
+        } else {
+            $updateData['early_out_status'] = 'pending';
+            $updateData['is_suspicious'] = true;
+            $schedEndTimeStr = $minCheckOutTime ? " ({$minCheckOutTime->format('H:i')} WIB)" : '';
+            $updateData['suspicious_reason'] = trim(($updateData['suspicious_reason'] ?? $attendance->suspicious_reason) . " | Pulang Awal{$schedEndTimeStr}: {$earlyOutReason}", ' |');
+        }
+    }
+
+    private function recordCheckOutTrack(User $user, StoreAttendanceRequest $request): void
+    {
+        try {
+            $track = EmployeeTrack::create([
+                'user_id' => $user->id,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'accuracy' => 10.0,
+                'battery_level' => 100,
+                'recorded_at' => now(),
+            ]);
+            broadcast(new EmployeeLocationUpdated($track))->toOthers();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Auto track on checkOut failed: '.$e->getMessage());
+        }
+    }
+
+    private function handleEarlyOutNotifications(Attendance $attendance, User $user, string $earlyOutReason, bool $isAutoValidated, string $scoreText)
+    {
+        if ($isAutoValidated) {
+            $this->notify(
+                $user,
+                'ABSEN PULANG AWAL DISETUJUI (AUTO-VALIDASI)',
+                "Anda telah berhasil absen keluar lebih awal pada pukul " . now()->format('H:i') . " WIB dengan Validasi Otomatis Aktif. Alasan: {$earlyOutReason}",
+                'success',
+                null,
+                'notif',
+                false
+            );
+            return $this->successResponse($attendance->fresh(), "Absen pulang awal berhasil dicatat & divalidasi otomatis (Fitur Auto-Validasi Aktif).{$scoreText}");
+        }
+
+        // Notify Admins
+        $this->notifySuperAdmins(
+            $user->company_id,
+            'PERMOHONAN PULANG AWAL BUTUH PERSETUJUAN',
+            "Karyawan {$user->name} melakukan absen pulang lebih awal pada pukul " . now()->format('H:i') . " WIB. Alasan: \"{$earlyOutReason}\". Membutuhkan persetujuan Anda.",
+            'warning',
+            '/dashboard/approvals',
+            $user->id
+        );
+
+        $hrds = User::where('company_id', $user->company_id)
+            ->where('id', '!=', $user->id)
+            ->whereHas('role', fn($r) => $r->where('name', 'like', '%hrd%'))
+            ->get();
+
+        foreach ($hrds as $hrd) {
+            $this->notify(
+                $hrd,
+                'PERMOHONAN PULANG AWAL BUTUH PERSETUJUAN',
+                "Karyawan {$user->name} melakukan absen pulang lebih awal pada pukul " . now()->format('H:i') . " WIB. Alasan: \"{$earlyOutReason}\". Membutuhkan persetujuan Anda.",
+                'warning',
+                '/dashboard/approvals',
+                'notif',
+                false
+            );
+        }
+
+        $this->notify(
+            $user,
+            'ABSEN PULANG AWAL TERCATAT (MENUNGGU PERSETUJUAN)',
+            "Absen keluar lebih awal Anda pada pukul " . now()->format('H:i') . " WIB telah dicatat dan sedang menunggu persetujuan Super Admin.",
+            'info',
+            null,
+            'notif',
+            false
+        );
+
+        return $this->successResponse($attendance->fresh(), "Absen pulang awal berhasil dicatat. Menunggu persetujuan Super Admin.{$scoreText}");
     }
 
     public function today(Request $request)

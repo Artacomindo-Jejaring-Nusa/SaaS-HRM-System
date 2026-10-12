@@ -551,7 +551,7 @@ function OfficialApprovalFormDetails({ item, numericAmount }: OfficialApprovalFo
                     <span className="px-2 py-0.5 bg-orange-100 text-orange-900 font-bold rounded mr-2 border border-orange-300">
                       Bypass Jam Pulang
                     </span>
-                    Pulang Sebelum Waktu Shift Berakhir
+                    <span>Pulang Sebelum Waktu Shift Berakhir</span>
                   </td>
                 </tr>
                 <tr className="border-b border-slate-200">

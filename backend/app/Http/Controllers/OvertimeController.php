@@ -252,6 +252,15 @@ class OvertimeController extends Controller
             $this->notify($user, self::NOTIFICATION_OVERTIME_SUCCESS, "Permohonan lembur Anda sedang menunggu persetujuan.", 'info');
         }
 
+        $this->notifySuperAdmins(
+            $companyId,
+            'PENGAJUAN LEMBUR BARU',
+            "Karyawan {$user->name} mengajukan lembur: " . ($overtime->title ?? $overtime->reason ?? 'Lembur Karyawan') . ($overtime->date ? " pada tanggal {$overtime->date}." : '.'),
+            'warning',
+            self::ROUTE_APPROVALS,
+            $user->id
+        );
+
         return $this->successResponse($overtime, 'Permohonan lembur berhasil diajukan.', 201);
     }
 
@@ -385,6 +394,15 @@ class OvertimeController extends Controller
                 $this->notify($user, self::NOTIFICATION_OVERTIME_SUCCESS, "Permohonan lembur Anda sedang menunggu persetujuan.", 'info');
             }
 
+            $this->notifySuperAdmins(
+                $companyId,
+                'PENGAJUAN LEMBUR BARU',
+                "Karyawan {$user->name} mengajukan lembur: " . ($overtime->title ?? $overtime->reason ?? 'Lembur Karyawan') . ($overtime->date ? " pada tanggal {$overtime->date}." : '.'),
+                'warning',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
+
             return $this->successResponse($overtime, 'Lembur berhasil diajukan.');
         }
 
@@ -433,6 +451,15 @@ class OvertimeController extends Controller
             if ($result['is_final'] && $result['status'] === 'approved') {
                 $this->notify($overtime->user, 'LEMBUR DISETUJUI', "Permohonan lembur Anda telah DISETUJUI.", 'success');
 
+                $this->notifySuperAdmins(
+                    $overtime->company_id,
+                    'PENGAJUAN LEMBUR DISETUJUI',
+                    "Pengajuan lembur {$overtime->user->name} (" . ($overtime->title ?? '-') . ") telah DISETUJUI oleh {$user->name}.",
+                    'success',
+                    self::ROUTE_APPROVALS,
+                    $user->id
+                );
+
                 return $this->successResponse($overtime, 'Permohonan lembur disetujui.');
             }
 
@@ -442,6 +469,15 @@ class OvertimeController extends Controller
                 }
             }
             $this->notify($overtime->user, 'LEMBUR DALAM PROSES', "Pengajuan lembur Anda disetujui di tahap sebelumnya. Menunggu: {$result['step_label']}.", 'info');
+
+            $this->notifySuperAdmins(
+                $overtime->company_id,
+                'PROGRESS PERSETUJUAN LEMBUR',
+                "Pengajuan lembur {$overtime->user->name} (" . ($overtime->title ?? '-') . ") telah disetujui di tahap sebelumnya oleh {$user->name}. Menunggu: {$result['step_label']}.",
+                'info',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
 
             return $this->successResponse($overtime, "Di-approve. Menunggu: {$result['step_label']}.");
         }
@@ -485,6 +521,15 @@ class OvertimeController extends Controller
             ]);
 
             $this->notify($overtime->user, 'LEMBUR DITOLAK', "Mohon maaf, permohonan lembur Anda telah DITOLAK.", 'danger');
+
+            $this->notifySuperAdmins(
+                $overtime->company_id,
+                'PENGAJUAN LEMBUR DITOLAK',
+                "Pengajuan lembur {$overtime->user->name} (" . ($overtime->title ?? '-') . ") telah DITOLAK oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+                'danger',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
 
             return $this->successResponse($overtime, 'Permohonan lembur ditolak.');
         }
@@ -604,6 +649,15 @@ class OvertimeController extends Controller
         ]);
 
         $this->notify($overtime->user, $notifTitle, $notifMsg, $notifType);
+
+        $this->notifySuperAdmins(
+            $overtime->company_id,
+            $isApproval ? 'PENGAJUAN LEMBUR DISETUJUI' : 'PENGAJUAN LEMBUR DITOLAK',
+            "Pengajuan lembur {$overtime->user->name} (" . ($overtime->title ?? '-') . ") telah " . ($isApproval ? 'DISETUJUI' : 'DITOLAK') . " oleh {$request->user()->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            $notifType,
+            self::ROUTE_APPROVALS,
+            $request->user()->id
+        );
 
         return $this->successResponse($overtime, $responseMsg);
     }

@@ -81,6 +81,15 @@ class ShiftSwapController extends Controller
             '/dashboard/shift-swap'
         );
 
+        $this->notifySuperAdmins(
+            $user->company_id,
+            'PERMINTAAN TUKAR SHIFT BARU',
+            "Karyawan {$user->name} mengajukan tukar shift dengan {$receiver->name} untuk tanggal {$reqSched->date}.",
+            'info',
+            '/dashboard/shift-swap',
+            $user->id
+        );
+
         return response()->json(['status' => 'success', 'data' => $swap, 'message' => 'Permintaan tukar shift dikirim.']);
     }
 
@@ -129,6 +138,14 @@ class ShiftSwapController extends Controller
             if ($approver) {
                 $this->notify($approver, 'APPROVAL TUKAR SHIFT', "Ada permintaan tukar shift antara {$swap->requester->name} dan {$swap->receiver->name} menunggu persetujuan Anda.", 'warning');
             }
+
+            $this->notifySuperAdmins(
+                $swap->company_id,
+                'TUKAR SHIFT MENUNGGU PERSETUJUAN ATASAN',
+                "Permintaan tukar shift antara {$swap->requester->name} dan {$swap->receiver->name} telah disetujui penerima dan menunggu persetujuan Manager/Supervisor.",
+                'warning',
+                '/dashboard/shift-swap'
+            );
         }
 
         return response()->json(['status' => 'success', 'message' => 'Status berhasil diupdate.']);
@@ -177,6 +194,15 @@ class ShiftSwapController extends Controller
             // Notify both parties
             $this->notify($swap->requester, 'FINAL TUKAR SHIFT', $msg, $request->status === 'approved' ? 'success' : 'danger');
             $this->notify($swap->receiver, 'FINAL TUKAR SHIFT', $msg, $request->status === 'approved' ? 'success' : 'danger');
+
+            $this->notifySuperAdmins(
+                $swap->company_id,
+                $request->status === 'approved' ? 'TUKAR SHIFT DISETUJUI' : 'TUKAR SHIFT DITOLAK',
+                "Permintaan tukar shift antara {$swap->requester->name} dan {$swap->receiver->name} telah ".($request->status === 'approved' ? 'DISETUJUI' : 'DITOLAK')." oleh {$user->name}.",
+                $request->status === 'approved' ? 'success' : 'danger',
+                '/dashboard/shift-swap',
+                $user->id
+            );
 
             return response()->json(['status' => 'success', 'message' => $msg]);
 

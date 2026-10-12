@@ -161,6 +161,15 @@ class FundRequestController extends Controller
                     'success'
                 );
 
+                $this->notifySuperAdmins(
+                    $fundRequest->company_id,
+                    'PERMINTAAN DANA DISETUJUI',
+                    "Pengajuan dana {$fundRequest->user->name} sebesar Rp ".number_format($fundRequest->amount, 0, ',', '.')." telah DISETUJUI sepenuhnya oleh {$user->name}.",
+                    'success',
+                    self::ROUTE_APPROVALS,
+                    $user->id
+                );
+
                 return response()->json(['status' => 'success', 'message' => 'Pengajuan dana telah disetujui sepenuhnya.']);
             }
 
@@ -171,6 +180,15 @@ class FundRequestController extends Controller
                 }
             }
             $this->notify($fundRequest->user, 'PENGAJUAN DANA DALAM PROSES', "Pengajuan dana Anda disetujui di tahap sebelumnya. Menunggu: {$result['step_label']}.", 'info');
+
+            $this->notifySuperAdmins(
+                $fundRequest->company_id,
+                'PROGRESS PERMINTAAN DANA',
+                "Pengajuan dana {$fundRequest->user->name} sebesar Rp ".number_format($fundRequest->amount, 0, ',', '.')." disetujui di tahap sebelumnya oleh {$user->name}. Menunggu: {$result['step_label']}.",
+                'info',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
 
             return response()->json(['status' => 'success', 'message' => "Di-approve. Menunggu: {$result['step_label']}."]);
         }
@@ -207,6 +225,15 @@ class FundRequestController extends Controller
                 );
             }
 
+            $this->notifySuperAdmins(
+                $fundRequest->company_id,
+                'DANA DISETUJUI SUPERVISOR',
+                "Pengajuan dana {$fundRequest->user->name} sebesar Rp ".number_format($fundRequest->amount, 0, ',', '.')." telah disetujui oleh Supervisor ({$user->name}). Menunggu persetujuan HRD.",
+                'info',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
+
             return response()->json(['status' => 'success', 'message' => 'Disetujui oleh Supervisor. Menunggu persetujuan HRD.']);
 
         } elseif ($fundRequest->status === 'approved_by_supervisor') {
@@ -226,6 +253,15 @@ class FundRequestController extends Controller
                 'PENGAJUAN DANA DISETUJUI',
                 self::FUND_REQUEST_MSG_PREFIX.number_format($fundRequest->amount, 0, ',', '.').' telah DISETUJUI sepenuhnya.',
                 'success'
+            );
+
+            $this->notifySuperAdmins(
+                $fundRequest->company_id,
+                'PERMINTAAN DANA DISETUJUI',
+                "Pengajuan dana {$fundRequest->user->name} sebesar Rp ".number_format($fundRequest->amount, 0, ',', '.')." telah DISETUJUI sepenuhnya oleh {$user->name}.",
+                'success',
+                self::ROUTE_APPROVALS,
+                $user->id
             );
 
             return response()->json(['status' => 'success', 'message' => 'Pengajuan dana telah disetujui sepenuhnya.']);
@@ -268,6 +304,15 @@ class FundRequestController extends Controller
                 'danger'
             );
 
+            $this->notifySuperAdmins(
+                $fundRequest->company_id,
+                'PERMINTAAN DANA DITOLAK',
+                "Pengajuan dana {$fundRequest->user->name} sebesar Rp ".number_format($fundRequest->amount, 0, ',', '.')." telah DITOLAK oleh {$user->name}." . ($request->reject_reason ? " Alasan: {$request->reject_reason}" : ''),
+                'danger',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
+
             return response()->json(['status' => 'success', 'message' => 'Pengajuan dana ditolak.']);
         }
 
@@ -283,6 +328,15 @@ class FundRequestController extends Controller
             'PENGAJUAN DANA DITOLAK',
             "Pengajuan dana Anda telah DITOLAK. Alasan: {$request->reject_reason}",
             'danger'
+        );
+
+        $this->notifySuperAdmins(
+            $fundRequest->company_id,
+            'PERMINTAAN DANA DITOLAK',
+            "Pengajuan dana {$fundRequest->user->name} sebesar Rp ".number_format($fundRequest->amount, 0, ',', '.')." telah DITOLAK oleh {$user->name}." . ($request->reject_reason ? " Alasan: {$request->reject_reason}" : ''),
+            'danger',
+            self::ROUTE_APPROVALS,
+            $user->id
         );
 
         return response()->json(['status' => 'success', 'message' => 'Pengajuan dana ditolak.']);
@@ -459,5 +513,14 @@ class FundRequestController extends Controller
                 );
             }
         }
+
+        $this->notifySuperAdmins(
+            $user->company_id,
+            'PERMINTAAN DANA BARU',
+            "Karyawan {$user->name} mengajukan dana sebesar Rp {$formattedAmount}.",
+            'warning',
+            self::ROUTE_APPROVALS,
+            $user->id
+        );
     }
 }

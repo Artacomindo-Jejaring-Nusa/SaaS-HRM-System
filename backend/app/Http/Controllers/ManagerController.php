@@ -135,6 +135,16 @@ class ManagerController extends Controller
                     $routePath
                 );
             }
+
+            $this->notifySuperAdmins(
+                $item->company_id ?? $user->company_id,
+                "PENGAJUAN {$typeText} {$statusText}",
+                "Pengajuan {$typeText} {$item->user?->name} telah {$statusText} oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+                $result['status'] === 'approved' ? 'success' : 'danger',
+                $routePath,
+                $user->id
+            );
+
             return "Pengajuan {$typeText} berhasil di-{$request->status} secara final.";
         }
 
@@ -149,6 +159,7 @@ class ManagerController extends Controller
                 );
             }
         }
+
         if ($item->user) {
             $this->notify(
                 $item->user,
@@ -158,6 +169,16 @@ class ManagerController extends Controller
                 $routePath
             );
         }
+
+        $this->notifySuperAdmins(
+            $item->company_id ?? $user->company_id,
+            "PROGRESS PENGAJUAN {$typeText}",
+            "Pengajuan {$typeText} {$item->user?->name} telah disetujui di tahap {$item->current_approval_step} oleh {$user->name}. Menunggu: {$result['step_label']}.",
+            'info',
+            $routePath,
+            $user->id
+        );
+
         return "Persetujuan tahap {$item->current_approval_step} berhasil. Menunggu tahap berikutnya.";
     }
 
@@ -224,6 +245,16 @@ class ManagerController extends Controller
                         self::ROUTE_FUND_REQUESTS
                     );
                 }
+
+                $this->notifySuperAdmins(
+                    $item->company_id ?? $user->company_id,
+                    'PERSETUJUAN DANA (TAHAP SUPERVISOR)',
+                    "Pengajuan dana {$item->user?->name} telah disetujui Supervisor ({$user->name}). Menunggu persetujuan akhir HRD.",
+                    'info',
+                    self::ROUTE_FUND_REQUESTS,
+                    $user->id
+                );
+
                 return 'approved_by_supervisor';
             }
 
@@ -297,6 +328,15 @@ class ManagerController extends Controller
             $badge,
             $routePath
         );
+
+        $this->notifySuperAdmins(
+            $item->company_id ?? $request->user()->company_id,
+            "PENGAJUAN {$typeText} {$statusText}",
+            "Pengajuan {$typeText} {$item->user?->name} telah {$statusText} oleh {$request->user()->name}.{$remarkText}",
+            $badge,
+            $routePath,
+            $request->user()->id
+        );
     }
 
     private function handleLegacyApproval($item, Request $request, $user, bool $isGlobalAdmin, bool $isCompanyAdmin)
@@ -342,14 +382,14 @@ class ManagerController extends Controller
         }
 
         if ($request->type === 'payroll') {
-            return $this->handlePayrollApproval($request, $user, $isGlobalAdmin);
+            $response = $this->handlePayrollApproval($request, $user, $isGlobalAdmin);
+        } elseif ($request->type === 'early_out') {
+            $response = $this->handleEarlyOutApproval($request, $user, $isGlobalAdmin);
+        } else {
+            $response = $this->handleGeneralRequestApproval($request, $user, $isGlobalAdmin, $isCompanyAdmin);
         }
 
-        if ($request->type === 'early_out') {
-            return $this->handleEarlyOutApproval($request, $user, $isGlobalAdmin);
-        }
-
-        return $this->handleGeneralRequestApproval($request, $user, $isGlobalAdmin, $isCompanyAdmin);
+        return $response;
     }
 
     private function handleEarlyOutApproval(Request $request, $user, bool $isGlobalAdmin)
@@ -384,6 +424,15 @@ class ManagerController extends Controller
             '/dashboard/attendance'
         );
 
+        $this->notifySuperAdmins(
+            $attendance->company_id ?? $user->company_id,
+            $isApproved ? 'ABSEN PULANG AWAL DISETUJUI' : 'ABSEN PULANG AWAL DITOLAK',
+            "Permohonan Pulang Awal {$attendance->user?->name} tanggal {$dateStr} telah " . ($isApproved ? 'DISETUJUI' : 'DITOLAK') . " oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            $isApproved ? 'success' : 'danger',
+            '/dashboard/attendance',
+            $user->id
+        );
+
         return response()->json([
             'status' => 'success',
             'message' => $isApproved ? 'Absensi pulang awal berhasil disetujui.' : 'Absensi pulang awal berhasil ditolak.',
@@ -407,6 +456,15 @@ class ManagerController extends Controller
         ]);
 
         Salary::where('batch_id', $batch->id)->update(['status' => $request->status]);
+
+        $this->notifySuperAdmins(
+            $batch->company_id ?? $user->company_id,
+            $isApproved ? 'BATCH PAYROLL DISETUJUI' : 'BATCH PAYROLL DITOLAK',
+            "Batch payroll '{$batch->batch_number}' telah " . ($isApproved ? 'DISETUJUI' : 'DITOLAK') . " oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            $isApproved ? 'success' : 'danger',
+            '/dashboard/payroll/approval',
+            $user->id
+        );
 
         $message = $isApproved
             ? 'Batch payroll berhasil disetujui.'

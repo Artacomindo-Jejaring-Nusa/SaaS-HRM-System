@@ -171,6 +171,55 @@ export default function WebAttendanceModal({
     startCamera();
   };
 
+  const buildAttendanceFormData = () => {
+    const formData = new FormData();
+    if (capturedFile) {
+      formData.append("image", capturedFile);
+    } else if (capturedImage) {
+      formData.append("image_base64", capturedImage);
+    }
+
+    if (location) {
+      formData.append("latitude", location.lat.toString());
+      formData.append("longitude", location.lng.toString());
+    }
+
+    if (type === "out" && earlyOutReason.trim()) {
+      formData.append("early_out_reason", earlyOutReason.trim());
+    }
+
+    return formData;
+  };
+
+  const showAttendanceSuccessToast = (data: { message?: string; data?: { web_approval_status?: string; status?: string } }) => {
+    const status = data.data?.web_approval_status || data.data?.status;
+    if (status === "valid" || status === "present" || status === "late") {
+      toast.success(data.message || "Absen via Web berhasil disahkan!", {
+        description: `Tercatat pada ${currentTime}. Status: Tervalidasi Otomatis (Valid).`,
+      });
+      return;
+    }
+
+    toast.info(data.message || "Absen via Web berhasil dikirim!", {
+      description: "Status absensi Anda saat ini: Pending (Menunggu Persetujuan Superadmin / HRD).",
+    });
+  };
+
+  const handleSubmissionError = (err: unknown) => {
+    console.error("Web attendance error:", err);
+    const axiosErr = err as { response?: { data?: { requires_early_out_reason?: boolean; can_bypass?: boolean; message?: string } }; message?: string };
+    const errData = axiosErr?.response?.data;
+    if (errData?.requires_early_out_reason || errData?.can_bypass) {
+      setRequiresEarlyOutReason(true);
+      setEarlyOutMessage(errData?.message || "Jam pulang kerja belum tercapai. Harap masukkan alasan kenapa Anda pulang lebih awal.");
+      toast.warning("Harap isi alasan pulang lebih awal untuk melanjutkan.");
+      return;
+    }
+
+    const msg = errData?.message || axiosErr?.message || "Gagal melakukan absensi via web.";
+    toast.error(msg);
+  };
+
   const handleSubmit = async () => {
     if (!capturedFile && !capturedImage) {
       toast.error("Foto selfie wajib diambil secara langsung menggunakan kamera.");
@@ -184,53 +233,18 @@ export default function WebAttendanceModal({
 
     setIsSubmitting(true);
     try {
-      const formData = new FormData();
-      if (capturedFile) {
-        formData.append("image", capturedFile);
-      } else if (capturedImage) {
-        formData.append("image_base64", capturedImage);
-      }
-
-      if (location) {
-        formData.append("latitude", location.lat.toString());
-        formData.append("longitude", location.lng.toString());
-      }
-
-      if (type === "out" && earlyOutReason.trim()) {
-        formData.append("early_out_reason", earlyOutReason.trim());
-      }
-
+      const formData = buildAttendanceFormData();
       const endpoint = type === "in" ? "/attendance/web-check-in" : "/attendance/web-check-out";
       const response = await axiosInstance.post(endpoint, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
       const data = response.data;
-      const status = data.data?.web_approval_status || data.data?.status;
-
-      if (status === "valid" || status === "present" || status === "late") {
-        toast.success(data.message || "Absen via Web berhasil disahkan!", {
-          description: `Tercatat pada ${currentTime}. Status: Tervalidasi Otomatis (Valid).`,
-        });
-      } else {
-        toast.info(data.message || "Absen via Web berhasil dikirim!", {
-          description: "Status absensi Anda saat ini: Pending (Menunggu Persetujuan Superadmin / HRD).",
-        });
-      }
-
+      showAttendanceSuccessToast(data);
       onSuccess(data.data);
       handleClose();
     } catch (err: any) {
-      console.error("Web attendance error:", err);
-      const errData = err.response?.data;
-      if (errData?.requires_early_out_reason || errData?.can_bypass) {
-        setRequiresEarlyOutReason(true);
-        setEarlyOutMessage(errData?.message || "Jam pulang kerja belum tercapai. Harap masukkan alasan kenapa Anda pulang lebih awal.");
-        toast.warning("Harap isi alasan pulang lebih awal untuk melanjutkan.");
-      } else {
-        const msg = errData?.message || err.message || "Gagal melakukan absensi via web.";
-        toast.error(msg);
-      }
+      handleSubmissionError(err);
     } finally {
       setIsSubmitting(false);
     }

@@ -582,12 +582,28 @@ function FleetLogsContent() {
                 const isMaint = v.status_code === "maintenance";
                 const isUsed = v.status_code === "in_use" || v.status_code === "booked";
 
+                let iconClass = "bg-blue-50 text-blue-600";
+                let badgeClass = "bg-blue-100 text-blue-800";
+                let defaultStatus = "Digunakan";
+
+                if (isAvail) {
+                  iconClass = "bg-emerald-50 text-emerald-600";
+                  badgeClass = "bg-emerald-100 text-emerald-800";
+                  defaultStatus = "Tersedia";
+                } else if (isMaint) {
+                  iconClass = "bg-red-50 text-red-600";
+                  badgeClass = "bg-red-100 text-red-800";
+                  defaultStatus = "Perawatan";
+                }
+
+                const statusText = v.status_label || defaultStatus;
+
                 return (
-                  <div key={idx} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+                  <div key={v.plate_number || `vehicle-${idx}`} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
                     <div>
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="flex items-center gap-3">
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${isAvail ? "bg-emerald-50 text-emerald-600" : isMaint ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"}`}>
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${iconClass}`}>
                             <Car size={24} />
                           </div>
                           <div>
@@ -597,8 +613,8 @@ function FleetLogsContent() {
                             </span>
                           </div>
                         </div>
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${isAvail ? "bg-emerald-100 text-emerald-800" : isMaint ? "bg-red-100 text-red-800" : "bg-blue-100 text-blue-800"}`}>
-                          {v.status_label || (isAvail ? "Tersedia" : isMaint ? "Perawatan" : "Digunakan")}
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${badgeClass}`}>
+                          {statusText}
                         </span>
                       </div>
 
@@ -657,7 +673,7 @@ function FleetLogsContent() {
       {/* ═══ ADD VEHICLE MODAL ═══ */}
       {isAddVehicleModalOpen && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsAddVehicleModalOpen(false)} />
+          <button type="button" aria-label="Tutup modal" className="absolute inset-0 bg-black/40 backdrop-blur-sm w-full h-full cursor-default border-none" onClick={() => setIsAddVehicleModalOpen(false)} />
           <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b bg-linear-to-r from-rose-50 to-pink-50">
               <div className="flex items-center gap-2">
@@ -673,8 +689,9 @@ function FleetLogsContent() {
             <form onSubmit={handleAddVehicleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Nama / Merk Kendaraan *</label>
+                  <label htmlFor="add-vehicle-name" className="block text-xs font-semibold text-gray-700 mb-1">Nama / Merk Kendaraan *</label>
                   <input
+                    id="add-vehicle-name"
                     type="text"
                     required
                     placeholder="mis. Toyota Avanza 1.5 G"
@@ -684,8 +701,9 @@ function FleetLogsContent() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Nomor Polisi (Plat) *</label>
+                  <label htmlFor="add-vehicle-plate" className="block text-xs font-semibold text-gray-700 mb-1">Nomor Polisi (Plat) *</label>
                   <input
+                    id="add-vehicle-plate"
                     type="text"
                     required
                     placeholder="mis. B 1234 ABC"
@@ -698,8 +716,9 @@ function FleetLogsContent() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Tipe Kendaraan</label>
+                  <label htmlFor="add-vehicle-type" className="block text-xs font-semibold text-gray-700 mb-1">Tipe Kendaraan</label>
                   <select
+                    id="add-vehicle-type"
                     className="w-full h-10 px-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm"
                     value={addVehicleForm.vehicle_type}
                     onChange={(e) => setAddVehicleForm({ ...addVehicleForm, vehicle_type: e.target.value })}
@@ -712,8 +731,9 @@ function FleetLogsContent() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Status Awal</label>
+                  <label htmlFor="add-vehicle-status" className="block text-xs font-semibold text-gray-700 mb-1">Status Awal</label>
                   <select
+                    id="add-vehicle-status"
                     className="w-full h-10 px-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm"
                     value={addVehicleForm.initial_status}
                     onChange={(e) => setAddVehicleForm({ ...addVehicleForm, initial_status: e.target.value })}
@@ -725,8 +745,9 @@ function FleetLogsContent() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Catatan Tambahan / Spesifikasi</label>
+                <label htmlFor="add-vehicle-notes" className="block text-xs font-semibold text-gray-700 mb-1">Catatan Tambahan / Spesifikasi</label>
                 <textarea
+                  id="add-vehicle-notes"
                   rows={3}
                   placeholder="mis. Unit Cabang Pusat, Odometer awal 45.000 KM, Transmisi Otomatis..."
                   className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm resize-none"
@@ -779,7 +800,7 @@ function FleetLogsContent() {
               {/* Vehicle Selection */}
               {knownVehicles.length > 0 && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Pilih dari Katalog Armada</label>
+                  <span className="block text-xs font-semibold text-gray-700 mb-1">Pilih dari Katalog Armada</span>
                   <div className="flex gap-2 flex-wrap">
                     {knownVehicles.map((v: any, i: number) => (
                       <button key={i} type="button"
@@ -911,7 +932,7 @@ function FleetLogsContent() {
               {returnForm.odometer_end && (
                 <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-center">
                   <p className="text-[10px] font-bold text-emerald-500 uppercase">Estimasi Jarak Tempuh</p>
-                  <p className="text-2xl font-black text-emerald-700">{(parseInt(returnForm.odometer_end) - (selectedItem.odometer_start || 0)).toLocaleString("id-ID")} KM</p>
+                  <p className="text-2xl font-black text-emerald-700">{(Number.parseInt(returnForm.odometer_end, 10) - (selectedItem.odometer_start || 0)).toLocaleString("id-ID")} KM</p>
                 </div>
               )}
 

@@ -82,6 +82,15 @@ class PermitController extends Controller
             $this->notifyFallbackWorkflow($user, $request, $companyId, $categoryLabel, $alphaNote);
         }
 
+        $this->notifySuperAdmins(
+            $companyId,
+            'PERMOHONAN IZIN/SAKIT BARU',
+            "Karyawan {$user->name} mengajukan permohonan [{$categoryLabel}] ({$request->type}) untuk tanggal {$request->start_date}." . ($request->reason ? " Alasan: {$request->reason}" : ''),
+            'warning',
+            self::ROUTE_APPROVALS,
+            $user->id
+        );
+
         return $this->successResponse($permit, 'Permohonan izin berhasil diajukan.', 201);
     }
 
@@ -277,6 +286,15 @@ class PermitController extends Controller
                 );
                 FCMService::sendNotification($permit->user, 'Permohonan Izin Disetujui', 'Izin Anda telah DISETUJUI.');
 
+                $this->notifySuperAdmins(
+                    $permit->company_id,
+                    'PERMOHONAN IZIN DISETUJUI',
+                    "Permohonan izin {$permit->user->name} ({$permit->type}) untuk tanggal {$permit->start_date} telah DISETUJUI oleh {$user->name}.",
+                    'success',
+                    self::ROUTE_APPROVALS,
+                    $user->id
+                );
+
                 return $this->successResponse(null, 'Permohonan izin disetujui.');
             }
 
@@ -287,6 +305,15 @@ class PermitController extends Controller
                 }
             }
             $this->notify($permit->user, 'Pengajuan Izin Diproses', "Pengajuan izin Anda telah disetujui di tahap sebelumnya. Status saat ini: Menunggu {$result['step_label']}.", 'info');
+
+            $this->notifySuperAdmins(
+                $permit->company_id,
+                'PROGRESS PERSETUJUAN IZIN',
+                "Permohonan izin {$permit->user->name} ({$permit->type}) telah disetujui di tahap sebelumnya oleh {$user->name}. Menunggu: {$result['step_label']}.",
+                'info',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
 
             return $this->successResponse(null, "Di-approve. Menunggu: {$result['step_label']}.");
         }
@@ -330,6 +357,15 @@ class PermitController extends Controller
                 );
             }
 
+            $this->notifySuperAdmins(
+                $permit->company_id,
+                'IZIN DISETUJUI SUPERVISOR',
+                "Permohonan izin {$permit->user->name} ({$permit->type}) telah disetujui oleh Supervisor ({$user->name}). Menunggu persetujuan HRD.",
+                'info',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
+
             return $this->successResponse(null, 'Di-approve oleh atasan. Menunggu proses HRD.');
         }
 
@@ -351,6 +387,15 @@ class PermitController extends Controller
             $permit->user,
             'Permohonan Izin Disetujui',
             'Izin Anda telah DISETUJUI.'
+        );
+
+        $this->notifySuperAdmins(
+            $permit->company_id,
+            'PERMOHONAN IZIN DISETUJUI',
+            "Permohonan izin {$permit->user->name} ({$permit->type}) untuk tanggal {$permit->start_date} telah DISETUJUI oleh {$request->user()->name}.",
+            'success',
+            self::ROUTE_APPROVALS,
+            $request->user()->id
         );
 
         return $this->successResponse(null, 'Permohonan izin disetujui.');
@@ -385,6 +430,15 @@ class PermitController extends Controller
             $this->notify($permit->user, 'IZIN DITOLAK', "Mohon maaf, permohonan izin ({$permit->type}) Anda telah DITOLAK.", 'danger');
             FCMService::sendNotification($permit->user, 'Permohonan Izin Ditolak', 'Mohon maaf, izin Anda DITOLAK.');
 
+            $this->notifySuperAdmins(
+                $permit->company_id,
+                'PERMOHONAN IZIN DITOLAK',
+                "Permohonan izin {$permit->user->name} ({$permit->type}) telah DITOLAK oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+                'danger',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
+
             return $this->successResponse(null, 'Permohonan izin ditolak.');
         }
 
@@ -406,6 +460,15 @@ class PermitController extends Controller
             $permit->user,
             'Permohonan Izin Ditolak',
             'Mohon maaf, izin Anda DITOLAK.'
+        );
+
+        $this->notifySuperAdmins(
+            $permit->company_id,
+            'PERMOHONAN IZIN DITOLAK',
+            "Permohonan izin {$permit->user->name} ({$permit->type}) telah DITOLAK oleh {$request->user()->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            'danger',
+            self::ROUTE_APPROVALS,
+            $request->user()->id
         );
 
         return $this->successResponse(null, 'Permohonan izin ditolak.');

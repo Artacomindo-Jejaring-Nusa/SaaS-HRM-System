@@ -162,6 +162,15 @@ class VehicleLogController extends Controller
 
         $this->logActivity('REQUEST_VEHICLE_LOG', "Mengajukan peminjaman kendaraan {$request->vehicle_name} ({$request->plate_number}) ke {$request->destination}", $log);
 
+        $this->notifySuperAdmins(
+            $user->company_id,
+            'PENGAJUAN PINJAM KENDARAAN BARU',
+            "Karyawan {$user->name} mengajukan peminjaman unit {$request->vehicle_name} ({$request->plate_number}) ke {$request->destination} untuk tanggal {$request->departure_date}.",
+            'warning',
+            self::URL_FLEET_LOGS,
+            $user->id
+        );
+
         return $this->successResponse($log, 'Pengajuan peminjaman kendaraan berhasil dikirim.', 201);
     }
 
@@ -374,6 +383,15 @@ class VehicleLogController extends Controller
                     'success',
                     self::URL_FLEET_LOGS
                 );
+
+                $this->notifySuperAdmins(
+                    $log->company_id,
+                    'PEMINJAMAN KENDARAAN DISETUJUI',
+                    "Pengajuan peminjaman unit {$log->vehicle_name} ({$log->plate_number}) dari {$log->user->name} telah DISETUJUI oleh {$request->user()->name}.",
+                    'success',
+                    self::URL_FLEET_LOGS,
+                    $request->user()->id
+                );
             } else {
                 $log->update([
                     'current_approval_step' => $result['current_approval_step'],
@@ -388,6 +406,15 @@ class VehicleLogController extends Controller
                         self::URL_FLEET_LOGS
                     );
                 }
+
+                $this->notifySuperAdmins(
+                    $log->company_id,
+                    'PROGRESS PEMINJAMAN KENDARAAN',
+                    "Pengajuan peminjaman unit {$log->vehicle_name} ({$log->plate_number}) dari {$log->user->name} disetujui di tahap sebelumnya oleh {$request->user()->name}. Menunggu: {$result['step_label']}.",
+                    'info',
+                    self::URL_FLEET_LOGS,
+                    $request->user()->id
+                );
             }
 
             $this->logActivity('APPROVE_VEHICLE_LOG', "Menyetujui tahap pengajuan peminjaman kendaraan {$log->vehicle_name} dari {$log->user->name}", $log);
@@ -435,6 +462,15 @@ class VehicleLogController extends Controller
         );
 
         $this->logActivity('APPROVE_VEHICLE_LOG', "Menyetujui log kendaraan {$log->vehicle_name} dari {$log->user->name}", $log);
+
+        $this->notifySuperAdmins(
+            $log->company_id,
+            'LOG KENDARAAN DISETUJUI',
+            "Log / peminjaman kendaraan {$log->vehicle_name} ({$log->plate_number}) dari {$log->user->name} telah DISETUJUI oleh {$request->user()->name}.",
+            'success',
+            self::URL_FLEET_LOGS,
+            $request->user()->id
+        );
 
         return $this->successResponse($log, 'Log kendaraan berhasil disetujui.');
     }
@@ -488,6 +524,15 @@ class VehicleLogController extends Controller
         );
 
         $this->logActivity('REJECT_VEHICLE_LOG', "Menolak log kendaraan {$log->vehicle_name} dari {$log->user->name}", $log);
+
+        $this->notifySuperAdmins(
+            $log->company_id,
+            'LOG KENDARAAN DITOLAK',
+            "Pengajuan / log kendaraan {$log->vehicle_name} ({$log->plate_number}) dari {$log->user->name} telah DITOLAK oleh {$request->user()->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            'danger',
+            self::URL_FLEET_LOGS,
+            $request->user()->id
+        );
 
         return $this->successResponse($log, 'Pengajuan kendaraan ditolak.');
     }
@@ -577,17 +622,10 @@ class VehicleLogController extends Controller
     public function vehicles(Request $request)
     {
         $user = $request->user();
-        $companyId = $request->query('company_id') ?: $user->company_id;
-        if (! $companyId && $user->canAccessAllCompanies()) {
-            $companyId = \App\Models\Company::first()?->id;
-        }
+        $companyId = $this->resolveEffectiveCompanyId($user, $request->query('company_id'));
 
         $vehiclesQuery = VehicleLog::query();
-        if ($user->company_id && ! $user->canAccessAllCompanies()) {
-            $vehiclesQuery->where('company_id', $user->company_id);
-        } elseif ($companyId) {
-            $vehiclesQuery->where('company_id', $companyId);
-        }
+        $this->scopeCompanyFleet($vehiclesQuery, $user, $companyId);
 
         // Distinct fleet
         $rawVehicles = $vehiclesQuery
@@ -599,49 +637,63 @@ class VehicleLogController extends Controller
         // Check currently active / in-use trips
         $tripsQuery = VehicleLog::with('user:id,name')
             ->whereIn('status', ['in_use', 'departure', 'approved', 'maintenance']);
-        if ($user->company_id && ! $user->canAccessAllCompanies()) {
-            $tripsQuery->where('company_id', $user->company_id);
-        } elseif ($companyId) {
-            $tripsQuery->where('company_id', $companyId);
-        }
+        $this->scopeCompanyFleet($tripsQuery, $user, $companyId);
         $activeTrips = $tripsQuery->get()->keyBy('plate_number');
 
-        $result = $rawVehicles->map(function ($v) use ($activeTrips) {
-            $active = $activeTrips->get($v->plate_number);
-            $isAvailable = ! $active;
-
-            $statusLabel = 'Tersedia';
-            $statusCode = 'available';
-
-            if ($active) {
-                if ($active->status === 'maintenance') {
-                    $statusLabel = 'Dalam Perawatan';
-                    $statusCode = 'maintenance';
-                } elseif ($active->status === 'in_use' || $active->status === 'departure') {
-                    $statusLabel = 'Sedang Digunakan';
-                    $statusCode = 'in_use';
-                } elseif ($active->status === 'approved') {
-                    $statusLabel = 'Sudah Dipesan';
-                    $statusCode = 'booked';
-                }
-            }
-
-            return [
-                'vehicle_name' => $v->vehicle_name,
-                'plate_number' => $v->plate_number,
-                'is_available' => $isAvailable,
-                'status_code' => $statusCode,
-                'status_label' => $statusLabel,
-                'current_user' => $active?->user?->name,
-                'destination' => $active?->destination,
-                'purpose' => $active?->purpose,
-                'notes' => $active?->notes,
-                'until' => $active?->return_date ? Carbon::parse($active->return_date)->format('d M Y') : null,
-                'departure_date' => $active?->departure_date ? Carbon::parse($active->departure_date)->format('d M Y') : null,
-            ];
-        });
+        $result = $rawVehicles->map(fn($v) => $this->formatVehicleItem($v, $activeTrips->get($v->plate_number)));
 
         return $this->successResponse($result, 'Daftar armada kendaraan berhasil diambil.');
+    }
+
+    private function resolveEffectiveCompanyId($user, ?string $queryCompanyId): ?int
+    {
+        $companyId = $queryCompanyId ?: $user->company_id;
+        if (! $companyId && $user->canAccessAllCompanies()) {
+            return \App\Models\Company::first()?->id;
+        }
+        return $companyId ? (int) $companyId : null;
+    }
+
+    private function scopeCompanyFleet($query, $user, ?int $companyId): void
+    {
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
+            $query->where('company_id', $user->company_id);
+        } elseif ($companyId) {
+            $query->where('company_id', $companyId);
+        }
+    }
+
+    private function resolveVehicleStatus(?VehicleLog $active): array
+    {
+        if (! $active) {
+            return ['status_code' => 'available', 'status_label' => 'Tersedia'];
+        }
+
+        return match ($active->status) {
+            'maintenance' => ['status_code' => 'maintenance', 'status_label' => 'Dalam Perawatan'],
+            'in_use', 'departure' => ['status_code' => 'in_use', 'status_label' => 'Sedang Digunakan'],
+            'approved' => ['status_code' => 'booked', 'status_label' => 'Sudah Dipesan'],
+            default => ['status_code' => 'available', 'status_label' => 'Tersedia'],
+        };
+    }
+
+    private function formatVehicleItem($v, ?VehicleLog $active): array
+    {
+        $statusInfo = $this->resolveVehicleStatus($active);
+
+        return [
+            'vehicle_name' => $v->vehicle_name,
+            'plate_number' => $v->plate_number,
+            'is_available' => ! $active,
+            'status_code' => $statusInfo['status_code'],
+            'status_label' => $statusInfo['status_label'],
+            'current_user' => $active?->user?->name,
+            'destination' => $active?->destination,
+            'purpose' => $active?->purpose,
+            'notes' => $active?->notes,
+            'until' => $active?->return_date ? Carbon::parse($active->return_date)->format('d M Y') : null,
+            'departure_date' => $active?->departure_date ? Carbon::parse($active->departure_date)->format('d M Y') : null,
+        ];
     }
 
     /**

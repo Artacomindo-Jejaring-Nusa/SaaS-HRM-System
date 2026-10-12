@@ -208,6 +208,15 @@ class AttendanceCorrectionController extends Controller
             }
         }
 
+        $this->notifySuperAdmins(
+            $companyId,
+            'PENGAJUAN KOREKSI ABSEN BARU',
+            "Karyawan {$user->name} mengajukan koreksi absen untuk tanggal {$attendanceDate}." . ($request->reason ? " Alasan: {$request->reason}" : ''),
+            'warning',
+            '/dashboard/attendance-corrections',
+            $user->id
+        );
+
         return $this->successResponse($correction, 'Pengajuan koreksi absen berhasil diajukan.', 201);
     }
 
@@ -266,6 +275,15 @@ class AttendanceCorrectionController extends Controller
                     'success'
                 );
 
+                $this->notifySuperAdmins(
+                    $correction->company_id,
+                    'KOREKSI ABSEN DISETUJUI',
+                    "Pengajuan koreksi absen {$correction->user->name} untuk tanggal {$attendanceDate} telah DISETUJUI oleh {$user->name}.",
+                    'success',
+                    '/dashboard/attendance-corrections',
+                    $user->id
+                );
+
                 return $this->successResponse(null, 'Koreksi absen disetujui dan data absen telah diperbarui.');
             }
 
@@ -276,6 +294,15 @@ class AttendanceCorrectionController extends Controller
                 }
             }
             $this->notify($correction->user, 'KOREKSI ABSEN DALAM PROSES', "Koreksi absen Anda disetujui di tahap sebelumnya. Menunggu: {$result['step_label']}.", 'info');
+
+            $this->notifySuperAdmins(
+                $correction->company_id,
+                'PROGRESS KOREKSI ABSEN',
+                "Pengajuan koreksi absen {$correction->user->name} disetujui di tahap sebelumnya oleh {$user->name}. Menunggu: {$result['step_label']}.",
+                'info',
+                '/dashboard/attendance-corrections',
+                $user->id
+            );
 
             return $this->successResponse(null, "Di-approve. Menunggu: {$result['step_label']}.");
         }
@@ -319,6 +346,15 @@ class AttendanceCorrectionController extends Controller
             'success'
         );
 
+        $this->notifySuperAdmins(
+            $correction->company_id,
+            'KOREKSI ABSEN DISETUJUI',
+            "Pengajuan koreksi absen {$correction->user->name} untuk tanggal {$attendanceDate} telah DISETUJUI oleh {$request->user()->name}.",
+            'success',
+            '/dashboard/attendance-corrections',
+            $request->user()->id
+        );
+
         return $this->successResponse(null, 'Koreksi absen disetujui dan data absen telah diperbarui.');
     }
 
@@ -358,6 +394,15 @@ class AttendanceCorrectionController extends Controller
                 'danger'
             );
 
+            $this->notifySuperAdmins(
+                $correction->company_id,
+                'KOREKSI ABSEN DITOLAK',
+                "Pengajuan koreksi absen {$correction->user->name} untuk tanggal {$attendanceDate} telah DITOLAK oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+                'danger',
+                '/dashboard/attendance-corrections',
+                $user->id
+            );
+
             return $this->successResponse(null, 'Koreksi absen ditolak.');
         }
 
@@ -380,6 +425,15 @@ class AttendanceCorrectionController extends Controller
             'KOREKSI ABSEN DITOLAK',
             "Mohon maaf, pengajuan koreksi absen Anda untuk tanggal {$attendanceDate} telah DITOLAK. ".($request->remark ? "Alasan: {$request->remark}" : ''),
             'danger'
+        );
+
+        $this->notifySuperAdmins(
+            $correction->company_id,
+            'KOREKSI ABSEN DITOLAK',
+            "Pengajuan koreksi absen {$correction->user->name} untuk tanggal {$attendanceDate} telah DITOLAK oleh {$request->user()->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            'danger',
+            '/dashboard/attendance-corrections',
+            $request->user()->id
         );
 
         return $this->successResponse(null, 'Koreksi absen ditolak.');

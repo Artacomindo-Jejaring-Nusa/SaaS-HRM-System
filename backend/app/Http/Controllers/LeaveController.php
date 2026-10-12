@@ -220,6 +220,15 @@ class LeaveController extends Controller
             }
         }
 
+        $this->notifySuperAdmins(
+            $companyId,
+            'PERMOHONAN CUTI BARU',
+            "Karyawan {$user->name} mengajukan cuti ({$request->type}) untuk tanggal {$request->start_date} s/d {$request->end_date}." . ($request->reason ? " Alasan: {$request->reason}" : ''),
+            'warning',
+            self::ROUTE_APPROVALS,
+            $user->id
+        );
+
         // If emergency expand was used, record it on the user object
         if ($isExpandUsed) {
             $user->update([
@@ -283,6 +292,15 @@ class LeaveController extends Controller
                 'success'
             );
 
+            $this->notifySuperAdmins(
+                $leave->company_id,
+                'PERMOHONAN CUTI DISETUJUI',
+                "Permohonan cuti {$leave->user->name} ({$leave->type}) untuk tanggal {$leave->start_date} s/d {$leave->end_date} telah DISETUJUI oleh {$user->name}.",
+                'success',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
+
             $msg = 'Permohonan cuti disetujui.';
         } else {
             if (isset($result['approvers'])) {
@@ -302,6 +320,15 @@ class LeaveController extends Controller
                 'CUTI DALAM PROSES',
                 "Pengajuan cuti Anda telah disetujui di tahap sebelumnya. Menunggu: {$result['step_label']}.",
                 'info'
+            );
+
+            $this->notifySuperAdmins(
+                $leave->company_id,
+                'PROGRESS PERSETUJUAN CUTI',
+                "Permohonan cuti {$leave->user->name} ({$leave->type}) telah disetujui di tahap sebelumnya oleh {$user->name}. Menunggu: {$result['step_label']}.",
+                'info',
+                self::ROUTE_APPROVALS,
+                $user->id
             );
 
             $msg = "Di-approve. Menunggu: {$result['step_label']}.";
@@ -345,6 +372,14 @@ class LeaveController extends Controller
 
             $this->notify($leave->user, 'Cuti Disetujui Atasan', "Kabar baik, permohonan cuti Anda ({$leave->type}) telah disetujui oleh atasan langsung Anda. Saat ini pengajuan sedang diteruskan ke tim HRD untuk persetujuan akhir.", 'info');
             $this->notifyHrdsAfterSupervisorApprove($leave);
+            $this->notifySuperAdmins(
+                $leave->company_id,
+                'CUTI DISETUJUI SUPERVISOR',
+                "Permohonan cuti {$leave->user->name} ({$leave->type}) telah disetujui oleh Supervisor ({$user->name}). Menunggu persetujuan HRD.",
+                'info',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
 
             return $this->successResponse(null, 'Di-approve oleh atasan. Menunggu proses HRD.');
         }
@@ -391,6 +426,14 @@ class LeaveController extends Controller
             'Pengajuan Cuti Disetujui',
             "Selamat! Permohonan cuti Anda untuk tanggal {$leave->start_date} s/d {$leave->end_date} telah disetujui sepenuhnya oleh manajemen. Semoga liburan Anda menyenangkan!",
             'success'
+        );
+
+        $this->notifySuperAdmins(
+            $leave->company_id,
+            'PERMOHONAN CUTI DISETUJUI',
+            "Permohonan cuti {$leave->user->name} ({$leave->type}) untuk tanggal {$leave->start_date} s/d {$leave->end_date} telah DISETUJUI sepenuhnya.",
+            'success',
+            self::ROUTE_APPROVALS
         );
 
         return $this->successResponse(null, 'Permohonan cuti disetujui.');
@@ -472,6 +515,15 @@ class LeaveController extends Controller
             'danger'
         );
 
+        $this->notifySuperAdmins(
+            $leave->company_id,
+            'PERMOHONAN CUTI DITOLAK',
+            "Permohonan cuti {$leave->user->name} ({$leave->type}) telah DITOLAK oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            'danger',
+            self::ROUTE_APPROVALS,
+            $user->id
+        );
+
         return $this->successResponse(null, 'Permohonan cuti ditolak.');
     }
 
@@ -504,6 +556,15 @@ class LeaveController extends Controller
             'CUTI DITOLAK',
             "Mohon maaf, permohonan cuti Anda untuk tanggal {$leave->start_date} s/d {$leave->end_date} telah DITOLAK.",
             'danger'
+        );
+
+        $this->notifySuperAdmins(
+            $leave->company_id,
+            'PERMOHONAN CUTI DITOLAK',
+            "Permohonan cuti {$leave->user->name} ({$leave->type}) telah DITOLAK oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            'danger',
+            self::ROUTE_APPROVALS,
+            $user->id
         );
 
         return $this->successResponse(null, 'Permohonan cuti ditolak.');

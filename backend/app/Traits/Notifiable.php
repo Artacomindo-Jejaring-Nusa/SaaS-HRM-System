@@ -69,4 +69,48 @@ trait Notifiable
             }
         }
     }
+
+    /**
+     * Send notifications to Super Admins (both global super admins and company-specific super admins).
+     *
+     * @param int|null $companyId The company ID associated with the request/event
+     * @param string $title Notification title
+     * @param string $message Notification body message
+     * @param string $type Notification badge/type (info, warning, success, danger)
+     * @param string|null $link Link to redirect in dashboard
+     * @param int|null $exceptUserId User ID to exclude (e.g. the actor performing the action)
+     * @param bool $sendEmail Whether to send email (default: false to avoid flooding)
+     * @param bool $sendWA Whether to send WhatsApp (default: false to avoid third-party limit exhaustion)
+     */
+    public function notifySuperAdmins(?int $companyId, string $title, string $message, string $type = 'info', ?string $link = null, ?int $exceptUserId = null, bool $sendEmail = false, bool $sendWA = false): void
+    {
+        $query = User::query();
+
+        // Must be super admin (role_id 1 or role name contains 'super admin')
+        $query->where(function ($q) {
+            $q->where('role_id', 1)
+              ->orWhereHas('role', function ($r) {
+                  $r->whereRaw('LOWER(name) LIKE ?', ['%super admin%']);
+              });
+        });
+
+        // Tenant filtering: Global super admins (role_id 1 or null company_id) or tenant super admin of this company
+        if ($companyId) {
+            $query->where(function ($q) use ($companyId) {
+                $q->whereNull('company_id')
+                  ->orWhere('role_id', 1)
+                  ->orWhere('company_id', $companyId);
+            });
+        }
+
+        if ($exceptUserId) {
+            $query->where('id', '!=', $exceptUserId);
+        }
+
+        $superAdmins = $query->get()->unique('id');
+
+        foreach ($superAdmins as $admin) {
+            $this->notify($admin, $title, $message, $type, $link, 'notif', $sendEmail, $sendWA);
+        }
+    }
 }

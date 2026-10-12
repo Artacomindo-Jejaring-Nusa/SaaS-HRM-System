@@ -162,36 +162,51 @@ trait HandlesWebAttendance
             return $this->errorResponse('Anda belum melakukan Check-in hari ini atau sudah Check-out.', 400);
         }
 
+        $minCheckOutTime = $this->resolveWebMinCheckOutTime($user, $today);
+        $isEarly = $now->lt($minCheckOutTime);
+        $earlyOutReason = $request->input('early_out_reason') ?: $request->input('bypass_reason');
+
+        if ($isEarly && empty($earlyOutReason)) {
+            return $this->buildEarlyOutPromptResponse($minCheckOutTime, $now);
+        }
+
+        return $this->processWebCheckOutExecution($attendance, $user, $request, $now, $isEarly, $earlyOutReason, $minCheckOutTime);
+    }
+
+    private function resolveWebMinCheckOutTime(User $user, string $today): Carbon
+    {
         $schedule = Schedule::with('shift')
             ->where('user_id', $user->id)
             ->where('date', $today)
             ->first();
 
-        if ($schedule && $schedule->shift && $schedule->shift->end_time) {
-            $minCheckOutTime = Carbon::parse($today . ' ' . $schedule->shift->end_time);
-        } else {
-            $workEndTime = $user->office?->work_end_time ?? $user->company?->work_end_time ?? '17:00:00';
-            $minCheckOutTime = Carbon::parse($today . ' ' . $workEndTime);
+        if ($schedule?->shift?->end_time) {
+            return Carbon::parse($today . ' ' . $schedule->shift->end_time);
         }
 
-        $isEarly = $now->lt($minCheckOutTime);
-        $earlyOutReason = $request->input('early_out_reason') ?: $request->input('bypass_reason');
+        $workEndTime = $user->office?->work_end_time ?? $user->company?->work_end_time ?? '17:00:00';
+        return Carbon::parse($today . ' ' . $workEndTime);
+    }
 
-        if ($isEarly && empty($earlyOutReason)) {
-            $diffMinutes = $now->diffInMinutes($minCheckOutTime);
-            $hours = floor($diffMinutes / 60);
-            $mins = $diffMinutes % 60;
-            $timeRemaining = ($hours > 0 ? $hours . ' jam ' : '') . $mins . ' menit';
-            return response()->json([
-                'status' => 'error',
-                'can_bypass' => true,
-                'requires_early_out_reason' => true,
-                'min_checkout_time' => $minCheckOutTime->format('H:i'),
-                'time_remaining' => $timeRemaining,
-                'message' => "Belum saatnya pulang! Jam pulang Anda adalah pukul {$minCheckOutTime->format('H:i')} WIB (Kurang {$timeRemaining} lagi). Silakan sertakan alasan jika Anda harus pulang lebih awal.",
-            ], 400);
-        }
+    private function buildEarlyOutPromptResponse(Carbon $minCheckOutTime, Carbon $now)
+    {
+        $diffMinutes = $now->diffInMinutes($minCheckOutTime);
+        $hours = floor($diffMinutes / 60);
+        $mins = $diffMinutes % 60;
+        $timeRemaining = ($hours > 0 ? $hours . ' jam ' : '') . $mins . ' menit';
 
+        return response()->json([
+            'status' => 'error',
+            'can_bypass' => true,
+            'requires_early_out_reason' => true,
+            'min_checkout_time' => $minCheckOutTime->format('H:i'),
+            'time_remaining' => $timeRemaining,
+            'message' => "Belum saatnya pulang! Jam pulang Anda adalah pukul {$minCheckOutTime->format('H:i')} WIB (Kurang {$timeRemaining} lagi). Silakan sertakan alasan jika Anda harus pulang lebih awal.",
+        ], 400);
+    }
+
+    private function processWebCheckOutExecution(Attendance $attendance, User $user, Request $request, Carbon $now, bool $isEarly, ?string $earlyOutReason, Carbon $minCheckOutTime)
+    {
         $imageName = $this->saveCompressedAttendanceImage($request, 'web_out');
         $isAutoValidated = $user->isWebAttendanceAutoValidated();
 
@@ -203,66 +218,13 @@ trait HandlesWebAttendance
         ];
 
         if ($isEarly && !empty($earlyOutReason)) {
-            $updateData['is_early_out'] = true;
-            $updateData['early_out_reason'] = $earlyOutReason;
-
-            if ($isAutoValidated) {
-                $updateData['early_out_status'] = 'approved';
-                $updateData['early_out_approved_at'] = now();
-            } else {
-                $updateData['early_out_status'] = 'pending';
-                $updateData['is_suspicious'] = true;
-                $schedEndTimeStr = " ({$minCheckOutTime->format('H:i')} WIB)";
-                $updateData['suspicious_reason'] = trim(($attendance->suspicious_reason ?? '') . " | Pulang Awal Web{$schedEndTimeStr}: {$earlyOutReason}", ' |');
-            }
+            $this->applyWebEarlyOutData($updateData, $attendance, $earlyOutReason, $isAutoValidated, $minCheckOutTime);
         }
 
         $attendance->update($updateData);
 
         if ($isEarly && !empty($earlyOutReason)) {
-            if ($isAutoValidated) {
-                $this->notify(
-                    $user,
-                    'ABSEN PULANG AWAL WEB DISETUJUI (AUTO-VALIDASI)',
-                    "Absen keluar web lebih awal Anda pada pukul {$now->format('H:i')} WIB telah disetujui otomatis. Alasan: {$earlyOutReason}",
-                    'success',
-                    null,
-                    'notif',
-                    false
-                );
-                return $this->successResponse($attendance->fresh(), 'Absen keluar via Web (Pulang Awal) berhasil divalidasi otomatis.');
-            }
-
-            // Notify Super Admin
-            $admins = User::where('company_id', $user->company_id)
-                ->where(function ($q) {
-                    $q->where('role_id', 1)
-                      ->orWhereHas('role', fn($r) => $r->where('name', 'like', '%super admin%')->orWhere('name', 'like', '%hrd%'));
-                })->get();
-
-            foreach ($admins as $admin) {
-                $this->notify(
-                    $admin,
-                    'PERMOHONAN PULANG AWAL WEB BUTUH PERSETUJUAN',
-                    "Karyawan {$user->name} melakukan absen keluar web lebih awal pada pukul {$now->format('H:i')} WIB. Alasan: \"{$earlyOutReason}\". Butuh persetujuan Anda.",
-                    'warning',
-                    '/dashboard/approvals',
-                    'notif',
-                    false
-                );
-            }
-
-            $this->notify(
-                $user,
-                'ABSEN PULANG AWAL WEB TERCATAT (MENUNGGU PERSETUJUAN)',
-                "Absen keluar web lebih awal Anda pada pukul {$now->format('H:i')} WIB telah dicatat dan sedang menunggu persetujuan Super Admin.",
-                'info',
-                null,
-                'notif',
-                false
-            );
-
-            return $this->successResponse($attendance->fresh(), 'Absen keluar via Web berhasil dikirim. Menunggu persetujuan Super Admin.');
+            return $this->handleWebEarlyOutNotifications($attendance, $user, $now, $earlyOutReason, $isAutoValidated);
         }
 
         $this->notify(
@@ -276,6 +238,77 @@ trait HandlesWebAttendance
         );
 
         return $this->successResponse($attendance->fresh(), 'Absen keluar via Web berhasil dicatat.');
+    }
+
+    private function applyWebEarlyOutData(array &$updateData, Attendance $attendance, string $earlyOutReason, bool $isAutoValidated, Carbon $minCheckOutTime): void
+    {
+        $updateData['is_early_out'] = true;
+        $updateData['early_out_reason'] = $earlyOutReason;
+
+        if ($isAutoValidated) {
+            $updateData['early_out_status'] = 'approved';
+            $updateData['early_out_approved_at'] = now();
+        } else {
+            $updateData['early_out_status'] = 'pending';
+            $updateData['is_suspicious'] = true;
+            $schedEndTimeStr = " ({$minCheckOutTime->format('H:i')} WIB)";
+            $updateData['suspicious_reason'] = trim(($attendance->suspicious_reason ?? '') . " | Pulang Awal Web{$schedEndTimeStr}: {$earlyOutReason}", ' |');
+        }
+    }
+
+    private function handleWebEarlyOutNotifications(Attendance $attendance, User $user, Carbon $now, string $earlyOutReason, bool $isAutoValidated)
+    {
+        if ($isAutoValidated) {
+            $this->notify(
+                $user,
+                'ABSEN PULANG AWAL WEB DISETUJUI (AUTO-VALIDASI)',
+                "Absen keluar web lebih awal Anda pada pukul {$now->format('H:i')} WIB telah disetujui otomatis. Alasan: {$earlyOutReason}",
+                'success',
+                null,
+                'notif',
+                false
+            );
+            return $this->successResponse($attendance->fresh(), 'Absen keluar via Web (Pulang Awal) berhasil divalidasi otomatis.');
+        }
+
+        // Notify Super Admin
+        $this->notifySuperAdmins(
+            $user->company_id,
+            'PERMOHONAN PULANG AWAL WEB BUTUH PERSETUJUAN',
+            "Karyawan {$user->name} melakukan absen keluar web lebih awal pada pukul {$now->format('H:i')} WIB. Alasan: \"{$earlyOutReason}\". Butuh persetujuan Anda.",
+            'warning',
+            '/dashboard/approvals',
+            $user->id
+        );
+
+        $hrds = User::where('company_id', $user->company_id)
+            ->where('id', '!=', $user->id)
+            ->whereHas('role', fn($r) => $r->where('name', 'like', '%hrd%'))
+            ->get();
+
+        foreach ($hrds as $hrd) {
+            $this->notify(
+                $hrd,
+                'PERMOHONAN PULANG AWAL WEB BUTUH PERSETUJUAN',
+                "Karyawan {$user->name} melakukan absen keluar web lebih awal pada pukul {$now->format('H:i')} WIB. Alasan: \"{$earlyOutReason}\". Butuh persetujuan Anda.",
+                'warning',
+                '/dashboard/approvals',
+                'notif',
+                false
+            );
+        }
+
+        $this->notify(
+            $user,
+            'ABSEN PULANG AWAL WEB TERCATAT (MENUNGGU PERSETUJUAN)',
+            "Absen keluar web lebih awal Anda pada pukul {$now->format('H:i')} WIB telah dicatat dan sedang menunggu persetujuan Super Admin.",
+            'info',
+            null,
+            'notif',
+            false
+        );
+
+        return $this->successResponse($attendance->fresh(), 'Absen keluar via Web berhasil dikirim. Menunggu persetujuan Super Admin.');
     }
 
     /**
