@@ -74,24 +74,31 @@ class ManagerApprovalService
         $isGlobalAdmin = $user->role_id === 1;
         $isCompanyAdmin = PendingRequestService::isExecutiveOrAdmin($user);
 
-        $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
-
-        if (! $isGlobalAdmin && ! $isCompanyAdmin && $subordinateIds->isEmpty() && isset(self::PERM_MAP[$request->type]) && ! $user->hasPermission(self::PERM_MAP[$request->type])) {
+        if (! $this->canUserApproveRequest($user, $request->type, $isGlobalAdmin, $isCompanyAdmin)) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Anda tidak memiliki hak akses untuk menyetujui pengajuan ini.',
             ], 403);
         }
 
-        if ($request->type === 'payroll') {
-            return $this->handlePayrollApproval($request, $user, $isGlobalAdmin);
+        return match ($request->type) {
+            'payroll' => $this->handlePayrollApproval($request, $user, $isGlobalAdmin),
+            'early_out' => $this->handleEarlyOutApproval($request, $user, $isGlobalAdmin),
+            default => $this->handleGeneralRequestApproval($request, $user, $isGlobalAdmin, $isCompanyAdmin),
+        };
+    }
+
+    private function canUserApproveRequest(User $user, string $type, bool $isGlobalAdmin, bool $isCompanyAdmin): bool
+    {
+        if ($isGlobalAdmin || $isCompanyAdmin) {
+            return true;
         }
 
-        if ($request->type === 'early_out') {
-            return $this->handleEarlyOutApproval($request, $user, $isGlobalAdmin);
+        if (User::where('supervisor_id', $user->id)->exists()) {
+            return true;
         }
 
-        return $this->handleGeneralRequestApproval($request, $user, $isGlobalAdmin, $isCompanyAdmin);
+        return !isset(self::PERM_MAP[$type]) || $user->hasPermission(self::PERM_MAP[$type]);
     }
 
     private function handleEarlyOutApproval(Request $request, User $user, bool $isGlobalAdmin)
@@ -324,7 +331,9 @@ class ManagerApprovalService
 
         $typeText = self::TYPE_TEXTS[$request->type] ?? ucfirst($request->type);
         $routePath = self::ROUTE_PATHS[$request->type] ?? '/dashboard';
-        $msg = $this->sendDynamicApprovalNotifications($item, $request, $user, $result, $typeText, $routePath);
+        $msg = $result['is_final']
+            ? $this->sendFinalDynamicApprovalNotification($item, $request, $user, $result, $typeText, $routePath)
+            : $this->sendStepDynamicApprovalNotification($item, $user, $result, $typeText, $routePath);
 
         return response()->json([
             'status' => 'success',
@@ -367,15 +376,6 @@ class ManagerApprovalService
         }
 
         return $updateData;
-    }
-
-    private function sendDynamicApprovalNotifications($item, Request $request, User $user, array $result, string $typeText, string $routePath): string
-    {
-        if ($result['is_final']) {
-            return $this->sendFinalDynamicApprovalNotification($item, $request, $user, $result, $typeText, $routePath);
-        }
-
-        return $this->sendStepDynamicApprovalNotification($item, $user, $result, $typeText, $routePath);
     }
 
     private function sendFinalDynamicApprovalNotification($item, Request $request, User $user, array $result, string $typeText, string $routePath): string
