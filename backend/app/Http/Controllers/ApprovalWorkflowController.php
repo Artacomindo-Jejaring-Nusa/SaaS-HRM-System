@@ -24,6 +24,8 @@ class ApprovalWorkflowController extends Controller
 {
     use HandlesApprovalWorkflowHelpers;
 
+    private const OP_NOT_LIKE = 'not like';
+
     public function index(Request $request)
     {
         $companyId = $this->resolveCompanyId($request);
@@ -31,9 +33,9 @@ class ApprovalWorkflowController extends Controller
         $workflows = ApprovalWorkflow::with(['steps.role', 'steps.approverUser', 'scopeRole', 'scopeUser'])
             ->where('company_id', $companyId)
             ->whereNotIn('module_key', ['performance_review', 'profile', 'profile_update', 'kpi', 'profil'])
-            ->where('name', 'not like', '%Profil%')
-            ->where('name', 'not like', '%Kinerja%')
-            ->where('name', 'not like', '%KPI%')
+            ->where('name', self::OP_NOT_LIKE, '%Profil%')
+            ->where('name', self::OP_NOT_LIKE, '%Kinerja%')
+            ->where('name', self::OP_NOT_LIKE, '%KPI%')
             ->get();
 
         return $this->successResponse($workflows, 'Workflows retrieved successfully.');
