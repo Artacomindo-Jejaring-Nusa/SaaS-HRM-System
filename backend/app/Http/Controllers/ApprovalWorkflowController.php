@@ -30,6 +30,10 @@ class ApprovalWorkflowController extends Controller
 
         $workflows = ApprovalWorkflow::with(['steps.role', 'steps.approverUser', 'scopeRole', 'scopeUser'])
             ->where('company_id', $companyId)
+            ->whereNotIn('module_key', ['performance_review', 'profile', 'profile_update', 'kpi', 'profil'])
+            ->where('name', 'not like', '%Profil%')
+            ->where('name', 'not like', '%Kinerja%')
+            ->where('name', 'not like', '%KPI%')
             ->get();
 
         return $this->successResponse($workflows, 'Workflows retrieved successfully.');
@@ -422,32 +426,56 @@ class ApprovalWorkflowController extends Controller
 
         // 1. Process standard System Modules (from ApprovalService::SYSTEM_MODULES)
         foreach (ApprovalService::SYSTEM_MODULES as $key => $meta) {
+            if ($this->isExcludedWorkflowModule($key, $meta['name'] ?? '')) {
+                continue;
+            }
             $resultModules->push($this->mapSystemModuleItem($key, $meta, $configuredWorkflows));
         }
 
         // 2. Process Custom Modules added previously (if any exist)
         foreach ($configuredWorkflows as $key => $variants) {
+            $firstName = $variants->first()?->name ?? '';
+            if ($this->isExcludedWorkflowModule($key, $firstName)) {
+                continue;
+            }
             if (! array_key_exists($key, ApprovalService::SYSTEM_MODULES)) {
                 $resultModules->push($this->mapCustomModuleItem($key, $variants));
             }
         }
 
         // 3. Catalog of selectable HRMS features to activate
-        $availableSystemCatalog = collect(ApprovalService::SYSTEM_MODULES)->map(function ($meta, $key) {
-            return [
-                'key' => $key,
-                'name' => $meta['name'],
-                'category' => $meta['category'],
-                'icon' => $meta['icon'],
-                'description' => $meta['description'],
-                'default_layers' => $meta['default_layers'],
-            ];
-        })->values();
+        $availableSystemCatalog = collect(ApprovalService::SYSTEM_MODULES)
+            ->filter(fn ($meta, $key) => ! $this->isExcludedWorkflowModule($key, $meta['name'] ?? ''))
+            ->map(function ($meta, $key) {
+                return [
+                    'key' => $key,
+                    'name' => $meta['name'],
+                    'category' => $meta['category'],
+                    'icon' => $meta['icon'],
+                    'description' => $meta['description'],
+                    'default_layers' => $meta['default_layers'],
+                ];
+            })->values();
 
         return $this->successResponse([
             'modules' => $resultModules->values(),
             'system_catalog' => $availableSystemCatalog,
         ], 'Module keys retrieved successfully.');
+    }
+
+    private function isExcludedWorkflowModule(string $key, ?string $name = null): bool
+    {
+        $normalizedKey = strtolower($key);
+        $normalizedName = strtolower($name ?? '');
+
+        return in_array($normalizedKey, ['performance_review', 'kpi', 'profile', 'profile_update', 'profil'])
+            || str_contains($normalizedKey, 'profile')
+            || str_contains($normalizedKey, 'profil')
+            || str_contains($normalizedKey, 'performance')
+            || str_contains($normalizedKey, 'kpi')
+            || str_contains($normalizedName, 'profil')
+            || str_contains($normalizedName, 'kpi')
+            || str_contains($normalizedName, 'kinerja');
     }
 
     /**

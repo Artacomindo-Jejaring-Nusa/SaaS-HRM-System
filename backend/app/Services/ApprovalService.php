@@ -22,7 +22,6 @@ class ApprovalService
         'shift_swap' => 'Tukar Shift',
         'task' => 'Pemberian & Verifikasi Tugas',
         'vehicle_log' => 'Peminjaman Kendaraan',
-        'performance_review' => 'Evaluasi Kinerja',
         'payroll' => 'Penggajian (Payroll)',
     ];
 
@@ -94,13 +93,6 @@ class ApprovalService
             'icon' => 'Car',
             'description' => 'Persetujuan penggunaan armada kendaraan dinas operasional.',
             'default_layers' => 1,
-        ],
-        'performance_review' => [
-            'name' => 'Evaluasi Kinerja (KPI Review)',
-            'category' => 'SDM & Karir',
-            'icon' => 'Award',
-            'description' => 'Persetujuan berjenjang atas hasil penilaian performa kerja.',
-            'default_layers' => 2,
         ],
         'payroll' => [
             'name' => 'Penggajian (Payroll)',
@@ -500,7 +492,6 @@ class ApprovalService
             'attendance_correction' => 'approve-attendances',
             'task' => 'manage-tasks',
             'vehicle_log' => 'approve-vehicle-logs',
-            'performance_review' => 'manage-performance-reviews',
             'payroll' => 'approve-payroll',
             default => null,
         };

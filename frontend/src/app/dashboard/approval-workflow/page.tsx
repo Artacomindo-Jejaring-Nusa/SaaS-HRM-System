@@ -1583,7 +1583,20 @@ export default function ApprovalWorkflowPage() {
       .get(`/approval-workflows/modules${params}`)
       .then((res) => {
         if (res.data.status === "success" && res.data.data) {
-          const list = res.data.data.modules || [];
+          const rawList = res.data.data.modules || [];
+          const list = rawList.filter((m: WorkflowModule) => {
+            const k = (m.key || "").toLowerCase();
+            const lbl = (m.label || "").toLowerCase();
+            return (
+              !k.includes("performance") &&
+              !k.includes("kpi") &&
+              !k.includes("profile") &&
+              !k.includes("profil") &&
+              !lbl.includes("kinerja") &&
+              !lbl.includes("kpi") &&
+              !lbl.includes("profil")
+            );
+          });
           setModuleList(list);
 
           // If current selected is invalid, select first available
