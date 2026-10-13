@@ -765,9 +765,11 @@ function ApprovalAuthorizationSection({ item, timeline }: ApprovalAuthorizationS
           {timeline.steps.map((st, idx) => {
             const isLast = idx === timeline.steps.length - 1;
             const borderCls = isLast ? "truncate px-1" : "border-r-2 border-black truncate px-1";
+            const roleFallback = st.approver_role ? st.approver_role.toUpperCase() : `TAHAP ${st.step_order}`;
+            const stepLabel = st.label || roleFallback;
             return (
               <div key={st.step_order} className={borderCls}>
-                {idx + 2}. {st.label || (st.approver_role ? st.approver_role.toUpperCase() : `TAHAP ${st.step_order}`)}
+                {idx + 2}. {stepLabel}
               </div>
             );
           })}
@@ -857,11 +859,13 @@ function ApprovalAuthorizationSection({ item, timeline }: ApprovalAuthorizationS
               );
             }
 
-            const displayName = isSuperAdminOverride
-              ? "Super Admin (Override)"
-              : (st.candidate_approvers?.length
-                  ? st.candidate_approvers[0]
-                  : st.approver_name || st.approver_role || "Approver");
+            let displayName = st.approver_name || st.approver_role || "Approver";
+            if (st.candidate_approvers?.length) {
+              displayName = st.candidate_approvers[0];
+            }
+            if (isSuperAdminOverride) {
+              displayName = "Super Admin (Override)";
+            }
 
             return (
               <div key={st.step_order} className={`p-2 flex flex-col justify-between min-h-[95px] items-center ${borderClass}`}>

@@ -292,7 +292,7 @@ class ApprovalService
         }
 
         // Validate that this user is authorized to act on this step
-        if (! self::canUserApproveStep($step, $approver, $submitter, $companyId, $moduleKey)) {
+        if (! self::canUserApproveStep($step, $approver, $submitter, $moduleKey)) {
             return ['error' => 'Anda tidak memiliki wewenang untuk menyetujui/menolak pada tahap ini.'];
         }
 
@@ -359,7 +359,7 @@ class ApprovalService
             return false;
         }
 
-        return self::canUserApproveStep($step, $approver, $submitter, $companyId, $moduleKey);
+        return self::canUserApproveStep($step, $approver, $submitter, $moduleKey);
     }
 
     public const ROLE_SUPER_ADMIN = 'Super Admin';
@@ -530,7 +530,7 @@ class ApprovalService
     /**
      * Check if a specific user can act on a specific workflow step.
      */
-    private static function canUserApproveStep(WorkflowStep $step, User $approver, User $submitter, int $companyId, ?string $moduleKey = null): bool
+    private static function canUserApproveStep(WorkflowStep $step, User $approver, User $submitter, ?string $moduleKey = null): bool
     {
         // Approver cannot approve their own submission
         if ($approver->id === $submitter->id) {

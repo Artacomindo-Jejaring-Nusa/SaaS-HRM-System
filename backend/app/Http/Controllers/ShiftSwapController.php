@@ -15,6 +15,7 @@ class ShiftSwapController extends Controller
 {
     use Notifiable;
 
+    private const ROLE_SUPER_ADMIN = 'Super Admin';
     private const ROUTE_SHIFT_SWAP = '/dashboard/shift-swap';
 
     public function index(Request $request)
@@ -23,7 +24,7 @@ class ShiftSwapController extends Controller
         $query = ShiftSwap::with(['requester', 'receiver', 'requesterSchedule.shift', 'receiverSchedule.shift'])
             ->where('company_id', $user->company_id);
 
-        $canViewAll = $user->hasRole('Super Admin')
+        $canViewAll = $user->hasRole(self::ROLE_SUPER_ADMIN)
             || $user->canAccessAllCompanies()
             || $user->hasPermission('approve-shift-swaps');
 
@@ -156,7 +157,7 @@ class ShiftSwapController extends Controller
     public function approve(Request $request, $id)
     {
         $user = $request->user();
-        $canApprove = $user->hasRole('Super Admin')
+        $canApprove = $user->hasRole(self::ROLE_SUPER_ADMIN)
             || $user->canAccessAllCompanies()
             || $user->hasPermission('approve-shift-swaps');
 
@@ -276,7 +277,7 @@ class ShiftSwapController extends Controller
         $swap = ShiftSwap::where('company_id', $user->company_id)->findOrFail($id);
 
         $isOwner = $swap->requester_id === $user->id;
-        $isSuperAdmin = $user->hasRole('Super Admin')
+        $isSuperAdmin = $user->hasRole(self::ROLE_SUPER_ADMIN)
             || $user->canAccessAllCompanies()
             || $user->hasPermission('approve-shift-swaps');
 

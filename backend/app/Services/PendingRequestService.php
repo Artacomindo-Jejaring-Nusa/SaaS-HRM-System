@@ -82,42 +82,67 @@ class PendingRequestService
 
     public static function getPendingRequests(Request $request, User $user, array $permMap)
     {
-        $isGlobalAdmin = $user->role_id === 1;
-        $isCompanyAdmin = self::isExecutiveOrAdmin($user);
-        $type = $request->type;
+        $type = (string) $request->type;
 
-        if (!$isGlobalAdmin && !$user->hasPermission('manage-approvals') && isset($permMap[$type]) && !$user->hasPermission($permMap[$type])) {
+        if (! self::canUserViewPendingType($user, $type, $permMap)) {
             return [];
         }
 
-        $query = self::resolvePendingBaseQuery((string)$type, $isGlobalAdmin, $isCompanyAdmin);
-        if (!$query) {
+        $isGlobalAdmin = $user->role_id === 1;
+        $isCompanyAdmin = self::isExecutiveOrAdmin($user);
+
+        $query = self::resolvePendingBaseQuery($type, $isGlobalAdmin, $isCompanyAdmin);
+        if (! $query) {
             return null;
         }
 
-        if (!$isGlobalAdmin) {
+        if (! $isGlobalAdmin) {
             $query->where('company_id', $user->company_id);
         }
 
         $items = $query->orderBy('created_at', 'desc')->get();
 
-        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'early_out'])) {
-            $items = self::filterPendingItems($items, (string)$type, $user);
+        if (! $isGlobalAdmin && ! in_array($type, ['vehicle_log', 'early_out'])) {
+            $items = self::filterPendingItems($items, $type, $user);
         }
 
-        $items->each(function ($item) use ($type, $user) {
-            if (!empty($item->current_approval_step)) {
-                $submitter = $type === 'payroll' ? ($item->creator ?: $user) : ($item->user ?: $user);
-                $item->current_step_info = ApprovalService::getCurrentStepInfo(
-                    $type,
-                    $item->company_id ?? $user->company_id,
-                    $item->current_approval_step,
-                    $submitter
-                );
-            }
-        });
+        self::attachStepInfo($items, $type, $user);
 
         return $items;
+    }
+
+    private static function canUserViewPendingType(User $user, ?string $type, array $permMap): bool
+    {
+        if ($user->role_id === 1 || $user->hasPermission('manage-approvals')) {
+            return true;
+        }
+
+        if (isset($permMap[$type]) && ! $user->hasPermission($permMap[$type])) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static function attachStepInfo($items, string $type, User $user): void
+    {
+        $items->each(function ($item) use ($type, $user) {
+            if (empty($item->current_approval_step)) {
+                return;
+            }
+
+            $submitter = $item->user ?: $user;
+            if ($type === 'payroll') {
+                $submitter = $item->creator ?: $user;
+            }
+
+            $item->current_step_info = ApprovalService::getCurrentStepInfo(
+                $type,
+                $item->company_id ?? $user->company_id,
+                $item->current_approval_step,
+                $submitter
+            );
+        });
     }
 
     private static function countScopedPending($modelClass, string $type, string|array $pendingStatus, User $user, bool $isGlobalAdmin): int
@@ -162,7 +187,11 @@ class PendingRequestService
     private static function filterPendingItems($items, string $type, User $user)
     {
         return $items->filter(function ($item) use ($type, $user) {
-            $submitter = $type === 'payroll' ? ($item->creator ?: $user) : $item->user;
+            $submitter = $item->user;
+            if ($type === 'payroll') {
+                $submitter = $item->creator ?: $user;
+            }
+
             if (!empty($item->current_approval_step) && $submitter) {
                 return ApprovalService::canApprove(
                     $type,

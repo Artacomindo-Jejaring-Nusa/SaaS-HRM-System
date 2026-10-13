@@ -43,6 +43,7 @@ class ManagerController extends Controller
 
     private const ROUTE_FUND_REQUESTS = '/dashboard/fund-requests';
     private const ROUTE_ATTENDANCE = '/dashboard/attendance';
+    private const ROUTE_PAYROLL_APPROVAL = '/dashboard/payroll/approval';
 
     private const PERM_MAP = [
         'leave' => 'approve-leaves',
@@ -81,7 +82,7 @@ class ManagerController extends Controller
         'permit' => '/dashboard/permits',
         'fund_request' => self::ROUTE_FUND_REQUESTS,
         'vehicle_log' => '/dashboard/fleet-logs',
-        'payroll' => '/dashboard/payroll/approval',
+        'payroll' => self::ROUTE_PAYROLL_APPROVAL,
         'early_out' => self::ROUTE_ATTENDANCE,
     ];
 
@@ -491,73 +492,94 @@ class ManagerController extends Controller
         $companyId = $batch->company_id ?: $user->company_id;
 
         if ($batch->current_approval_step !== null) {
-            $action = $request->status === 'approved' ? 'approve' : 'reject';
-            $result = \App\Services\ApprovalService::processApproval(
-                'payroll',
-                $companyId,
-                $user,
-                $submitter,
-                $batch->current_approval_step,
-                $action
-            );
+            return $this->handleWorkflowPayrollApproval($batch, $request, $user, $companyId, $submitter);
+        }
 
-            if ($result && isset($result['error'])) {
-                return response()->json(['status' => 'error', 'message' => $result['error']], 403);
-            }
+        return $this->handleDirectPayrollApproval($batch, $request, $user);
+    }
 
-            if ($result) {
-                if ($result['is_final']) {
-                    $batchStatus = $result['status'] === 'approved' ? 'approved' : 'rejected';
-                    $batch->update([
-                        'status' => $batchStatus,
-                        'current_approval_step' => null,
-                        'approved_by' => $result['status'] === 'approved' ? $user->id : null,
-                        'approved_at' => $result['status'] === 'approved' ? now() : null,
-                        'rejection_note' => $result['status'] === 'rejected' ? ($request->remark ?? 'Ditolak oleh approver') : null,
-                    ]);
-                    Salary::where('batch_id', $batch->id)->update(['status' => $batchStatus]);
+    private function handleWorkflowPayrollApproval($batch, Request $request, $user, int $companyId, $submitter)
+    {
+        $action = $request->status === 'approved' ? 'approve' : 'reject';
+        $result = \App\Services\ApprovalService::processApproval(
+            'payroll',
+            $companyId,
+            $user,
+            $submitter,
+            $batch->current_approval_step,
+            $action
+        );
 
-                    $this->notifySuperAdmins(
-                        $companyId,
-                        $result['status'] === 'approved' ? 'BATCH PAYROLL DISETUJUI' : 'BATCH PAYROLL DITOLAK',
-                        "Batch payroll periode {$batch->period_month} {$batch->period_year} telah " . ($result['status'] === 'approved' ? 'DISETUJUI' : 'DITOLAK') . " oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
-                        $result['status'] === 'approved' ? 'success' : 'danger',
-                        '/dashboard/payroll/approval',
-                        $user->id
-                    );
+        if ($result && isset($result['error'])) {
+            return response()->json(['status' => 'error', 'message' => $result['error']], 403);
+        }
 
-                    return response()->json([
-                        'status' => 'success',
-                        'message' => $result['status'] === 'approved' ? 'Batch payroll berhasil disetujui sepenuhnya.' : 'Batch payroll berhasil ditolak.',
-                        'data' => $batch->fresh(),
-                    ]);
-                }
+        if ($result && $result['is_final']) {
+            return $this->handleFinalPayrollStep($batch, $result, $request, $user, $companyId);
+        }
 
-                $batch->update([
-                    'status' => 'pending_approval',
-                    'current_approval_step' => $result['current_approval_step'],
-                ]);
+        return $this->handleIntermediatePayrollStep($batch, $result);
+    }
 
-                if (isset($result['approvers'])) {
-                    foreach ($result['approvers'] as $nextApprover) {
-                        $this->notify(
-                            $nextApprover,
-                            'PERSETUJUAN PAYROLL TAHAP BERIKUTNYA',
-                            "Batch payroll periode {$batch->period_month} {$batch->period_year} siap untuk tahap persetujuan Anda ({$result['step_label']}).",
-                            'info',
-                            '/dashboard/payroll/approval'
-                        );
-                    }
-                }
+    private function handleFinalPayrollStep($batch, array $result, Request $request, $user, int $companyId)
+    {
+        $isApproved = $result['status'] === 'approved';
+        $batchStatus = $isApproved ? 'approved' : 'rejected';
+        $batch->update([
+            'status' => $batchStatus,
+            'current_approval_step' => null,
+            'approved_by' => $isApproved ? $user->id : null,
+            'approved_at' => $isApproved ? now() : null,
+            'rejection_note' => $isApproved ? null : ($request->remark ?? 'Ditolak oleh approver'),
+        ]);
+        Salary::where('batch_id', $batch->id)->update(['status' => $batchStatus]);
 
-                return response()->json([
-                    'status' => 'success',
-                    'message' => "Persetujuan tahap {$batch->current_approval_step} berhasil. Berlanjut ke tahap berikutnya.",
-                    'data' => $batch->fresh(),
-                ]);
+        $statusLabel = $isApproved ? 'DISETUJUI' : 'DITOLAK';
+        $this->notifySuperAdmins(
+            $companyId,
+            "BATCH PAYROLL {$statusLabel}",
+            "Batch payroll periode {$batch->period_month} {$batch->period_year} telah {$statusLabel} oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            $isApproved ? 'success' : 'danger',
+            self::ROUTE_PAYROLL_APPROVAL,
+            $user->id
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $isApproved ? 'Batch payroll berhasil disetujui sepenuhnya.' : 'Batch payroll berhasil ditolak.',
+            'data' => $batch->fresh(),
+        ]);
+    }
+
+    private function handleIntermediatePayrollStep($batch, ?array $result)
+    {
+        $step = $result['current_approval_step'] ?? 1;
+        $batch->update([
+            'status' => 'pending_approval',
+            'current_approval_step' => $step,
+        ]);
+
+        if (isset($result['approvers'])) {
+            foreach ($result['approvers'] as $nextApprover) {
+                $this->notify(
+                    $nextApprover,
+                    'PERSETUJUAN PAYROLL TAHAP BERIKUTNYA',
+                    "Batch payroll periode {$batch->period_month} {$batch->period_year} siap untuk tahap persetujuan Anda ({$result['step_label']}).",
+                    'info',
+                    self::ROUTE_PAYROLL_APPROVAL
+                );
             }
         }
 
+        return response()->json([
+            'status' => 'success',
+            'message' => "Persetujuan tahap {$batch->current_approval_step} berhasil. Berlanjut ke tahap berikutnya.",
+            'data' => $batch->fresh(),
+        ]);
+    }
+
+    private function handleDirectPayrollApproval($batch, Request $request, $user)
+    {
         $isApproved = $request->status === 'approved';
 
         $batch->update([
@@ -569,22 +591,19 @@ class ManagerController extends Controller
 
         Salary::where('batch_id', $batch->id)->update(['status' => $request->status]);
 
+        $statusLabel = $isApproved ? 'DISETUJUI' : 'DITOLAK';
         $this->notifySuperAdmins(
             $batch->company_id ?? $user->company_id,
-            $isApproved ? 'BATCH PAYROLL DISETUJUI' : 'BATCH PAYROLL DITOLAK',
-            "Batch payroll periode {$batch->period_month} {$batch->period_year} telah " . ($isApproved ? 'DISETUJUI' : 'DITOLAK') . " oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            "BATCH PAYROLL {$statusLabel}",
+            "Batch payroll periode {$batch->period_month} {$batch->period_year} telah {$statusLabel} oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
             $isApproved ? 'success' : 'danger',
-            '/dashboard/payroll/approval',
+            self::ROUTE_PAYROLL_APPROVAL,
             $user->id
         );
 
-        $message = $isApproved
-            ? 'Batch payroll berhasil disetujui.'
-            : 'Batch payroll berhasil ditolak untuk revisi.';
-
         return response()->json([
             'status' => 'success',
-            'message' => $message,
+            'message' => $isApproved ? 'Batch payroll berhasil disetujui.' : 'Batch payroll berhasil ditolak untuk revisi.',
             'data' => $batch->fresh(),
         ]);
     }

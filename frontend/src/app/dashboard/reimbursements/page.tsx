@@ -430,68 +430,70 @@ interface ReimbursementSheetInnerProps {
   isDetailView?: boolean;
 }
 
+const getApprovalState = (
+  status: string | undefined,
+  type: 'dirut' | 'finance' | 'unit_head',
+  currentStep?: number | null
+): 'approved' | 'rejected' | 'pending' | 'waiting' => {
+  if (status === 'rejected') return 'rejected';
+
+  const step = Number(currentStep) || 0;
+
+  if (type === 'unit_head') {
+    if (status === 'approved' || status === 'approved_by_supervisor' || step > 1) {
+      return 'approved';
+    }
+    if (status === 'pending' || step === 1) {
+      return 'pending';
+    }
+    return 'waiting';
+  }
+
+  if (type === 'finance') {
+    if (status === 'approved' || step > 2) {
+      return 'approved';
+    }
+    if (status === 'approved_by_supervisor' || step === 2) {
+      return 'pending';
+    }
+    return 'waiting';
+  }
+
+  // dirut
+  if (status === 'approved') return 'approved';
+  if (step === 3) return 'pending';
+  return 'waiting';
+};
+
 const renderSignatureStatus = (
   status: string | undefined, 
   type: 'dirut' | 'finance' | 'unit_head',
   currentStep?: number | null
 ) => {
-  const isRejected = status === 'rejected';
+  const state = getApprovalState(status, type, currentStep);
 
-  if (type === 'unit_head') {
-    const isApproved = status === 'approved' || status === 'approved_by_supervisor' || (Boolean(currentStep) && Number(currentStep) > 1);
-    const isPending = !isApproved && !isRejected && (status === 'pending' || currentStep === 1);
-    if (isApproved) {
+  switch (state) {
+    case 'approved':
       return (
         <div className="inline-block border-2 border-emerald-600 bg-emerald-50 text-emerald-700 rounded px-2 py-0.5 font-black text-[8px] uppercase tracking-wider shadow-xs">
           APPROVED ✓
         </div>
       );
-    }
-    if (isRejected) {
-      return <div className="inline-block border-2 border-red-600 bg-red-50 text-red-700 rounded px-2 py-0.5 font-bold text-[8px] uppercase">REJECTED ✗</div>;
-    }
-    if (isPending) {
-      return <div className="inline-block border border-dashed border-amber-500 bg-amber-50 text-amber-800 rounded px-1.5 py-0.5 font-bold text-[7px] uppercase animate-pulse">MENUNGGU ACC</div>;
-    }
-    return <span className="text-gray-400 italic text-[7px]">— Menunggu Giliran —</span>;
-  }
-
-  if (type === 'finance') {
-    const isApproved = status === 'approved' || (Boolean(currentStep) && Number(currentStep) > 2);
-    const isPending = !isApproved && !isRejected && (status === 'approved_by_supervisor' || currentStep === 2);
-    if (isApproved) {
+    case 'rejected':
       return (
-        <div className="inline-block border-2 border-emerald-600 bg-emerald-50 text-emerald-700 rounded px-2 py-0.5 font-black text-[8px] uppercase tracking-wider shadow-xs">
-          APPROVED ✓
+        <div className="inline-block border-2 border-red-600 bg-red-50 text-red-700 rounded px-2 py-0.5 font-bold text-[8px] uppercase">
+          REJECTED ✗
         </div>
       );
-    }
-    if (isRejected) {
-      return <div className="inline-block border-2 border-red-600 bg-red-50 text-red-700 rounded px-2 py-0.5 font-bold text-[8px] uppercase">REJECTED ✗</div>;
-    }
-    if (isPending) {
-      return <div className="inline-block border border-dashed border-amber-500 bg-amber-50 text-amber-800 rounded px-1.5 py-0.5 font-bold text-[7px] uppercase animate-pulse">MENUNGGU ACC</div>;
-    }
-    return <span className="text-gray-400 italic text-[7px]">— Menunggu Giliran —</span>;
+    case 'pending':
+      return (
+        <div className="inline-block border border-dashed border-amber-500 bg-amber-50 text-amber-800 rounded px-1.5 py-0.5 font-bold text-[7px] uppercase animate-pulse">
+          MENUNGGU ACC
+        </div>
+      );
+    default:
+      return <span className="text-gray-400 italic text-[7px]">— Menunggu Giliran —</span>;
   }
-
-  // dirut
-  const isApproved = status === 'approved';
-  const isPending = !isApproved && !isRejected && currentStep === 3;
-  if (isApproved) {
-    return (
-      <div className="inline-block border-2 border-emerald-600 bg-emerald-50 text-emerald-700 rounded px-2 py-0.5 font-black text-[8px] uppercase tracking-wider shadow-xs">
-        APPROVED ✓
-      </div>
-    );
-  }
-  if (isRejected) {
-    return <div className="inline-block border-2 border-red-600 bg-red-50 text-red-700 rounded px-2 py-0.5 font-bold text-[8px] uppercase">REJECTED ✗</div>;
-  }
-  if (isPending) {
-    return <div className="inline-block border border-dashed border-amber-500 bg-amber-50 text-amber-800 rounded px-1.5 py-0.5 font-bold text-[7px] uppercase animate-pulse">MENUNGGU ACC</div>;
-  }
-  return <span className="text-gray-400 italic text-[7px]">— Menunggu Giliran —</span>;
 };
 
 const renderTableBody = (items: ReimbursementItem[], totalAmount: number, isDetailView: boolean) => {

@@ -174,7 +174,7 @@ function PayrollBatchCard(props: Readonly<PayrollBatchCardProps>) {
             <Eye size={14} /> Lihat Detail Karyawan
           </button>
 
-          {(batch.can_user_approve !== undefined ? batch.can_user_approve : canApprove) && batch.status === "pending_approval" && (
+          {(batch.can_user_approve ?? canApprove) && batch.status === "pending_approval" && (
             <>
               <button
                 onClick={() => onOpenReject(batch.id)}

@@ -75,21 +75,39 @@ class AuthController extends Controller
             return $this->errorResponse('Invalid credentials', 401);
         }
 
-        // --- Device Binding & FCM Token ---
+        $deviceError = $this->handleDeviceBindingAndFcm($user, $request, 'login');
+        if ($deviceError) {
+            return $this->errorResponse($deviceError, 403);
+        }
+
+        return $this->createLoginResponse(
+            $user,
+            $request,
+            'LOGIN',
+            "User {$user->name} berhasil masuk ke sistem.",
+            'login_success',
+            "User {$user->name} logged in successfully"
+        );
+    }
+
+    private function handleDeviceBindingAndFcm(User $user, Request $request, string $context = 'login'): ?string
+    {
+        $deviceId = $request->device_id;
         $isSuperAdmin = $user->role_id === 1 || (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies());
 
+        if ($deviceId && $user->device_id && $user->device_id !== $deviceId && ! $isSuperAdmin) {
+            AuditLogger::log(
+                'device_mismatch',
+                "User tried to {$context} from a different device",
+                ['email' => $user->email, 'expected_device' => $user->device_id, 'actual_device' => $deviceId],
+                'critical'
+            );
+            return 'Akun Anda terkunci pada perangkat lain. Silakan hubungi Admin untuk reset Device ID Anda.';
+        }
+
         $updateData = [];
-        if ($request->device_id) {
-            if (! $user->device_id) {
-                $updateData['device_id'] = $request->device_id;
-            } elseif ($user->device_id !== $request->device_id) {
-                if (! $isSuperAdmin) {
-                    AuditLogger::log('device_mismatch', 'User tried to login from a different device', ['email' => $request->email, 'expected_device' => $user->device_id, 'actual_device' => $request->device_id], 'critical');
-                    return $this->errorResponse('Akun Anda terkunci pada perangkat lain. Silakan hubungi Admin untuk reset Device ID Anda.', 403);
-                } else {
-                    $updateData['device_id'] = $request->device_id;
-                }
-            }
+        if ($deviceId && (! $user->device_id || $isSuperAdmin)) {
+            $updateData['device_id'] = $deviceId;
         }
 
         if ($request->fcm_token) {
@@ -100,11 +118,13 @@ class AuthController extends Controller
             $user->update($updateData);
         }
 
-        // --- Generate Access Token (short-lived) ---
+        return null;
+    }
+
+    private function createLoginResponse(User $user, Request $request, string $actionName, string $logDesc, string $auditKey, string $auditMsg)
+    {
         $accessToken = $user->createToken('auth_token', ['*'], now()->addMinutes(self::ACCESS_TOKEN_MINUTES))->plainTextToken;
 
-        // --- Generate Refresh Token (long-lived) ---
-        // Revoke old refresh tokens for this device (token rotation)
         if ($request->device_id) {
             RefreshToken::revokeForDevice($user->id, $request->device_id);
         }
@@ -123,18 +143,18 @@ class AuthController extends Controller
         ActivityLog::create([
             'company_id' => $user->company_id,
             'user_id' => $user->id,
-            'action' => 'LOGIN',
-            'description' => "User {$user->name} berhasil masuk ke sistem.",
+            'action' => $actionName,
+            'description' => $logDesc,
         ]);
 
-        AuditLogger::log('login_success', "User {$user->name} logged in successfully", ['email' => $user->email, 'company_id' => $user->company_id]);
+        AuditLogger::log($auditKey, $auditMsg, ['email' => $user->email, 'company_id' => $user->company_id]);
 
         return $this->successResponse([
             'access_token' => $accessToken,
             'refresh_token' => $refreshTokenData['plain_token'],
             'token_type' => 'Bearer',
-            'expires_in' => self::ACCESS_TOKEN_MINUTES * 60, // in seconds
-            'refresh_expires_in' => $refreshDays * 86400, // in seconds
+            'expires_in' => self::ACCESS_TOKEN_MINUTES * 60,
+            'refresh_expires_in' => $refreshDays * 86400,
             'user' => $user->load(['role.permissions', 'office']),
         ], 'Login berhasil');
     }
@@ -366,19 +386,12 @@ class AuthController extends Controller
         ]);
 
         try {
-            // 1. Verifikasi Google ID Token
-            // Gunakan Client ID dari Google Cloud Console / Firebase Web Config
-            $clientId = env('GOOGLE_CLIENT_ID') ?: '1015918555814-0qod31fvuc96odo10a2uqmppoqf9vegi.apps.googleusercontent.com';
-            $client = new \Google_Client(['client_id' => $clientId]);
-            $payload = $client->verifyIdToken($request->id_token);
-
+            $payload = $this->verifyGoogleIdToken($request->id_token);
             if (! $payload) {
                 return $this->errorResponse('Token Google tidak valid atau sudah kadaluarsa.', 401);
             }
 
             $email = $payload['email'];
-
-            // 2. Cari Perusahaan
             $company = Company::where('name', $request->company_name)
                 ->orWhere('name', 'like', '%'.$request->company_name.'%')
                 ->first();
@@ -387,7 +400,6 @@ class AuthController extends Controller
                 return $this->errorResponse('Perusahaan tidak ditemukan.', 401);
             }
 
-            // 3. Cari User berdasarkan email di perusahaan tersebut
             $user = User::where('email', $email)
                 ->where('company_id', $company->id)
                 ->first();
@@ -396,70 +408,31 @@ class AuthController extends Controller
                 return $this->errorResponse("Email $email tidak terdaftar di $company->name. Silakan hubungi Admin.", 401);
             }
 
-            // 4. Device Binding & FCM Token
-            $isSuperAdmin = $user->role_id === 1 || (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies());
-
-            $updateData = [];
-            if ($request->device_id) {
-                if (! $user->device_id) {
-                    $updateData['device_id'] = $request->device_id;
-                } elseif ($user->device_id !== $request->device_id) {
-                    if (! $isSuperAdmin) {
-                        AuditLogger::log('device_mismatch', 'User tried to Google login from a different device', ['email' => $user->email, 'expected_device' => $user->device_id, 'actual_device' => $request->device_id], 'critical');
-                        return $this->errorResponse('Akun Anda terkunci pada perangkat lain. Silakan hubungi Admin untuk reset Device ID Anda.', 403);
-                    } else {
-                        $updateData['device_id'] = $request->device_id;
-                    }
-                }
+            $deviceError = $this->handleDeviceBindingAndFcm($user, $request, 'Google login');
+            if ($deviceError) {
+                return $this->errorResponse($deviceError, 403);
             }
 
-            if ($request->fcm_token) {
-                $updateData['fcm_token'] = $request->fcm_token;
-            }
-
-            if (! empty($updateData)) {
-                $user->update($updateData);
-            }
-
-            // 5. Generate Tokens
-            $accessToken = $user->createToken('auth_token', ['*'], now()->addMinutes(self::ACCESS_TOKEN_MINUTES))->plainTextToken;
-
-            if ($request->device_id) {
-                RefreshToken::revokeForDevice($user->id, $request->device_id);
-            }
-
-            $keepLoggedIn = $request->boolean('keep_logged_in', true);
-            $refreshDays = $keepLoggedIn ? self::REFRESH_TOKEN_DAYS : 1;
-
-            $refreshTokenData = RefreshToken::generateFor(
+            return $this->createLoginResponse(
                 $user,
-                $request->device_id,
-                $request->ip(),
-                $request->userAgent(),
-                $refreshDays
+                $request,
+                'LOGIN_GOOGLE',
+                "User {$user->name} berhasil masuk via Google Login.",
+                'login_google_success',
+                "User {$user->name} logged in via Google"
             );
-
-            ActivityLog::create([
-                'company_id' => $user->company_id,
-                'user_id' => $user->id,
-                'action' => 'LOGIN_GOOGLE',
-                'description' => "User {$user->name} berhasil masuk via Google Login.",
-            ]);
-
-            AuditLogger::log('login_google_success', "User {$user->name} logged in via Google", ['email' => $user->email, 'company_id' => $user->company_id]);
-
-            return $this->successResponse([
-                'access_token' => $accessToken,
-                'refresh_token' => $refreshTokenData['plain_token'],
-                'token_type' => 'Bearer',
-                'expires_in' => self::ACCESS_TOKEN_MINUTES * 60,
-                'refresh_expires_in' => $refreshDays * 86400,
-                'user' => $user->load(['role.permissions', 'office']),
-            ], 'Login berhasil');
 
         } catch (\Exception $e) {
             return $this->errorResponse('Terjadi kesalahan pada server saat verifikasi Google: '.$e->getMessage(), 500);
         }
+    }
+
+    private function verifyGoogleIdToken(string $idToken): ?array
+    {
+        $clientId = env('GOOGLE_CLIENT_ID') ?: '1015918555814-0qod31fvuc96odo10a2uqmppoqf9vegi.apps.googleusercontent.com';
+        $client = new \Google_Client(['client_id' => $clientId]);
+        $payload = $client->verifyIdToken($idToken);
+        return $payload ?: null;
     }
 
     public function sendOtp(Request $request)

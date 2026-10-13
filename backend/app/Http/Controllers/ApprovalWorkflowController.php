@@ -609,14 +609,13 @@ class ApprovalWorkflowController extends Controller
         }
 
         $user = $request->user();
-        $companyId = $user->company_id;
         $id = $request->filled('id') ? (int) $request->id : null;
 
         // Draft preview mode (when id is not yet created)
         if (! $id) {
             $timeline = ApprovalService::getApprovalTimeline(
                 $module,
-                $companyId ?? 1,
+                $user->company_id ?? 1,
                 $user,
                 1,
                 'draft'
@@ -624,20 +623,12 @@ class ApprovalWorkflowController extends Controller
             return $this->successResponse($timeline, 'Tahap alur persetujuan default berhasil dimuat.');
         }
 
-        $model = match ($module) {
-            'leave' => \App\Models\Leave::with(['user.supervisor', 'user.role'])->find($id),
-            'permit' => \App\Models\Permit::with(['user.supervisor', 'user.role'])->find($id),
-            'overtime' => \App\Models\Overtime::with(['user.supervisor', 'user.role'])->find($id),
-            'reimbursement' => \App\Models\Reimbursement::with(['user.supervisor', 'user.role'])->find($id),
-            'fund_request' => \App\Models\FundRequest::with(['user.supervisor', 'user.role'])->find($id),
-            'attendance_correction' => \App\Models\AttendanceCorrection::with(['user.supervisor', 'user.role'])->find($id),
-            'shift_swap' => \App\Models\ShiftSwap::with(['requester.supervisor', 'requester.role', 'receiver'])->find($id),
-            'vehicle_log' => \App\Models\VehicleLog::with(['user.supervisor', 'user.role'])->find($id),
-            'task' => \App\Models\Task::with(['user.supervisor', 'user.role'])->find($id),
-            'payroll' => \App\Models\PayrollBatch::with(['creator.role'])->find($id),
-            default => null,
-        };
+        return $this->resolveExistingRequestTimeline($module, $id, $user, $user->company_id);
+    }
 
+    private function resolveExistingRequestTimeline(string $module, int $id, $user, ?int $companyId)
+    {
+        $model = $this->resolveModelForModule($module, $id);
         if (! $model) {
             return $this->errorResponse('Data permohonan tidak ditemukan.', 404);
         }
@@ -662,5 +653,22 @@ class ApprovalWorkflowController extends Controller
         );
 
         return $this->successResponse($timeline, 'Tahap alur persetujuan berhasil dimuat.');
+    }
+
+    private function resolveModelForModule(string $module, int $id)
+    {
+        return match ($module) {
+            'leave' => \App\Models\Leave::with(['user.supervisor', 'user.role'])->find($id),
+            'permit' => \App\Models\Permit::with(['user.supervisor', 'user.role'])->find($id),
+            'overtime' => \App\Models\Overtime::with(['user.supervisor', 'user.role'])->find($id),
+            'reimbursement' => \App\Models\Reimbursement::with(['user.supervisor', 'user.role'])->find($id),
+            'fund_request' => \App\Models\FundRequest::with(['user.supervisor', 'user.role'])->find($id),
+            'attendance_correction' => \App\Models\AttendanceCorrection::with(['user.supervisor', 'user.role'])->find($id),
+            'shift_swap' => \App\Models\ShiftSwap::with(['requester.supervisor', 'requester.role', 'receiver'])->find($id),
+            'vehicle_log' => \App\Models\VehicleLog::with(['user.supervisor', 'user.role'])->find($id),
+            'task' => \App\Models\Task::with(['user.supervisor', 'user.role'])->find($id),
+            'payroll' => \App\Models\PayrollBatch::with(['creator.role'])->find($id),
+            default => null,
+        };
     }
 }
