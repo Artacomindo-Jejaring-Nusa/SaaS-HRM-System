@@ -426,23 +426,72 @@ interface ReimbursementSheetInnerProps {
   dateStr: string;
   noStr: string;
   status?: string;
+  currentStep?: number | null;
   isDetailView?: boolean;
 }
 
-const renderSignatureStatus = (status: string | undefined, type: 'dirut' | 'finance' | 'unit_head') => {
-  if (status === 'approved') {
-    if (type === 'dirut') {
-      return <div className="inline-block border-2 border-blue-600 text-blue-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-blue-50/50">APPROVED</div>;
+const renderSignatureStatus = (
+  status: string | undefined, 
+  type: 'dirut' | 'finance' | 'unit_head',
+  currentStep?: number | null
+) => {
+  const isRejected = status === 'rejected';
+
+  if (type === 'unit_head') {
+    const isApproved = status === 'approved' || status === 'approved_by_supervisor' || (Boolean(currentStep) && Number(currentStep) > 1);
+    const isPending = !isApproved && !isRejected && (status === 'pending' || currentStep === 1);
+    if (isApproved) {
+      return (
+        <div className="inline-block border-2 border-emerald-600 bg-emerald-50 text-emerald-700 rounded px-2 py-0.5 font-black text-[8px] uppercase tracking-wider shadow-xs">
+          APPROVED ✓
+        </div>
+      );
     }
-    return <div className="inline-block border-2 border-green-600 text-green-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-green-50/50">VERIFIED</div>;
+    if (isRejected) {
+      return <div className="inline-block border-2 border-red-600 bg-red-50 text-red-700 rounded px-2 py-0.5 font-bold text-[8px] uppercase">REJECTED ✗</div>;
+    }
+    if (isPending) {
+      return <div className="inline-block border border-dashed border-amber-500 bg-amber-50 text-amber-800 rounded px-1.5 py-0.5 font-bold text-[7px] uppercase animate-pulse">MENUNGGU ACC</div>;
+    }
+    return <span className="text-gray-400 italic text-[7px]">— Menunggu Giliran —</span>;
   }
-  if (status === 'rejected') {
-    return <div className="inline-block border-2 border-red-600 text-red-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-red-50/50">REJECTED</div>;
+
+  if (type === 'finance') {
+    const isApproved = status === 'approved' || (Boolean(currentStep) && Number(currentStep) > 2);
+    const isPending = !isApproved && !isRejected && (status === 'approved_by_supervisor' || currentStep === 2);
+    if (isApproved) {
+      return (
+        <div className="inline-block border-2 border-emerald-600 bg-emerald-50 text-emerald-700 rounded px-2 py-0.5 font-black text-[8px] uppercase tracking-wider shadow-xs">
+          APPROVED ✓
+        </div>
+      );
+    }
+    if (isRejected) {
+      return <div className="inline-block border-2 border-red-600 bg-red-50 text-red-700 rounded px-2 py-0.5 font-bold text-[8px] uppercase">REJECTED ✗</div>;
+    }
+    if (isPending) {
+      return <div className="inline-block border border-dashed border-amber-500 bg-amber-50 text-amber-800 rounded px-1.5 py-0.5 font-bold text-[7px] uppercase animate-pulse">MENUNGGU ACC</div>;
+    }
+    return <span className="text-gray-400 italic text-[7px]">— Menunggu Giliran —</span>;
   }
-  if (type === 'dirut') {
-    return <span className="text-gray-400 italic text-[7px]">— Belum Disetujui —</span>;
+
+  // dirut
+  const isApproved = status === 'approved';
+  const isPending = !isApproved && !isRejected && currentStep === 3;
+  if (isApproved) {
+    return (
+      <div className="inline-block border-2 border-emerald-600 bg-emerald-50 text-emerald-700 rounded px-2 py-0.5 font-black text-[8px] uppercase tracking-wider shadow-xs">
+        APPROVED ✓
+      </div>
+    );
   }
-  return <span className="text-gray-400 italic text-[7px]">— Belum Diverifikasi —</span>;
+  if (isRejected) {
+    return <div className="inline-block border-2 border-red-600 bg-red-50 text-red-700 rounded px-2 py-0.5 font-bold text-[8px] uppercase">REJECTED ✗</div>;
+  }
+  if (isPending) {
+    return <div className="inline-block border border-dashed border-amber-500 bg-amber-50 text-amber-800 rounded px-1.5 py-0.5 font-bold text-[7px] uppercase animate-pulse">MENUNGGU ACC</div>;
+  }
+  return <span className="text-gray-400 italic text-[7px]">— Menunggu Giliran —</span>;
 };
 
 const renderTableBody = (items: ReimbursementItem[], totalAmount: number, isDetailView: boolean) => {
@@ -503,6 +552,7 @@ const ReimbursementSheetInner = ({
   dateStr,
   noStr,
   status,
+  currentStep,
   isDetailView = false
 }: ReimbursementSheetInnerProps) => {
   const styles = getSizeStyles(isDetailView);
@@ -571,43 +621,69 @@ const ReimbursementSheetInner = ({
         </div>
       </div>
 
-      {/* ===== SIGNATURE GRID (4 columns matching Excel) ===== */}
-      <table className={`w-full border-collapse ${styles.sizeSigText} signature-table`} style={{ border: '1.5px solid #000' }}>
+      {/* ===== SIGNATURE GRID (4 sequential workflow columns) ===== */}
+      <table className={`w-full border-collapse ${styles.sizeSigText} signature-table bg-white`} style={{ border: '1.5px solid #000' }}>
         <thead>
-          <tr>
-            <th className="border border-black text-center font-bold py-1 w-1/4">DIRUT</th>
-            <th className="border border-black text-center font-bold py-1 w-1/4">FINANCE</th>
-            <th className="border border-black text-center font-bold py-1 w-1/4">UNIT HEAD</th>
-            <th className="border border-black text-center font-bold py-1 w-1/4">REQUESTER</th>
+          <tr className="bg-gray-100/90">
+            <th className="border border-black text-center font-bold py-1 w-1/4">1. PEMOHON</th>
+            <th className="border border-black text-center font-bold py-1 w-1/4">2. ATASAN LANGSUNG</th>
+            <th className="border border-black text-center font-bold py-1 w-1/4">3. FINANCE / HRD</th>
+            <th className="border border-black text-center font-bold py-1 w-1/4">4. DIREKTUR UTAMA</th>
           </tr>
         </thead>
         <tbody>
           {/* Signature spaces */}
           <tr>
-            <td className="border border-black text-center align-middle sig-space">
-              {renderSignatureStatus(status, 'dirut')}
+            {/* 1. PEMOHON */}
+            <td className="border border-black text-center align-middle sig-space p-2">
+              <div className="h-10 flex items-center justify-center w-full">
+                {signature ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={signature} alt="TTD Pemohon" className={`${styles.sizeSigImg} mx-auto object-contain`} />
+                ) : (
+                  <div className="border border-emerald-600 bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold text-[7px] uppercase">
+                    VERIFIED DIGITAL
+                  </div>
+                )}
+              </div>
+              <div className={`${styles.sizeSigName} font-bold mt-1 text-black truncate`}>
+                ( {employee_name || 'PEMOHON'} )
+              </div>
+              <div className="text-[6.5px] text-gray-500 italic">Pemohon</div>
             </td>
-            <td className="border border-black text-center align-middle sig-space">
-              {renderSignatureStatus(status, 'finance')}
+
+            {/* 2. ATASAN LANGSUNG */}
+            <td className="border border-black text-center align-middle sig-space p-2">
+              <div className="h-10 flex items-center justify-center w-full">
+                {renderSignatureStatus(status, 'unit_head', currentStep)}
+              </div>
+              <div className={`${styles.sizeSigName} font-semibold mt-1 text-gray-800 italic`}>
+                ( Atasan Langsung )
+              </div>
+              <div className="text-[6.5px] text-gray-500 italic">Verifikator Tahap 1</div>
             </td>
-            <td className="border border-black text-center align-middle sig-space">
-              {renderSignatureStatus(status, 'unit_head')}
+
+            {/* 3. FINANCE */}
+            <td className="border border-black text-center align-middle sig-space p-2">
+              <div className="h-10 flex items-center justify-center w-full">
+                {renderSignatureStatus(status, 'finance', currentStep)}
+              </div>
+              <div className={`${styles.sizeSigName} font-semibold mt-1 text-gray-800 italic`}>
+                ( Finance & Accounting )
+              </div>
+              <div className="text-[6.5px] text-gray-500 italic">Verifikator Tahap 2</div>
             </td>
-            <td className="border border-black text-center align-middle sig-space">
-              {signature ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={signature} alt="TTD" className={`${styles.sizeSigImg} mx-auto object-contain`} />
-              ) : (
-                <span className="text-gray-400 text-[7px]">— Belum TTD —</span>
-              )}
-              <div className={`${styles.sizeSigName} font-bold mt-0.5`}>{employee_name || '—'}</div>
+
+            {/* 4. DIREKTUR UTAMA */}
+            <td className="border border-black text-center align-middle sig-space p-2">
+              <div className="h-10 flex items-center justify-center w-full">
+                {renderSignatureStatus(status, 'dirut', currentStep)}
+              </div>
+              <div className={`${styles.sizeSigName} font-semibold mt-1 text-gray-800 italic`}>
+                ( Direktur Utama )
+              </div>
+              <div className="text-[6.5px] text-gray-500 italic">Penyetuju Akhir</div>
             </td>
-          </tr>
-          {/* Extra row: Posting Accounting & Procurement */}
-          <tr>
-            <td colSpan={2} className="no-border" style={{ border: 'none' }}></td>
-            <td className="border border-black text-center font-bold py-1 text-[7px]">Posting<br/>Accounting</td>
-            <td className="border border-black text-center font-bold py-1 text-[7px]">PROCUREMENT</td>
           </tr>
         </tbody>
       </table>
@@ -643,6 +719,7 @@ const LiveExcelPreview = ({ formData, calculatedTotal, user }: LiveExcelPreviewP
         dateStr={dateStr}
         noStr={noStr}
         status="pending"
+        currentStep={1}
         isDetailView={false}
       />
     </div>
@@ -671,6 +748,7 @@ const PrintableSheet = ({ selectedItem }: PrintableSheetProps) => {
         dateStr={dateStr}
         noStr={noStr}
         status={selectedItem.status}
+        currentStep={selectedItem.current_approval_step}
         isDetailView={true}
       />
     </div>

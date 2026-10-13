@@ -101,16 +101,18 @@ class PendingRequestService
 
         $items = $query->orderBy('created_at', 'desc')->get();
 
-        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'payroll', 'early_out'])) {
+        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'early_out'])) {
             $items = self::filterPendingItems($items, (string)$type, $user);
         }
 
         $items->each(function ($item) use ($type, $user) {
             if (!empty($item->current_approval_step)) {
+                $submitter = $type === 'payroll' ? ($item->creator ?: $user) : ($item->user ?: $user);
                 $item->current_step_info = ApprovalService::getCurrentStepInfo(
                     $type,
                     $item->company_id ?? $user->company_id,
-                    $item->current_approval_step
+                    $item->current_approval_step,
+                    $submitter
                 );
             }
         });
@@ -128,8 +130,8 @@ class PendingRequestService
             $query->where('company_id', $user->company_id);
         }
 
-        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'payroll', 'early_out'])) {
-            $items = $query->with(['user.supervisor', 'user.role'])->get();
+        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'early_out'])) {
+            $items = $query->with(['user.supervisor', 'user.role', 'creator.supervisor', 'creator.role'])->get();
             return self::filterPendingItems($items, $type, $user)->count();
         }
 
@@ -160,14 +162,19 @@ class PendingRequestService
     private static function filterPendingItems($items, string $type, User $user)
     {
         return $items->filter(function ($item) use ($type, $user) {
-            if (!empty($item->current_approval_step) && $item->user) {
+            $submitter = $type === 'payroll' ? ($item->creator ?: $user) : $item->user;
+            if (!empty($item->current_approval_step) && $submitter) {
                 return ApprovalService::canApprove(
                     $type,
                     $item->company_id ?? $user->company_id,
                     $user,
-                    $item->user,
+                    $submitter,
                     $item->current_approval_step
                 );
+            }
+
+            if ($type === 'payroll') {
+                return $user->role_id === 1 || $user->hasPermission('approve-payroll') || $user->hasPermission('manage-payroll');
             }
 
             return self::canHandlePendingItem($item, $user);

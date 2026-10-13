@@ -28,7 +28,8 @@ import {
   Trash2,
   History,
   Filter,
-  ShieldAlert
+  ShieldAlert,
+  DollarSign
 } from "lucide-react";
 import { ListPageSkeleton } from "@/components/Skeleton";
 import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
@@ -46,6 +47,7 @@ type ApprovalType =
   | "dinas_luar" 
   | "fund_request"
   | "vehicle_log"
+  | "payroll"
   | "early_out";
 
 type FilterType = "all" | ApprovalType;
@@ -97,8 +99,6 @@ interface ApprovalItem {
   reimbursement_items?: ReimbursementItemDetail[];
   reimbursement_divisi?: string;
   reimbursement_tujuan?: string;
-  // Profile-specific
-  profile_new_data?: Record<string, unknown>;
   // Dinas Luar-specific
   dinas_luar_status?: string;
   dinas_luar_destination?: string;
@@ -139,6 +139,7 @@ const typeLabel: Record<ApprovalType, string> = {
   dinas_luar: "Dinas Luar",
   fund_request: "Pengajuan Dana",
   vehicle_log: "Log Armada",
+  payroll: "Payroll",
   early_out: "Pulang Awal",
 };
 
@@ -150,6 +151,7 @@ const typeColor: Record<ApprovalType, string> = {
   dinas_luar: "bg-rose-50 text-rose-700 border-rose-200",
   fund_request: "bg-teal-50 text-teal-700 border-teal-200",
   vehicle_log: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  payroll: "bg-emerald-50 text-emerald-700 border-emerald-200",
   early_out: "bg-orange-50 text-orange-700 border-orange-200",
 };
 
@@ -338,6 +340,23 @@ const normalizeEarlyOut = (rawAttendances: any[]): ApprovalItem[] =>
     target_supervisor_id: a.user?.supervisor_id
   }));
 
+const normalizePayroll = (rawPayrolls: any[]): ApprovalItem[] =>
+  rawPayrolls.map((p: any) => ({
+    id: p.id,
+    type: "payroll",
+    user_name: p.creator?.name || "HR Officer",
+    user_email: p.creator?.email,
+    user_role: p.creator?.role?.name || "HR / Finance",
+    description: `Batch Payroll Periode ${p.period_month} ${p.period_year} (${p.total_employees} Karyawan)`,
+    category: `Payroll ${p.period_month} ${p.period_year}`,
+    amount: p.total_net ? String(p.total_net) : undefined,
+    status: p.status,
+    current_approval_step: p.current_approval_step || null,
+    current_step_info: p.current_step_info,
+    created_at: p.submitted_at || p.created_at,
+    target_supervisor_id: null,
+  }));
+
 const dispatchApprovalRequest = async (
   item: ApprovalItem,
   action: ActionType,
@@ -409,7 +428,7 @@ const renderMemberStatusBadge = (member: TeamMemberAttendance) => {
 };
 
 export default function ApprovalsPage() {
-  const { user: currentUser, hasPermission } = useAuth();
+  const { user: currentUser, hasPermission, isManager } = useAuth();
   
   // Tabs: 'approvals' (Persetujuan) vs 'team' (Kehadiran Tim) vs 'history' (Riwayat & Audit Log)
   const [activeTab, setActiveTab] = useState<"approvals" | "team" | "history">("approvals");
@@ -448,6 +467,8 @@ export default function ApprovalsPage() {
         return hasPermission("approve-fund-requests");
       case "vehicle_log":
         return hasPermission("approve-vehicle-logs");
+      case "payroll":
+        return hasPermission("approve-payroll") || hasPermission("manage-payroll") || isSuperAdmin;
       case "dinas_luar":
         return hasPermission("approve-leaves") || hasPermission("view-attendances");
       case "early_out":
@@ -466,6 +487,7 @@ export default function ApprovalsPage() {
     canApprove("reimbursement") ||
     canApprove("fund_request") ||
     canApprove("vehicle_log") ||
+    canApprove("payroll") ||
     canApprove("dinas_luar") ||
     canApprove("early_out");
 
@@ -478,6 +500,7 @@ export default function ApprovalsPage() {
     permit: number;
     fund_request: number;
     vehicle_log: number;
+    payroll?: number;
     early_out?: number;
     total: number;
   }>({
@@ -487,6 +510,7 @@ export default function ApprovalsPage() {
     permit: 0,
     fund_request: 0,
     vehicle_log: 0,
+    payroll: 0,
     early_out: 0,
     total: 0,
   });
@@ -573,7 +597,8 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         fundData,
         vehicleData,
         dinasData,
-        earlyOutData
+        earlyOutData,
+        payrollData
       ] = await Promise.all([
         fetchCategoryData(canApprove("leave"), "/manager/pending-requests?type=leave"),
         fetchCategoryData(canApprove("reimbursement"), "/manager/pending-requests?type=reimbursement"),
@@ -583,6 +608,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         fetchCategoryData(canApprove("vehicle_log"), "/manager/pending-requests?type=vehicle_log"),
         fetchCategoryData(canApprove("dinas_luar"), "/attendance/dinas-luar/pending"),
         fetchCategoryData(canApprove("early_out"), "/manager/pending-requests?type=early_out"),
+        fetchCategoryData(canApprove("payroll"), "/manager/pending-requests?type=payroll"),
       ]);
 
       const allMerged = [
@@ -593,7 +619,8 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         ...normalizeFunds(fundData),
         ...normalizeVehicles(vehicleData),
         ...normalizeDinas(dinasData),
-        ...normalizeEarlyOut(earlyOutData)
+        ...normalizeEarlyOut(earlyOutData),
+        ...normalizePayroll(payrollData)
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setItems(allMerged);
@@ -881,7 +908,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
     ));
   };
 
-  if (!hasAnyApprovalPermission) {
+  if (!isManager || !hasAnyApprovalPermission) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
         <div className="w-16 h-16 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mb-4 border border-rose-100 shadow-sm">
@@ -1176,6 +1203,29 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
                 <div className="text-[10px] text-slate-400">Sebelum Waktu Shift</div>
               </button>
             )}
+
+            {/* Payroll Batch */}
+            {canApprove("payroll") && (
+              <button
+                onClick={() => setFilter(filter === "payroll" ? "all" : "payroll")}
+                className={`p-4 rounded-2xl border text-left transition-all ${
+                  filter === "payroll"
+                    ? "bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-500/20 shadow-sm"
+                    : "bg-white border-slate-200 hover:border-slate-300 shadow-xs"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                    <DollarSign size={16} />
+                  </div>
+                  <span className="text-base font-black text-emerald-900">
+                    {pendingCounts.payroll || items.filter(i => i.type === "payroll").length}
+                  </span>
+                </div>
+                <div className="text-xs font-bold text-slate-800">Payroll</div>
+                <div className="text-[10px] text-slate-400">Batch Gaji Bulanan</div>
+              </button>
+            )}
           </div>
 
           {/* Search and Category Filter Pills */}
@@ -1298,6 +1348,18 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
                   }`}
                 >
                   Pulang Awal
+                </button>
+              )}
+              {canApprove("payroll") && (
+                <button
+                  onClick={() => setFilter("payroll")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    filter === "payroll"
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Payroll
                 </button>
               )}
             </div>

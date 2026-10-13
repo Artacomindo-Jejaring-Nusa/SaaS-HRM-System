@@ -23,6 +23,7 @@ class ApprovalService
         'task' => 'Pemberian & Verifikasi Tugas',
         'vehicle_log' => 'Peminjaman Kendaraan',
         'performance_review' => 'Evaluasi Kinerja',
+        'payroll' => 'Penggajian (Payroll)',
     ];
 
     public const CAT_ATTENDANCE = 'Kehadiran & Waktu';
@@ -99,6 +100,13 @@ class ApprovalService
             'category' => 'SDM & Karir',
             'icon' => 'Award',
             'description' => 'Persetujuan berjenjang atas hasil penilaian performa kerja.',
+            'default_layers' => 2,
+        ],
+        'payroll' => [
+            'name' => 'Penggajian (Payroll)',
+            'category' => 'Keuangan',
+            'icon' => 'DollarSign',
+            'description' => 'Persetujuan berjenjang atas batch penggajian (payroll) sebelum pembayaran transfer gaji.',
             'default_layers' => 2,
         ],
     ];
@@ -493,6 +501,7 @@ class ApprovalService
             'task' => 'manage-tasks',
             'vehicle_log' => 'approve-vehicle-logs',
             'performance_review' => 'manage-performance-reviews',
+            'payroll' => 'approve-payroll',
             default => null,
         };
     }
@@ -528,9 +537,9 @@ class ApprovalService
             return false;
         }
 
-        // Must belong to the same company (or can access all companies)
-        if ($approver->company_id !== $companyId && ! (method_exists($approver, 'canAccessAllCompanies') && $approver->canAccessAllCompanies())) {
-            return false;
+        // Super Admin (Master Admin Role ID 1) memiliki wewenang override / persetujuan darurat di tahap mana pun
+        if ($approver->role_id === 1 || (method_exists($approver, 'canAccessAllCompanies') && $approver->canAccessAllCompanies())) {
+            return true;
         }
 
         $resolvedModuleKey = $moduleKey ?: ($step->workflow->module_key ?? '');

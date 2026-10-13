@@ -32,14 +32,19 @@ class ApprovalTimelineService
 
             $timelineSteps[] = [
                 'step_number' => $st->step_number,
+                'step_order' => $st->step_number,
                 'name' => ApprovalService::getStepLabel($st),
                 'label' => ApprovalService::getStepLabel($st),
                 'approver_type' => $st->approver_type,
+                'approver_role' => $st->role?->name ?? $st->approver_type,
+                'approver_name' => $approverCandidates[0] ?? null,
                 'approver_candidates' => $approverCandidates,
+                'candidate_approvers' => $approverCandidates,
                 'status' => $stepStatus,
                 'is_current' => $isCurrent,
                 'sla_hours' => $st->sla_hours,
-                'remark' => $isCurrent ? $remark : null,
+                'remark' => $remark,
+                'notes' => $remark,
             ];
         }
 

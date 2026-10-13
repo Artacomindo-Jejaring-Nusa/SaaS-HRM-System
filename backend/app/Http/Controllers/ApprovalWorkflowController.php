@@ -535,6 +535,19 @@ class ApprovalWorkflowController extends Controller
                 ]);
                 break;
 
+            case 'payroll':
+                $item = \App\Models\PayrollBatch::findOrFail($request->target_id);
+                $payrollStatus = $action === 'approve' ? 'approved' : 'rejected';
+                $item->update([
+                    'status' => $payrollStatus,
+                    'current_approval_step' => null,
+                    'approved_by' => $action === 'approve' ? $user->id : null,
+                    'approved_at' => $action === 'approve' ? now() : null,
+                    'rejection_note' => $action === 'reject' ? $reason : null,
+                ]);
+                \App\Models\Salary::where('batch_id', $item->id)->update(['status' => $payrollStatus]);
+                break;
+
             default:
                 return $this->errorResponse("Modul '{$request->module_key}' belum mendukung override instan.", 400);
         }
@@ -590,15 +603,26 @@ class ApprovalWorkflowController extends Controller
      */
     public function getRequestTimeline(Request $request)
     {
-        $request->validate([
-            'module' => 'required|string',
-            'id' => 'required|integer',
-        ]);
+        $module = $request->input('module') ?? $request->input('type');
+        if (! $module) {
+            return $this->errorResponse('Parameter module atau type wajib disertakan.', 422);
+        }
 
         $user = $request->user();
         $companyId = $user->company_id;
-        $module = $request->module;
-        $id = (int) $request->id;
+        $id = $request->filled('id') ? (int) $request->id : null;
+
+        // Draft preview mode (when id is not yet created)
+        if (! $id) {
+            $timeline = ApprovalService::getApprovalTimeline(
+                $module,
+                $companyId ?? 1,
+                $user,
+                1,
+                'draft'
+            );
+            return $this->successResponse($timeline, 'Tahap alur persetujuan default berhasil dimuat.');
+        }
 
         $model = match ($module) {
             'leave' => \App\Models\Leave::with(['user.supervisor', 'user.role'])->find($id),
@@ -610,6 +634,7 @@ class ApprovalWorkflowController extends Controller
             'shift_swap' => \App\Models\ShiftSwap::with(['requester.supervisor', 'requester.role', 'receiver'])->find($id),
             'vehicle_log' => \App\Models\VehicleLog::with(['user.supervisor', 'user.role'])->find($id),
             'task' => \App\Models\Task::with(['user.supervisor', 'user.role'])->find($id),
+            'payroll' => \App\Models\PayrollBatch::with(['creator.role'])->find($id),
             default => null,
         };
 
@@ -617,7 +642,12 @@ class ApprovalWorkflowController extends Controller
             return $this->errorResponse('Data permohonan tidak ditemukan.', 404);
         }
 
-        $submitter = $module === 'shift_swap' ? $model->requester : $model->user;
+        $submitter = match ($module) {
+            'shift_swap' => $model->requester,
+            'payroll' => $model->creator ?? $user,
+            default => $model->user ?? $user,
+        };
+
         if (! $submitter) {
             return $this->errorResponse('Data pemohon tidak ditemukan.', 404);
         }

@@ -94,18 +94,17 @@ class User extends Authenticatable
 
     public function canAccessManagerPortal(): bool
     {
-        if ($this->role_id === 1) {
-            return true;
-        }
-
         // 1. Explicit override in database: true/1 = Force Enabled, false/0 = Force Disabled
         if (isset($this->attributes['can_access_manager_portal']) && $this->attributes['can_access_manager_portal'] !== null) {
             return (bool) $this->attributes['can_access_manager_portal'];
         }
 
-        // 2. Default: evaluate role permissions or subordinates
-        return $this->hasApprovalPermissions()
-            || $this->subordinates()->exists();
+        if ($this->role_id === 1 || ($this->role && strtolower($this->role->name) === 'super admin')) {
+            return true;
+        }
+
+        // 2. Default: evaluate approval permissions given by Super Admin
+        return $this->hasApprovalPermissions();
     }
 
     private function hasApprovalPermissions(): bool
@@ -114,7 +113,7 @@ class User extends Authenticatable
             'view-manager-portal', 'manage-approvals', 'view-approvals', 'approve-leaves', 'approve-permits',
             'approve-overtimes', 'approve-reimbursements', 'approve-fund-requests',
             'approve-vehicle-logs', 'approve-shift-swaps', 'approve-project-costs', 'approve-payroll',
-            'manage-attendance-corrections', 'approve-attendance-corrections',
+            'approve-attendance-corrections',
         ];
 
         foreach ($permissions as $perm) {

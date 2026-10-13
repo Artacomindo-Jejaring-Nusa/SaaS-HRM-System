@@ -269,4 +269,27 @@ class ShiftSwapController extends Controller
             $fileName
         );
     }
+
+    public function destroy(Request $request, $id)
+    {
+        $user = $request->user();
+        $swap = ShiftSwap::where('company_id', $user->company_id)->findOrFail($id);
+
+        $isOwner = $swap->requester_id === $user->id;
+        $isSuperAdmin = $user->hasRole('Super Admin')
+            || $user->canAccessAllCompanies()
+            || $user->hasPermission('approve-shift-swaps');
+
+        if (! $isOwner && ! $isSuperAdmin) {
+            return response()->json(['status' => 'error', 'message' => 'Anda tidak memiliki hak untuk membatalkan pengajuan ini.'], 403);
+        }
+
+        if (! in_array($swap->status, ['pending_receiver', 'pending_manager'])) {
+            return response()->json(['status' => 'error', 'message' => 'Pengajuan tukar shift yang sudah diproses tidak dapat dibatalkan.'], 400);
+        }
+
+        $swap->delete();
+
+        return response()->json(['status' => 'success', 'message' => 'Pengajuan tukar shift berhasil dibatalkan.']);
+    }
 }

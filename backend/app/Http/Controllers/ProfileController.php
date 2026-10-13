@@ -23,69 +23,25 @@ class ProfileController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'phone' => 'nullable|string|max:20',
+            'email' => 'nullable|email|max:255|unique:users,email,'.$user->id,
             'address' => 'nullable|string',
+            'nik' => 'nullable|string|max:50',
         ]);
 
-        $sensitiveFields = ['email', 'phone', 'nik'];
-        $directFields = ['name', 'address'];
-
-        // 1. Handle Direct Updates
-        $user->update($request->only($directFields));
-
-        // 2. Detect Sensitive Changes
-        $newData = $request->only($sensitiveFields);
-        $changes = [];
-
-        foreach ($newData as $key => $value) {
-            if ($value && $value != $user->$key) {
-                $changes[$key] = $value;
-            }
+        $updatableFields = ['name', 'phone', 'address'];
+        if ($request->filled('email')) {
+            $updatableFields[] = 'email';
+        }
+        if ($request->filled('nik') && ($user->role_id === 1 || empty($user->nik))) {
+            $updatableFields[] = 'nik';
         }
 
-        if (! empty($changes)) {
-            // Create a request for sensitive fields
-            ProfileRequest::create([
-                'user_id' => $user->id,
-                'company_id' => $user->company_id,
-                'old_data' => $user->only(array_keys($changes)),
-                'new_data' => $changes,
-                'status' => 'pending',
-            ]);
-
-            // Notify user
-            $this->notify(
-                $user,
-                'PENGAJUAN PERUBAHAN PROFIL',
-                'Permohonan perubahan data profil Anda sedang menunggu persetujuan admin.',
-                'info'
-            );
-
-            // Notify Admins and HR
-            $adminRoles = Role::whereIn('name', ['Super Admin', 'HRD', 'Manager', 'Management'])->pluck('id');
-
-            $admins = User::where('company_id', $user->company_id)
-                ->whereIn('role_id', $adminRoles)
-                ->get();
-
-            foreach ($admins as $admin) {
-                $this->notify(
-                    $admin,
-                    'PERUBAHAN PROFIL BARU',
-                    "{$user->name} telah mengajukan perubahan data profil sensitif (NIK/Email/Telepon).",
-                    'warning',
-                    '/dashboard/profile-requests' // Link to approval page
-                );
-            }
-
-            return $this->successResponse([
-                'user' => $user->fresh()->load('role.permissions'),
-                'needs_approval' => true,
-            ], 'Profil diperbarui, namun perubahan nomor telepon/email memerlukan persetujuan admin.');
-        }
+        $user->update($request->only($updatableFields));
 
         return $this->successResponse([
-            'user' => $user->fresh()->load('role'),
-        ], 'Profil berhasil diperbarui');
+            'user' => $user->fresh()->load('role.permissions'),
+            'needs_approval' => false,
+        ], 'Data profil berhasil diperbarui langsung tanpa memerlukan persetujuan.');
     }
 
     public function uploadPhoto(Request $request)

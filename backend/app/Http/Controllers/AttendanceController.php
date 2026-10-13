@@ -520,11 +520,15 @@ class AttendanceController extends Controller
             return ['message' => 'Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli perangkat Anda.', 'code' => 403];
         }
 
+        $isSuperAdmin = $user->role_id === 1 || (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies());
+
         if ($request->device_id) {
             if (! $user->device_id) {
                 $user->update(['device_id' => $request->device_id]);
             } elseif ($user->device_id !== $request->device_id) {
-                return ['message' => 'HP Anda tidak terdaftar. Mohon hubungi Admin untuk reset Device ID.', 'code' => 403];
+                if (! $isSuperAdmin) {
+                    return ['message' => 'HP Anda tidak terdaftar. Mohon hubungi Admin untuk reset Device ID.', 'code' => 403];
+                }
             }
         }
 

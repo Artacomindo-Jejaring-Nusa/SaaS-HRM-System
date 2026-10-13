@@ -506,6 +506,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     // Shift Swap (Tukar Shift)
     Route::get('/shift-swap', [ShiftSwapController::class, 'index']);
     Route::post('/shift-swap', [ShiftSwapController::class, 'store']);
+    Route::delete('/shift-swap/{id}', [ShiftSwapController::class, 'destroy']);
     Route::post('/shift-swap/{id}/respond', [ShiftSwapController::class, 'respond']);
     Route::middleware('permission:view-shift-swap-reports')->get('/shift-swap/report', [ShiftSwapController::class, 'report']);
     Route::middleware('permission:export-shift-swaps')->get('/shift-swap/export', [ShiftSwapController::class, 'export']);

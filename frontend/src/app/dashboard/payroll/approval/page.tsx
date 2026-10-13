@@ -50,6 +50,9 @@ interface PayrollBatch {
   total_deductions: number | string;
   total_net: number | string;
   status: "draft" | "pending_approval" | "approved" | "rejected" | "paid";
+  current_approval_step?: number | null;
+  current_step_info?: Record<string, any>;
+  can_user_approve?: boolean;
   created_at: string;
   submitted_at?: string;
   approved_at?: string;
@@ -135,7 +138,7 @@ function PayrollBatchCard(props: Readonly<PayrollBatchCardProps>) {
     <div className="bg-white rounded-3xl border border-gray-100 p-6 md:p-8 shadow-sm hover:shadow-md transition-all space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-6">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-2xl font-black text-gray-900">
               Periode {batch.period_month} {batch.period_year}
             </h2>
@@ -144,6 +147,11 @@ function PayrollBatchCard(props: Readonly<PayrollBatchCardProps>) {
             >
               {statusBadge.label}
             </span>
+            {batch.current_step_info && (
+              <span className="px-3 py-1 text-[11px] font-bold rounded-xl bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1 shadow-xs">
+                <span>📍 {batch.current_step_info.step_label || `Tahap ${batch.current_approval_step}`}</span>
+              </span>
+            )}
           </div>
           <p className="text-xs text-gray-400 font-medium mt-1">
             Diajukan oleh: <strong className="text-gray-700">{batch.creator?.name || "HR Officer"}</strong> • {batch.total_employees} Karyawan Terdaftar
@@ -166,7 +174,7 @@ function PayrollBatchCard(props: Readonly<PayrollBatchCardProps>) {
             <Eye size={14} /> Lihat Detail Karyawan
           </button>
 
-          {canApprove && batch.status === "pending_approval" && (
+          {(batch.can_user_approve !== undefined ? batch.can_user_approve : canApprove) && batch.status === "pending_approval" && (
             <>
               <button
                 onClick={() => onOpenReject(batch.id)}

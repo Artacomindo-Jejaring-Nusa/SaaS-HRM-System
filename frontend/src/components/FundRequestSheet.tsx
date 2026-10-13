@@ -111,23 +111,69 @@ export const calculateTotal = (items: FundRequestItem[]): number => {
   }, 0);
 };
 
+export const renderStampBadge = (
+  isApproved: boolean,
+  isPending: boolean,
+  isRejected: boolean,
+  label = "APPROVED ✓",
+  approvedAt?: string | null
+) => {
+  if (isApproved) {
+    return (
+      <div className="flex flex-col items-center justify-center">
+        <div className="border-2 border-emerald-600 bg-emerald-50/90 text-emerald-700 px-2 py-0.5 rounded font-black text-[8px] uppercase tracking-wider shadow-xs">
+          {label}
+        </div>
+        {approvedAt && (
+          <span className="text-[6.5px] text-emerald-700 font-bold mt-0.5">
+            {new Date(approvedAt).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+          </span>
+        )}
+      </div>
+    );
+  }
+  if (isRejected) {
+    return (
+      <div className="border-2 border-red-600 bg-red-50 text-red-700 px-2 py-0.5 rounded font-black text-[8px] uppercase tracking-wider">
+        REJECTED ✗
+      </div>
+    );
+  }
+  if (isPending) {
+    return (
+      <div className="border border-dashed border-amber-500 bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded font-bold text-[7px] uppercase animate-pulse">
+        MENUNGGU ACC
+      </div>
+    );
+  }
+  return <span className="text-gray-400 italic text-[7px]">— Menunggu Giliran —</span>;
+};
+
 export const renderSignatureStatus = (
   status: string | undefined, 
-  type: 'hrd' | 'spv',
+  type: 'hrd' | 'spv' | 'dirut',
   currentStep?: number | null,
   supervisorApprovedAt?: string | null,
   hrdApprovedAt?: string | null
 ) => {
-  if (status === 'approved' || hrdApprovedAt) {
-    return <div className="inline-block border-2 border-green-600 text-green-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-green-50/50">VERIFIED</div>;
+  const isRejected = status === 'rejected';
+
+  if (type === 'spv') {
+    const isApproved = status === 'approved' || status === 'approved_by_supervisor' || (Boolean(currentStep) && Number(currentStep) > 1) || Boolean(supervisorApprovedAt);
+    const isPending = !isApproved && !isRejected && (status === 'pending' || currentStep === 1);
+    return renderStampBadge(isApproved, isPending, isRejected, "APPROVED ✓", supervisorApprovedAt);
   }
-  if (type === 'spv' && (status === 'approved_by_supervisor' || (currentStep && currentStep > 1) || supervisorApprovedAt)) {
-    return <div className="inline-block border-2 border-blue-600 text-blue-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-blue-50/50">ACC SPV</div>;
+
+  if (type === 'hrd') {
+    const isApproved = status === 'approved' || Boolean(hrdApprovedAt) || (Boolean(currentStep) && Number(currentStep) > 2);
+    const isPending = !isApproved && !isRejected && (status === 'approved_by_supervisor' || currentStep === 2);
+    return renderStampBadge(isApproved, isPending, isRejected, "APPROVED ✓", hrdApprovedAt);
   }
-  if (status === 'rejected') {
-    return <div className="inline-block border-2 border-red-600 text-red-600 rounded px-2 py-0.5 font-bold text-[8px] uppercase bg-red-50/50">REJECTED</div>;
-  }
-  return <span className="text-gray-400 italic text-[7px]">— Belum Disetujui —</span>;
+
+  // dirut / final
+  const isApproved = status === 'approved';
+  const isPending = !isApproved && !isRejected && currentStep === 3;
+  return renderStampBadge(isApproved, isPending, isRejected, "APPROVED ✓");
 };
 
 export const renderPriorityBoxes = (priority: string, isDetailView: boolean) => {
@@ -364,49 +410,62 @@ export const FundRequestSheetInner = ({
         </div>
       </div>
 
-      <div className="border border-black rounded-sm overflow-hidden">
-        <div className="grid grid-cols-4 border-b border-black text-center font-bold text-black bg-gray-100/80 text-[8px] py-1 uppercase">
-          <div className="border-r border-black">DIRUT</div>
-          <div className="border-r border-black">FINANCE</div>
-          <div className="border-r border-black">UNIT HEAD</div>
-          <div>REQUESTER</div>
+      <div className="border border-black rounded-sm overflow-hidden bg-white">
+        <div className="grid grid-cols-4 border-b border-black text-center font-bold text-black bg-gray-100/90 text-[8px] py-1 uppercase tracking-wider">
+          <div className="border-r border-black">1. PEMOHON</div>
+          <div className="border-r border-black">2. ATASAN LANGSUNG</div>
+          <div className="border-r border-black">3. FINANCE / HRD</div>
+          <div>4. DIREKTUR UTAMA</div>
         </div>
         <div className="grid grid-cols-4 text-center">
-          <div className="border-r border-black p-2 flex flex-col justify-between min-h-[60px] items-center">
-            <div className="h-10 flex items-center justify-center w-full">
-              {renderSignatureStatus(status, 'hrd', currentStep, supervisorApprovedAt, hrdApprovedAt)}
-            </div>
-            <div className={`border-t border-dotted border-gray-400 w-full pt-0.5 text-gray-500 italic ${styles.sizeSigName}`}>
-              Direktur Utama
-            </div>
-          </div>
-          <div className="border-r border-black p-2 flex flex-col justify-between min-h-[60px] items-center">
-            <div className="h-10 flex items-center justify-center w-full">
-              {renderSignatureStatus(status, 'spv', currentStep, supervisorApprovedAt, hrdApprovedAt)}
-            </div>
-            <div className={`border-t border-dotted border-gray-400 w-full pt-0.5 text-gray-500 italic ${styles.sizeSigName}`}>
-              Pending Accounting
-            </div>
-          </div>
-          <div className="border-r border-black p-2 flex flex-col justify-between min-h-[60px] items-center">
-            <div className="h-10 flex items-center justify-center w-full">
-              {renderSignatureStatus(status, 'spv', currentStep, supervisorApprovedAt, hrdApprovedAt)}
-            </div>
-            <div className={`border-t border-dotted border-gray-400 w-full pt-0.5 text-gray-500 italic ${styles.sizeSigName}`}>
-              Pending Unit Head
-            </div>
-          </div>
-          <div className="p-2 flex flex-col justify-between min-h-[60px] items-center">
+          {/* 1. PEMOHON / REQUESTER */}
+          <div className="border-r border-black p-2 flex flex-col justify-between min-h-[64px] items-center">
             <div className="h-10 flex items-center justify-center w-full">
               {signature ? (
                 <img src={signature} alt="Tanda Tangan Pengaju" className={`${styles.sizeSigImg} object-contain`} />
               ) : (
-                <span className="text-gray-400 italic text-[7px]">— Belum TTD —</span>
+                <div className="border border-emerald-600 bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold text-[7px] uppercase">
+                  VERIFIED DIGITAL
+                </div>
               )}
             </div>
             <div className={`border-t border-dotted border-gray-400 w-full pt-0.5 text-black font-bold truncate ${styles.sizeSigName}`}>
-              {employee_name || 'PROCUREMENT'}
+              ( {employee_name || 'PEMOHON'} )
             </div>
+            <div className="text-[6.5px] text-gray-500 italic">Pemohon</div>
+          </div>
+
+          {/* 2. ATASAN LANGSUNG / SPV */}
+          <div className="border-r border-black p-2 flex flex-col justify-between min-h-[64px] items-center">
+            <div className="h-10 flex items-center justify-center w-full">
+              {renderSignatureStatus(status, 'spv', currentStep, supervisorApprovedAt, hrdApprovedAt)}
+            </div>
+            <div className={`border-t border-dotted border-gray-400 w-full pt-0.5 text-gray-700 font-semibold italic ${styles.sizeSigName}`}>
+              ( Atasan Langsung )
+            </div>
+            <div className="text-[6.5px] text-gray-500 italic">Verifikator Tahap 1</div>
+          </div>
+
+          {/* 3. FINANCE & ACCOUNTING / HRD */}
+          <div className="border-r border-black p-2 flex flex-col justify-between min-h-[64px] items-center">
+            <div className="h-10 flex items-center justify-center w-full">
+              {renderSignatureStatus(status, 'hrd', currentStep, supervisorApprovedAt, hrdApprovedAt)}
+            </div>
+            <div className={`border-t border-dotted border-gray-400 w-full pt-0.5 text-gray-700 font-semibold italic ${styles.sizeSigName}`}>
+              ( Finance & Accounting )
+            </div>
+            <div className="text-[6.5px] text-gray-500 italic">Verifikator Tahap 2</div>
+          </div>
+
+          {/* 4. DIREKTUR UTAMA */}
+          <div className="p-2 flex flex-col justify-between min-h-[64px] items-center">
+            <div className="h-10 flex items-center justify-center w-full">
+              {renderSignatureStatus(status, 'dirut', currentStep, supervisorApprovedAt, hrdApprovedAt)}
+            </div>
+            <div className={`border-t border-dotted border-gray-400 w-full pt-0.5 text-gray-700 font-semibold italic ${styles.sizeSigName}`}>
+              ( Direktur Utama )
+            </div>
+            <div className="text-[6.5px] text-gray-500 italic">Penyetuju Akhir</div>
           </div>
         </div>
       </div>

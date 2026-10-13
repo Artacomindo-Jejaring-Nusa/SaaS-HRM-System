@@ -169,6 +169,13 @@ class ApiService {
           Map<String, dynamic> data) =>
       LeaveRepository.submitLeave(data);
 
+  static Future<Map<String, dynamic>> updateLeave(
+          int id, Map<String, dynamic> data) =>
+      LeaveRepository.updateLeave(id, data);
+
+  static Future<Map<String, dynamic>> deleteLeave(int id) =>
+      LeaveRepository.deleteLeave(id);
+
   // ============ PERMITS (PERIZINAN) ============
 
   static Future<List<dynamic>?> getPermits() => PermitRepository.getPermits();
@@ -176,6 +183,13 @@ class ApiService {
   static Future<Map<String, dynamic>> submitPermit(
           Map<String, dynamic> data) =>
       PermitRepository.submitPermit(data);
+
+  static Future<Map<String, dynamic>> updatePermit(
+          int id, Map<String, dynamic> data) =>
+      PermitRepository.updatePermit(id, data);
+
+  static Future<Map<String, dynamic>> deletePermit(int id) =>
+      PermitRepository.deletePermit(id);
 
   // ============ OVERTIME (LEMBUR) ============
 
@@ -239,6 +253,15 @@ class ApiService {
           {List<String>? filePaths}) =>
       ReimbursementRepository.submitReimbursement(data, filePaths: filePaths);
 
+  static Future<Map<String, dynamic>> updateReimbursement(
+          int id, Map<String, String> data,
+          {List<String>? filePaths}) =>
+      ReimbursementRepository.updateReimbursement(id, data,
+          filePaths: filePaths);
+
+  static Future<Map<String, dynamic>> deleteReimbursement(int id) =>
+      ReimbursementRepository.deleteReimbursement(id);
+
   // ============ SETTINGS ============
 
   static Future<Map<String, dynamic>> changePassword(
@@ -283,6 +306,9 @@ class ApiService {
   static Future<Map<String, dynamic>> submitShiftSwap(
           Map<String, dynamic> data) =>
       ShiftSwapRepository.submitShiftSwap(data);
+
+  static Future<Map<String, dynamic>> deleteShiftSwap(int id) =>
+      ShiftSwapRepository.deleteShiftSwap(id);
 
   static Future<Map<String, dynamic>> respondShiftSwap(int id, String status,
           {String? remark}) =>
@@ -359,9 +385,15 @@ class ApiService {
 
   static Future<Map<String, dynamic>> submitFundRequest(
           Map<String, dynamic> data,
-          {String? attachmentPath}) =>
+          {String? attachmentPath, List<String>? filePaths}) =>
       FundRequestRepository.submitFundRequest(data,
-          attachmentPath: attachmentPath);
+          attachmentPath: attachmentPath, filePaths: filePaths);
+
+  static Future<Map<String, dynamic>> updateFundRequest(
+          int id, Map<String, dynamic> data,
+          {String? attachmentPath, List<String>? filePaths}) =>
+      FundRequestRepository.updateFundRequest(id, data,
+          attachmentPath: attachmentPath, filePaths: filePaths);
 
   static Future<Map<String, dynamic>> deleteFundRequest(int id) =>
       FundRequestRepository.deleteFundRequest(id);

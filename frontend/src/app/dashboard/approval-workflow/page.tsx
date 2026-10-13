@@ -425,6 +425,26 @@ function defaultFlowData(selected: string, activeModule?: WorkflowModule | null)
     };
   }
 
+  if (selected === "payroll") {
+    return {
+      nodes: [
+        { id: "submit", x: 40, y: 100, label: "Pengajuan Payroll", sub: "Generate & Submit Batch", type: "trigger", icon: "💵" },
+        { id: "mgr", x: 290, y: 100, label: "Pemeriksaan (Step 1)", sub: "Finance / HR Manager", type: "supervisor", icon: "👔" },
+        { id: "dir", x: 540, y: 100, label: "Persetujuan (Step 2)", sub: "Direktur / Super Admin", type: "super_admin", icon: "🛡️" },
+        { id: "ok", x: 790, y: 100, label: "Payroll Disetujui", sub: "Siap Dicairkan / Dibayar", type: "approved", icon: "✅" },
+        { id: "no1", x: 290, y: 270, label: "Ditolak (Tahap 1)", sub: "Revisi Batch", type: "rejected", icon: "❌" },
+        { id: "no2", x: 540, y: 270, label: "Ditolak (Tahap 2)", sub: "Revisi Batch", type: "rejected", icon: "❌" },
+      ],
+      edges: [
+        { id: "e1", from: "submit", to: "mgr", color: "#3b82f6", animated: true },
+        { id: "e2", from: "mgr", to: "dir", label: "Approve", color: "#10b981", animated: true },
+        { id: "e3", from: "mgr", to: "no1", label: "Reject", color: "#ef4444" },
+        { id: "e4", from: "dir", to: "ok", label: "Approve", color: "#10b981", animated: true },
+        { id: "e5", from: "dir", to: "no2", label: "Reject", color: "#ef4444" },
+      ],
+    };
+  }
+
   const defaultTitle = activeModule?.label || "Pengajuan";
   return {
     nodes: [

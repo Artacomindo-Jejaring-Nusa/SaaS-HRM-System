@@ -654,6 +654,59 @@ class _OvertimeScreenState extends State<OvertimeScreen> {
                           ),
                         ),
                       ],
+                      if (status == 'draft' || status == 'pending') ...[
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  _deleteOvertime(overtime['id'], isDraft: status == 'draft');
+                                },
+                                icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                                label: Text(
+                                  status == 'draft' ? "HAPUS DRAF" : "BATALKAN",
+                                  style: GoogleFonts.inter(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: Colors.red.shade300),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => OvertimeFormScreen(
+                                        userProfile: _userProfile,
+                                        existingOvertime: overtime,
+                                        onSubmitted: _fetchData,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.edit, size: 16, color: Colors.white),
+                                label: Text(
+                                  "EDIT PENGAJUAN",
+                                  style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue.shade700,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 16),
                     ],
                   ),
@@ -666,17 +719,24 @@ class _OvertimeScreenState extends State<OvertimeScreen> {
     );
   }
 
-  Future<void> _deleteOvertime(int id) async {
+  Future<void> _deleteOvertime(int id, {bool isDraft = false}) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Hapus Draf"),
-        content: const Text("Apakah Anda yakin ingin menghapus draf pengajuan lembur ini?"),
+        title: Text(
+          isDraft ? "Hapus Draf" : "Batalkan Pengajuan Lembur",
+          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          isDraft
+              ? "Apakah Anda yakin ingin menghapus draf pengajuan lembur ini?"
+              : "Apakah Anda yakin ingin membatalkan/menghapus pengajuan lembur ini?",
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Batal")),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Tidak")),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Hapus", style: TextStyle(color: Colors.red)),
+            child: Text(isDraft ? "Hapus" : "Ya, Batalkan", style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -684,18 +744,21 @@ class _OvertimeScreenState extends State<OvertimeScreen> {
 
     if (confirm != true) return;
 
-    LoadingDialog.show(context, message: "Menghapus draf...");
+    LoadingDialog.show(context, message: isDraft ? "Menghapus draf..." : "Membatalkan lembur...");
     try {
       final res = await ApiService.deleteOvertime(id);
       LoadingDialog.hide(context);
       if (res['status'] == 'success') {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Draf berhasil dihapus"), backgroundColor: Colors.green),
+          SnackBar(
+            content: Text(isDraft ? "Draf berhasil dihapus" : "Pengajuan lembur berhasil dibatalkan"),
+            backgroundColor: Colors.green,
+          ),
         );
         _fetchData();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res['message'] ?? "Gagal menghapus draf"), backgroundColor: Colors.red),
+          SnackBar(content: Text(res['message'] ?? "Gagal memproses"), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
@@ -827,11 +890,12 @@ class _OvertimeScreenState extends State<OvertimeScreen> {
                                           Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              if (rawStatus == 'draft') ...[
+                                              if (rawStatus == 'draft' || rawStatus == 'pending') ...[
                                                 IconButton(
                                                   constraints: const BoxConstraints(),
-                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                                                   icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                                                  tooltip: 'Edit Pengajuan',
                                                   onPressed: () {
                                                     Navigator.push(
                                                       context,
@@ -847,11 +911,13 @@ class _OvertimeScreenState extends State<OvertimeScreen> {
                                                 ),
                                                 IconButton(
                                                   constraints: const BoxConstraints(),
-                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                                                   icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                                                  onPressed: () => _deleteOvertime(ot['id']),
+                                                  tooltip: rawStatus == 'draft' ? 'Hapus Draf' : 'Batalkan Lembur',
+                                                  onPressed: () => _deleteOvertime(ot['id'], isDraft: rawStatus == 'draft'),
                                                 ),
-                                              ] else if (rawStatus != 'rejected') ...[
+                                              ],
+                                              if (rawStatus != 'rejected' && rawStatus != 'draft') ...[
                                                 Row(
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
@@ -1558,7 +1624,10 @@ class _OvertimeFormScreenState extends State<OvertimeFormScreen> {
 
     // Submitting requires a signature and filled items
     if (!isDraft) {
-      if (_sigController.isEmpty) {
+      final hasExistingSig = widget.existingOvertime != null && 
+          widget.existingOvertime!['signature'] != null && 
+          widget.existingOvertime!['signature'].toString().isNotEmpty;
+      if (_sigController.isEmpty && !hasExistingSig) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Tanda tangan wajib diisi"), backgroundColor: Colors.red),
         );
@@ -1613,6 +1682,8 @@ class _OvertimeFormScreenState extends State<OvertimeFormScreen> {
 
       if (base64Sig != null) {
         payload['signature'] = base64Sig;
+      } else if (widget.existingOvertime != null && widget.existingOvertime!['signature'] != null) {
+        payload['signature'] = widget.existingOvertime!['signature'];
       }
 
       final Map<String, dynamic> res;

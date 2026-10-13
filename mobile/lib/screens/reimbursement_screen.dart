@@ -3,7 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../api/api_service.dart';
 import '../../widgets/skeleton_loading.dart';
+import '../../widgets/loading_overlay.dart';
 import 'reimbursement_form_screen.dart';
+import '../widgets/animated_helpers.dart';
 
 
 class ReimbursementScreen extends StatefulWidget {
@@ -65,6 +67,48 @@ class _ReimbursementScreenState extends State<ReimbursementScreen> {
     );
   }
 
+  Future<void> _deleteClaim(int id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Batalkan Klaim", style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+        content: const Text("Apakah Anda yakin ingin membatalkan/menghapus pengajuan klaim ini?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Tidak")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Ya, Batalkan", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    LoadingDialog.show(context, message: "Membatalkan klaim...");
+    try {
+      final res = await ApiService.deleteReimbursement(id);
+      if (!mounted) return;
+      LoadingDialog.hide(context);
+      if (res['status'] == 'success') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Pengajuan klaim berhasil dibatalkan"), backgroundColor: Colors.green),
+        );
+        _fetchClaims();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message'] ?? "Gagal membatalkan klaim"), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      LoadingDialog.hide(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -88,23 +132,49 @@ class _ReimbursementScreenState extends State<ReimbursementScreen> {
               child: _claims.isEmpty
                   ? _buildEmptyState()
                   : ListView.builder(
-                      padding: const EdgeInsets.all(20),
+                      physics: const BouncingScrollPhysics(),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: ResponsiveHelper.padding(context, 16),
+                        vertical: 16,
+                      ),
                       itemCount: _claims.length,
-                      itemBuilder: (context, index) =>
-                          _buildClaimCard(_claims[index]),
+                      itemBuilder: (context, index) => AnimatedListItem(
+                        index: index,
+                        child: _buildClaimCard(_claims[index]),
+                      ),
                     ),
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: primaryColor,
-        onPressed: _showAddDialog,
-        label: Text(
-          "AJUKAN KLAIM",
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+      floatingActionButton: ScaleOnTap(
+        onTap: _showAddDialog,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          decoration: BoxDecoration(
+            color: primaryColor,
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: [
+              BoxShadow(
+                color: primaryColor.withOpacity(0.4),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.add_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 6),
+              Text(
+                "AJUKAN KLAIM",
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  fontSize: 12,
+                ),
+              ),
+            ],
           ),
         ),
-        icon: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
@@ -133,20 +203,33 @@ class _ReimbursementScreenState extends State<ReimbursementScreen> {
     if (priority.toLowerCase() == 'urgent') priorityColor = Colors.orange;
     if (priority.toLowerCase() == 'top urgent' || priority.toLowerCase() == 'top_urgent') priorityColor = Colors.red;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
+    return ScaleOnTap(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ReimbursementFormScreen(
+              employees: _employees,
+              existingClaim: claim,
+              onSubmitted: _fetchClaims,
+            ),
           ),
-        ],
-      ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 15),
+        padding: EdgeInsets.all(ResponsiveHelper.padding(context, 16)),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -161,6 +244,43 @@ class _ReimbursementScreenState extends State<ReimbursementScreen> {
               ),
               Row(
                 children: [
+                  if (status == 'pending') ...[
+                    IconButton(
+                      constraints: const BoxConstraints(),
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        Icons.edit_outlined,
+                        color: primaryColor,
+                        size: 20,
+                      ),
+                      tooltip: "Edit Klaim",
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ReimbursementFormScreen(
+                              employees: _employees,
+                              existingClaim: claim,
+                              onSubmitted: _fetchClaims,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      constraints: const BoxConstraints(),
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.red,
+                        size: 20,
+                      ),
+                      tooltip: "Batalkan Klaim",
+                      onPressed: () => _deleteClaim(claim['id']),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   if (status != 'rejected') ...[
                     IconButton(
                       constraints: const BoxConstraints(),
@@ -410,27 +530,73 @@ class _ReimbursementScreenState extends State<ReimbursementScreen> {
             ),
           ],
           if (claim['remark'] != null) ...[
-            const Divider(height: 30),
-            Text(
-              "Catatan Admin:",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: Colors.grey[800],
+            const Divider(height: 24),
+            if (claim['remark'].toString().contains('[Disetujui Super Admin'))
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber[300]!),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.shield_rounded, size: 16, color: Colors.amber[900]),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Otorisasi Super Admin",
+                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber[950]),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            claim['remark'].toString(),
+                            style: GoogleFonts.inter(fontSize: 10.5, color: Colors.amber[900]),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else ...[
+              Text(
+                "Catatan Admin:",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: Colors.grey[800],
+                ),
               ),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              claim['remark'],
-              style: TextStyle(
-                color: Colors.red[700],
-                fontStyle: FontStyle.italic,
-                fontSize: 12,
+              const SizedBox(height: 5),
+              Text(
+                claim['remark'],
+                style: TextStyle(
+                  color: Colors.red[700],
+                  fontStyle: FontStyle.italic,
+                  fontSize: 12,
+                ),
               ),
-            ),
+            ],
           ],
+          const Divider(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Ketuk untuk pratinjau formulir & tanda tangan",
+                style: GoogleFonts.inter(fontSize: 10, color: Colors.grey[500], fontStyle: FontStyle.italic),
+              ),
+              Icon(Icons.arrow_forward_ios_rounded, size: 11, color: Colors.grey[400]),
+            ],
+          ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }

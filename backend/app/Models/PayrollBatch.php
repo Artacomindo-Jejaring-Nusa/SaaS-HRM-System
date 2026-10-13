@@ -20,6 +20,7 @@ class PayrollBatch extends Model
         'total_deductions',
         'total_net',
         'status',
+        'current_approval_step',
         'created_by',
         'approved_by',
         'submitted_at',
@@ -29,6 +30,7 @@ class PayrollBatch extends Model
     ];
 
     protected $casts = [
+        'current_approval_step' => 'integer',
         'submitted_at' => 'datetime',
         'approved_at' => 'datetime',
     ];

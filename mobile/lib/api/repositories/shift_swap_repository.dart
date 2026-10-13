@@ -44,6 +44,19 @@ class ShiftSwapRepository {
     }
   }
 
+  static Future<Map<String, dynamic>> deleteShiftSwap(int id) async {
+    try {
+      final headers = await ApiClient.getHeaders();
+      final response = await ApiClient.client.delete(
+        Uri.parse('${ApiClient.baseUrl}/shift-swap/$id'),
+        headers: headers,
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'status': 'error', 'message': 'Koneksi gagal.'};
+    }
+  }
+
   static Future<Map<String, dynamic>> respondShiftSwap(
     int id,
     String status, {

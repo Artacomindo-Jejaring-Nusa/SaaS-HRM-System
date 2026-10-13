@@ -73,21 +73,35 @@ export const isSuperAdminUser = (u: any): boolean => {
 
 export const isManagerUser = (u: any, permissions: string[] = []): boolean => {
   if (!u) return false;
-  if (isSuperAdminUser(u)) {
-    return Boolean(u.can_access_manager_portal ?? true);
-  }
 
-  // 1. Explicit override in database: false = force disabled
-  if (u.can_access_manager_portal === false) {
+  // 1. Explicit override in database: false = force disabled by Super Admin
+  if (
+    u.can_access_manager_portal === false ||
+    u.can_access_manager_portal === 0 ||
+    u.can_access_manager_portal === "0"
+  ) {
     return false;
   }
 
-  // 2. Explicit override in database: true = force enabled
-  if (u.can_access_manager_portal === true) {
+  // 2. Explicit override in database: true = force enabled by Super Admin
+  if (
+    u.can_access_manager_portal === true ||
+    u.can_access_manager_portal === 1 ||
+    u.can_access_manager_portal === "1"
+  ) {
     return true;
   }
 
-  // 3. Dynamic permissions assigned to role/user (Super Admin configured)
+  if (isSuperAdminUser(u)) {
+    return true;
+  }
+
+  // 3. Authoritative backend attribute if present
+  if (typeof u.is_manager === "boolean") {
+    return u.is_manager;
+  }
+
+  // 4. Dynamic permissions assigned to role/user (Super Admin configured)
   const approvalPerms = new Set([
     'view-manager-portal',
     'manage-approvals',
@@ -102,7 +116,6 @@ export const isManagerUser = (u: any, permissions: string[] = []): boolean => {
     'approve-attendance-corrections',
     'approve-project-costs',
     'approve-payroll',
-    'manage-attendance-corrections'
   ]);
   
   return permissions.some(p => approvalPerms.has(p));

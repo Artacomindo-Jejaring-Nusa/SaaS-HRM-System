@@ -21,6 +21,7 @@ export type ApprovalType =
   | "dinas_luar" 
   | "fund_request"
   | "vehicle_log"
+  | "payroll"
   | "early_out";
 
 export interface OvertimeItemDetail {
@@ -100,6 +101,7 @@ export interface ApprovalTimelineStep {
   actor_name?: string | null;
   acted_at?: string | null;
   notes?: string | null;
+  remark?: string | null;
 }
 
 export interface ApprovalTimelineData {
@@ -158,6 +160,8 @@ export const getDocumentCode = (item: ApprovalItem) => {
       return `GA/F-LOG/${dateStr}/${idStr}`;
     case "dinas_luar":
       return `OPS/F-SPPD/${dateStr}/${idStr}`;
+    case "payroll":
+      return `PAY/F-BATCH/${dateStr}/${idStr}`;
     default:
       return `DOC/${dateStr}/${idStr}`;
   }
@@ -179,6 +183,8 @@ export const getFormTitle = (type?: string) => {
       return "LEMBAR PENGGUNAAN & LOGBOOK ARMADA DINAS";
     case "dinas_luar":
       return "SURAT TUGAS & LAPORAN DINAS LUAR KANTOR";
+    case "payroll":
+      return "BERITA ACARA & PERSETUJUAN BATCH PAYROLL";
     default:
       return "FORMULIR PENGAJUAN RESMI PERUSAHAAN";
   }
@@ -797,23 +803,50 @@ function ApprovalAuthorizationSection({ item, timeline }: ApprovalAuthorizationS
             const isLast = idx === timeline.steps.length - 1;
             const borderClass = isLast ? "" : "border-r-2 border-black";
 
+            const isSuperAdminOverride = Boolean(
+              st.status === "approved" &&
+              (st.notes?.includes("Disetujui Super Admin") ||
+               st.remark?.includes("Disetujui Super Admin") ||
+               st.actor_name?.toLowerCase().includes("super admin"))
+            );
+
             let stampBox;
             if (st.status === "approved") {
-              stampBox = (
-                <div className="border-2 border-emerald-600 text-emerald-700 bg-emerald-50/80 rounded px-2 py-0.5 font-black text-[9px] uppercase tracking-wider">
-                  ACC DISETUJUI ✓
-                </div>
-              );
+              if (isSuperAdminOverride) {
+                stampBox = (
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="border-2 border-purple-600 bg-purple-50 text-purple-900 rounded px-2 py-0.5 font-black text-[7.5px] uppercase tracking-wider shadow-xs">
+                      APPROVED (SUPER ADMIN) ✓
+                    </div>
+                    <span className="text-[6.5px] text-purple-700 font-bold mt-0.5">
+                      Override Otorisasi
+                    </span>
+                  </div>
+                );
+              } else {
+                stampBox = (
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="border-2 border-emerald-600 bg-emerald-50/90 text-emerald-800 rounded px-2.5 py-0.5 font-black text-[9px] uppercase tracking-widest shadow-xs">
+                      APPROVED ✓
+                    </div>
+                    {st.acted_at && (
+                      <span className="text-[7px] text-emerald-700 font-bold mt-0.5">
+                        {new Date(st.acted_at).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
+                );
+              }
             } else if (st.status === "rejected") {
               stampBox = (
-                <div className="border-2 border-red-600 text-red-700 bg-red-50/80 rounded px-2 py-0.5 font-black text-[9px] uppercase tracking-wider">
-                  DITOLAK ✗
+                <div className="border-2 border-red-600 text-red-700 bg-red-50/90 rounded px-2 py-0.5 font-black text-[9px] uppercase tracking-wider">
+                  REJECTED ✗
                 </div>
               );
             } else if (st.status === "pending" || st.is_current) {
               stampBox = (
-                <div className="border border-dashed border-amber-500 bg-amber-50 text-amber-900 rounded px-1.5 py-0.5 font-bold text-[8px] uppercase animate-pulse">
-                  MENUNGGU PROSES
+                <div className="border border-dashed border-amber-500 bg-amber-50 text-amber-900 rounded px-2 py-0.5 font-bold text-[8px] uppercase animate-pulse">
+                  MENUNGGU ACC
                 </div>
               );
             } else {
@@ -824,19 +857,26 @@ function ApprovalAuthorizationSection({ item, timeline }: ApprovalAuthorizationS
               );
             }
 
-            const displayName = st.candidate_approvers?.length
-              ? st.candidate_approvers[0]
-              : st.approver_name || st.approver_role || "Approver";
+            const displayName = isSuperAdminOverride
+              ? "Super Admin (Override)"
+              : (st.candidate_approvers?.length
+                  ? st.candidate_approvers[0]
+                  : st.approver_name || st.approver_role || "Approver");
 
             return (
-              <div key={st.step_order} className={`p-2.5 flex flex-col justify-between min-h-[90px] items-center ${borderClass}`}>
-                <div className="h-14 flex items-center justify-center w-full">{stampBox}</div>
-                <div className="border-t border-dotted border-slate-500 w-full pt-1 text-slate-800 italic text-[9px] truncate px-1">
+              <div key={st.step_order} className={`p-2 flex flex-col justify-between min-h-[95px] items-center ${borderClass}`}>
+                <div className="h-12 flex items-center justify-center w-full">{stampBox}</div>
+                <div className="border-t border-dotted border-slate-500 w-full pt-1 text-slate-800 italic text-[8.5px] truncate px-1">
                   ( {displayName} )
                 </div>
-                <div className="text-[8px] text-slate-500 font-medium mt-0.5 truncate">
+                <div className="text-[7.5px] text-slate-500 font-medium mt-0.5 truncate">
                   {st.label || `Otorisasi Tahap ${st.step_order}`}
                 </div>
+                {isSuperAdminOverride && (st.notes || st.remark) && (
+                  <div className="text-[6.5px] text-purple-900 bg-purple-50 border border-purple-200 rounded px-1 py-0.5 mt-1 max-w-full text-center truncate italic" title={st.notes || st.remark || ""}>
+                    {st.notes || st.remark}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -879,8 +919,8 @@ function ApprovalAuthorizationSection({ item, timeline }: ApprovalAuthorizationS
         <div className="border-r-2 border-black p-3 flex flex-col justify-between min-h-[90px] items-center">
           <div className="h-14 flex items-center justify-center w-full">
             {item.current_approval_step && item.current_approval_step > 1 ? (
-              <div className="border-2 border-blue-600 text-blue-700 bg-blue-50/80 rounded px-2.5 py-1 font-black text-[10px] uppercase tracking-wider">
-                ACC ATASAN ✓
+              <div className="border-2 border-emerald-600 text-emerald-800 bg-emerald-50/90 rounded px-2.5 py-1 font-black text-[10px] uppercase tracking-wider shadow-xs">
+                APPROVED ✓
               </div>
             ) : (
               <div className="border border-dashed border-amber-400 bg-amber-50 text-amber-800 rounded px-2 py-0.5 font-bold text-[9px] uppercase">

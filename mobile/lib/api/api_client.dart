@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/secure_storage_service.dart';
 
 /// Core HTTP Client — handles configuration, token lifecycle, and HTTP wrapper.
@@ -67,19 +69,43 @@ class ApiClient {
 
   /// Use this to mock device ID in unit tests
   static String? mockDeviceId;
+  static const String _deviceIdPrefKey = 'hrms_persistent_device_id';
 
   static Future<String> getDeviceId() async {
     if (mockDeviceId != null) return mockDeviceId!;
 
-    DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-    if (Platform.isAndroid) {
-      AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-      return androidInfo.id;
-    } else if (Platform.isIOS) {
-      IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
-      return iosInfo.identifierForVendor ?? 'unknown_ios';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String? cachedId = prefs.getString(_deviceIdPrefKey);
+      if (cachedId != null && cachedId.trim().isNotEmpty) {
+        return cachedId;
+      }
+
+      final deviceInfo = DeviceInfoPlugin();
+      String generatedId = '';
+
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        final cleanBrand = androidInfo.brand.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+        final cleanModel = androidInfo.model.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+        final rand = Random().nextInt(899999) + 100000;
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final hash = androidInfo.fingerprint.hashCode.abs();
+        generatedId = 'AND_${cleanBrand}_${cleanModel}_${hash}_${timestamp}_$rand';
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        final vendorId = iosInfo.identifierForVendor ?? 'IOS_${DateTime.now().millisecondsSinceEpoch}';
+        generatedId = vendorId;
+      } else {
+        generatedId = 'DEV_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
+      }
+
+      await prefs.setString(_deviceIdPrefKey, generatedId);
+      return generatedId;
+    } catch (e) {
+      debugPrint('Error generating persistent deviceId: $e');
+      return 'fallback_device_${DateTime.now().millisecondsSinceEpoch}';
     }
-    return 'unknown_device';
   }
 
   // ============ TOKEN MANAGEMENT ============

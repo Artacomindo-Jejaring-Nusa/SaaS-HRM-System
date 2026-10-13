@@ -27,6 +27,20 @@ class ManagerController extends Controller
 {
     use Notifiable;
 
+    public function __construct()
+    {
+        $this->middleware(function ($request, $next) {
+            $user = $request->user();
+            if (!$user || !$user->canAccessManagerPortal()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Anda tidak memiliki hak akses untuk portal manager.',
+                ], 403);
+            }
+            return $next($request);
+        });
+    }
+
     private const ROUTE_FUND_REQUESTS = '/dashboard/fund-requests';
     private const ROUTE_ATTENDANCE = '/dashboard/attendance';
 
@@ -105,6 +119,13 @@ class ManagerController extends Controller
             'current_approval_step' => $result['current_approval_step'],
         ];
 
+        $isGlobalAdmin = $user->role_id === 1 || (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies());
+        $remarkText = $request->remark;
+        if ($isGlobalAdmin) {
+            $reasonPart = $request->filled('remark') ? ": {$request->remark}" : ' (Override Otorisasi Darurat)';
+            $remarkText = "[Disetujui Super Admin - {$user->name}]{$reasonPart}";
+        }
+
         if ($request->type === 'fund_request' && empty($item->supervisor_approved_at)) {
             $updateData['supervisor_id'] = $user->id;
             $updateData['supervisor_approved_at'] = now();
@@ -117,7 +138,12 @@ class ManagerController extends Controller
             } else {
                 $updateData['approved_by'] = $user->id;
             }
-            $updateData['remark'] = $request->remark;
+            $updateData['remark'] = $remarkText;
+        } else {
+            // Pada tahap intermediate, simpan catatan override agar tetap terekam di dokumen
+            if (\Illuminate\Support\Facades\Schema::hasColumn($item->getTable(), 'remark')) {
+                $updateData['remark'] = $remarkText;
+            }
         }
 
         return $updateData;
@@ -456,9 +482,81 @@ class ManagerController extends Controller
 
     private function handlePayrollApproval(Request $request, $user, bool $isGlobalAdmin)
     {
-        $batch = PayrollBatch::where('id', $request->id)
+        $batch = PayrollBatch::with(['creator', 'company'])
+            ->where('id', $request->id)
             ->when(! $isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))
             ->firstOrFail();
+
+        $submitter = $batch->creator ?: $user;
+        $companyId = $batch->company_id ?: $user->company_id;
+
+        if ($batch->current_approval_step !== null) {
+            $action = $request->status === 'approved' ? 'approve' : 'reject';
+            $result = \App\Services\ApprovalService::processApproval(
+                'payroll',
+                $companyId,
+                $user,
+                $submitter,
+                $batch->current_approval_step,
+                $action
+            );
+
+            if ($result && isset($result['error'])) {
+                return response()->json(['status' => 'error', 'message' => $result['error']], 403);
+            }
+
+            if ($result) {
+                if ($result['is_final']) {
+                    $batchStatus = $result['status'] === 'approved' ? 'approved' : 'rejected';
+                    $batch->update([
+                        'status' => $batchStatus,
+                        'current_approval_step' => null,
+                        'approved_by' => $result['status'] === 'approved' ? $user->id : null,
+                        'approved_at' => $result['status'] === 'approved' ? now() : null,
+                        'rejection_note' => $result['status'] === 'rejected' ? ($request->remark ?? 'Ditolak oleh approver') : null,
+                    ]);
+                    Salary::where('batch_id', $batch->id)->update(['status' => $batchStatus]);
+
+                    $this->notifySuperAdmins(
+                        $companyId,
+                        $result['status'] === 'approved' ? 'BATCH PAYROLL DISETUJUI' : 'BATCH PAYROLL DITOLAK',
+                        "Batch payroll periode {$batch->period_month} {$batch->period_year} telah " . ($result['status'] === 'approved' ? 'DISETUJUI' : 'DITOLAK') . " oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+                        $result['status'] === 'approved' ? 'success' : 'danger',
+                        '/dashboard/payroll/approval',
+                        $user->id
+                    );
+
+                    return response()->json([
+                        'status' => 'success',
+                        'message' => $result['status'] === 'approved' ? 'Batch payroll berhasil disetujui sepenuhnya.' : 'Batch payroll berhasil ditolak.',
+                        'data' => $batch->fresh(),
+                    ]);
+                }
+
+                $batch->update([
+                    'status' => 'pending_approval',
+                    'current_approval_step' => $result['current_approval_step'],
+                ]);
+
+                if (isset($result['approvers'])) {
+                    foreach ($result['approvers'] as $nextApprover) {
+                        $this->notify(
+                            $nextApprover,
+                            'PERSETUJUAN PAYROLL TAHAP BERIKUTNYA',
+                            "Batch payroll periode {$batch->period_month} {$batch->period_year} siap untuk tahap persetujuan Anda ({$result['step_label']}).",
+                            'info',
+                            '/dashboard/payroll/approval'
+                        );
+                    }
+                }
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => "Persetujuan tahap {$batch->current_approval_step} berhasil. Berlanjut ke tahap berikutnya.",
+                    'data' => $batch->fresh(),
+                ]);
+            }
+        }
 
         $isApproved = $request->status === 'approved';
 
@@ -474,7 +572,7 @@ class ManagerController extends Controller
         $this->notifySuperAdmins(
             $batch->company_id ?? $user->company_id,
             $isApproved ? 'BATCH PAYROLL DISETUJUI' : 'BATCH PAYROLL DITOLAK',
-            "Batch payroll '{$batch->batch_number}' telah " . ($isApproved ? 'DISETUJUI' : 'DITOLAK') . " oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            "Batch payroll periode {$batch->period_month} {$batch->period_year} telah " . ($isApproved ? 'DISETUJUI' : 'DITOLAK') . " oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
             $isApproved ? 'success' : 'danger',
             '/dashboard/payroll/approval',
             $user->id

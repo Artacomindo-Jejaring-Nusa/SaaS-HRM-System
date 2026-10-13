@@ -336,6 +336,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             (userData['role'] != null && userData['role']['id'] == 1) ||
             (userData['role'] != null && userData['role']['name'] == 'Super Admin')) {
           _isManager = true;
+        } else if (userData['is_manager'] != null) {
+          _isManager = userData['is_manager'] == true;
         } else {
           _isManager = _hasPermission('view-manager-portal') ||
               _hasPermission('manage-approvals') ||
@@ -349,7 +351,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _hasPermission('approve-shift-swaps') ||
               _hasPermission('approve-project-costs') ||
               _hasPermission('approve-payroll') ||
-              _hasPermission('manage-attendance-corrections');
+              _hasPermission('approve-attendance-corrections');
+        }
+
+        final int maxIndex = _isManager ? 5 : 4;
+        if (_selectedIndex > maxIndex) {
+          _selectedIndex = 0;
         }
 
         _attendanceType = userData['attendance_type'];
@@ -725,7 +732,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           floatingActionButtonLocation:
               FloatingActionButtonLocation.centerFloat,
           bottomNavigationBar: BottomNavigationBar(
-            currentIndex: _selectedIndex,
+            currentIndex: _selectedIndex.clamp(0, _isManager ? 5 : 4),
             onTap: _onItemTapped,
             selectedItemColor: primaryColor,
             unselectedItemColor: Colors.grey,
@@ -1219,7 +1226,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _getBody() {
-    switch (_selectedIndex) {
+    final effectiveIndex = _selectedIndex.clamp(0, _isManager ? 5 : 4);
+    switch (effectiveIndex) {
       case 0:
         return _buildHomeContent();
       case 1:

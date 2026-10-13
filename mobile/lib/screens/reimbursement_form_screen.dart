@@ -8,6 +8,8 @@ import 'dart:ui' as ui;
 import 'package:image_picker/image_picker.dart';
 import '../api/api_service.dart';
 import '../widgets/loading_overlay.dart';
+import '../widgets/animated_helpers.dart';
+import 'camera_capture_screen.dart';
 
 // ──────────────────────────────────────────────
 // Data model for each item row
@@ -34,11 +36,13 @@ class _ItemInput {
 class ReimbursementFormScreen extends StatefulWidget {
   final List<dynamic> employees;
   final VoidCallback onSubmitted;
+  final Map<String, dynamic>? existingClaim;
 
   const ReimbursementFormScreen({
     Key? key,
     required this.employees,
     required this.onSubmitted,
+    this.existingClaim,
   }) : super(key: key);
 
   @override
@@ -47,7 +51,7 @@ class ReimbursementFormScreen extends StatefulWidget {
 }
 
 class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const Color _primary = Color(0xFF800000);
 
   late TabController _tabController;
@@ -88,6 +92,69 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadUserProfile();
+    _checkLostData();
+    _initExistingClaim();
+  }
+
+  void _initExistingClaim() {
+    if (widget.existingClaim == null) return;
+    final c = widget.existingClaim!;
+    _titleCtrl.text = c['title']?.toString() ?? '';
+    _descCtrl.text = c['description']?.toString() ?? '';
+    _divisiCtrl.text = c['divisi']?.toString() ?? 'Operasional';
+    
+    final prio = c['priority']?.toString() ?? 'Normal';
+    if (['Normal', 'Urgent', 'Top Urgent'].contains(prio)) {
+      _selectedPriority = prio;
+    }
+    
+    final tuj = c['tujuan']?.toString() ?? '';
+    if (['', 'Pengadaan Baru', 'Dari Gudang'].contains(tuj)) {
+      _selectedTujuan = tuj;
+    } else if (tuj.isNotEmpty) {
+      _selectedTujuan = 'Lainnya';
+      _tujuanLainnyaCtrl.text = tuj;
+    }
+    
+    if (c['employee_name'] != null && c['employee_name'].toString().isNotEmpty) {
+      _chosenEmployeeName = c['employee_name'].toString();
+      _empNameCtrl.text = c['employee_name'].toString();
+    }
+    
+    if (c['signature'] != null && c['signature'].toString().isNotEmpty) {
+      _signatureBase64 = c['signature'].toString();
+    }
+    
+    dynamic rawItems = c['items'];
+    if (rawItems is String) {
+      try {
+        rawItems = jsonDecode(rawItems);
+      } catch (_) {}
+    }
+    if (rawItems is List && rawItems.isNotEmpty) {
+      _items = rawItems.map< _ItemInput >((it) {
+        final input = _ItemInput();
+        input.spesifikasiCtrl.text = it['spesifikasi']?.toString() ?? it['name']?.toString() ?? '';
+        input.unitCtrl.text = it['unit']?.toString() ?? 'Pcs';
+        input.qtyCtrl.text = (it['qty'] ?? 1).toString();
+        input.hargaCtrl.text = (it['estimasi_harga'] ?? it['price'] ?? 0).toString();
+        input.keteranganCtrl.text = it['keterangan']?.toString() ?? '';
+        return input;
+      }).toList();
+    }
+  }
+
+  Future<void> _checkLostData() async {
+    try {
+      final picker = ImagePicker();
+      final response = await picker.retrieveLostData();
+      if (response.isEmpty) return;
+      if (response.file != null && mounted) {
+        setState(() => _pickedFiles.add(response.file!));
+      } else if (response.files != null && response.files!.isNotEmpty && mounted) {
+        setState(() => _pickedFiles.addAll(response.files!));
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadUserProfile() async {
@@ -188,7 +255,7 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
       return;
     }
 
-    if (_pickedFiles.isEmpty) {
+    if (_pickedFiles.isEmpty && widget.existingClaim == null) {
       _snack("Foto bukti nota / struk / kuitansi asli wajib diunggah untuk klaim biaya!", Colors.red);
       return;
     }
@@ -214,8 +281,9 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
 
   // ── Submit API ──
   Future<void> _submit() async {
+    final bool isEditing = widget.existingClaim != null;
     setState(() => _isSubmitting = true);
-    LoadingDialog.show(context, message: "Mengajukan klaim biaya...");
+    LoadingDialog.show(context, message: isEditing ? "Menyimpan perubahan klaim biaya..." : "Mengajukan klaim biaya...");
 
     try {
       final itemsList = _items.map((i) {
@@ -230,20 +298,23 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
         };
       }).toList();
 
-      final res = await ApiService.submitReimbursement(
-        {
-          'title': _titleCtrl.text,
-          'amount': _totalAmount.toString(),
-          'description': _descCtrl.text.isEmpty ? _titleCtrl.text : _descCtrl.text,
-          'divisi': _divisiCtrl.text,
-          'tujuan': _selectedTujuan == "Lainnya" ? _tujuanLainnyaCtrl.text : _selectedTujuan,
-          'priority': _selectedPriority,
-          'employee_name': _employeeName(),
-          'items': jsonEncode(itemsList),
-          if (_signatureBase64 != null) 'signature': _signatureBase64!,
-        },
-        filePaths: _pickedFiles.map((e) => e.path).toList(),
-      );
+      final payload = {
+        'title': _titleCtrl.text,
+        'amount': _totalAmount.toString(),
+        'description': _descCtrl.text.isEmpty ? _titleCtrl.text : _descCtrl.text,
+        'divisi': _divisiCtrl.text,
+        'tujuan': _selectedTujuan == "Lainnya" ? _tujuanLainnyaCtrl.text : _selectedTujuan,
+        'priority': _selectedPriority,
+        'employee_name': _employeeName(),
+        'items': jsonEncode(itemsList),
+        if (_signatureBase64 != null) 'signature': _signatureBase64!,
+      };
+
+      final files = _pickedFiles.isNotEmpty ? _pickedFiles.map((e) => e.path).toList() : null;
+
+      final res = isEditing
+          ? await ApiService.updateReimbursement(widget.existingClaim!['id'], payload, filePaths: files)
+          : await ApiService.submitReimbursement(payload, filePaths: files);
 
       LoadingDialog.hide(context);
 
@@ -251,7 +322,7 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
         if (res['status'] == 'success') {
           widget.onSubmitted();
           Navigator.pop(context);
-          _snack("Klaim biaya berhasil diajukan!", Colors.green);
+          _snack(isEditing ? "Klaim biaya berhasil diperbarui!" : "Klaim biaya berhasil diajukan!", Colors.green);
         } else {
           setState(() => _isSubmitting = false);
           _snack("Gagal: ${res['message'] ?? 'Status Error'}", Colors.red);
@@ -684,7 +755,7 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
         foregroundColor: Colors.black,
         elevation: 0.5,
         title: Text(
-          "Formulir Klaim Biaya",
+          widget.existingClaim != null ? "Edit Formulir Klaim Biaya" : "Formulir Klaim Biaya",
           style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         bottom: TabBar(
@@ -721,307 +792,510 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
   //  TAB 1 — FORM PENGAJUAN
   // ═══════════════════════════════════════════════════════
   Widget _buildFormTab() {
+    final hPad = ResponsiveHelper.padding(context, 20);
     return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
       padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
+        left: hPad,
+        right: hPad,
+        top: hPad,
         bottom: MediaQuery.of(context).viewInsets.bottom + 100,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Header ──
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey[200]!),
-            ),
-            child: Row(
-              children: [
-                Image.asset('assets/images/artacom.png', height: 40),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "FORM KLAIM BIAYA (REIMBURSEMENT)",
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        "PT ARTACOMINDO JEJARING NUSA",
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[700],
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ],
+          FadeSlideIn(
+            delay: const Duration(milliseconds: 0),
+            child: Container(
+              padding: EdgeInsets.all(ResponsiveHelper.padding(context, 16)),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey[200]!),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
-                ),
-              ],
+                ],
+              ),
+              child: Row(
+                children: [
+                  Image.asset('assets/images/artacom.png',
+                      height: ResponsiveHelper.isSmallPhone(context) ? 32 : 40),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "FORM KLAIM BIAYA (REIMBURSEMENT)",
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w900,
+                            fontSize: ResponsiveHelper.fontSize(context, 13),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "PT ARTACOMINDO JEJARING NUSA",
+                          style: GoogleFonts.inter(
+                            fontSize: ResponsiveHelper.fontSize(context, 10),
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[700],
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 20),
 
           // ── Section: Nama Pemohon ──
-          _sectionTitle("NAMA PEMOHON / KARYAWAN"),
-          const SizedBox(height: 8),
-          _isCustomEmployee
-              ? _textField("Nama Pemohon (Manual)", _empNameCtrl, Icons.person_rounded)
-              : _isLoadingProfile
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF800000)),
-                        ),
-                      ),
-                    )
-                  : TextFormField(
-                      initialValue: _chosenEmployeeName ?? "-",
-                      key: ValueKey(_chosenEmployeeName),
-                      readOnly: true,
-                      decoration: _dropdownDecor("Nama Karyawan (Otomatis)", Icons.person_outline_rounded).copyWith(
-                        suffixIcon: const Icon(Icons.lock_outline, color: Colors.grey, size: 20),
+          FadeSlideIn(
+            delay: const Duration(milliseconds: 80),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _sectionTitle("NAMA PEMOHON / KARYAWAN"),
+                const SizedBox(height: 8),
+                _isCustomEmployee
+                    ? _textField("Nama Pemohon (Manual)", _empNameCtrl, Icons.person_rounded)
+                    : _isLoadingProfile
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 10),
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Color(0xFF800000)),
+                              ),
+                            ),
+                          )
+                        : TextFormField(
+                            initialValue: _chosenEmployeeName ?? "-",
+                            key: ValueKey(_chosenEmployeeName),
+                            readOnly: true,
+                            decoration: _dropdownDecor("Nama Karyawan (Otomatis)",
+                                    Icons.person_outline_rounded)
+                                .copyWith(
+                              suffixIcon: const Icon(Icons.lock_outline,
+                                  color: Colors.grey, size: 20),
+                            ),
+                          ),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _isCustomEmployee,
+                      activeColor: _primary,
+                      onChanged: (val) => setState(() {
+                        _isCustomEmployee = val ?? false;
+                        if (!_isCustomEmployee) {
+                          _chosenEmployeeName = _userProfile?['name'];
+                          if (_userProfile?['role'] != null) {
+                            _divisiCtrl.text =
+                                _userProfile?['role']['name'] ?? "Operasional";
+                          }
+                        } else {
+                          _empNameCtrl.clear();
+                        }
+                      }),
+                    ),
+                    Flexible(
+                      child: Text(
+                        "Tulis Nama Manual / Custom",
+                        style: GoogleFonts.inter(
+                            fontSize: ResponsiveHelper.fontSize(context, 12),
+                            color: Colors.grey[700]),
                       ),
                     ),
-          Row(
-            children: [
-              Checkbox(
-                value: _isCustomEmployee,
-                activeColor: _primary,
-                onChanged: (val) => setState(() {
-                  _isCustomEmployee = val ?? false;
-                  if (!_isCustomEmployee) {
-                    _chosenEmployeeName = _userProfile?['name'];
-                    if (_userProfile?['role'] != null) {
-                      _divisiCtrl.text = _userProfile?['role']['name'] ?? "Operasional";
-                    }
-                  } else {
-                    _empNameCtrl.clear();
-                  }
-                }),
-              ),
-              Text(
-                "Tulis Nama Manual / Custom",
-                style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[700]),
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
 
           // ── Section: Keperluan / Judul ──
-          _sectionTitle("KEPERLUAN / JUDUL"),
-          const SizedBox(height: 8),
-          _textField("Contoh: Pembelian Laptop Kantor Baru", _titleCtrl, Icons.title_rounded),
+          FadeSlideIn(
+            delay: const Duration(milliseconds: 160),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _sectionTitle("KEPERLUAN / JUDUL"),
+                const SizedBox(height: 8),
+                _textField("Contoh: Pembelian Laptop Kantor Baru", _titleCtrl,
+                    Icons.title_rounded),
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
 
           // ── Section: Divisi ──
-          _sectionTitle("DIVISI (DIV.)"),
-          const SizedBox(height: 8),
-          _textField("Operasional", _divisiCtrl, Icons.business_rounded),
+          FadeSlideIn(
+            delay: const Duration(milliseconds: 200),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _sectionTitle("DIVISI (DIV.)"),
+                const SizedBox(height: 8),
+                _textField("Operasional", _divisiCtrl, Icons.business_rounded),
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
 
           // ── Row: Tujuan + Prioritas ──
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _sectionTitle("TUJUAN PENGADAAN"),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedTujuan,
-                      decoration: _dropdownDecor("Tujuan", Icons.info_outline_rounded),
-                      isExpanded: true,
-                      items: const [
-                        DropdownMenuItem(value: "", child: Text("Tidak Ada / Kosong")),
-                        DropdownMenuItem(value: "Pengadaan Baru", child: Text("Pengadaan Baru")),
-                        DropdownMenuItem(value: "Dari Gudang", child: Text("Dari Gudang")),
-                        DropdownMenuItem(value: "Lainnya", child: Text("Lainnya")),
+          FadeSlideIn(
+            delay: const Duration(milliseconds: 240),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 340) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _sectionTitle("TUJUAN PENGADAAN"),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            value: _selectedTujuan,
+                            decoration: _dropdownDecor(
+                                "Tujuan", Icons.info_outline_rounded),
+                            isExpanded: true,
+                            items: const [
+                              DropdownMenuItem(
+                                  value: "",
+                                  child: Text("Tidak Ada / Kosong")),
+                              DropdownMenuItem(
+                                  value: "Pengadaan Baru",
+                                  child: Text("Pengadaan Baru")),
+                              DropdownMenuItem(
+                                  value: "Dari Gudang",
+                                  child: Text("Dari Gudang")),
+                              DropdownMenuItem(
+                                  value: "Lainnya",
+                                  child: Text("Lainnya")),
+                            ],
+                            onChanged: (val) =>
+                                setState(() => _selectedTujuan = val!),
+                          ),
+                          const SizedBox(height: 12),
+                          _sectionTitle("PRIORITAS"),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            value: _selectedPriority,
+                            decoration: _dropdownDecor(
+                                "Prioritas", Icons.warning_amber_rounded),
+                            isExpanded: true,
+                            items: const [
+                              DropdownMenuItem(
+                                  value: "Normal", child: Text("Normal")),
+                              DropdownMenuItem(
+                                  value: "Urgent", child: Text("Urgent")),
+                              DropdownMenuItem(
+                                  value: "Top Urgent",
+                                  child: Text("Top Urgent")),
+                            ],
+                            onChanged: (val) =>
+                                setState(() => _selectedPriority = val!),
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _sectionTitle("TUJUAN PENGADAAN"),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<String>(
+                                value: _selectedTujuan,
+                                decoration: _dropdownDecor(
+                                    "Tujuan", Icons.info_outline_rounded),
+                                isExpanded: true,
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: "",
+                                      child: Text("Tidak Ada / Kosong")),
+                                  DropdownMenuItem(
+                                      value: "Pengadaan Baru",
+                                      child: Text("Pengadaan Baru")),
+                                  DropdownMenuItem(
+                                      value: "Dari Gudang",
+                                      child: Text("Dari Gudang")),
+                                  DropdownMenuItem(
+                                      value: "Lainnya",
+                                      child: Text("Lainnya")),
+                                ],
+                                onChanged: (val) =>
+                                    setState(() => _selectedTujuan = val!),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _sectionTitle("PRIORITAS"),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<String>(
+                                value: _selectedPriority,
+                                decoration: _dropdownDecor(
+                                    "Prioritas", Icons.warning_amber_rounded),
+                                isExpanded: true,
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: "Normal", child: Text("Normal")),
+                                  DropdownMenuItem(
+                                      value: "Urgent", child: Text("Urgent")),
+                                  DropdownMenuItem(
+                                      value: "Top Urgent",
+                                      child: Text("Top Urgent")),
+                                ],
+                                onChanged: (val) =>
+                                    setState(() => _selectedPriority = val!),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
-                      onChanged: (val) => setState(() => _selectedTujuan = val!),
-                    ),
-                  ],
+                    );
+                  },
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _sectionTitle("PRIORITAS"),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedPriority,
-                      decoration: _dropdownDecor("Prioritas", Icons.warning_amber_rounded),
-                      isExpanded: true,
-                      items: const [
-                        DropdownMenuItem(value: "Normal", child: Text("Normal")),
-                        DropdownMenuItem(value: "Urgent", child: Text("Urgent")),
-                        DropdownMenuItem(value: "Top Urgent", child: Text("Top Urgent")),
-                      ],
-                      onChanged: (val) => setState(() => _selectedPriority = val!),
-                    ),
-                  ],
+                SmoothReveal(
+                  isVisible: _selectedTujuan == "Lainnya",
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: _textField("Tujuan Lainnya", _tujuanLainnyaCtrl,
+                        Icons.edit_note_rounded),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          if (_selectedTujuan == "Lainnya") ...[
-            const SizedBox(height: 12),
-            _textField("Tujuan Lainnya", _tujuanLainnyaCtrl, Icons.edit_note_rounded),
-          ],
           const SizedBox(height: 24),
 
           // ═══════════════════════════════════
           //  ITEM BARANG / JASA
           // ═══════════════════════════════════
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _sectionTitle("ITEM BARANG / JASA"),
-              TextButton.icon(
-                onPressed: () => setState(() => _items.add(_ItemInput())),
-                icon: Icon(Icons.add_circle_outline, color: _primary, size: 18),
-                label: Text(
-                  "+ Tambah Baris",
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: _primary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ..._buildItemCards(),
-          const SizedBox(height: 16),
-
-          // ── TOTAL ESTIMASI ──
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.amber[50],
-              border: Border.all(color: Colors.amber[300]!, width: 1.5),
-              borderRadius: BorderRadius.circular(14),
-            ),
+          FadeSlideIn(
+            delay: const Duration(milliseconds: 320),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      "TOTAL ESTIMASI:",
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: Colors.amber[900],
-                      ),
-                    ),
-                    Text(
-                      _currFmt.format(_totalAmount),
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 17,
-                        color: Colors.amber[950],
+                    Flexible(child: _sectionTitle("ITEM BARANG / JASA")),
+                    TextButton.icon(
+                      onPressed: () =>
+                          setState(() => _items.add(_ItemInput())),
+                      icon: Icon(Icons.add_circle_outline,
+                          color: _primary, size: 18),
+                      label: Text(
+                        "+ Tambah Baris",
+                        style: GoogleFonts.inter(
+                          fontSize: ResponsiveHelper.fontSize(context, 12),
+                          fontWeight: FontWeight.bold,
+                          color: _primary,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  "Terbilang: ${_terbilang(_totalAmount)}",
-                  style: GoogleFonts.inter(
-                    fontStyle: FontStyle.italic,
-                    fontSize: 11,
-                    color: Colors.amber[800],
-                  ),
+                const SizedBox(height: 8),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.topCenter,
+                  child: Column(children: _buildItemCards()),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
-          // ── Catatan ──
-          _sectionTitle("CATATAN / KETERANGAN PENGAJUAN"),
-          const SizedBox(height: 8),
-          _textField("Catatan pengajuan (opsional)", _descCtrl, Icons.description_rounded, maxLines: 3),
-          const SizedBox(height: 24),
-
-          // ── Tanda Tangan Digital ──
-          _sectionTitle("TANDA TANGAN PENGAJU (DIAJUKAN OLEH)"),
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.grey[300]!),
-            ),
-            child: Column(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-                  child: Signature(
-                    controller: _signatureCtrl,
-                    height: 150,
-                    backgroundColor: Colors.grey[50]!,
-                  ),
+          // ── TOTAL ESTIMASI ──
+          FadeSlideIn(
+            delay: const Duration(milliseconds: 380),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOutCubic,
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _totalAmount > 0 ? Colors.amber[50] : Colors.grey[50],
+                border: Border.all(
+                  color: _totalAmount > 0
+                      ? Colors.amber[300]!
+                      : Colors.grey[300]!,
+                  width: 1.5,
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Row(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        "Tanda Tangan Digital",
-                        style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[600]),
+                        "TOTAL ESTIMASI:",
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.bold,
+                          fontSize: ResponsiveHelper.fontSize(context, 13),
+                          color: Colors.amber[900],
+                        ),
                       ),
-                      TextButton(
-                        onPressed: () {
-                          _signatureCtrl.clear();
-                          setState(() => _signatureBase64 = null);
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 350),
+                        transitionBuilder: (child, animation) {
+                          return SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0, 0.3),
+                              end: Offset.zero,
+                            ).animate(CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeOutCubic)),
+                            child: FadeTransition(
+                                opacity: animation, child: child),
+                          );
                         },
                         child: Text(
-                          "Bersihkan",
+                          _currFmt.format(_totalAmount),
+                          key: ValueKey(_totalAmount),
                           style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: _primary,
+                            fontWeight: FontWeight.w900,
+                            fontSize: ResponsiveHelper.fontSize(context, 17),
+                            color: Colors.amber[950],
                           ),
                         ),
                       ),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Terbilang: ${_terbilang(_totalAmount)}",
+                    style: GoogleFonts.inter(
+                      fontStyle: FontStyle.italic,
+                      fontSize: ResponsiveHelper.fontSize(context, 11),
+                      color: Colors.amber[800],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // ── Catatan ──
+          FadeSlideIn(
+            delay: const Duration(milliseconds: 440),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _sectionTitle("CATATAN / KETERANGAN PENGAJUAN"),
+                const SizedBox(height: 8),
+                _textField("Catatan pengajuan (opsional)", _descCtrl,
+                    Icons.description_rounded,
+                    maxLines: 3),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Row(
+          const SizedBox(height: 24),
+
+          // ── Tanda Tangan Digital ──
+          FadeSlideIn(
+            delay: const Duration(milliseconds: 500),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.info_outline, size: 14, color: Colors.grey[500]),
-                const SizedBox(width: 6),
-                Text(
-                  "Tanda tangan digital wajib dicantumkan sebelum mengajukan.",
-                  style: GoogleFonts.inter(fontSize: 10, color: Colors.grey[500]),
+                _sectionTitle("TANDA TANGAN PENGAJU (DIAJUKAN OLEH)"),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Column(
+                    children: [
+                      ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(14)),
+                        child: Signature(
+                          controller: _signatureCtrl,
+                          height: 150,
+                          backgroundColor: Colors.grey[50]!,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        child: Row(
+                          mainAxisAlignment:
+                              MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "Tanda Tangan Digital",
+                              style: GoogleFonts.inter(
+                                  fontSize: ResponsiveHelper.fontSize(
+                                      context, 12),
+                                  color: Colors.grey[600]),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                _signatureCtrl.clear();
+                                setState(
+                                    () => _signatureBase64 = null);
+                              },
+                              child: Text(
+                                "Bersihkan",
+                                style: GoogleFonts.inter(
+                                  fontSize: ResponsiveHelper.fontSize(
+                                      context, 12),
+                                  fontWeight: FontWeight.bold,
+                                  color: _primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 14, color: Colors.grey[500]),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          "Tanda tangan digital wajib dicantumkan sebelum mengajukan.",
+                          style: GoogleFonts.inter(
+                              fontSize: ResponsiveHelper.fontSize(
+                                  context, 10),
+                              color: Colors.grey[500]),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1029,105 +1303,240 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
           const SizedBox(height: 24),
 
           // ── Lampiran Bukti / Nota (WAJIB) ──
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _sectionTitle("BUKTI NOTA / STRUK PEMBAYARAN (WAJIB) *"),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.red[50],
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.red[200]!),
-                ),
-                child: Text(
-                  "Wajib Diisi",
-                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red[800]),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          GestureDetector(
-            onTap: _isSubmitting ? null : _pickImages,
-            child: Container(
-              height: 150,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: _pickedFiles.isEmpty ? Colors.red[300]! : Colors.grey[300]!,
-                  width: _pickedFiles.isEmpty ? 1.5 : 1.0,
-                ),
-              ),
-              child: _pickedFiles.isNotEmpty
-                  ? ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.all(8),
-                      itemCount: _pickedFiles.length,
-                      itemBuilder: (context, i) => Container(
-                        width: 130,
-                        margin: const EdgeInsets.only(right: 10),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Image.file(File(_pickedFiles[i].path), fit: BoxFit.cover),
-                        ),
+          FadeSlideIn(
+            delay: const Duration(milliseconds: 560),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                        child: _sectionTitle(
+                            "BUKTI NOTA / STRUK PEMBAYARAN (WAJIB) *")),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red[50],
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.red[200]!),
                       ),
-                    )
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.add_a_photo_outlined, size: 36, color: _primary),
-                        const SizedBox(height: 8),
-                        Text(
-                          "Klik untuk foto / upload nota asli (Wajib)",
-                          style: GoogleFonts.inter(color: Colors.red[700], fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          "Klaim biaya memerlukan minimal 1 foto struk pembayaran",
-                          style: GoogleFonts.inter(color: Colors.grey[500], fontSize: 10),
-                        ),
-                      ],
+                      child: Text(
+                        "Wajib Diisi",
+                        style: GoogleFonts.inter(
+                            fontSize: ResponsiveHelper.fontSize(
+                                context, 10),
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red[800]),
+                      ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: _isSubmitting ? null : _pickImages,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    height: 150,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: _pickedFiles.isEmpty
+                            ? Colors.red[300]!
+                            : Colors.grey[300]!,
+                        width: _pickedFiles.isEmpty ? 1.5 : 1.0,
+                      ),
+                    ),
+                    child: _pickedFiles.isNotEmpty
+                        ? ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.all(8),
+                            itemCount: _pickedFiles.length + 1,
+                            itemBuilder: (context, i) {
+                              if (i == _pickedFiles.length) {
+                                return GestureDetector(
+                                  onTap: _isSubmitting
+                                      ? null
+                                      : _pickImages,
+                                  child: Container(
+                                    width: 100,
+                                    margin:
+                                        const EdgeInsets.only(right: 10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[100],
+                                      borderRadius:
+                                          BorderRadius.circular(10),
+                                      border: Border.all(
+                                          color: Colors.grey[300]!,
+                                          style: BorderStyle.solid),
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                            Icons
+                                                .add_photo_alternate_outlined,
+                                            color: _primary,
+                                            size: 28),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          "+ Tambah",
+                                          style: GoogleFonts.inter(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: _primary),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }
+                              return Stack(
+                                children: [
+                                  Container(
+                                    width: 120,
+                                    margin:
+                                        const EdgeInsets.only(right: 10),
+                                    decoration: BoxDecoration(
+                                      borderRadius:
+                                          BorderRadius.circular(10),
+                                      border: Border.all(
+                                          color: Colors.grey[300]!),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius:
+                                          BorderRadius.circular(10),
+                                      child: Image.file(
+                                          File(_pickedFiles[i].path),
+                                          fit: BoxFit.cover,
+                                          width: 120,
+                                          height: double.infinity),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 4,
+                                    right: 14,
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        setState(() =>
+                                            _pickedFiles.removeAt(i));
+                                      },
+                                      child: Container(
+                                        padding:
+                                            const EdgeInsets.all(3),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.black54,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(Icons.close,
+                                            size: 14,
+                                            color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          )
+                        : Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.add_a_photo_outlined,
+                                  size: 36, color: _primary),
+                              const SizedBox(height: 8),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12),
+                                child: Text(
+                                  "Klik untuk foto / upload nota asli (Wajib)",
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.inter(
+                                      color: Colors.red[700],
+                                      fontSize:
+                                          ResponsiveHelper.fontSize(
+                                              context, 12),
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12),
+                                child: Text(
+                                  "Klaim biaya memerlukan minimal 1 foto struk pembayaran",
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.inter(
+                                      color: Colors.grey[500],
+                                      fontSize:
+                                          ResponsiveHelper.fontSize(
+                                              context, 10)),
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 32),
 
           // ── Buttons ──
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _isSubmitting ? null : () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.grey[700],
-                    side: BorderSide(color: Colors.grey[300]!),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  child: Text("Batal", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton.icon(
-                  onPressed: _isSubmitting ? null : _validateAndShowPreview,
-                  icon: const Icon(Icons.remove_red_eye_rounded, size: 18, color: Colors.white),
-                  label: Text(
-                    "Preview & Ajukan",
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    elevation: 0,
+          FadeSlideIn(
+            delay: const Duration(milliseconds: 640),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _isSubmitting
+                        ? null
+                        : () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey[700],
+                      side: BorderSide(color: Colors.grey[300]!),
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: Text("Batal",
+                        style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold)),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    onPressed: _isSubmitting
+                        ? null
+                        : _validateAndShowPreview,
+                    icon: Icon(Icons.remove_red_eye_rounded,
+                        size: ResponsiveHelper.iconSize(context, 18),
+                        color: Colors.white),
+                    label: Text(
+                      "Preview & Ajukan",
+                      style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: ResponsiveHelper.fontSize(
+                              context, 14),
+                          color: Colors.white),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primary,
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                      elevation: 0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 40),
         ],
@@ -1569,66 +1978,126 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
         ),
         const SizedBox(height: 12),
 
-        // ── SIGNATURE TABLE ──
-        Table(
-          border: TableBorder.all(color: Colors.black, width: 1.2),
-          children: [
-            TableRow(
+        // ── SIGNATURE TABLE (SEQUENTIAL APPROVAL WORKFLOW) ──
+        Builder(
+          builder: (context) {
+            final claim = widget.existingClaim;
+            final claimStatus = (claim?['status'] ?? '').toString();
+            final currentStep = claim?['current_approval_step'] != null
+                ? int.tryParse(claim!['current_approval_step'].toString()) ?? 1
+                : 1;
+            final isUnitHeadApproved = claimStatus == 'approved' ||
+                claimStatus == 'approved_by_supervisor' ||
+                currentStep > 1;
+            final isFinanceApproved = claimStatus == 'approved' || currentStep > 2;
+            final isDirutApproved = claimStatus == 'approved';
+
+            return Table(
+              border: TableBorder.all(color: Colors.black, width: 1.2),
               children: [
-                _tCell("DIRUT", bold: true, center: true),
-                _tCell("FINANCE", bold: true, center: true),
-                _tCell("UNIT HEAD", bold: true, center: true),
-                _tCell("REQUESTER", bold: true, center: true),
-              ],
-            ),
-            TableRow(
-              children: [
-                // DIRUT
-                _sigCell("— Belum Disetujui —"),
-                // FINANCE
-                _sigCell("— Belum Diverifikasi —"),
-                // UNIT HEAD
-                _sigCell("— Belum Diverifikasi —"),
-                // REQUESTER
-                TableCell(
-                  child: Container(
-                    height: 50,
-                    padding: const EdgeInsets.all(4),
-                    alignment: Alignment.center,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (_signatureBase64 != null)
-                          Image.memory(
-                            base64Decode(_signatureBase64!.split(',').last),
-                            height: 28,
-                            fit: BoxFit.contain,
-                          )
-                        else if (_signatureCtrl.isNotEmpty)
-                          Text("✍ TTD Ready", style: GoogleFonts.inter(fontSize: 7, color: Colors.green[700], fontWeight: FontWeight.bold))
-                        else
-                          Text("— Belum TTD —", style: GoogleFonts.inter(fontSize: 7, color: Colors.grey[400], fontStyle: FontStyle.italic)),
-                        const SizedBox(height: 2),
-                        Text(
-                          empName.isEmpty ? "—" : empName,
-                          style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 7),
-                          textAlign: TextAlign.center,
+                TableRow(
+                  children: [
+                    _tCell("1. PEMOHON", bold: true, center: true),
+                    _tCell("2. ATASAN", bold: true, center: true),
+                    _tCell("3. FINANCE", bold: true, center: true),
+                    _tCell("4. DIREKTUR", bold: true, center: true),
+                  ],
+                ),
+                TableRow(
+                  children: [
+                    // 1. REQUESTER
+                    TableCell(
+                      child: Container(
+                        height: 52,
+                        padding: const EdgeInsets.all(4),
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (_signatureBase64 != null)
+                              Image.memory(
+                                base64Decode(_signatureBase64!.split(',').last),
+                                height: 26,
+                                fit: BoxFit.contain,
+                              )
+                            else if (_signatureCtrl.isNotEmpty)
+                              Text("✍ TTD Ready", style: GoogleFonts.inter(fontSize: 7, color: Colors.green[700], fontWeight: FontWeight.bold))
+                            else
+                              Text("— Belum TTD —", style: GoogleFonts.inter(fontSize: 7, color: Colors.grey[400], fontStyle: FontStyle.italic)),
+                            const SizedBox(height: 2),
+                            Text(
+                              empName.isEmpty ? "—" : empName,
+                              style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 7),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
+                    // 2. ATASAN / UNIT HEAD
+                    _sigCell(
+                      isUnitHeadApproved ? "APPROVED ✓" : "— Belum Diverifikasi —",
+                      isApproved: isUnitHeadApproved,
+                      subText: "Atasan Langsung",
+                    ),
+                    // 3. FINANCE
+                    _sigCell(
+                      isFinanceApproved ? "APPROVED ✓" : (isUnitHeadApproved ? "— Belum Diverifikasi —" : "— Menunggu Giliran —"),
+                      isApproved: isFinanceApproved,
+                      subText: "Finance & HRD",
+                    ),
+                    // 4. DIREKTUR
+                    _sigCell(
+                      isDirutApproved ? "APPROVED ✓" : "— Menunggu Giliran —",
+                      isApproved: isDirutApproved,
+                      subText: "Direktur Utama",
+                    ),
+                  ],
                 ),
               ],
-            ),
-            TableRow(
-              children: [
-                _tCell(""),  // no border simulation — left two cols
-                _tCell(""),
-                _tCell("Posting\nAccounting", bold: true, center: true, fontSize: 7),
-                _tCell("PROCUREMENT", bold: true, center: true, fontSize: 7),
-              ],
-            ),
-          ],
+            );
+          },
+        ),
+        Builder(
+          builder: (context) {
+            final claim = widget.existingClaim;
+            final remark = (claim?['remark'] ?? claim?['notes'] ?? '').toString();
+            if (remark.contains('[Disetujui Super Admin')) {
+              return Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber[50],
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.amber[400]!, width: 1),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.shield_outlined, size: 14, color: Colors.amber[900]),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Catatan Otorisasi Darurat Super Admin:",
+                            style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: Colors.amber[900]),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            remark,
+                            style: GoogleFonts.inter(fontSize: 8, color: Colors.amber[950]),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          },
         ),
       ],
     );
@@ -1809,15 +2278,48 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
     );
   }
 
-  Widget _sigCell(String text) {
+  Widget _sigCell(String text, {bool isApproved = false, String? subText}) {
     return TableCell(
       child: Container(
-        height: 50,
+        height: 52,
         alignment: Alignment.center,
-        child: Text(
-          text,
-          style: GoogleFonts.inter(fontSize: 7, color: Colors.grey[400], fontStyle: FontStyle.italic),
-          textAlign: TextAlign.center,
+        padding: const EdgeInsets.all(2),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isApproved)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  border: Border.all(color: Colors.green[700]!, width: 1.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Text(
+                  "APPROVED ✓",
+                  style: GoogleFonts.inter(
+                    fontSize: 6.5,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.green[800],
+                  ),
+                ),
+              )
+            else
+              Text(
+                text,
+                style: GoogleFonts.inter(fontSize: 7, color: Colors.grey[400], fontStyle: FontStyle.italic),
+                textAlign: TextAlign.center,
+              ),
+            if (subText != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                subText,
+                style: GoogleFonts.inter(fontSize: 6.5, color: Colors.grey[700], fontStyle: FontStyle.italic),
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -1825,7 +2327,7 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
 
   // ── Image picker ──
   Future<void> _pickImages() async {
-    final source = await showModalBottomSheet<ImageSource>(
+    final choice = await showModalBottomSheet<String>(
       context: context,
       builder: (ctx) => Container(
         padding: const EdgeInsets.all(20),
@@ -1833,27 +2335,61 @@ class _ReimbursementFormScreenState extends State<ReimbursementFormScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text("Kamera"),
-              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              leading: const Icon(Icons.camera_alt, color: Color(0xFF800000)),
+              title: const Text("Kamera (Ambil Foto Bukti)"),
+              subtitle: const Text("Foto langsung nota / struk asli"),
+              onTap: () => Navigator.pop(ctx, 'camera'),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library),
+              leading: const Icon(Icons.photo_library, color: Color(0xFF800000)),
               title: const Text("Galeri"),
-              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              subtitle: const Text("Pilih gambar dari galeri perangkat"),
+              onTap: () => Navigator.pop(ctx, 'gallery'),
             ),
           ],
         ),
       ),
     );
-    if (source == null) return;
-    final picker = ImagePicker();
-    if (source == ImageSource.gallery) {
-      final images = await picker.pickMultiImage(imageQuality: 50);
-      if (images.isNotEmpty) setState(() => _pickedFiles = images);
+    if (choice == null || !mounted) return;
+
+    if (choice == 'camera') {
+      try {
+        final XFile? captured = await Navigator.push<XFile?>(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const CameraCaptureScreen(
+              title: "Foto Bukti Nota / Kuitansi",
+              guideText: "Posisikan nota atau struk di dalam bingkai agar jelas terbaca",
+            ),
+          ),
+        );
+        if (captured != null && mounted) {
+          setState(() => _pickedFiles.add(captured));
+        }
+      } catch (e) {
+        // Fallback to ImagePicker if in-app camera fails
+        final picker = ImagePicker();
+        final img = await picker.pickImage(
+          source: ImageSource.camera,
+          maxWidth: 1600,
+          maxHeight: 1600,
+          imageQuality: 75,
+        );
+        if (img != null && mounted) {
+          setState(() => _pickedFiles.add(img));
+        }
+      }
     } else {
-      final img = await picker.pickImage(source: source, imageQuality: 50);
-      if (img != null) setState(() => _pickedFiles = [img]);
+      final picker = ImagePicker();
+      final images = await picker.pickMultiImage(
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 75,
+      );
+      if (images.isNotEmpty && mounted) {
+        setState(() => _pickedFiles.addAll(images));
+      }
     }
   }
 }
+

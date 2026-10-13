@@ -76,13 +76,19 @@ class AuthController extends Controller
         }
 
         // --- Device Binding & FCM Token ---
+        $isSuperAdmin = $user->role_id === 1 || (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies());
+
         $updateData = [];
         if ($request->device_id) {
             if (! $user->device_id) {
                 $updateData['device_id'] = $request->device_id;
             } elseif ($user->device_id !== $request->device_id) {
-                AuditLogger::log('device_mismatch', 'User tried to login from a different device', ['email' => $request->email, 'expected_device' => $user->device_id, 'actual_device' => $request->device_id], 'critical');
-                return $this->errorResponse('Akun Anda terkunci pada perangkat lain. Silakan hubungi Admin untuk reset Device ID Anda.', 403);
+                if (! $isSuperAdmin) {
+                    AuditLogger::log('device_mismatch', 'User tried to login from a different device', ['email' => $request->email, 'expected_device' => $user->device_id, 'actual_device' => $request->device_id], 'critical');
+                    return $this->errorResponse('Akun Anda terkunci pada perangkat lain. Silakan hubungi Admin untuk reset Device ID Anda.', 403);
+                } else {
+                    $updateData['device_id'] = $request->device_id;
+                }
             }
         }
 
@@ -391,11 +397,20 @@ class AuthController extends Controller
             }
 
             // 4. Device Binding & FCM Token
-            // Google Login lebih fleksibel: auto-update device_id karena autentikasi
-            // Google sudah aman (MFA, verifikasi 2 langkah, dll)
+            $isSuperAdmin = $user->role_id === 1 || (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies());
+
             $updateData = [];
             if ($request->device_id) {
-                $updateData['device_id'] = $request->device_id;
+                if (! $user->device_id) {
+                    $updateData['device_id'] = $request->device_id;
+                } elseif ($user->device_id !== $request->device_id) {
+                    if (! $isSuperAdmin) {
+                        AuditLogger::log('device_mismatch', 'User tried to Google login from a different device', ['email' => $user->email, 'expected_device' => $user->device_id, 'actual_device' => $request->device_id], 'critical');
+                        return $this->errorResponse('Akun Anda terkunci pada perangkat lain. Silakan hubungi Admin untuk reset Device ID Anda.', 403);
+                    } else {
+                        $updateData['device_id'] = $request->device_id;
+                    }
+                }
             }
 
             if ($request->fcm_token) {

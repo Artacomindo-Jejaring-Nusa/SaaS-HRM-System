@@ -79,6 +79,48 @@ class _ShiftSwapScreenState extends State<ShiftSwapScreen> {
     _loadData();
   }
 
+  Future<void> _deleteShiftSwap(int id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Batalkan Tukar Shift", style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+        content: const Text("Apakah Anda yakin ingin membatalkan pengajuan tukar shift ini?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Tidak")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Ya, Batalkan", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    LoadingDialog.show(context, message: "Membatalkan pengajuan...");
+    try {
+      final res = await ApiService.deleteShiftSwap(id);
+      if (!mounted) return;
+      LoadingDialog.hide(context);
+      if (res['status'] == 'success') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message'] ?? "Pengajuan berhasil dibatalkan"), backgroundColor: Colors.green),
+        );
+        _loadData();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message'] ?? "Gagal membatalkan pengajuan"), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      LoadingDialog.hide(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   void _showAddSwapDialog() async {
     showModalBottomSheet(
       context: context,
@@ -215,6 +257,7 @@ class _ShiftSwapScreenState extends State<ShiftSwapScreen> {
             isManager: _currentUser?['is_manager'] == true,
             isManagerView: isManagerView,
             onAction: (status, {remark}) => _handleAction(swap['id'], status, remark: remark, isManager: isManagerView),
+            onDelete: () => _deleteShiftSwap(swap['id']),
           );
         },
       ),
@@ -228,8 +271,16 @@ class _SwapCard extends StatelessWidget {
   final bool isManager;
   final bool isManagerView;
   final Function(String status, {String? remark}) onAction;
+  final VoidCallback? onDelete;
 
-  const _SwapCard({required this.swap, this.currentUserId, required this.isManager, required this.onAction, this.isManagerView = false});
+  const _SwapCard({
+    required this.swap, 
+    this.currentUserId, 
+    required this.isManager, 
+    required this.onAction, 
+    this.isManagerView = false,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -326,6 +377,27 @@ class _SwapCard extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(child: ElevatedButton(onPressed: () => onAction('approved'), style: ElevatedButton.styleFrom(backgroundColor: Colors.green), child: const Text("APPROVE", style: TextStyle(color: Colors.white)))),
                 ],
+              ),
+            ),
+
+          if ((status == 'pending_receiver' || status == 'pending_manager') && swap['requester_id'] == currentUserId && !isManagerView)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.cancel_outlined, size: 16, color: Colors.red),
+                  label: const Text(
+                    "BATALKAN PENGAJUAN",
+                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: Colors.red.shade300),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
               ),
             ),
         ],
