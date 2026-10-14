@@ -40,6 +40,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     with WidgetsBindingObserver {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
+  CameraDescription? _cameraDescription;
   bool _isCameraReady = false;
   bool _isProcessing = false;
   bool _isCapturing = false;
@@ -62,9 +63,9 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   String? _capturedImagePath;
   bool _showShutterFlash = false;
 
-  // Counter agar tidak capture terlalu cepat (butuh beberapa frame stabil)
+  // Counter agar tidak capture terlalu lambat (4 frame stabil ~0.4 detik)
   int _stableFaceFrames = 0;
-  static const int _requiredStableFrames = 8; // ~1 detik (8 × 120ms)
+  static const int _requiredStableFrames = 4;
 
   // Mencegah double-capture
   bool _hasAutoCaptured = false;
@@ -144,6 +145,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           (camera) => camera.lensDirection == CameraLensDirection.front,
           orElse: () => _cameras!.first,
         );
+        _cameraDescription = frontCamera;
 
         _controller = CameraController(
           frontCamera,
@@ -186,7 +188,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       if (!mounted || _hasAutoCaptured) return;
 
       if (faces.isEmpty) {
-        _stableFaceFrames = 0;
+        if (_stableFaceFrames > 0) _stableFaceFrames--;
         setState(() {
           _statusMessage = "Arahkan Wajah ke Kamera";
           _statusColor = Colors.white70;
@@ -199,8 +201,8 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       final eulerY = face.headEulerAngleY ?? 0.0;
       final eulerX = face.headEulerAngleX ?? 0.0;
 
-      // Cek apakah wajah cukup frontal (tidak terlalu miring)
-      if (eulerY.abs() < 15 && eulerX.abs() < 15) {
+      // Cek apakah wajah cukup frontal (toleransi diperlonggar ke 25° agar lebih natural & responsif)
+      if (eulerY.abs() < 25 && eulerX.abs() < 25) {
         _stableFaceFrames++;
 
         if (_stableFaceFrames < _requiredStableFrames) {
@@ -222,7 +224,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           Future.microtask(() => _autoCaptureAndSubmit());
         }
       } else {
-        _stableFaceFrames = 0;
+        if (_stableFaceFrames > 0) _stableFaceFrames--;
         setState(() {
           _statusMessage = "Hadap Lurus ke Depan";
           _statusColor = Colors.amberAccent;
@@ -232,7 +234,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     } catch (e) {
       debugPrint("Face detection error: $e");
     } finally {
-      await Future.delayed(const Duration(milliseconds: 120));
+      await Future.delayed(const Duration(milliseconds: 100));
       _isStreamActive = false;
     }
   }
@@ -254,7 +256,15 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     });
 
     try {
-      // 1. Ambil foto snapshot seketika saat posisi wajah valid
+      // 1. Hentikan image stream terlebih dahulu agar resource sensor kamera bebas untuk takePicture
+      await _stopStreamSafe();
+      await Future.delayed(const Duration(milliseconds: 150));
+
+      if (!mounted || _controller == null || !_controller!.value.isInitialized) {
+        throw Exception("Kamera tidak tersedia saat mengambil foto.");
+      }
+
+      // 2. Ambil foto snapshot seketika saat posisi wajah valid
       debugPrint("[Attendance] Taking picture...");
       final XFile image = await _controller!.takePicture();
       debugPrint("[Attendance] Photo saved: ${image.path}");
@@ -264,9 +274,6 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       if (!await file.exists() || await file.length() < 1000) {
         throw Exception("Foto tidak valid, silakan coba lagi.");
       }
-
-      // 2. STOP image stream & FREEZE tampilan kamera dengan foto yang tertangkap
-      await _stopStreamSafe();
 
       if (!mounted) return;
       setState(() {
@@ -632,16 +639,32 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     );
   }
 
+  InputImageRotation _getImageRotation() {
+    if (Platform.isIOS) {
+      return InputImageRotation.rotation90deg;
+    }
+    final sensorOrientation = _cameraDescription?.sensorOrientation ?? 270;
+    switch (sensorOrientation) {
+      case 0:
+        return InputImageRotation.rotation0deg;
+      case 90:
+        return InputImageRotation.rotation90deg;
+      case 180:
+        return InputImageRotation.rotation180deg;
+      case 270:
+      default:
+        return InputImageRotation.rotation270deg;
+    }
+  }
+
   InputImage _convertCameraImageToInputImage(CameraImage image) {
-    final bytes = Platform.isAndroid
+    final bytes = image.planes.length == 1
         ? image.planes[0].bytes
         : _concatenatePlanes(image.planes);
 
     final InputImageMetadata metadata = InputImageMetadata(
       size: Size(image.width.toDouble(), image.height.toDouble()),
-      rotation: Platform.isIOS
-          ? InputImageRotation.rotation90deg
-          : InputImageRotation.rotation270deg,
+      rotation: _getImageRotation(),
       format: Platform.isIOS
           ? InputImageFormat.bgra8888
           : InputImageFormat.nv21,
@@ -908,29 +931,62 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                   ),
                 )
               : Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                   decoration: BoxDecoration(
-                    color: Colors.black45,
-                    borderRadius: BorderRadius.circular(16),
+                    color: Colors.black.withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white12),
                   ),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.auto_awesome,
-                          color: Colors.cyanAccent, size: 28),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Foto Otomatis",
-                        style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold),
+                      // Shutter manual button
+                      GestureDetector(
+                        onTap: (_isCapturing || _isProcessing)
+                            ? null
+                            : () {
+                                if (!_hasAutoCaptured) {
+                                  _hasAutoCaptured = true;
+                                  _autoCaptureAndSubmit();
+                                }
+                              },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.cyanAccent.withValues(alpha: 0.35),
+                                blurRadius: 12,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: Container(
+                            width: 56,
+                            height: 56,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt_rounded,
+                              color: Color(0xFF0A0E21),
+                              size: 28,
+                            ),
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 10),
                       Text(
-                        "Posisikan wajah & mata lurus ke dalam lingkaran.\nFoto diambil otomatis setelah posisi stabil.",
+                        "Auto-capture aktif atau ketuk tombol untuk jepret manual",
                         textAlign: TextAlign.center,
                         style: GoogleFonts.outfit(
-                            color: Colors.white60, fontSize: 13),
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ],
                   ),

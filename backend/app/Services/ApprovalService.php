@@ -470,9 +470,13 @@ class ApprovalService
     /**
      * Get the current step info for display purposes (e.g., in API response).
      */
-    public static function getCurrentStepInfo(string $moduleKey, int $companyId, ?int $currentStep, ?User $submitter = null): ?array
+    public static function getCurrentStepInfo(string $moduleKey, ?int $companyId, ?int $currentStep, ?User $submitter = null): ?array
     {
-        return ApprovalTimelineService::getCurrentStepInfo($moduleKey, $companyId, $currentStep, $submitter);
+        if (empty($companyId) || empty($currentStep)) {
+            return null;
+        }
+
+        return ApprovalTimelineService::getCurrentStepInfo($moduleKey, (int) $companyId, $currentStep, $submitter);
     }
 
     // ─── Private Helpers ───────────────────────────────────

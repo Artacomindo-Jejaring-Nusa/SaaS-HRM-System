@@ -600,8 +600,9 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
 
     if (items == null) {
       if (mounted) {
+        final errorMsg = ApiService.lastManagerError ?? "Gagal mengambil data pengajuan.";
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Gagal mengambil data pengajuan."), backgroundColor: Colors.red),
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
         );
       }
       return;

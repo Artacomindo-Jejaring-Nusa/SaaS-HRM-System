@@ -111,4 +111,57 @@ trait Notifiable
             $this->notify($admin, $title, $message, $type, $link, 'notif', false, false);
         }
     }
+
+    /**
+     * Send notifications to relevant approvers and admins (Super Admins, Company Admins, HRD, and module approvers).
+     */
+    public function notifyCompanyApprovers(
+        ?int $companyId,
+        string $title,
+        string $message,
+        string $type = 'warning',
+        ?string $link = null,
+        ?int $exceptUserId = null,
+        ?string $permission = null
+    ): void {
+        $query = User::query();
+
+        $query->where(function ($q) use ($permission) {
+            $q->where('role_id', 1)
+              ->orWhereHas('role', function ($r) {
+                  $r->whereRaw('LOWER(name) LIKE ?', ['%super admin%'])
+                    ->orWhereRaw('LOWER(name) LIKE ?', ['%admin%'])
+                    ->orWhereRaw('LOWER(name) LIKE ?', ['%hrd%'])
+                    ->orWhereRaw('LOWER(name) LIKE ?', ['%finance%']);
+              });
+
+            if ($permission) {
+                $q->orWhereHas('role.permissions', function ($p) use ($permission) {
+                    $p->where('slug', $permission)->orWhere('slug', 'manage-approvals');
+                });
+            }
+        });
+
+        if ($companyId) {
+            $query->where(function ($q) use ($companyId) {
+                $q->whereNull('company_id')
+                  ->orWhere('role_id', 1)
+                  ->orWhere('company_id', $companyId);
+            });
+        }
+
+        $allApprovers = $query->get()->unique('id');
+
+        $recipients = $allApprovers;
+        if ($exceptUserId) {
+            $filtered = $allApprovers->where('id', '!=', $exceptUserId);
+            if ($filtered->isNotEmpty()) {
+                $recipients = $filtered;
+            }
+        }
+
+        foreach ($recipients as $recipient) {
+            $this->notify($recipient, $title, $message, $type, $link, 'notif', false, false);
+        }
+    }
 }

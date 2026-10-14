@@ -37,7 +37,31 @@ class EmployeeController extends Controller
 
         // --- GreetDay Feature: My Team Filter ---
         if ($request->is_team === 'true' || $request->is_team === true) {
-            $query->where('supervisor_id', $user->id);
+            $isGlobalAdmin = $user->role_id === 1 || $user->hasRole('Super Admin');
+            $isCompanyAdmin = $user->hasRole(['Admin', 'HRD', 'Direktur']) || $user->canAccessAllCompanies();
+
+            if ($isGlobalAdmin || $isCompanyAdmin) {
+                // Admin/Super Admin/Direktur/HRD dapat memberikan tugas ke seluruh karyawan perusahaan kecuali diri sendiri
+                $query->where('id', '!=', $user->id);
+            } else {
+                // Ambil bawahan langsung (direct) dan bawahan bertingkat (indirect)
+                $directIds = User::where('supervisor_id', $user->id)->pluck('id')->toArray();
+                $allSubordinateIds = $directIds;
+
+                if (!empty($directIds)) {
+                    $indirectIds = User::whereIn('supervisor_id', $directIds)->pluck('id')->toArray();
+                    $allSubordinateIds = array_unique(array_merge($directIds, $indirectIds));
+                }
+
+                if (!empty($allSubordinateIds)) {
+                    $query->whereIn('id', $allSubordinateIds);
+                } elseif ($user->hasPermission('manage-tasks') || $user->hasPermission('assign-tasks')) {
+                    // Fallback jika user memiliki izin penugasan tugas tapi relasi atasan belum tersetting
+                    $query->where('id', '!=', $user->id);
+                } else {
+                    $query->where('supervisor_id', $user->id);
+                }
+            }
         }
 
         if ($request->filled('role_id') && $request->role_id !== 'all') {

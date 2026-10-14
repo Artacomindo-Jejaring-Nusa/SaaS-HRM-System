@@ -99,10 +99,25 @@ class _TaskScreenState extends State<TaskScreen> with SingleTickerProviderStateM
   }
 
   void _showCreateTaskModal() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      ),
+    );
+
     final subordinates = await ApiService.getSubordinates();
+    if (mounted) Navigator.pop(context); // Close loading indicator
+
+    if (!mounted) return;
+
     if (subordinates == null || subordinates.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Tidak ada bawahan ditemukan untuk ditugaskan."))
+        const SnackBar(
+          content: Text("Tidak ada karyawan atau bawahan yang ditemukan untuk ditugaskan."),
+          backgroundColor: Colors.orangeAccent,
+        ),
       );
       return;
     }

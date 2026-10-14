@@ -365,10 +365,16 @@ class ManagerApprovalService
             if ($request->type === 'fund_request') {
                 $updateData['hrd_id'] = $user->id;
                 $updateData['hrd_approved_at'] = now();
+                if ($result['status'] === 'rejected') {
+                    $updateData['reject_reason'] = $remarkText;
+                    $updateData['rejected_at'] = now();
+                }
             } else {
                 $updateData['approved_by'] = $user->id;
             }
-            $updateData['remark'] = $remarkText;
+            if (Schema::hasColumn($item->getTable(), 'remark')) {
+                $updateData['remark'] = $remarkText;
+            }
         } else {
             if (Schema::hasColumn($item->getTable(), 'remark')) {
                 $updateData['remark'] = $remarkText;

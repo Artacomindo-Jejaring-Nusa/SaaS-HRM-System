@@ -35,6 +35,10 @@ class FundRequest extends Model
 
     protected $casts = [
         'items' => 'array',
+        'company_id' => 'integer',
+        'user_id' => 'integer',
+        'current_approval_step' => 'integer',
+        'amount' => 'float',
     ];
 
     protected $appends = [
@@ -43,11 +47,20 @@ class FundRequest extends Model
 
     public function getCurrentStepInfoAttribute()
     {
-        if ($this->current_approval_step === null) {
+        if (empty($this->current_approval_step) || empty($this->company_id)) {
             return null;
         }
 
-        return \App\Services\ApprovalService::getCurrentStepInfo('fund_request', $this->company_id, $this->current_approval_step);
+        try {
+            return \App\Services\ApprovalService::getCurrentStepInfo(
+                'fund_request',
+                (int) $this->company_id,
+                (int) $this->current_approval_step,
+                $this->user
+            );
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     public function user()

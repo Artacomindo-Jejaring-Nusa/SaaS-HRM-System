@@ -501,26 +501,40 @@ class FundRequestController extends Controller
                     self::ROUTE_APPROVALS
                 );
             }
-        } elseif ($user->supervisor_id) {
-            $supervisor = User::find($user->supervisor_id);
-            if ($supervisor) {
-                $this->notify(
-                    $supervisor,
-                    'PENGAJUAN DANA BARU',
-                    "{$user->name} mengajukan dana sebesar Rp {$formattedAmount}. Mohon tinjau.",
-                    'warning',
-                    self::ROUTE_APPROVALS
-                );
+        } else {
+            // Notifikasi konfirmasi ke submitter
+            $this->notify(
+                $user,
+                'PENGAJUAN DANA BERHASIL',
+                self::FUND_REQUEST_MSG_PREFIX."{$formattedAmount} telah berhasil diajukan dan sedang menunggu persetujuan.",
+                'info',
+                self::ROUTE_APPROVALS
+            );
+
+            // 1. Notifikasi Atasan Langsung (jika ada)
+            if ($user->supervisor_id) {
+                $supervisor = User::find($user->supervisor_id);
+                if ($supervisor) {
+                    $this->notify(
+                        $supervisor,
+                        'PENGAJUAN DANA BARU',
+                        "{$user->name} mengajukan dana sebesar Rp {$formattedAmount}. Mohon tinjau.",
+                        'warning',
+                        self::ROUTE_APPROVALS
+                    );
+                }
             }
         }
 
-        $this->notifySuperAdmins(
+        // 2. Notifikasi Admin / HRD Perusahaan dan Super Admin
+        $this->notifyCompanyApprovers(
             $user->company_id,
             'PERMINTAAN DANA BARU',
             "Karyawan {$user->name} mengajukan dana sebesar Rp {$formattedAmount}.",
             'warning',
             self::ROUTE_APPROVALS,
-            $user->id
+            $user->id,
+            'approve-fund-requests'
         );
     }
 }

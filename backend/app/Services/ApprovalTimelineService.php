@@ -63,13 +63,13 @@ class ApprovalTimelineService
         ];
     }
 
-    public static function getCurrentStepInfo(string $moduleKey, int $companyId, ?int $currentStep, ?User $submitter = null): ?array
+    public static function getCurrentStepInfo(string $moduleKey, ?int $companyId, ?int $currentStep, ?User $submitter = null): ?array
     {
-        if ($currentStep === null) {
+        if (empty($companyId) || empty($currentStep)) {
             return null;
         }
 
-        $workflow = ApprovalService::getWorkflow($moduleKey, $companyId, $submitter);
+        $workflow = ApprovalService::getWorkflow($moduleKey, (int) $companyId, $submitter);
         $step = $workflow?->steps()->where('step_number', $currentStep)->first();
         if (!$step) {
             return null;

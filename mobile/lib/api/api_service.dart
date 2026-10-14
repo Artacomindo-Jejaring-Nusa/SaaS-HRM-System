@@ -277,6 +277,8 @@ class ApiService {
   static Future<Map<String, dynamic>?> getManagerPendingCount() =>
       ManagerRepository.getManagerPendingCount();
 
+  static String? get lastManagerError => ManagerRepository.lastErrorMessage;
+
   static Future<List<dynamic>?> getManagerPendingRequests(String type) =>
       ManagerRepository.getManagerPendingRequests(type);
 

@@ -48,9 +48,10 @@ class PendingRequestService
     {
         $isGlobalAdmin = $user->role_id === 1;
         $isCompanyAdmin = self::isExecutiveOrAdmin($user);
+        $hasSubordinates = User::where('supervisor_id', $user->id)->exists();
 
-        $canApprove = function ($t) use ($user, $isGlobalAdmin, $permMap) {
-            if ($isGlobalAdmin || $user->hasPermission('manage-approvals')) {
+        $canApprove = function ($t) use ($user, $isGlobalAdmin, $isCompanyAdmin, $hasSubordinates, $permMap) {
+            if ($isGlobalAdmin || $isCompanyAdmin || $user->hasPermission('manage-approvals') || $hasSubordinates) {
                 return true;
             }
             return isset($permMap[$t]) && $user->hasPermission($permMap[$t]);
@@ -58,7 +59,7 @@ class PendingRequestService
 
         $fundRequestStatus = ($isGlobalAdmin || $isCompanyAdmin) ? ['pending', 'approved_by_supervisor'] : 'pending';
 
-        $leaveCount = $canApprove('leave') ? self::countScopedPending(Leave::class, 'leave', 'pending', $user, $isGlobalAdmin) : 0;
+        $leaveCount = $canApprove('leave') ? self::countScopedPending(Leave::class, 'leave', ['pending', 'pending_supervisor', 'pending_hr'], $user, $isGlobalAdmin) : 0;
         $overtimeCount = $canApprove('overtime') ? self::countScopedPending(Overtime::class, 'overtime', 'pending', $user, $isGlobalAdmin) : 0;
         $reimbursementCount = $canApprove('reimbursement') ? self::countScopedPending(Reimbursement::class, 'reimbursement', 'pending', $user, $isGlobalAdmin) : 0;
         $permitCount = $canApprove('permit') ? self::countScopedPending(Permit::class, 'permit', 'pending', $user, $isGlobalAdmin) : 0;
@@ -113,7 +114,12 @@ class PendingRequestService
 
     private static function canUserViewPendingType(User $user, ?string $type, array $permMap): bool
     {
-        if ($user->role_id === 1 || $user->hasPermission('manage-approvals')) {
+        if ($user->role_id === 1 || $user->hasPermission('manage-approvals') || self::isExecutiveOrAdmin($user)) {
+            return true;
+        }
+
+        // Direct supervisor with subordinates can view pending requests from their team
+        if (User::where('supervisor_id', $user->id)->exists()) {
             return true;
         }
 
@@ -136,12 +142,15 @@ class PendingRequestService
                 $submitter = $item->creator ?: $user;
             }
 
-            $item->current_step_info = ApprovalService::getCurrentStepInfo(
-                $type,
-                $item->company_id ?? $user->company_id,
-                $item->current_approval_step,
-                $submitter
-            );
+            $companyId = $item->company_id ?? $user->company_id;
+            if (!empty($companyId)) {
+                $item->current_step_info = ApprovalService::getCurrentStepInfo(
+                    $type,
+                    (int) $companyId,
+                    (int) $item->current_approval_step,
+                    $submitter
+                );
+            }
         });
     }
 
@@ -166,7 +175,7 @@ class PendingRequestService
     private static function resolvePendingBaseQuery(string $type, bool $isGlobalAdmin, bool $isCompanyAdmin)
     {
         return match ($type) {
-            'leave' => Leave::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
+            'leave' => Leave::with(['user.role', 'user.office', 'user.supervisor'])->whereIn('status', ['pending', 'pending_supervisor', 'pending_hr']),
             'overtime' => Overtime::with(['user.role', 'user.office', 'user.supervisor', 'items'])->where('status', 'pending'),
             'reimbursement' => Reimbursement::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
             'permit' => Permit::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
@@ -206,17 +215,56 @@ class PendingRequestService
                 return $user->role_id === 1 || $user->hasPermission('approve-payroll') || $user->hasPermission('manage-payroll');
             }
 
-            return self::canHandlePendingItem($item, $user);
+            return self::canHandlePendingItem($item, $user, $type);
         })->values();
     }
 
-    private static function canHandlePendingItem($item, User $user): bool
+    private static function canHandlePendingItem($item, User $user, string $type = ''): bool
     {
-        if ($item->status === 'pending_hr') {
-            return $user->hasPermission('approve-leaves') || $user->hasPermission('approve-permits') || $user->role_id === 1;
+        $isGlobalAdmin = $user->role_id === 1;
+        $isExecutiveAdmin = self::isExecutiveOrAdmin($user);
+        $isDirectSupervisor = ($item->user?->supervisor_id === $user->id) || (isset($item->supervisor_id) && $item->supervisor_id === $user->id);
+
+        if ($type === 'fund_request') {
+            if ($isGlobalAdmin || $isExecutiveAdmin || $user->hasPermission('approve-fund-requests')) {
+                return true;
+            }
+            if ($item->status === 'pending' && $isDirectSupervisor) {
+                return true;
+            }
+            if ($item->status === 'approved_by_supervisor' && ($isGlobalAdmin || $isExecutiveAdmin || $user->hasPermission('approve-fund-requests'))) {
+                return true;
+            }
+            return false;
         }
 
-        $isSupervisor = $item->status === 'pending_supervisor' || ($user->supervisor_id && $item->user_id);
-        return $isSupervisor && $item->user?->supervisor_id === $user->id;
+        if ($type === 'reimbursement') {
+            if ($isGlobalAdmin || $isExecutiveAdmin || $user->hasPermission('approve-reimbursements')) {
+                return true;
+            }
+            return $isDirectSupervisor;
+        }
+
+        if ($type === 'overtime') {
+            if ($isGlobalAdmin || $isExecutiveAdmin || $user->hasPermission('approve-overtimes')) {
+                return true;
+            }
+            return $isDirectSupervisor;
+        }
+
+        if ($item->status === 'pending_hr') {
+            return $user->hasPermission('approve-leaves') || $user->hasPermission('approve-permits') || $isGlobalAdmin || $isExecutiveAdmin;
+        }
+
+        if ($item->status === 'pending_supervisor' || $item->status === 'pending') {
+            if ($isDirectSupervisor) {
+                return true;
+            }
+            if ($isGlobalAdmin || $isExecutiveAdmin) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../api_client.dart';
 import '../../services/secure_storage_service.dart';
@@ -9,6 +9,8 @@ import '../../services/secure_storage_service.dart';
 ///            updateManagerRequestStatus, getTeamAttendance,
 ///            getSubordinates, launchPdf.
 class ManagerRepository {
+  static String? lastErrorMessage;
+
   static Future<Map<String, dynamic>?> getManagerPendingCount() async {
     try {
       final headers = await ApiClient.getHeaders();
@@ -27,6 +29,7 @@ class ManagerRepository {
   }
 
   static Future<List<dynamic>?> getManagerPendingRequests(String type) async {
+    lastErrorMessage = null;
     try {
       final headers = await ApiClient.getHeaders();
       final response = await ApiClient.client.get(
@@ -42,9 +45,23 @@ class ManagerRepository {
           return data['data'];
         }
         return [];
+      } else {
+        try {
+          final errBody = jsonDecode(response.body);
+          lastErrorMessage = errBody['message'] ?? 'Gagal mengambil data (${response.statusCode})';
+        } catch (_) {
+          lastErrorMessage = 'Server error (${response.statusCode})';
+        }
+        if (kDebugMode) {
+          debugPrint('[ManagerRepo] Error fetching $type: $lastErrorMessage');
+        }
+        return null;
       }
-      return null;
     } catch (e) {
+      lastErrorMessage = 'Koneksi gagal: $e';
+      if (kDebugMode) {
+        debugPrint('[ManagerRepo] Exception fetching $type: $e');
+      }
       return null;
     }
   }
@@ -100,16 +117,40 @@ class ManagerRepository {
   static Future<List<dynamic>?> getSubordinates() async {
     try {
       final headers = await ApiClient.getHeaders();
+      // 1. Coba ambil bawahan tim langsung
       final response = await ApiClient.client.get(
         Uri.parse('${ApiClient.baseUrl}/employees?is_team=true&per_page=100'),
         headers: headers,
       );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        return body['data']['data'];
+        final data = body['data'];
+        List<dynamic> list = [];
+        if (data is Map && data['data'] is List) {
+          list = data['data'];
+        } else if (data is List) {
+          list = data;
+        }
+        if (list.isNotEmpty) return list;
+      }
+
+      // 2. Fallback: jika is_team kosong (misal Admin, HRD, Direktur, atau relasi atasan belum diisi di database)
+      final fallbackResponse = await ApiClient.client.get(
+        Uri.parse('${ApiClient.baseUrl}/employees?per_page=100'),
+        headers: headers,
+      );
+      if (fallbackResponse.statusCode == 200) {
+        final body = jsonDecode(fallbackResponse.body);
+        final data = body['data'];
+        if (data is Map && data['data'] is List) {
+          return data['data'];
+        } else if (data is List) {
+          return data;
+        }
       }
       return null;
     } catch (e) {
+      debugPrint("Error getSubordinates: $e");
       return null;
     }
   }
