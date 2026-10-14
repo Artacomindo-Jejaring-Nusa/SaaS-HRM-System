@@ -35,33 +35,8 @@ class EmployeeController extends Controller
             $query->where('company_id', $user->company_id);
         }
 
-        // --- GreetDay Feature: My Team Filter ---
         if ($request->is_team === 'true' || $request->is_team === true) {
-            $isGlobalAdmin = $user->role_id === 1 || $user->hasRole('Super Admin');
-            $isCompanyAdmin = $user->hasRole(['Admin', 'HRD', 'Direktur']) || $user->canAccessAllCompanies();
-
-            if ($isGlobalAdmin || $isCompanyAdmin) {
-                // Admin/Super Admin/Direktur/HRD dapat memberikan tugas ke seluruh karyawan perusahaan kecuali diri sendiri
-                $query->where('id', '!=', $user->id);
-            } else {
-                // Ambil bawahan langsung (direct) dan bawahan bertingkat (indirect)
-                $directIds = User::where('supervisor_id', $user->id)->pluck('id')->toArray();
-                $allSubordinateIds = $directIds;
-
-                if (!empty($directIds)) {
-                    $indirectIds = User::whereIn('supervisor_id', $directIds)->pluck('id')->toArray();
-                    $allSubordinateIds = array_unique(array_merge($directIds, $indirectIds));
-                }
-
-                if (!empty($allSubordinateIds)) {
-                    $query->whereIn('id', $allSubordinateIds);
-                } elseif ($user->hasPermission('manage-tasks') || $user->hasPermission('assign-tasks')) {
-                    // Fallback jika user memiliki izin penugasan tugas tapi relasi atasan belum tersetting
-                    $query->where('id', '!=', $user->id);
-                } else {
-                    $query->where('supervisor_id', $user->id);
-                }
-            }
+            $this->applyTeamFilter($query, $user);
         }
 
         if ($request->filled('role_id') && $request->role_id !== 'all') {
@@ -73,32 +48,71 @@ class EmployeeController extends Controller
         }
 
         $employees = $query
-            ->when($request->search, function ($q) use ($request) {
-                $q->where(function ($qq) use ($request) {
-                    $qq->where('name', 'like', "%{$request->search}%")
-                        ->orWhere('email', 'like', "%{$request->search}%")
-                        ->orWhere('nik', 'like', "%{$request->search}%")
-                        ->orWhereHas('role', function ($r) use ($request) {
-                            $r->where('name', 'like', "%{$request->search}%");
-                        });
-                });
-            })
-            ->when($request->id, function ($q) use ($request) {
-                $q->where('id', $request->id);
-            })
+            ->when($request->search, fn ($q) => $this->applySearchFilter($q, (string) $request->search))
+            ->when($request->id, fn ($q) => $q->where('id', $request->id))
             ->with(['role.permissions', 'supervisor', 'office'])
             ->orderBy('name', 'asc')
             ->paginate($request->per_page ?? 10);
 
-        // Sembunyikan data sensitif payroll / finansial jika bukan HRD/Admin/Manager
-        if (! $user->hasPermission('view-employees') && ! $user->hasRole(['Super Admin', 'Admin', 'HRD', 'Manager'])) {
-            $employees->getCollection()->transform(function ($emp) {
-                $emp->makeHidden(['basic_salary', 'bank_account_no', 'bank_name', 'ktp_no', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no']);
-                return $emp;
-            });
-        }
+        $this->maskSensitiveFields($employees, $user);
 
         return $this->successResponse($employees, 'Data karyawan berhasil diambil.');
+    }
+
+    private function applyTeamFilter($query, User $user): void
+    {
+        $isGlobalAdmin = $user->role_id === 1 || $user->hasRole('Super Admin');
+        $isCompanyAdmin = $user->hasRole(['Admin', 'HRD', 'Direktur']) || $user->canAccessAllCompanies();
+
+        if ($isGlobalAdmin || $isCompanyAdmin) {
+            $query->where('id', '!=', $user->id);
+            return;
+        }
+
+        $allSubordinateIds = $this->resolveSubordinateIds($user->id);
+
+        if (!empty($allSubordinateIds)) {
+            $query->whereIn('id', $allSubordinateIds);
+        } elseif ($user->hasPermission('manage-tasks') || $user->hasPermission('assign-tasks')) {
+            $query->where('id', '!=', $user->id);
+        } else {
+            $query->where('supervisor_id', $user->id);
+        }
+    }
+
+    private function resolveSubordinateIds(int $userId): array
+    {
+        $directIds = User::where('supervisor_id', $userId)->pluck('id')->toArray();
+        if (empty($directIds)) {
+            return [];
+        }
+
+        $indirectIds = User::whereIn('supervisor_id', $directIds)->pluck('id')->toArray();
+        return array_unique(array_merge($directIds, $indirectIds));
+    }
+
+    private function applySearchFilter($query, string $search): void
+    {
+        $query->where(function ($qq) use ($search) {
+            $qq->where('name', 'like', "%{$search}%")
+                ->orWhere('email', 'like', "%{$search}%")
+                ->orWhere('nik', 'like', "%{$search}%")
+                ->orWhereHas('role', function ($r) use ($search) {
+                    $r->where('name', 'like', "%{$search}%");
+                });
+        });
+    }
+
+    private function maskSensitiveFields($employees, User $user): void
+    {
+        if ($user->hasPermission('view-employees') || $user->hasRole(['Super Admin', 'Admin', 'HRD', 'Manager'])) {
+            return;
+        }
+
+        $employees->getCollection()->transform(function ($emp) {
+            $emp->makeHidden(['basic_salary', 'bank_account_no', 'bank_name', 'ktp_no', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no']);
+            return $emp;
+        });
     }
 
     /**

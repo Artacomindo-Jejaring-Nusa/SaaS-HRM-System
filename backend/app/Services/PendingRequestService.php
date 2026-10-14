@@ -114,20 +114,16 @@ class PendingRequestService
 
     private static function canUserViewPendingType(User $user, ?string $type, array $permMap): bool
     {
-        if ($user->role_id === 1 || $user->hasPermission('manage-approvals') || self::isExecutiveOrAdmin($user)) {
+        $hasPrivilegedAccess = $user->role_id === 1
+            || $user->hasPermission('manage-approvals')
+            || self::isExecutiveOrAdmin($user)
+            || User::where('supervisor_id', $user->id)->exists();
+
+        if ($hasPrivilegedAccess) {
             return true;
         }
 
-        // Direct supervisor with subordinates can view pending requests from their team
-        if (User::where('supervisor_id', $user->id)->exists()) {
-            return true;
-        }
-
-        if (isset($permMap[$type]) && ! $user->hasPermission($permMap[$type])) {
-            return false;
-        }
-
-        return true;
+        return !isset($permMap[$type]) || $user->hasPermission($permMap[$type]);
     }
 
     private static function attachStepInfo($items, string $type, User $user): void
@@ -221,48 +217,34 @@ class PendingRequestService
 
     private static function canHandlePendingItem($item, User $user, string $type = ''): bool
     {
-        $isGlobalAdmin = $user->role_id === 1;
-        $isExecutiveAdmin = self::isExecutiveOrAdmin($user);
-        $isDirectSupervisor = ($item->user?->supervisor_id === $user->id) || (isset($item->supervisor_id) && $item->supervisor_id === $user->id);
+        $isAdmin = $user->role_id === 1 || self::isExecutiveOrAdmin($user);
+        $isSupervisor = ($item->user?->supervisor_id === $user->id) || (isset($item->supervisor_id) && $item->supervisor_id === $user->id);
 
-        if ($type === 'fund_request') {
-            if ($isGlobalAdmin || $isExecutiveAdmin || $user->hasPermission('approve-fund-requests')) {
-                return true;
-            }
-            if ($item->status === 'pending' && $isDirectSupervisor) {
-                return true;
-            }
-            if ($item->status === 'approved_by_supervisor' && ($isGlobalAdmin || $isExecutiveAdmin || $user->hasPermission('approve-fund-requests'))) {
-                return true;
-            }
-            return false;
+        return match ($type) {
+            'fund_request' => self::canHandleFundRequest($item, $user, $isAdmin, $isSupervisor),
+            'reimbursement' => $isAdmin || $user->hasPermission('approve-reimbursements') || $isSupervisor,
+            'overtime' => $isAdmin || $user->hasPermission('approve-overtimes') || $isSupervisor,
+            default => self::canHandleDefaultPending($item, $isAdmin, $isSupervisor, $user),
+        };
+    }
+
+    private static function canHandleFundRequest($item, User $user, bool $isAdmin, bool $isSupervisor): bool
+    {
+        if ($isAdmin || $user->hasPermission('approve-fund-requests')) {
+            return true;
         }
 
-        if ($type === 'reimbursement') {
-            if ($isGlobalAdmin || $isExecutiveAdmin || $user->hasPermission('approve-reimbursements')) {
-                return true;
-            }
-            return $isDirectSupervisor;
-        }
+        return $item->status === 'pending' && $isSupervisor;
+    }
 
-        if ($type === 'overtime') {
-            if ($isGlobalAdmin || $isExecutiveAdmin || $user->hasPermission('approve-overtimes')) {
-                return true;
-            }
-            return $isDirectSupervisor;
-        }
-
+    private static function canHandleDefaultPending($item, bool $isAdmin, bool $isSupervisor, User $user): bool
+    {
         if ($item->status === 'pending_hr') {
-            return $user->hasPermission('approve-leaves') || $user->hasPermission('approve-permits') || $isGlobalAdmin || $isExecutiveAdmin;
+            return $isAdmin || $user->hasPermission('approve-leaves') || $user->hasPermission('approve-permits');
         }
 
         if ($item->status === 'pending_supervisor' || $item->status === 'pending') {
-            if ($isDirectSupervisor) {
-                return true;
-            }
-            if ($isGlobalAdmin || $isExecutiveAdmin) {
-                return true;
-            }
+            return $isSupervisor || $isAdmin;
         }
 
         return false;

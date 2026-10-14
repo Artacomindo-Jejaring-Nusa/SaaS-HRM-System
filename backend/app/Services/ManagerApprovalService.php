@@ -349,12 +349,7 @@ class ManagerApprovalService
             'current_approval_step' => $result['current_approval_step'],
         ];
 
-        $isGlobalAdmin = $user->role_id === 1 || (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies());
-        $remarkText = $request->remark;
-        if ($isGlobalAdmin) {
-            $reasonPart = $request->filled('remark') ? ": {$request->remark}" : ' (Override Otorisasi Darurat)';
-            $remarkText = "[Disetujui Super Admin - {$user->name}]{$reasonPart}";
-        }
+        $remarkText = $this->resolveDynamicRemarkText($request, $user);
 
         if ($request->type === 'fund_request' && empty($item->supervisor_approved_at)) {
             $updateData['supervisor_id'] = $user->id;
@@ -362,26 +357,41 @@ class ManagerApprovalService
         }
 
         if ($result['is_final']) {
-            if ($request->type === 'fund_request') {
-                $updateData['hrd_id'] = $user->id;
-                $updateData['hrd_approved_at'] = now();
-                if ($result['status'] === 'rejected') {
-                    $updateData['reject_reason'] = $remarkText;
-                    $updateData['rejected_at'] = now();
-                }
-            } else {
-                $updateData['approved_by'] = $user->id;
-            }
-            if (Schema::hasColumn($item->getTable(), 'remark')) {
-                $updateData['remark'] = $remarkText;
-            }
-        } else {
-            if (Schema::hasColumn($item->getTable(), 'remark')) {
-                $updateData['remark'] = $remarkText;
-            }
+            $this->applyFinalStepData($updateData, $item, $request->type, $user, $result['status'], $remarkText);
+        } elseif (Schema::hasColumn($item->getTable(), 'remark')) {
+            $updateData['remark'] = $remarkText;
         }
 
         return $updateData;
+    }
+
+    private function resolveDynamicRemarkText(Request $request, User $user): ?string
+    {
+        $isGlobalAdmin = $user->role_id === 1 || (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies());
+        if (!$isGlobalAdmin) {
+            return $request->remark;
+        }
+
+        $reasonPart = $request->filled('remark') ? ": {$request->remark}" : ' (Override Otorisasi Darurat)';
+        return "[Disetujui Super Admin - {$user->name}]{$reasonPart}";
+    }
+
+    private function applyFinalStepData(array &$updateData, $item, string $type, User $user, string $status, ?string $remarkText): void
+    {
+        if ($type === 'fund_request') {
+            $updateData['hrd_id'] = $user->id;
+            $updateData['hrd_approved_at'] = now();
+            if ($status === 'rejected') {
+                $updateData['reject_reason'] = $remarkText;
+                $updateData['rejected_at'] = now();
+            }
+        } else {
+            $updateData['approved_by'] = $user->id;
+        }
+
+        if (Schema::hasColumn($item->getTable(), 'remark')) {
+            $updateData['remark'] = $remarkText;
+        }
     }
 
     private function sendFinalDynamicApprovalNotification($item, Request $request, User $user, array $result, string $typeText, string $routePath): string

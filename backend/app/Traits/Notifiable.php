@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Mail;
 
 trait Notifiable
 {
+    public const SQL_LOWER_NAME_LIKE = 'LOWER(name) LIKE ?';
+
     /**
      * Send database, push (FCM), email, and WhatsApp notifications to a user
      */
@@ -88,7 +90,7 @@ trait Notifiable
         $query->where(function ($q) {
             $q->where('role_id', 1)
               ->orWhereHas('role', function ($r) {
-                  $r->whereRaw('LOWER(name) LIKE ?', ['%super admin%']);
+                  $r->whereRaw(self::SQL_LOWER_NAME_LIKE, ['%super admin%']);
               });
         });
 
@@ -129,10 +131,10 @@ trait Notifiable
         $query->where(function ($q) use ($permission) {
             $q->where('role_id', 1)
               ->orWhereHas('role', function ($r) {
-                  $r->whereRaw('LOWER(name) LIKE ?', ['%super admin%'])
-                    ->orWhereRaw('LOWER(name) LIKE ?', ['%admin%'])
-                    ->orWhereRaw('LOWER(name) LIKE ?', ['%hrd%'])
-                    ->orWhereRaw('LOWER(name) LIKE ?', ['%finance%']);
+                  $r->whereRaw(self::SQL_LOWER_NAME_LIKE, ['%super admin%'])
+                    ->orWhereRaw(self::SQL_LOWER_NAME_LIKE, ['%admin%'])
+                    ->orWhereRaw(self::SQL_LOWER_NAME_LIKE, ['%hrd%'])
+                    ->orWhereRaw(self::SQL_LOWER_NAME_LIKE, ['%finance%']);
               });
 
             if ($permission) {
