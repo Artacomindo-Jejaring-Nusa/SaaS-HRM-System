@@ -505,15 +505,15 @@ class ApprovalService
 
     private static function canApproveRoleStep(WorkflowStep $step, User $approver): bool
     {
-        return $approver->role_id === $step->approver_role_id 
-            || $approver->role_id === 1 
+        return $approver->role_id === $step->approver_role_id
+            || $approver->role_id === 1
             || (method_exists($approver, 'isSuperAdmin') && $approver->isSuperAdmin());
     }
 
     private static function canApproveUserStep(WorkflowStep $step, User $approver): bool
     {
-        return $approver->id === $step->approver_user_id 
-            || $approver->role_id === 1 
+        return $approver->id === $step->approver_user_id
+            || $approver->role_id === 1
             || (method_exists($approver, 'isSuperAdmin') && $approver->isSuperAdmin());
     }
 
@@ -523,8 +523,8 @@ class ApprovalService
             return $submitter->supervisor_id === $approver->id;
         }
 
-        return $approver->role_id === 1 
-            || (method_exists($approver, 'isSuperAdmin') && $approver->isSuperAdmin()) 
+        return $approver->role_id === 1
+            || (method_exists($approver, 'isSuperAdmin') && $approver->isSuperAdmin())
             || $hasModulePermission;
     }
 
@@ -533,8 +533,8 @@ class ApprovalService
      */
     private static function canUserApproveStep(WorkflowStep $step, User $approver, User $submitter, ?string $moduleKey = null): bool
     {
-        $isSuperAdmin = $approver->role_id === 1 
-            || (method_exists($approver, 'isSuperAdmin') && $approver->isSuperAdmin()) 
+        $isSuperAdmin = $approver->role_id === 1
+            || (method_exists($approver, 'isSuperAdmin') && $approver->isSuperAdmin())
             || (method_exists($approver, 'canAccessAllCompanies') && $approver->canAccessAllCompanies());
 
         // Approver cannot approve their own submission unless Super Admin

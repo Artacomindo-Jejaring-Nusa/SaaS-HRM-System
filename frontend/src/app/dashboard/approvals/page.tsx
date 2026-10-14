@@ -448,6 +448,63 @@ const renderMemberStatusBadge = (member: TeamMemberAttendance) => {
   );
 };
 
+const isItemWithinPeriod = (
+  item: ApprovalItem,
+  period: string,
+  customStart: string,
+  customEnd: string
+): boolean => {
+  if (period === "all") return true;
+
+  const itemDateStr = item.start_date || item.created_at;
+  if (!itemDateStr) return true;
+
+  const d = new Date(itemDateStr);
+  if (Number.isNaN(d.getTime())) return true;
+
+  const now = new Date();
+  if (period === "this_month") {
+    const inMonth = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    const cDate = new Date(item.created_at);
+    const cInMonth = !Number.isNaN(cDate.getTime()) && cDate.getFullYear() === now.getFullYear() && cDate.getMonth() === now.getMonth();
+    return inMonth || cInMonth;
+  }
+
+  if (period === "this_year") {
+    const inYear = d.getFullYear() === now.getFullYear();
+    const cDate = new Date(item.created_at);
+    const cInYear = !Number.isNaN(cDate.getTime()) && cDate.getFullYear() === now.getFullYear();
+    return inYear || cInYear;
+  }
+
+  if (period === "custom") {
+    if (customStart) {
+      const s = new Date(customStart);
+      s.setHours(0, 0, 0, 0);
+      if (d < s) return false;
+    }
+    if (customEnd) {
+      const e = new Date(customEnd);
+      e.setHours(23, 59, 59, 999);
+      if (d > e) return false;
+    }
+  }
+
+  return true;
+};
+
+const isItemMatchingSearch = (item: ApprovalItem, searchQuery: string): boolean => {
+  if (!searchQuery.trim()) return true;
+  const q = searchQuery.toLowerCase();
+  return (
+    item.user_name.toLowerCase().includes(q) ||
+    Boolean(item.user_email?.toLowerCase().includes(q)) ||
+    Boolean(item.user_role?.toLowerCase().includes(q)) ||
+    item.category.toLowerCase().includes(q) ||
+    item.description.toLowerCase().includes(q)
+  );
+};
+
 export default function ApprovalsPage() {
   const { user: currentUser, hasPermission, isManager } = useAuth();
   
@@ -831,54 +888,16 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
   };
 
   // Filtered approval items
-  // Filtered approval items
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       const matchType = filter === "all" || item.type === filter;
       if (!matchType) return false;
 
-      // Filter by period client-side as well for snappy reactivity
-      if (selectedPeriod !== "all") {
-        const itemDateStr = item.start_date || item.created_at;
-        if (itemDateStr) {
-          const d = new Date(itemDateStr);
-          if (!isNaN(d.getTime())) {
-            const now = new Date();
-            if (selectedPeriod === "this_month") {
-              const inMonth = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-              const cDate = new Date(item.created_at);
-              const cInMonth = !isNaN(cDate.getTime()) && cDate.getFullYear() === now.getFullYear() && cDate.getMonth() === now.getMonth();
-              if (!inMonth && !cInMonth) return false;
-            } else if (selectedPeriod === "this_year") {
-              const inYear = d.getFullYear() === now.getFullYear();
-              const cDate = new Date(item.created_at);
-              const cInYear = !isNaN(cDate.getTime()) && cDate.getFullYear() === now.getFullYear();
-              if (!inYear && !cInYear) return false;
-            } else if (selectedPeriod === "custom") {
-              if (customStartDate) {
-                const s = new Date(customStartDate);
-                s.setHours(0, 0, 0, 0);
-                if (d < s) return false;
-              }
-              if (customEndDate) {
-                const e = new Date(customEndDate);
-                e.setHours(23, 59, 59, 999);
-                if (d > e) return false;
-              }
-            }
-          }
-        }
+      if (!isItemWithinPeriod(item, selectedPeriod, customStartDate, customEndDate)) {
+        return false;
       }
 
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      return (
-        item.user_name.toLowerCase().includes(q) ||
-        Boolean(item.user_email?.toLowerCase().includes(q)) ||
-        Boolean(item.user_role?.toLowerCase().includes(q)) ||
-        item.category.toLowerCase().includes(q) ||
-        item.description.toLowerCase().includes(q)
-      );
+      return isItemMatchingSearch(item, searchQuery);
     });
   }, [items, filter, searchQuery, selectedPeriod, customStartDate, customEndDate]);
 

@@ -332,19 +332,7 @@ class ManagerApprovalService
         $updateData = $this->prepareDynamicUpdateData($item, $request, $user, $result);
         $item->update($updateData);
 
-        if ($request->type === 'leave' && $result['is_final'] && $result['status'] === 'approved') {
-            LeaveController::processLeaveApprovalDeduction();
-        }
-
-        if ($request->type === 'attendance_correction' && $result['is_final'] && $result['status'] === 'approved') {
-            $attendance = $item->attendance;
-            if ($attendance) {
-                $applyData = [];
-                if ($item->corrected_check_in) $applyData['check_in'] = $item->corrected_check_in;
-                if ($item->corrected_check_out) $applyData['check_out'] = $item->corrected_check_out;
-                if (!empty($applyData)) $attendance->update($applyData);
-            }
-        }
+        $this->processDynamicApprovalPostAction($item, $request->type, $result);
 
         $typeText = self::TYPE_TEXTS[$request->type] ?? ucfirst($request->type);
         $routePath = self::ROUTE_PATHS[$request->type] ?? '/dashboard';
@@ -357,6 +345,38 @@ class ManagerApprovalService
             'message' => $msg,
             'data' => $item,
         ]);
+    }
+
+    private function processDynamicApprovalPostAction($item, string $type, array $result): void
+    {
+        if (!$result['is_final'] || $result['status'] !== 'approved') {
+            return;
+        }
+
+        if ($type === 'leave') {
+            LeaveController::processLeaveApprovalDeduction();
+        } elseif ($type === 'attendance_correction') {
+            $this->applyAttendanceCorrectionToRecord($item);
+        }
+    }
+
+    private function applyAttendanceCorrectionToRecord($item): void
+    {
+        $attendance = $item->attendance;
+        if (!$attendance) {
+            return;
+        }
+
+        $applyData = [];
+        if ($item->corrected_check_in) {
+            $applyData['check_in'] = $item->corrected_check_in;
+        }
+        if ($item->corrected_check_out) {
+            $applyData['check_out'] = $item->corrected_check_out;
+        }
+        if (!empty($applyData)) {
+            $attendance->update($applyData);
+        }
     }
 
     private function prepareDynamicUpdateData($item, Request $request, User $user, array $result): array
@@ -498,35 +518,12 @@ class ManagerApprovalService
         }
 
         if ($request->type === 'attendance_correction') {
-            $isApproved = $request->status === 'approved';
-            $item->update([
-                'status' => $request->status,
-                'approved_by' => $user->id,
-                'remark' => $request->remark,
-            ]);
-            if ($isApproved && $item->attendance) {
-                $applyData = [];
-                if ($item->corrected_check_in) {
-                    $applyData['check_in'] = $item->corrected_check_in;
-                }
-                if ($item->corrected_check_out) {
-                    $applyData['check_out'] = $item->corrected_check_out;
-                }
-                if (!empty($applyData)) {
-                    $item->attendance->update($applyData);
-                }
-            }
-            return $request->status;
+            return $this->updateLegacyAttendanceCorrection($item, $request, $user);
         }
 
-        $targetStatus = $request->status;
-        if ($request->type === 'vehicle_log') {
-            if ($request->status === 'approved') {
-                $targetStatus = ($item->status === 'pending') ? 'approved' : 'validated';
-            } else {
-                $targetStatus = 'rejected';
-            }
-        }
+        $targetStatus = ($request->type === 'vehicle_log')
+            ? $this->resolveLegacyVehicleLogStatus($item, $request->status)
+            : $request->status;
 
         $previousStatus = $item->status;
         $item->update([
@@ -536,14 +533,42 @@ class ManagerApprovalService
         ]);
 
         if ($request->type === 'leave') {
-            if ($targetStatus === 'approved' && $previousStatus !== 'approved') {
-                LeaveController::processLeaveApprovalDeduction();
-            } elseif ($targetStatus === 'rejected' && $previousStatus === 'approved') {
-                LeaveController::processLeaveApprovalRefund();
-            }
+            $this->handleLegacyLeaveDeductionOrRefund($targetStatus, $previousStatus);
         }
 
         return $targetStatus;
+    }
+
+    private function updateLegacyAttendanceCorrection($item, Request $request, User $user): string
+    {
+        $item->update([
+            'status' => $request->status,
+            'approved_by' => $user->id,
+            'remark' => $request->remark,
+        ]);
+
+        if ($request->status === 'approved') {
+            $this->applyAttendanceCorrectionToRecord($item);
+        }
+
+        return $request->status;
+    }
+
+    private function resolveLegacyVehicleLogStatus($item, string $status): string
+    {
+        if ($status === 'approved') {
+            return ($item->status === 'pending') ? 'approved' : 'validated';
+        }
+        return 'rejected';
+    }
+
+    private function handleLegacyLeaveDeductionOrRefund(string $targetStatus, ?string $previousStatus): void
+    {
+        if ($targetStatus === 'approved' && $previousStatus !== 'approved') {
+            LeaveController::processLeaveApprovalDeduction();
+        } elseif ($targetStatus === 'rejected' && $previousStatus === 'approved') {
+            LeaveController::processLeaveApprovalRefund();
+        }
     }
 
     private function updateLegacyFundRequest($item, Request $request, User $user, bool $isCompanyAdmin, bool $isGlobalAdmin): string

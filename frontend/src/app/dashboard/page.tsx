@@ -324,8 +324,8 @@ export default function DashboardPage() {
     const q = todaySearchQuery.toLowerCase();
     return (
       att.user_name.toLowerCase().includes(q) ||
-      (att.nik && att.nik.toLowerCase().includes(q)) ||
-      (att.status && att.status.toLowerCase().includes(q))
+      Boolean(att.nik?.toLowerCase().includes(q)) ||
+      Boolean(att.status?.toLowerCase().includes(q))
     );
   });
 
@@ -644,9 +644,9 @@ export default function DashboardPage() {
 
           <div className="flex-1 overflow-y-auto space-y-2.5 max-h-[250px] pr-1">
             {displayEvents.length > 0 ? (
-              displayEvents.slice(0, 5).map((evt, idx) => (
+              displayEvents.slice(0, 5).map((evt) => (
                 <div
-                  key={idx}
+                  key={`${evt.type}-${evt.date}-${evt.title}`}
                   className={`p-2.5 rounded-xl border flex items-center gap-2.5 ${
                     evt.type === 'holiday' 
                       ? 'bg-rose-50/60 border-rose-100' 
@@ -701,7 +701,7 @@ export default function DashboardPage() {
                   const totalRolesCount = roleDistribution.reduce((s, r) => s + r.count, 0) || 1;
                   const percentage = Math.round((item.count / totalRolesCount) * 100);
                   return (
-                    <div key={idx} className="space-y-1">
+                    <div key={item.role} className="space-y-1">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-bold text-slate-700 truncate max-w-[140px]">{item.role}</span>
                         <span className="text-[11px] font-black text-slate-900">{item.count} ({percentage}%)</span>
@@ -794,11 +794,11 @@ export default function DashboardPage() {
             { label: "Log Armada", count: managerCounts.vehicle_log, color: "text-indigo-700 bg-indigo-50 border-indigo-200", icon: Car, type: "vehicle_log" },
             { label: "Koreksi Absen", count: managerCounts.attendance_correction || 0, color: "text-cyan-700 bg-cyan-50 border-cyan-200", icon: Clock, type: "attendance_correction" },
             { label: "Payroll", count: managerCounts.payroll || 0, color: "text-emerald-700 bg-emerald-50 border-emerald-200", icon: DollarSign, type: "payroll" },
-          ].map((item, idx) => {
+          ].map((item) => {
             const IconComp = item.icon;
             return (
               <Link
-                key={idx}
+                key={item.type}
                 href={`/dashboard/approvals`}
                 className={`p-3.5 rounded-xl border flex flex-col items-center justify-center text-center transition-all hover:scale-102 hover:shadow-xs ${item.color}`}
               >

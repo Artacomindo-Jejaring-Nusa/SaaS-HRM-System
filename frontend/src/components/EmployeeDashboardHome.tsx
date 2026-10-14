@@ -741,16 +741,30 @@ export default function EmployeeDashboardHome({
             const isToday = day.isToday;
             const isCheckedInToday = isToday && (todayAttendance?.check_in || todayAttendance?.checkIn);
 
+            let cardBgClass = "bg-white border-slate-100 opacity-60";
+            if (isToday) {
+              cardBgClass = "bg-rose-50 border-rose-300 ring-2 ring-rose-500/20 shadow-xs";
+            } else if (day.isPast) {
+              cardBgClass = "bg-slate-50 border-slate-200";
+            }
+
+            let statusIndicator: React.ReactNode;
+            if (isToday) {
+              if (isCheckedInToday) {
+                statusIndicator = <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" title="Hadir hari ini" />;
+              } else {
+                statusIndicator = <span className="inline-block w-2 h-2 rounded-full bg-rose-400" title="Belum absen hari ini" />;
+              }
+            } else if (day.isPast) {
+              statusIndicator = <span className="inline-block w-2 h-2 rounded-full bg-slate-400" title="Hari berlalu" />;
+            } else {
+              statusIndicator = <span className="inline-block w-2 h-2 rounded-full bg-slate-200" title="Mendatang" />;
+            }
+
             return (
               <div
                 key={day.fullDate}
-                className={`p-3 rounded-xl border text-center transition-all ${
-                  isToday
-                    ? "bg-rose-50 border-rose-300 ring-2 ring-rose-500/20 shadow-xs"
-                    : day.isPast
-                    ? "bg-slate-50 border-slate-200"
-                    : "bg-white border-slate-100 opacity-60"
-                }`}
+                className={`p-3 rounded-xl border text-center transition-all ${cardBgClass}`}
               >
                 <div className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? "text-[#8B0000]" : "text-slate-400"}`}>
                   {day.name}
@@ -759,17 +773,7 @@ export default function EmployeeDashboardHome({
                   {day.date}
                 </div>
                 <div className="mt-1.5">
-                  {isToday ? (
-                    isCheckedInToday ? (
-                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" title="Hadir hari ini" />
-                    ) : (
-                      <span className="inline-block w-2 h-2 rounded-full bg-rose-400" title="Belum absen hari ini" />
-                    )
-                  ) : day.isPast ? (
-                    <span className="inline-block w-2 h-2 rounded-full bg-slate-400" title="Hari berlalu" />
-                  ) : (
-                    <span className="inline-block w-2 h-2 rounded-full bg-slate-200" title="Mendatang" />
-                  )}
+                  {statusIndicator}
                 </div>
               </div>
             );

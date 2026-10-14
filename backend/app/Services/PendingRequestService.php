@@ -96,14 +96,9 @@ class PendingRequestService
         $isGlobalAdmin = $user->isSuperAdmin();
         $isCompanyAdmin = self::isExecutiveOrAdmin($user);
         $hasSubordinates = User::where('supervisor_id', $user->id)->exists();
+        $hasPrivilegedAccess = $isGlobalAdmin || $isCompanyAdmin || $user->hasPermission('manage-approvals') || $hasSubordinates;
 
-        $canApprove = function ($t) use ($user, $isGlobalAdmin, $isCompanyAdmin, $hasSubordinates, $permMap) {
-            if ($isGlobalAdmin || $isCompanyAdmin || $user->hasPermission('manage-approvals') || $hasSubordinates) {
-                return true;
-            }
-            return isset($permMap[$t]) && $user->hasPermission($permMap[$t]);
-        };
-
+        $canApprove = fn (string $type): bool => self::canUserApprovePendingType($user, $type, $permMap, $hasPrivilegedAccess);
         $fundRequestStatus = ($isGlobalAdmin || $isCompanyAdmin) ? ['pending', 'approved_by_supervisor'] : 'pending';
 
         $leaveCount = $canApprove('leave') ? self::countScopedPending(Leave::class, 'leave', ['pending', 'pending_supervisor', 'pending_hr'], $user, $isGlobalAdmin, $request) : 0;
@@ -114,19 +109,13 @@ class PendingRequestService
         $fundRequestCount = $canApprove('fund_request') ? self::countScopedPending(FundRequest::class, 'fund_request', $fundRequestStatus, $user, $isGlobalAdmin, $request) : 0;
         $payrollCount = $canApprove('payroll') ? self::countScopedPending(PayrollBatch::class, 'payroll', 'pending_approval', $user, $isGlobalAdmin, $request) : 0;
 
-        $earlyOutQuery = Attendance::where('is_early_out', true)->where('early_out_status', 'pending');
-        if (!$isGlobalAdmin && $user->company_id) {
-            $earlyOutQuery->where('company_id', $user->company_id);
-        }
-        self::applyDateFilter($earlyOutQuery, $request);
-        $earlyOutCount = $canApprove('early_out') ? $earlyOutQuery->count() : 0;
+        $earlyOutCount = $canApprove('early_out')
+            ? self::countDirectAttendancePending(Attendance::class, ['is_early_out' => true, 'early_out_status' => 'pending'], $user, $isGlobalAdmin, $request)
+            : 0;
 
-        $correctionQuery = AttendanceCorrection::where('status', 'pending');
-        if (!$isGlobalAdmin && $user->company_id) {
-            $correctionQuery->where('company_id', $user->company_id);
-        }
-        self::applyDateFilter($correctionQuery, $request);
-        $correctionCount = $canApprove('attendance_correction') ? $correctionQuery->count() : 0;
+        $correctionCount = $canApprove('attendance_correction')
+            ? self::countDirectAttendancePending(AttendanceCorrection::class, ['status' => 'pending'], $user, $isGlobalAdmin, $request)
+            : 0;
 
         return [
             'leave' => $leaveCount,
@@ -140,6 +129,25 @@ class PendingRequestService
             'attendance_correction' => $correctionCount,
             'total' => $leaveCount + $overtimeCount + $reimbursementCount + $permitCount + $vehicleCount + $fundRequestCount + $payrollCount + $earlyOutCount + $correctionCount,
         ];
+    }
+
+    private static function canUserApprovePendingType(User $user, string $type, array $permMap, bool $hasPrivilegedAccess): bool
+    {
+        if ($hasPrivilegedAccess) {
+            return true;
+        }
+
+        return isset($permMap[$type]) && $user->hasPermission($permMap[$type]);
+    }
+
+    private static function countDirectAttendancePending(string $modelClass, array $whereConditions, User $user, bool $isGlobalAdmin, ?Request $request): int
+    {
+        $query = $modelClass::where($whereConditions);
+        if (!$isGlobalAdmin && $user->company_id) {
+            $query->where('company_id', $user->company_id);
+        }
+        self::applyDateFilter($query, $request);
+        return $query->count();
     }
 
     public static function getPendingRequests(Request $request, User $user, array $permMap)
@@ -263,33 +271,31 @@ class PendingRequestService
 
     private static function filterPendingItems($items, string $type, User $user)
     {
-        return $items->filter(function ($item) use ($type, $user) {
-            // Super Admin or users with manage-approvals have emergency oversight on all pending submissions
-            if ($user->isSuperAdmin() || $user->hasPermission('manage-approvals')) {
-                return true;
-            }
+        return $items->filter(fn ($item) => self::canUserAccessPendingItem($item, $type, $user))->values();
+    }
 
-            $submitter = $item->user;
-            if ($type === 'payroll') {
-                $submitter = $item->creator ?: $user;
-            }
+    private static function canUserAccessPendingItem($item, string $type, User $user): bool
+    {
+        // Super Admin or users with manage-approvals have emergency oversight on all pending submissions
+        if ($user->isSuperAdmin() || $user->hasPermission('manage-approvals')) {
+            return true;
+        }
 
-            if (!empty($item->current_approval_step) && $submitter) {
-                return ApprovalService::canApprove(
-                    $type,
-                    $item->company_id ?? $user->company_id,
-                    $user,
-                    $submitter,
-                    $item->current_approval_step
-                );
-            }
+        $submitter = ($type === 'payroll') ? ($item->creator ?: $user) : $item->user;
 
-            if ($type === 'payroll') {
-                return $user->role_id === 1 || $user->hasPermission('approve-payroll') || $user->hasPermission('manage-payroll');
-            }
+        if (!empty($item->current_approval_step) && $submitter) {
+            return ApprovalService::canApprove(
+                $type,
+                $item->company_id ?? $user->company_id,
+                $user,
+                $submitter,
+                $item->current_approval_step
+            );
+        }
 
-            return self::canHandlePendingItem($item, $user, $type);
-        })->values();
+        return ($type === 'payroll')
+            ? ($user->role_id === 1 || $user->hasPermission('approve-payroll') || $user->hasPermission('manage-payroll'))
+            : self::canHandlePendingItem($item, $user, $type);
     }
 
     private static function canHandlePendingItem($item, User $user, string $type = ''): bool
