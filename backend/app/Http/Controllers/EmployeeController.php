@@ -6,6 +6,7 @@ use App\Imports\EmployeeImport;
 use App\Mail\WelcomeEmployeeNotification;
 use App\Models\Announcement;
 use App\Models\User;
+use App\Services\EmployeeQueryService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,91 +29,9 @@ class EmployeeController extends Controller
 
     public function index(Request $request)
     {
-        $user = $request->user();
-        $query = User::query();
-
-        if ($user->company_id && ! $user->canAccessAllCompanies()) {
-            $query->where('company_id', $user->company_id);
-        }
-
-        if ($request->is_team === 'true' || $request->is_team === true) {
-            $this->applyTeamFilter($query, $user);
-        }
-
-        if ($request->filled('role_id') && $request->role_id !== 'all') {
-            $query->where('role_id', $request->role_id);
-        }
-
-        if ($request->filled('attendance_type') && $request->attendance_type !== 'all') {
-            $query->where('attendance_type', $request->attendance_type);
-        }
-
-        $employees = $query
-            ->when($request->search, fn ($q) => $this->applySearchFilter($q, (string) $request->search))
-            ->when($request->id, fn ($q) => $q->where('id', $request->id))
-            ->with(['role.permissions', 'supervisor', 'office'])
-            ->orderBy('name', 'asc')
-            ->paginate($request->per_page ?? 10);
-
-        $this->maskSensitiveFields($employees, $user);
+        $employees = EmployeeQueryService::getPaginatedEmployees($request, $request->user());
 
         return $this->successResponse($employees, 'Data karyawan berhasil diambil.');
-    }
-
-    private function applyTeamFilter($query, User $user): void
-    {
-        $isGlobalAdmin = $user->role_id === 1 || $user->hasRole('Super Admin');
-        $isCompanyAdmin = $user->hasRole(['Admin', 'HRD', 'Direktur']) || $user->canAccessAllCompanies();
-
-        if ($isGlobalAdmin || $isCompanyAdmin) {
-            $query->where('id', '!=', $user->id);
-            return;
-        }
-
-        $allSubordinateIds = $this->resolveSubordinateIds($user->id);
-
-        if (!empty($allSubordinateIds)) {
-            $query->whereIn('id', $allSubordinateIds);
-        } elseif ($user->hasPermission('manage-tasks') || $user->hasPermission('assign-tasks')) {
-            $query->where('id', '!=', $user->id);
-        } else {
-            $query->where('supervisor_id', $user->id);
-        }
-    }
-
-    private function resolveSubordinateIds(int $userId): array
-    {
-        $directIds = User::where('supervisor_id', $userId)->pluck('id')->toArray();
-        if (empty($directIds)) {
-            return [];
-        }
-
-        $indirectIds = User::whereIn('supervisor_id', $directIds)->pluck('id')->toArray();
-        return array_unique(array_merge($directIds, $indirectIds));
-    }
-
-    private function applySearchFilter($query, string $search): void
-    {
-        $query->where(function ($qq) use ($search) {
-            $qq->where('name', 'like', "%{$search}%")
-                ->orWhere('email', 'like', "%{$search}%")
-                ->orWhere('nik', 'like', "%{$search}%")
-                ->orWhereHas('role', function ($r) use ($search) {
-                    $r->where('name', 'like', "%{$search}%");
-                });
-        });
-    }
-
-    private function maskSensitiveFields($employees, User $user): void
-    {
-        if ($user->hasPermission('view-employees') || $user->hasRole(['Super Admin', 'Admin', 'HRD', 'Manager'])) {
-            return;
-        }
-
-        $employees->getCollection()->transform(function ($emp) {
-            $emp->makeHidden(['basic_salary', 'bank_account_no', 'bank_name', 'ktp_no', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no']);
-            return $emp;
-        });
     }
 
     /**
@@ -123,63 +42,7 @@ class EmployeeController extends Controller
     {
         abort_if(! $request->user()->hasPermission('view-employees'), 403, self::MSG_FORBIDDEN);
 
-        $user = $request->user();
-        $query = $this->buildDatatablesBaseQuery($user, $request);
-
-        return DataTables::of($query)
-            ->with([
-                'unverified_count' => User::where('company_id', $user->company_id)->whereNull('email_verified_at')->count(),
-            ])
-            ->filter(fn ($q) => $this->applyDatatablesFilter($q, $request))
-            ->make(true);
-    }
-
-    private function buildDatatablesBaseQuery($user, Request $request)
-    {
-        $query = User::with(['role.permissions', 'supervisor', 'office']);
-
-        if ($user->company_id && ! $user->canAccessAllCompanies()) {
-            $query->where('company_id', $user->company_id);
-        }
-
-        if ($request->is_team === 'true' || $request->is_team === true) {
-            $query->where('supervisor_id', $user->id);
-        }
-
-        if ($request->filter === 'unverified') {
-            $query->whereNull('email_verified_at');
-        }
-
-        if ($request->filled('role_id') && $request->role_id !== 'all') {
-            $query->where('role_id', $request->role_id);
-        }
-
-        if ($request->filled('attendance_type') && $request->attendance_type !== 'all') {
-            $query->where('attendance_type', $request->attendance_type);
-        }
-
-        return $query;
-    }
-
-    private function applyDatatablesFilter($query, Request $request)
-    {
-        if ($request->filled('role_id') && $request->role_id !== 'all') {
-            $query->where('role_id', $request->role_id);
-        }
-        if ($request->filled('attendance_type') && $request->attendance_type !== 'all') {
-            $query->where('attendance_type', $request->attendance_type);
-        }
-        if ($request->has('search') && ! empty($request->search['value'])) {
-            $searchTerm = $request->search['value'];
-            $query->where(function ($q) use ($searchTerm) {
-                $q->where('name', 'like', "%{$searchTerm}%")
-                    ->orWhere('email', 'like', "%{$searchTerm}%")
-                    ->orWhere('nik', 'like', "%{$searchTerm}%")
-                    ->orWhereHas('role', function ($r) use ($searchTerm) {
-                        $r->where('name', 'like', "%{$searchTerm}%");
-                    });
-            });
-        }
+        return EmployeeQueryService::getDatatablesResponse($request, $request->user());
     }
 
     public function store(Request $request)
