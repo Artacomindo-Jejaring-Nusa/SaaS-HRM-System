@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\Attendance;
+use App\Models\AttendanceCorrection;
 use App\Models\FundRequest;
 use App\Models\Leave;
 use App\Models\Overtime;
@@ -10,15 +12,23 @@ use App\Models\Permit;
 use App\Models\Reimbursement;
 use App\Models\User;
 use App\Models\VehicleLog;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class PendingRequestService
 {
     public static function isExecutiveOrAdmin($user): bool
     {
+        if (!$user) {
+            return false;
+        }
+
+        if ($user->isSuperAdmin() || $user->role_id === 1 || $user->hasPermission('manage-approvals')) {
+            return true;
+        }
+
         $roleName = strtolower($user->role?->name ?? '');
-        return $user->role_id === 1
-            || $user->is_manager
+        return $user->is_manager
             || $user->hasPermission('approve-leaves')
             || $user->hasPermission('approve-permits')
             || $user->hasPermission('approve-overtimes')
@@ -28,6 +38,7 @@ class PendingRequestService
             || $user->hasPermission('approve-payroll')
             || $user->hasPermission('approve-shift-swaps')
             || $user->hasPermission('approve-project-costs')
+            || $user->hasPermission('approve-attendance-corrections')
             || $user->hasPermission('view-manager-portal')
             || str_contains($roleName, 'admin')
             || str_contains($roleName, 'hrd')
@@ -44,9 +55,45 @@ class PendingRequestService
             || str_contains($roleName, 'lead');
     }
 
-    public static function getPendingCount(User $user, array $permMap): array
+    public static function applyDateFilter($query, ?Request $request = null, string $dateColumn = 'created_at')
     {
-        $isGlobalAdmin = $user->role_id === 1;
+        if (!$request) {
+            return;
+        }
+
+        $period = $request->input('period');
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
+
+        if ($startDate && $endDate) {
+            $query->whereBetween($dateColumn, [
+                Carbon::parse($startDate)->startOfDay(),
+                Carbon::parse($endDate)->endOfDay(),
+            ]);
+            return;
+        }
+
+        if ($period === 'this_month') {
+            $query->whereBetween($dateColumn, [
+                Carbon::now()->startOfMonth(),
+                Carbon::now()->endOfMonth(),
+            ]);
+        } elseif ($period === 'this_year') {
+            $query->whereBetween($dateColumn, [
+                Carbon::now()->startOfYear(),
+                Carbon::now()->endOfYear(),
+            ]);
+        } elseif ($period === 'last_month') {
+            $query->whereBetween($dateColumn, [
+                Carbon::now()->subMonth()->startOfMonth(),
+                Carbon::now()->subMonth()->endOfMonth(),
+            ]);
+        }
+    }
+
+    public static function getPendingCount(User $user, array $permMap, ?Request $request = null): array
+    {
+        $isGlobalAdmin = $user->isSuperAdmin();
         $isCompanyAdmin = self::isExecutiveOrAdmin($user);
         $hasSubordinates = User::where('supervisor_id', $user->id)->exists();
 
@@ -59,14 +106,27 @@ class PendingRequestService
 
         $fundRequestStatus = ($isGlobalAdmin || $isCompanyAdmin) ? ['pending', 'approved_by_supervisor'] : 'pending';
 
-        $leaveCount = $canApprove('leave') ? self::countScopedPending(Leave::class, 'leave', ['pending', 'pending_supervisor', 'pending_hr'], $user, $isGlobalAdmin) : 0;
-        $overtimeCount = $canApprove('overtime') ? self::countScopedPending(Overtime::class, 'overtime', 'pending', $user, $isGlobalAdmin) : 0;
-        $reimbursementCount = $canApprove('reimbursement') ? self::countScopedPending(Reimbursement::class, 'reimbursement', 'pending', $user, $isGlobalAdmin) : 0;
-        $permitCount = $canApprove('permit') ? self::countScopedPending(Permit::class, 'permit', 'pending', $user, $isGlobalAdmin) : 0;
-        $vehicleCount = $canApprove('vehicle_log') ? self::countScopedPending(VehicleLog::class, 'vehicle_log', ['pending', 'completed'], $user, $isGlobalAdmin) : 0;
-        $fundRequestCount = $canApprove('fund_request') ? self::countScopedPending(FundRequest::class, 'fund_request', $fundRequestStatus, $user, $isGlobalAdmin) : 0;
-        $payrollCount = $canApprove('payroll') ? self::countScopedPending(PayrollBatch::class, 'payroll', 'pending_approval', $user, $isGlobalAdmin) : 0;
-        $earlyOutCount = $canApprove('early_out') ? \App\Models\Attendance::where('is_early_out', true)->where('early_out_status', 'pending')->when(!$isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))->count() : 0;
+        $leaveCount = $canApprove('leave') ? self::countScopedPending(Leave::class, 'leave', ['pending', 'pending_supervisor', 'pending_hr'], $user, $isGlobalAdmin, $request) : 0;
+        $overtimeCount = $canApprove('overtime') ? self::countScopedPending(Overtime::class, 'overtime', 'pending', $user, $isGlobalAdmin, $request) : 0;
+        $reimbursementCount = $canApprove('reimbursement') ? self::countScopedPending(Reimbursement::class, 'reimbursement', 'pending', $user, $isGlobalAdmin, $request) : 0;
+        $permitCount = $canApprove('permit') ? self::countScopedPending(Permit::class, 'permit', 'pending', $user, $isGlobalAdmin, $request) : 0;
+        $vehicleCount = $canApprove('vehicle_log') ? self::countScopedPending(VehicleLog::class, 'vehicle_log', ['pending', 'completed'], $user, $isGlobalAdmin, $request) : 0;
+        $fundRequestCount = $canApprove('fund_request') ? self::countScopedPending(FundRequest::class, 'fund_request', $fundRequestStatus, $user, $isGlobalAdmin, $request) : 0;
+        $payrollCount = $canApprove('payroll') ? self::countScopedPending(PayrollBatch::class, 'payroll', 'pending_approval', $user, $isGlobalAdmin, $request) : 0;
+
+        $earlyOutQuery = Attendance::where('is_early_out', true)->where('early_out_status', 'pending');
+        if (!$isGlobalAdmin && $user->company_id) {
+            $earlyOutQuery->where('company_id', $user->company_id);
+        }
+        self::applyDateFilter($earlyOutQuery, $request);
+        $earlyOutCount = $canApprove('early_out') ? $earlyOutQuery->count() : 0;
+
+        $correctionQuery = AttendanceCorrection::where('status', 'pending');
+        if (!$isGlobalAdmin && $user->company_id) {
+            $correctionQuery->where('company_id', $user->company_id);
+        }
+        self::applyDateFilter($correctionQuery, $request);
+        $correctionCount = $canApprove('attendance_correction') ? $correctionQuery->count() : 0;
 
         return [
             'leave' => $leaveCount,
@@ -77,7 +137,8 @@ class PendingRequestService
             'vehicle_log' => $vehicleCount,
             'payroll' => $payrollCount,
             'early_out' => $earlyOutCount,
-            'total' => $leaveCount + $overtimeCount + $reimbursementCount + $permitCount + $vehicleCount + $fundRequestCount + $payrollCount + $earlyOutCount,
+            'attendance_correction' => $correctionCount,
+            'total' => $leaveCount + $overtimeCount + $reimbursementCount + $permitCount + $vehicleCount + $fundRequestCount + $payrollCount + $earlyOutCount + $correctionCount,
         ];
     }
 
@@ -89,7 +150,7 @@ class PendingRequestService
             return [];
         }
 
-        $isGlobalAdmin = $user->role_id === 1;
+        $isGlobalAdmin = $user->isSuperAdmin();
         $isCompanyAdmin = self::isExecutiveOrAdmin($user);
 
         $query = self::resolvePendingBaseQuery($type, $isGlobalAdmin, $isCompanyAdmin);
@@ -97,13 +158,18 @@ class PendingRequestService
             return null;
         }
 
-        if (! $isGlobalAdmin) {
+        if (! $isGlobalAdmin && $user->company_id) {
             $query->where('company_id', $user->company_id);
+        } elseif ($request->filled('company_id')) {
+            $query->where('company_id', $request->company_id);
         }
+
+        // Apply period or start_date/end_date filter
+        self::applyDateFilter($query, $request);
 
         $items = $query->orderBy('created_at', 'desc')->get();
 
-        if (! $isGlobalAdmin && ! in_array($type, ['vehicle_log', 'early_out'])) {
+        if (! $isGlobalAdmin && ! in_array($type, ['vehicle_log', 'early_out', 'attendance_correction'])) {
             $items = self::filterPendingItems($items, $type, $user);
         }
 
@@ -114,7 +180,8 @@ class PendingRequestService
 
     private static function canUserViewPendingType(User $user, ?string $type, array $permMap): bool
     {
-        $hasPrivilegedAccess = $user->role_id === 1
+        $hasPrivilegedAccess = $user->isSuperAdmin()
+            || $user->role_id === 1
             || $user->hasPermission('manage-approvals')
             || self::isExecutiveOrAdmin($user)
             || User::where('supervisor_id', $user->id)->exists();
@@ -150,17 +217,21 @@ class PendingRequestService
         });
     }
 
-    private static function countScopedPending($modelClass, string $type, string|array $pendingStatus, User $user, bool $isGlobalAdmin): int
+    private static function countScopedPending($modelClass, string $type, string|array $pendingStatus, User $user, bool $isGlobalAdmin, ?Request $request = null): int
     {
         $query = is_array($pendingStatus)
             ? $modelClass::whereIn('status', $pendingStatus)
             : $modelClass::where('status', $pendingStatus);
 
-        if (!$isGlobalAdmin) {
+        if (!$isGlobalAdmin && $user->company_id) {
             $query->where('company_id', $user->company_id);
+        } elseif ($request && $request->filled('company_id')) {
+            $query->where('company_id', $request->company_id);
         }
 
-        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'early_out'])) {
+        self::applyDateFilter($query, $request);
+
+        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'early_out', 'attendance_correction'])) {
             $items = $query->with(['user.supervisor', 'user.role', 'creator.supervisor', 'creator.role'])->get();
             return self::filterPendingItems($items, $type, $user)->count();
         }
@@ -177,7 +248,8 @@ class PendingRequestService
             'permit' => Permit::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
             'vehicle_log' => VehicleLog::with(['user.role', 'user.office', 'user.supervisor', 'vehicle'])->whereIn('status', ['pending', 'completed']),
             'payroll' => PayrollBatch::with(['creator'])->where('status', 'pending_approval'),
-            'early_out' => \App\Models\Attendance::with(['user.role', 'user.office', 'user.supervisor'])->where('is_early_out', true)->where('early_out_status', 'pending'),
+            'early_out' => Attendance::with(['user.role', 'user.office', 'user.supervisor'])->where('is_early_out', true)->where('early_out_status', 'pending'),
+            'attendance_correction' => AttendanceCorrection::with(['user.role', 'user.office', 'user.supervisor', 'attendance'])->where('status', 'pending'),
             'fund_request' => FundRequest::with(['user.role', 'user.office', 'user.supervisor', 'supervisor', 'hrd'])->where(function ($q) use ($isGlobalAdmin, $isCompanyAdmin) {
                 if ($isGlobalAdmin || $isCompanyAdmin) {
                     $q->whereIn('status', ['pending', 'approved_by_supervisor']);
@@ -192,6 +264,11 @@ class PendingRequestService
     private static function filterPendingItems($items, string $type, User $user)
     {
         return $items->filter(function ($item) use ($type, $user) {
+            // Super Admin or users with manage-approvals have emergency oversight on all pending submissions
+            if ($user->isSuperAdmin() || $user->hasPermission('manage-approvals')) {
+                return true;
+            }
+
             $submitter = $item->user;
             if ($type === 'payroll') {
                 $submitter = $item->creator ?: $user;
@@ -217,13 +294,14 @@ class PendingRequestService
 
     private static function canHandlePendingItem($item, User $user, string $type = ''): bool
     {
-        $isAdmin = $user->role_id === 1 || self::isExecutiveOrAdmin($user);
+        $isAdmin = $user->isSuperAdmin() || $user->role_id === 1 || self::isExecutiveOrAdmin($user);
         $isSupervisor = ($item->user?->supervisor_id === $user->id) || (isset($item->supervisor_id) && $item->supervisor_id === $user->id);
 
         return match ($type) {
             'fund_request' => self::canHandleFundRequest($item, $user, $isAdmin, $isSupervisor),
             'reimbursement' => $isAdmin || $user->hasPermission('approve-reimbursements') || $isSupervisor,
             'overtime' => $isAdmin || $user->hasPermission('approve-overtimes') || $isSupervisor,
+            'attendance_correction' => $isAdmin || $user->hasPermission('approve-attendance-corrections') || $isSupervisor,
             default => self::canHandleDefaultPending($item, $isAdmin, $isSupervisor, $user),
         };
     }

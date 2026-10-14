@@ -25,6 +25,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
     with WidgetsBindingObserver {
   CameraController? _cameraController;
   List<CameraDescription>? _cameras;
+  CameraDescription? _cameraDescription;
   bool _isCameraReady = false;
   bool _isLoading = true;
   bool _isSubmitting = false;
@@ -143,6 +144,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
           orElse: () => _cameras!.first,
         );
 
+        _cameraDescription = frontCam;
         _cameraController = CameraController(
           frontCam,
           ResolutionPreset.high,
@@ -200,6 +202,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
   Future<void> _processLivenessFrame(CameraImage image) async {
     try {
       final inputImage = _convertCameraImageToInputImage(image);
+      if (inputImage == null) return;
       final faces = await _faceDetector.processImage(inputImage);
 
       if (!mounted) return;
@@ -389,23 +392,121 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
     });
   }
 
-  InputImage _convertCameraImageToInputImage(CameraImage image) {
-    final bytes = Platform.isAndroid
+  InputImageRotation _getImageRotation() {
+    if (Platform.isIOS) {
+      return InputImageRotation.rotation90deg;
+    }
+    final sensorOrientation = _cameraDescription?.sensorOrientation ?? 270;
+    switch (sensorOrientation) {
+      case 0:
+        return InputImageRotation.rotation0deg;
+      case 90:
+        return InputImageRotation.rotation90deg;
+      case 180:
+        return InputImageRotation.rotation180deg;
+      case 270:
+      default:
+        return InputImageRotation.rotation270deg;
+    }
+  }
+
+  InputImage? _convertCameraImageToInputImage(CameraImage image) {
+    if (_cameraDescription == null) return null;
+
+    final rotation = _getImageRotation();
+
+    if (Platform.isAndroid) {
+      final int width = image.width;
+      final int height = image.height;
+
+      // Kasus 1: Kamera sudah menyediakan 1 plane NV21 langsung
+      if (image.planes.length == 1) {
+        return InputImage.fromBytes(
+          bytes: image.planes[0].bytes,
+          metadata: InputImageMetadata(
+            size: Size(width.toDouble(), height.toDouble()),
+            rotation: rotation,
+            format: InputImageFormat.nv21,
+            bytesPerRow: image.planes[0].bytesPerRow,
+          ),
+        );
+      }
+
+      // Kasus 2: Multi-plane YUV_420_888 dari Camera2 / CameraX Android
+      // Konversi presisi ke buffer NV21 (Y plane + interleaved VU bytes)
+      if (image.planes.length >= 3) {
+        final planeY = image.planes[0];
+        final planeU = image.planes[1];
+        final planeV = image.planes[2];
+
+        final int yRowStride = planeY.bytesPerRow;
+        final Uint8List yBytes = planeY.bytes;
+
+        final int uPixelStride = planeU.bytesPerPixel ?? 1;
+        final int vPixelStride = planeV.bytesPerPixel ?? 1;
+        final int uRowStride = planeU.bytesPerRow;
+        final int vRowStride = planeV.bytesPerRow;
+        final Uint8List uBytes = planeU.bytes;
+        final Uint8List vBytes = planeV.bytes;
+
+        final int uvWidth = width ~/ 2;
+        final int uvHeight = height ~/ 2;
+        final int totalBytes = width * height + 2 * uvWidth * uvHeight;
+        final Uint8List nv21 = Uint8List(totalBytes);
+
+        // 1. Salin Plane Y (singkirkan padding row stride jika ada)
+        int dstIndex = 0;
+        if (yRowStride == width) {
+          nv21.setRange(0, width * height, yBytes);
+          dstIndex = width * height;
+        } else {
+          for (int row = 0; row < height; row++) {
+            nv21.setRange(
+              dstIndex,
+              dstIndex + width,
+              yBytes,
+              row * yRowStride,
+            );
+            dstIndex += width;
+          }
+        }
+
+        // 2. Interleave VU untuk format NV21 standar ML Kit
+        for (int row = 0; row < uvHeight; row++) {
+          final int uRowOffset = row * uRowStride;
+          final int vRowOffset = row * vRowStride;
+          for (int col = 0; col < uvWidth; col++) {
+            nv21[dstIndex++] = vBytes[vRowOffset + col * vPixelStride];
+            nv21[dstIndex++] = uBytes[uRowOffset + col * uPixelStride];
+          }
+        }
+
+        return InputImage.fromBytes(
+          bytes: nv21,
+          metadata: InputImageMetadata(
+            size: Size(width.toDouble(), height.toDouble()),
+            rotation: rotation,
+            format: InputImageFormat.nv21,
+            bytesPerRow: width,
+          ),
+        );
+      }
+    }
+
+    // Fallback untuk iOS (BGRA8888) atau format lainnya
+    final bytes = image.planes.length == 1
         ? image.planes[0].bytes
         : _concatenatePlanes(image.planes);
 
-    final InputImageMetadata metadata = InputImageMetadata(
-      size: Size(image.width.toDouble(), image.height.toDouble()),
-      rotation: Platform.isIOS
-          ? InputImageRotation.rotation90deg
-          : InputImageRotation.rotation270deg,
-      format: Platform.isIOS
-          ? InputImageFormat.bgra8888
-          : InputImageFormat.nv21,
-      bytesPerRow: image.planes[0].bytesPerRow,
+    return InputImage.fromBytes(
+      bytes: bytes,
+      metadata: InputImageMetadata(
+        size: Size(image.width.toDouble(), image.height.toDouble()),
+        rotation: rotation,
+        format: Platform.isIOS ? InputImageFormat.bgra8888 : InputImageFormat.nv21,
+        bytesPerRow: image.planes[0].bytesPerRow,
+      ),
     );
-
-    return InputImage.fromBytes(bytes: bytes, metadata: metadata);
   }
 
   Uint8List _concatenatePlanes(List<Plane> planes) {

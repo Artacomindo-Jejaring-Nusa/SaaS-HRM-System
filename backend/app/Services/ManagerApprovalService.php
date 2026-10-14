@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Http\Controllers\LeaveController;
 use App\Models\Attendance;
+use App\Models\AttendanceCorrection;
 use App\Models\FundRequest;
 use App\Models\Leave;
 use App\Models\Overtime;
@@ -35,6 +36,7 @@ class ManagerApprovalService
         'fund_request' => 'approve-fund-requests',
         'payroll' => 'approve-payroll',
         'early_out' => 'approve-attendances',
+        'attendance_correction' => 'approve-attendance-corrections',
     ];
 
     private const TYPE_TEXTS = [
@@ -46,6 +48,7 @@ class ManagerApprovalService
         'vehicle_log' => 'Peminjaman Kendaraan',
         'payroll' => 'Payroll',
         'early_out' => 'Pulang Awal',
+        'attendance_correction' => 'Koreksi Absen',
     ];
 
     private const ROUTE_PATHS = [
@@ -57,6 +60,7 @@ class ManagerApprovalService
         'vehicle_log' => '/dashboard/fleet-logs',
         'payroll' => self::ROUTE_PAYROLL_APPROVAL,
         'early_out' => self::ROUTE_ATTENDANCE,
+        'attendance_correction' => '/dashboard/attendance-corrections',
     ];
 
     /**
@@ -65,13 +69,13 @@ class ManagerApprovalService
     public function updateRequestStatus(Request $request, User $user)
     {
         $request->validate([
-            'type' => 'required|in:leave,overtime,reimbursement,permit,vehicle_log,fund_request,payroll,early_out',
+            'type' => 'required|in:leave,overtime,reimbursement,permit,vehicle_log,fund_request,payroll,early_out,attendance_correction',
             'id' => 'required|integer',
             'status' => 'required|in:approved,rejected',
             'remark' => 'nullable|string',
         ]);
 
-        $isGlobalAdmin = $user->role_id === 1;
+        $isGlobalAdmin = $user->isSuperAdmin();
         $isCompanyAdmin = PendingRequestService::isExecutiveOrAdmin($user);
 
         if (! $this->canUserApproveRequest($user, $request->type, $isGlobalAdmin, $isCompanyAdmin)) {
@@ -285,6 +289,7 @@ class ManagerApprovalService
             'permit' => Permit::class,
             'vehicle_log' => VehicleLog::class,
             'fund_request' => FundRequest::class,
+            'attendance_correction' => AttendanceCorrection::class,
         };
 
         $query = $model::where('id', $request->id);
@@ -305,11 +310,13 @@ class ManagerApprovalService
     private function handleDynamicApproval($item, Request $request, User $user)
     {
         $action = $request->status === 'approved' ? 'approve' : 'reject';
+        $submitter = $item->user ?: User::find($item->user_id) ?: $user;
+
         $result = ApprovalService::processApproval(
             $request->type,
             $item->company_id ?? $user->company_id,
             $user,
-            $item->user,
+            $submitter,
             $item->current_approval_step,
             $action
         );
@@ -327,6 +334,16 @@ class ManagerApprovalService
 
         if ($request->type === 'leave' && $result['is_final'] && $result['status'] === 'approved') {
             LeaveController::processLeaveApprovalDeduction();
+        }
+
+        if ($request->type === 'attendance_correction' && $result['is_final'] && $result['status'] === 'approved') {
+            $attendance = $item->attendance;
+            if ($attendance) {
+                $applyData = [];
+                if ($item->corrected_check_in) $applyData['check_in'] = $item->corrected_check_in;
+                if ($item->corrected_check_out) $applyData['check_out'] = $item->corrected_check_out;
+                if (!empty($applyData)) $attendance->update($applyData);
+            }
         }
 
         $typeText = self::TYPE_TEXTS[$request->type] ?? ucfirst($request->type);
@@ -478,6 +495,28 @@ class ManagerApprovalService
     {
         if ($request->type === 'fund_request') {
             return $this->updateLegacyFundRequest($item, $request, $user, $isCompanyAdmin, $isGlobalAdmin);
+        }
+
+        if ($request->type === 'attendance_correction') {
+            $isApproved = $request->status === 'approved';
+            $item->update([
+                'status' => $request->status,
+                'approved_by' => $user->id,
+                'remark' => $request->remark,
+            ]);
+            if ($isApproved && $item->attendance) {
+                $applyData = [];
+                if ($item->corrected_check_in) {
+                    $applyData['check_in'] = $item->corrected_check_in;
+                }
+                if ($item->corrected_check_out) {
+                    $applyData['check_out'] = $item->corrected_check_out;
+                }
+                if (!empty($applyData)) {
+                    $item->attendance->update($applyData);
+                }
+            }
+            return $request->status;
         }
 
         $targetStatus = $request->status;

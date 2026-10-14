@@ -92,6 +92,18 @@ class User extends Authenticatable
         return $this->profile_photo_path ? asset('storage/'.$this->profile_photo_path) : null;
     }
 
+    public function isSuperAdmin(): bool
+    {
+        if ($this->role_id === 1) {
+            return true;
+        }
+
+        $roleName = strtolower($this->role?->name ?? '');
+        return $roleName === 'super admin'
+            || str_contains($roleName, 'super admin')
+            || (method_exists($this, 'hasRole') && $this->hasRole('Super Admin'));
+    }
+
     public function canAccessManagerPortal(): bool
     {
         // 1. Explicit override in database: true/1 = Force Enabled, false/0 = Force Disabled
@@ -99,7 +111,7 @@ class User extends Authenticatable
             return (bool) $this->attributes['can_access_manager_portal'];
         }
 
-        if ($this->role_id === 1 || ($this->role && strtolower($this->role->name) === 'super admin')) {
+        if ($this->isSuperAdmin()) {
             return true;
         }
 
@@ -132,7 +144,7 @@ class User extends Authenticatable
 
     public function getPermissionSlugsAttribute(): array
     {
-        if ($this->role_id === 1) {
+        if ($this->isSuperAdmin()) {
             return Permission::pluck('slug')->toArray();
         }
 
@@ -161,8 +173,8 @@ class User extends Authenticatable
 
     public function hasPermission($slug)
     {
-        // Master Admin (Role ID 1) bypass all
-        if ($this->role_id === 1) {
+        // Master / Super Admin bypass all permissions
+        if ($this->isSuperAdmin()) {
             return true;
         }
 
@@ -184,8 +196,7 @@ class User extends Authenticatable
      */
     public function canAccessAllCompanies()
     {
-        // Only the actual Provider Master Admin (ID 1) can see all data
-        return $this->role_id === 1;
+        return $this->isSuperAdmin();
     }
 
     /**

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -48,9 +49,9 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   // Face detection (lokal, hanya untuk memastikan ada wajah di frame)
   final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
-      enableClassification: false, // Tidak perlu eye probability
+      enableClassification: false,
       enableTracking: true,
-      performanceMode: FaceDetectorMode.fast, // Prioritas kecepatan
+      performanceMode: FaceDetectorMode.accurate, // Akurat agar wajah tidak terlewat
     ),
   );
 
@@ -63,9 +64,15 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   String? _capturedImagePath;
   bool _showShutterFlash = false;
 
-  // Counter agar tidak capture terlalu lambat (4 frame stabil ~0.4 detik)
+  // Progress Bar & Auto-capture timer
+  double _progressValue = 0.0;
+  Timer? _fallbackTimer;
+  int _secondsElapsed = 0;
+  InputImageRotation? _confirmedRotation;
+
+  // Counter agar capture instan dan responsif (2 frame stabil ~0.2 detik)
   int _stableFaceFrames = 0;
-  static const int _requiredStableFrames = 4;
+  static const int _requiredStableFrames = 2;
 
   // Mencegah double-capture
   bool _hasAutoCaptured = false;
@@ -104,6 +111,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
   @override
   void dispose() {
+    _fallbackTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _faceDetector.close();
     _stopStreamSafe();
@@ -117,6 +125,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     if (_controller == null || !_controller!.value.isInitialized) return;
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused) {
+      _fallbackTimer?.cancel();
       _stopStreamSafe();
       _controller?.dispose();
       _controller = null;
@@ -160,6 +169,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         if (mounted) {
           setState(() => _isCameraReady = true);
           _startFaceDetectionStream();
+          _startFallbackTimer();
         }
       }
     } catch (e) {
@@ -167,66 +177,137 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     }
   }
 
+  /// Timer fail-safe: jika stream ML Kit lambat atau macet di hardware tertentu,
+  /// timer ini tetap memberikan progress bar visual dan otomatis mengambil foto setelah 3.5 detik.
+  void _startFallbackTimer() {
+    _fallbackTimer?.cancel();
+    _secondsElapsed = 0;
+    _fallbackTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      if (!mounted || _hasAutoCaptured || _isCapturing || _isProcessing) {
+        timer.cancel();
+        return;
+      }
+      _secondsElapsed += 100;
+
+      // Update progress bar visual agar user langsung melihat feedback aktif
+      if (_secondsElapsed >= 600 && _secondsElapsed <= 3500) {
+        final double p = (_secondsElapsed - 600) / 2900.0;
+        if (!_hasAutoCaptured && mounted) {
+          setState(() {
+            _progressValue = p.clamp(0.0, 0.95);
+            if (p > 0.25 && _statusMessage == "Arahkan Wajah ke Kamera") {
+              _statusMessage = "Merekam Wajah... Tetap Diam";
+              _statusColor = Colors.lightBlueAccent;
+            }
+          });
+        }
+      }
+
+      // Begitu mencapai 3.5 detik berada di depan kamera, jepret otomatis!
+      if (_secondsElapsed >= 3500) {
+        timer.cancel();
+        if (!_hasAutoCaptured && !_isCapturing && !_isProcessing && mounted) {
+          _hasAutoCaptured = true;
+          setState(() {
+            _progressValue = 1.0;
+            _statusMessage = "📸 Mengambil Foto...";
+            _statusColor = Colors.greenAccent;
+          });
+          _autoCaptureAndSubmit();
+        }
+      }
+    });
+  }
+
   void _startFaceDetectionStream() {
     if (_controller == null || !_controller!.value.isInitialized) return;
     if (_controller!.value.isStreamingImages) return;
 
-    _controller!.startImageStream((CameraImage image) {
-      if (_isStreamActive || _isCapturing || _isProcessing || _hasAutoCaptured) {
-        return;
-      }
-      _isStreamActive = true;
-      _detectFaceInFrame(image);
-    });
+    try {
+      _controller!.startImageStream((CameraImage image) {
+        if (_isStreamActive || _isCapturing || _isProcessing || _hasAutoCaptured) {
+          return;
+        }
+        _isStreamActive = true;
+        _detectFaceInFrame(image);
+      });
+    } catch (e) {
+      debugPrint("startImageStream error: $e");
+    }
   }
 
   Future<void> _detectFaceInFrame(CameraImage image) async {
     try {
-      final inputImage = _convertCameraImageToInputImage(image);
-      final faces = await _faceDetector.processImage(inputImage);
+      // Rotasi dinamis: jika belum terkonfirmasi, coba candidate rotations hingga wajah terdeteksi
+      final List<InputImageRotation> rotationsToTry;
+      if (_confirmedRotation != null) {
+        rotationsToTry = [_confirmedRotation!];
+      } else {
+        final defaultRot = _getImageRotation();
+        rotationsToTry = {
+          defaultRot,
+          InputImageRotation.rotation270deg,
+          InputImageRotation.rotation90deg,
+          InputImageRotation.rotation0deg,
+          InputImageRotation.rotation180deg,
+        }.toList();
+      }
+
+      List<Face> faces = [];
+      InputImageRotation? workingRot;
+
+      for (final rot in rotationsToTry) {
+        final inputImage = _convertCameraImageToInputImage(image, rot);
+        if (inputImage == null) continue;
+        try {
+          final detected = await _faceDetector.processImage(inputImage);
+          if (detected.isNotEmpty) {
+            faces = detected;
+            workingRot = rot;
+            break;
+          }
+        } catch (_) {}
+      }
+
+      if (workingRot != null && _confirmedRotation == null) {
+        _confirmedRotation = workingRot;
+        debugPrint("[Attendance] Confirmed working rotation: $workingRot");
+      }
 
       if (!mounted || _hasAutoCaptured) return;
 
       if (faces.isEmpty) {
         if (_stableFaceFrames > 0) _stableFaceFrames--;
-        setState(() {
-          _statusMessage = "Arahkan Wajah ke Kamera";
-          _statusColor = Colors.white70;
-          _statusIcon = Icons.face_retouching_off;
-        });
         return;
       }
 
+      // Wajah terdeteksi oleh ML Kit!
+      _stableFaceFrames++;
       final face = faces.first;
       final eulerY = face.headEulerAngleY ?? 0.0;
       final eulerX = face.headEulerAngleX ?? 0.0;
 
-      // Cek apakah wajah cukup frontal (toleransi diperlonggar ke 25° agar lebih natural & responsif)
-      if (eulerY.abs() < 25 && eulerX.abs() < 25) {
-        _stableFaceFrames++;
+      // Cek apakah posisi wajah wajar (toleransi 35° agar fleksibel & nyaman)
+      if (eulerY.abs() < 35 && eulerX.abs() < 35) {
+        setState(() {
+          _progressValue = 0.5 + (_stableFaceFrames * 0.25).clamp(0.0, 0.5);
+          _statusMessage = "📸 Wajah Terdeteksi! Merekam Wajah...";
+          _statusColor = Colors.greenAccent;
+          _statusIcon = Icons.face;
+        });
 
-        if (_stableFaceFrames < _requiredStableFrames) {
-          // Animasi countdown visual
-          setState(() {
-            _statusMessage = "Wajah Terdeteksi, Tetap Diam...";
-            _statusColor = Colors.lightBlueAccent;
-            _statusIcon = Icons.face;
-          });
-        } else if (!_hasAutoCaptured) {
-          // Wajah stabil cukup lama → AUTO CAPTURE!
+        if (_stableFaceFrames >= _requiredStableFrames && !_hasAutoCaptured) {
           _hasAutoCaptured = true;
+          _fallbackTimer?.cancel();
           setState(() {
-            _statusMessage = "📸 Memproses Absensi...";
-            _statusColor = Colors.greenAccent;
-            _statusIcon = Icons.check_circle;
+            _progressValue = 1.0;
+            _statusMessage = "📸 Mengambil Foto Wajah...";
           });
-          // Schedule capture outside stream callback
           Future.microtask(() => _autoCaptureAndSubmit());
         }
       } else {
-        if (_stableFaceFrames > 0) _stableFaceFrames--;
         setState(() {
-          _statusMessage = "Hadap Lurus ke Depan";
+          _statusMessage = "Tegakkan Wajah Lurus ke Kamera";
           _statusColor = Colors.amberAccent;
           _statusIcon = Icons.face;
         });
@@ -426,6 +507,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
   /// Reset semua state untuk retry & unfreeze kamera
   void _retryAttendance() {
+    _fallbackTimer?.cancel();
     setState(() {
       _showResult = false;
       _isSuccess = false;
@@ -436,17 +518,20 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       _capturedImagePath = null;
       _showShutterFlash = false;
       _stableFaceFrames = 0;
+      _progressValue = 0.0;
+      _secondsElapsed = 0;
       _statusMessage = "Arahkan Wajah ke Kamera";
       _statusColor = Colors.white70;
       _statusIcon = Icons.face;
     });
 
-    // Restart camera stream setelah delay
+    // Restart camera stream dan fallback timer setelah delay
     Future.delayed(const Duration(milliseconds: 400), () {
       if (mounted &&
           _controller != null &&
           _controller!.value.isInitialized) {
         _startFaceDetectionStream();
+        _startFallbackTimer();
       }
     });
   }
@@ -657,21 +742,108 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     }
   }
 
-  InputImage _convertCameraImageToInputImage(CameraImage image) {
+  InputImage? _convertCameraImageToInputImage(CameraImage image, [InputImageRotation? customRotation]) {
+    if (_cameraDescription == null) return null;
+
+    final rotation = customRotation ?? _getImageRotation();
+
+    if (Platform.isAndroid) {
+      final int width = image.width;
+      final int height = image.height;
+
+      // Kasus 1: Kamera sudah menyediakan 1 plane NV21 langsung
+      if (image.planes.length == 1) {
+        return InputImage.fromBytes(
+          bytes: image.planes[0].bytes,
+          metadata: InputImageMetadata(
+            size: Size(width.toDouble(), height.toDouble()),
+            rotation: rotation,
+            format: InputImageFormat.nv21,
+            bytesPerRow: image.planes[0].bytesPerRow,
+          ),
+        );
+      }
+
+      // Kasus 2: Multi-plane YUV_420_888 dari Camera2 / CameraX Android
+      // Konversi presisi ke buffer NV21 (Y plane + interleaved VU bytes)
+      if (image.planes.length >= 3) {
+        final planeY = image.planes[0];
+        final planeU = image.planes[1];
+        final planeV = image.planes[2];
+
+        final int yRowStride = planeY.bytesPerRow;
+        final Uint8List yBytes = planeY.bytes;
+
+        final int uPixelStride = planeU.bytesPerPixel ?? 1;
+        final int vPixelStride = planeV.bytesPerPixel ?? 1;
+        final int uRowStride = planeU.bytesPerRow;
+        final int vRowStride = planeV.bytesPerRow;
+        final Uint8List uBytes = planeU.bytes;
+        final Uint8List vBytes = planeV.bytes;
+
+        final int uvWidth = width ~/ 2;
+        final int uvHeight = height ~/ 2;
+        final int totalBytes = width * height + 2 * uvWidth * uvHeight;
+        final Uint8List nv21 = Uint8List(totalBytes);
+
+        // 1. Salin Plane Y (singkirkan padding row stride jika ada)
+        final int yLen = yBytes.length;
+        int dstIndex = 0;
+        if (yRowStride == width && yLen >= width * height) {
+          nv21.setRange(0, width * height, yBytes);
+          dstIndex = width * height;
+        } else {
+          for (int row = 0; row < height; row++) {
+            final int rowStart = row * yRowStride;
+            final int copyLen = (rowStart + width <= yLen) ? width : (yLen - rowStart).clamp(0, width);
+            if (copyLen > 0) {
+              nv21.setRange(dstIndex, dstIndex + copyLen, yBytes, rowStart);
+            }
+            dstIndex += width;
+          }
+        }
+
+        // 2. Interleave VU untuk format NV21 standar ML Kit dengan batas aman
+        final int vLen = vBytes.length;
+        final int uLen = uBytes.length;
+
+        for (int row = 0; row < uvHeight; row++) {
+          final int uRowOffset = row * uRowStride;
+          final int vRowOffset = row * vRowStride;
+          for (int col = 0; col < uvWidth; col++) {
+            final int vIdx = vRowOffset + col * vPixelStride;
+            final int uIdx = uRowOffset + col * uPixelStride;
+            nv21[dstIndex++] = vIdx < vLen ? vBytes[vIdx] : 128;
+            nv21[dstIndex++] = uIdx < uLen ? uBytes[uIdx] : 128;
+          }
+        }
+
+        return InputImage.fromBytes(
+          bytes: nv21,
+          metadata: InputImageMetadata(
+            size: Size(width.toDouble(), height.toDouble()),
+            rotation: rotation,
+            format: InputImageFormat.nv21,
+            bytesPerRow: width,
+          ),
+        );
+      }
+    }
+
+    // Fallback untuk iOS (BGRA8888) atau format lainnya
     final bytes = image.planes.length == 1
         ? image.planes[0].bytes
         : _concatenatePlanes(image.planes);
 
-    final InputImageMetadata metadata = InputImageMetadata(
-      size: Size(image.width.toDouble(), image.height.toDouble()),
-      rotation: _getImageRotation(),
-      format: Platform.isIOS
-          ? InputImageFormat.bgra8888
-          : InputImageFormat.nv21,
-      bytesPerRow: image.planes[0].bytesPerRow,
+    return InputImage.fromBytes(
+      bytes: bytes,
+      metadata: InputImageMetadata(
+        size: Size(image.width.toDouble(), image.height.toDouble()),
+        rotation: rotation,
+        format: Platform.isIOS ? InputImageFormat.bgra8888 : InputImageFormat.nv21,
+        bytesPerRow: image.planes[0].bytesPerRow,
+      ),
     );
-
-    return InputImage.fromBytes(bytes: bytes, metadata: metadata);
   }
 
   Uint8List _concatenatePlanes(List<Plane> planes) {
@@ -760,7 +932,19 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           ),
         ),
 
-        // Animated circle border
+        // Animated circle border & Progress Ring
+        Center(
+          child: SizedBox(
+            width: circleSize + 14,
+            height: circleSize + 14,
+            child: CircularProgressIndicator(
+              value: isFrozen ? 1.0 : (_progressValue > 0 ? _progressValue : null),
+              strokeWidth: 4,
+              valueColor: AlwaysStoppedAnimation<Color>(isFrozen ? Colors.greenAccent : _statusColor),
+              backgroundColor: Colors.white12,
+            ),
+          ),
+        ),
         Center(
           child: Container(
             width: circleSize,
@@ -769,9 +953,9 @@ class _AttendanceScreenState extends State<AttendanceScreen>
               shape: BoxShape.circle,
               border: Border.all(
                 color: isFrozen ? Colors.greenAccent : _statusColor,
-                width: (_stableFaceFrames > 0 || isFrozen) ? 5 : 3,
+                width: (_stableFaceFrames > 0 || isFrozen || _progressValue > 0) ? 4 : 2.5,
               ),
-              boxShadow: (_stableFaceFrames > 2 || isFrozen)
+              boxShadow: (_stableFaceFrames > 0 || isFrozen || _progressValue > 0.3)
                   ? [
                       BoxShadow(
                         color: (isFrozen ? Colors.greenAccent : _statusColor).withValues(alpha: 0.4),
@@ -831,24 +1015,22 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
-              // Progress dots (when detecting face before capture)
-              if (_stableFaceFrames > 0 && !_hasAutoCaptured)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(_requiredStableFrames, (i) {
-                    return Container(
-                      width: 10,
-                      height: 10,
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: i < _stableFaceFrames
-                            ? Colors.greenAccent
-                            : Colors.white24,
-                      ),
-                    );
-                  }),
+              // Progress Bar Visual
+              if (_progressValue > 0 && !_hasAutoCaptured)
+                Container(
+                  width: circleSize * 0.75,
+                  height: 6,
+                  margin: const EdgeInsets.only(top: 8),
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                    color: Colors.white12,
+                  ),
+                  child: LinearProgressIndicator(
+                    value: _progressValue,
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation<Color>(_statusColor),
+                  ),
                 ),
             ],
           ),

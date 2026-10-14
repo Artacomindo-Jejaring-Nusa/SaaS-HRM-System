@@ -29,7 +29,8 @@ import {
   History,
   Filter,
   ShieldAlert,
-  DollarSign
+  DollarSign,
+  CalendarDays
 } from "lucide-react";
 import { ListPageSkeleton } from "@/components/Skeleton";
 import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
@@ -48,7 +49,8 @@ type ApprovalType =
   | "fund_request"
   | "vehicle_log"
   | "payroll"
-  | "early_out";
+  | "early_out"
+  | "attendance_correction";
 
 type FilterType = "all" | ApprovalType;
 type ActionType = "approve" | "reject";
@@ -141,6 +143,7 @@ const typeLabel: Record<ApprovalType, string> = {
   vehicle_log: "Log Armada",
   payroll: "Payroll",
   early_out: "Pulang Awal",
+  attendance_correction: "Koreksi Absen",
 };
 
 const typeColor: Record<ApprovalType, string> = {
@@ -153,6 +156,7 @@ const typeColor: Record<ApprovalType, string> = {
   vehicle_log: "bg-indigo-50 text-indigo-700 border-indigo-200",
   payroll: "bg-emerald-50 text-emerald-700 border-emerald-200",
   early_out: "bg-orange-50 text-orange-700 border-orange-200",
+  attendance_correction: "bg-cyan-50 text-cyan-700 border-cyan-200",
 };
 
 const extractStoragePath = (url?: string): string | undefined => {
@@ -357,6 +361,23 @@ const normalizePayroll = (rawPayrolls: any[]): ApprovalItem[] =>
     target_supervisor_id: null,
   }));
 
+const normalizeCorrections = (rawCorrections: any[]): ApprovalItem[] =>
+  rawCorrections.map((c: any) => ({
+    id: c.id,
+    type: "attendance_correction",
+    user_name: c.user?.name || "Karyawan",
+    user_email: c.user?.email,
+    user_role: c.user?.role?.name || c.user?.role,
+    description: `Koreksi Absen Tanggal ${c.date || '-'}: Masuk [${c.corrected_check_in || '-'}] Pulang [${c.corrected_check_out || '-'}]. Alasan: ${c.reason || '-'}`,
+    category: "Koreksi Absensi",
+    start_date: c.date ? `${c.date} (${c.corrected_check_in || '--:--'} - ${c.corrected_check_out || '--:--'})` : undefined,
+    status: c.status || "pending",
+    current_approval_step: c.current_approval_step || null,
+    attachment: extractStoragePath(c.attachment),
+    created_at: c.created_at,
+    target_supervisor_id: c.user?.supervisor_id
+  }));
+
 const dispatchApprovalRequest = async (
   item: ApprovalItem,
   action: ActionType,
@@ -473,6 +494,8 @@ export default function ApprovalsPage() {
         return hasPermission("approve-leaves") || hasPermission("view-attendances");
       case "early_out":
         return hasPermission("approve-attendances") || hasPermission("view-attendances") || isSuperAdmin;
+      case "attendance_correction":
+        return hasPermission("approve-attendances") || hasPermission("edit-attendances") || isSuperAdmin;
       default:
         return false;
     }
@@ -489,7 +512,18 @@ export default function ApprovalsPage() {
     canApprove("vehicle_log") ||
     canApprove("payroll") ||
     canApprove("dinas_luar") ||
-    canApprove("early_out");
+    canApprove("early_out") ||
+    canApprove("attendance_correction");
+
+  // Date Period state (Presets & Custom Range)
+  type PeriodType = "this_month" | "this_year" | "all" | "custom";
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("this_month");
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
+  const [teamDate, setTeamDate] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
 
   // Approval state
   const [items, setItems] = useState<ApprovalItem[]>([]);
@@ -502,6 +536,7 @@ export default function ApprovalsPage() {
     vehicle_log: number;
     payroll?: number;
     early_out?: number;
+    attendance_correction?: number;
     total: number;
   }>({
     leave: 0,
@@ -512,6 +547,7 @@ export default function ApprovalsPage() {
     vehicle_log: 0,
     payroll: 0,
     early_out: 0,
+    attendance_correction: 0,
     total: 0,
   });
 
@@ -547,20 +583,27 @@ export default function ApprovalsPage() {
   // 1. Fetch Manager Pending Counts
   const fetchCounts = useCallback(async () => {
     try {
-      const res = await axiosInstance.get("/manager/pending-count");
+      const params = new URLSearchParams();
+      params.append("period", selectedPeriod);
+      if (selectedPeriod === "custom") {
+        if (customStartDate) params.append("start_date", customStartDate);
+        if (customEndDate) params.append("end_date", customEndDate);
+      }
+      const res = await axiosInstance.get(`/manager/pending-count?${params.toString()}`);
       if (res.data?.data) {
         setPendingCounts(res.data.data);
       }
     } catch (e) {
       console.warn("Could not fetch manager pending count:", e);
     }
-  }, []);
+  }, [selectedPeriod, customStartDate, customEndDate]);
 
   // 2. Fetch Team Attendance
-  const fetchTeamAttendance = useCallback(async () => {
+  const fetchTeamAttendance = useCallback(async (targetDate?: string) => {
     try {
       setLoadingTeam(true);
-      const res = await axiosInstance.get("/manager/team-attendance");
+      const queryDate = targetDate || teamDate;
+      const res = await axiosInstance.get(`/manager/team-attendance?date=${queryDate}`);
       if (res.data?.data && Array.isArray(res.data.data)) {
         setTeamMembers(res.data.data);
       }
@@ -569,7 +612,7 @@ export default function ApprovalsPage() {
     } finally {
       setLoadingTeam(false);
     }
-  }, []);
+  }, [teamDate]);
 
 const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> => {
   if (!allowed) return [];
@@ -582,11 +625,23 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
   }
 };
 
-  // 3. Fetch All Pending Approvals (filtered dynamically by allowed categories)
+  const buildPeriodQuery = useCallback(() => {
+    const params = new URLSearchParams();
+    params.append("period", selectedPeriod);
+    if (selectedPeriod === "custom") {
+      if (customStartDate) params.append("start_date", customStartDate);
+      if (customEndDate) params.append("end_date", customEndDate);
+    }
+    return params.toString();
+  }, [selectedPeriod, customStartDate, customEndDate]);
+
+  // 3. Fetch All Pending Approvals (filtered dynamically by allowed categories & period)
   const fetchApprovals = useCallback(async (isSilent = false) => {
     try {
       if (!isSilent) setLoading(true);
       setRefreshing(true);
+
+      const periodQuery = buildPeriodQuery();
 
       // Fetch from manager endpoints and specialized routes conditionally based on permissions
       const [
@@ -598,17 +653,19 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         vehicleData,
         dinasData,
         earlyOutData,
-        payrollData
+        payrollData,
+        correctionData
       ] = await Promise.all([
-        fetchCategoryData(canApprove("leave"), "/manager/pending-requests?type=leave"),
-        fetchCategoryData(canApprove("reimbursement"), "/manager/pending-requests?type=reimbursement"),
-        fetchCategoryData(canApprove("overtime"), "/manager/pending-requests?type=overtime"),
-        fetchCategoryData(canApprove("permit"), "/manager/pending-requests?type=permit"),
-        fetchCategoryData(canApprove("fund_request"), "/manager/pending-requests?type=fund_request"),
-        fetchCategoryData(canApprove("vehicle_log"), "/manager/pending-requests?type=vehicle_log"),
+        fetchCategoryData(canApprove("leave"), `/manager/pending-requests?type=leave&${periodQuery}`),
+        fetchCategoryData(canApprove("reimbursement"), `/manager/pending-requests?type=reimbursement&${periodQuery}`),
+        fetchCategoryData(canApprove("overtime"), `/manager/pending-requests?type=overtime&${periodQuery}`),
+        fetchCategoryData(canApprove("permit"), `/manager/pending-requests?type=permit&${periodQuery}`),
+        fetchCategoryData(canApprove("fund_request"), `/manager/pending-requests?type=fund_request&${periodQuery}`),
+        fetchCategoryData(canApprove("vehicle_log"), `/manager/pending-requests?type=vehicle_log&${periodQuery}`),
         fetchCategoryData(canApprove("dinas_luar"), "/attendance/dinas-luar/pending"),
-        fetchCategoryData(canApprove("early_out"), "/manager/pending-requests?type=early_out"),
-        fetchCategoryData(canApprove("payroll"), "/manager/pending-requests?type=payroll"),
+        fetchCategoryData(canApprove("early_out"), `/manager/pending-requests?type=early_out&${periodQuery}`),
+        fetchCategoryData(canApprove("payroll"), `/manager/pending-requests?type=payroll&${periodQuery}`),
+        fetchCategoryData(canApprove("attendance_correction"), `/manager/pending-requests?type=attendance_correction&${periodQuery}`),
       ]);
 
       const allMerged = [
@@ -620,7 +677,8 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         ...normalizeVehicles(vehicleData),
         ...normalizeDinas(dinasData),
         ...normalizeEarlyOut(earlyOutData),
-        ...normalizePayroll(payrollData)
+        ...normalizePayroll(payrollData),
+        ...normalizeCorrections(correctionData)
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setItems(allMerged);
@@ -631,16 +689,22 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
       setLoading(false);
       setRefreshing(false);
     }
-  }, [canApprove, fetchCounts]);
+  }, [canApprove, fetchCounts, buildPeriodQuery]);
 
   useEffect(() => {
     fetchApprovals();
+  }, [fetchApprovals]);
+
+  useEffect(() => {
     fetchTeamAttendance();
+  }, [fetchTeamAttendance]);
+
+  useEffect(() => {
     const interval = setInterval(() => {
       fetchApprovals(true);
     }, 30000);
     return () => clearInterval(interval);
-  }, [fetchApprovals, fetchTeamAttendance]);
+  }, [fetchApprovals]);
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -648,6 +712,11 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
       const params = new URLSearchParams();
       if (historyFilterType !== "all") params.append("type", historyFilterType);
       if (historyFilterStatus !== "all") params.append("status", historyFilterStatus);
+      params.append("period", selectedPeriod);
+      if (selectedPeriod === "custom") {
+        if (customStartDate) params.append("start_date", customStartDate);
+        if (customEndDate) params.append("end_date", customEndDate);
+      }
       const res = await axiosInstance.get(`/manager/history-requests?${params.toString()}`);
       setHistoryItems(res.data?.data || []);
     } catch (e) {
@@ -655,7 +724,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
     } finally {
       setLoadingHistory(false);
     }
-  }, [historyFilterType, historyFilterStatus]);
+  }, [historyFilterType, historyFilterStatus, selectedPeriod, customStartDate, customEndDate]);
 
   useEffect(() => {
     if (activeTab === "history") {
@@ -762,10 +831,44 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
   };
 
   // Filtered approval items
+  // Filtered approval items
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       const matchType = filter === "all" || item.type === filter;
       if (!matchType) return false;
+
+      // Filter by period client-side as well for snappy reactivity
+      if (selectedPeriod !== "all") {
+        const itemDateStr = item.start_date || item.created_at;
+        if (itemDateStr) {
+          const d = new Date(itemDateStr);
+          if (!isNaN(d.getTime())) {
+            const now = new Date();
+            if (selectedPeriod === "this_month") {
+              const inMonth = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+              const cDate = new Date(item.created_at);
+              const cInMonth = !isNaN(cDate.getTime()) && cDate.getFullYear() === now.getFullYear() && cDate.getMonth() === now.getMonth();
+              if (!inMonth && !cInMonth) return false;
+            } else if (selectedPeriod === "this_year") {
+              const inYear = d.getFullYear() === now.getFullYear();
+              const cDate = new Date(item.created_at);
+              const cInYear = !isNaN(cDate.getTime()) && cDate.getFullYear() === now.getFullYear();
+              if (!inYear && !cInYear) return false;
+            } else if (selectedPeriod === "custom") {
+              if (customStartDate) {
+                const s = new Date(customStartDate);
+                s.setHours(0, 0, 0, 0);
+                if (d < s) return false;
+              }
+              if (customEndDate) {
+                const e = new Date(customEndDate);
+                e.setHours(23, 59, 59, 999);
+                if (d > e) return false;
+              }
+            }
+          }
+        }
+      }
 
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
@@ -777,7 +880,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         item.description.toLowerCase().includes(q)
       );
     });
-  }, [items, filter, searchQuery]);
+  }, [items, filter, searchQuery, selectedPeriod, customStartDate, customEndDate]);
 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / itemsPerPage));
   const paginatedItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -810,7 +913,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
   // Reset page when filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [filter, searchQuery]);
+  }, [filter, searchQuery, selectedPeriod, customStartDate, customEndDate]);
 
   const getDinasLuarStatusText = (status?: string | null) => {
     if (status === 'approved_hr') return 'Disetujui HRD';
@@ -986,6 +1089,87 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         <div className="absolute -right-12 -bottom-12 h-56 w-56 rounded-full bg-white/5 blur-2xl pointer-events-none" />
       </div>
 
+      {/* Clean Date Period Filter Bar */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-700 mr-1">
+            <CalendarDays size={16} className="text-[#8B0000]" />
+            <span>Filter Rentang Waktu:</span>
+          </div>
+
+          <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200">
+            <button
+              onClick={() => setSelectedPeriod("this_month")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                selectedPeriod === "this_month"
+                  ? "bg-[#8B0000] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Bulan Ini ({new Intl.DateTimeFormat('id-ID', { month: 'short' }).format(new Date())})
+            </button>
+            <button
+              onClick={() => setSelectedPeriod("this_year")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                selectedPeriod === "this_year"
+                  ? "bg-[#8B0000] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Tahun Ini ({new Date().getFullYear()})
+            </button>
+            <button
+              onClick={() => setSelectedPeriod("all")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                selectedPeriod === "all"
+                  ? "bg-[#8B0000] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Semua Waktu
+            </button>
+            <button
+              onClick={() => setSelectedPeriod("custom")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                selectedPeriod === "custom"
+                  ? "bg-[#8B0000] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Kustom
+            </button>
+          </div>
+
+          {selectedPeriod === "custom" && (
+            <div className="flex items-center gap-2 mt-2 sm:mt-0 animate-in fade-in">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                placeholder="Mulai"
+                className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#8B0000]"
+              />
+              <span className="text-xs text-slate-400">s/d</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                placeholder="Selesai"
+                className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#8B0000]"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Super Admin Notice / Status Badge */}
+        {isSuperAdmin && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium">
+            <ShieldCheck size={14} className="text-amber-600 shrink-0" />
+            <span>Mode Super Admin: Menampilkan seluruh pengajuan & tim tanpa batasan hierarki</span>
+          </div>
+        )}
+      </div>
+
       {/* Main Tab Switcher */}
       <div className="flex items-center justify-between border-b border-slate-200 gap-4">
         <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto">
@@ -1015,7 +1199,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
             }`}
           >
             <Users size={16} />
-            <span>Kehadiran Tim Hari Ini</span>
+            <span>Monitoring Kehadiran Tim</span>
             {teamMembers.length > 0 && (
               <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-slate-100 text-slate-700">
                 {teamMembers.length} Anggota
@@ -1226,6 +1410,29 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
                 <div className="text-[10px] text-slate-400">Batch Gaji Bulanan</div>
               </button>
             )}
+
+            {/* Koreksi Absensi */}
+            {canApprove("attendance_correction") && (
+              <button
+                onClick={() => setFilter(filter === "attendance_correction" ? "all" : "attendance_correction")}
+                className={`p-4 rounded-2xl border text-left transition-all ${
+                  filter === "attendance_correction"
+                    ? "bg-cyan-50/80 border-cyan-300 ring-2 ring-cyan-500/20 shadow-sm"
+                    : "bg-white border-slate-200 hover:border-slate-300 shadow-xs"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-8 h-8 rounded-xl bg-cyan-100 text-cyan-800 flex items-center justify-center">
+                    <Clock size={16} />
+                  </div>
+                  <span className="text-base font-black text-cyan-900">
+                    {pendingCounts.attendance_correction || items.filter(i => i.type === "attendance_correction").length}
+                  </span>
+                </div>
+                <div className="text-xs font-bold text-slate-800">Koreksi Absen</div>
+                <div className="text-[10px] text-slate-400">Pengajuan Jam Absen</div>
+              </button>
+            )}
           </div>
 
           {/* Search and Category Filter Pills */}
@@ -1360,6 +1567,18 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
                   }`}
                 >
                   Payroll
+                </button>
+              )}
+              {canApprove("attendance_correction") && (
+                <button
+                  onClick={() => setFilter("attendance_correction")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    filter === "attendance_correction"
+                      ? "bg-cyan-600 text-white shadow-sm"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Koreksi Absen
                 </button>
               )}
             </div>
@@ -1582,9 +1801,60 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         )
       )}
 
-      {/* TAB 2: KEHADIRAN TIM HARI INI (TEAM ATTENDANCE) */}
+      {/* TAB 2: MONITORING KEHADIRAN TIM */}
       {activeTab === "team" && (
         <div className="space-y-6">
+          {/* Team Attendance Date Filter Bar */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-slate-700">Tanggal Kehadiran:</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => {
+                    const today = new Date().toISOString().split("T")[0];
+                    setTeamDate(today);
+                    fetchTeamAttendance(today);
+                  }}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition ${
+                    teamDate === new Date().toISOString().split("T")[0]
+                      ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  Hari Ini
+                </button>
+                <button
+                  onClick={() => {
+                    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+                    setTeamDate(yesterday);
+                    fetchTeamAttendance(yesterday);
+                  }}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition ${
+                    teamDate === new Date(Date.now() - 86400000).toISOString().split("T")[0]
+                      ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  Kemarin
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label htmlFor="team-date-picker" className="text-xs text-slate-500 font-medium">Pilih Tanggal:</label>
+              <input
+                id="team-date-picker"
+                type="date"
+                value={teamDate}
+                onChange={(e) => {
+                  setTeamDate(e.target.value);
+                  fetchTeamAttendance(e.target.value);
+                }}
+                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#8B0000]"
+              />
+            </div>
+          </div>
+
           {/* Top Summary Metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
             <div className="bg-white rounded-2xl border border-slate-200 p-4.5 shadow-xs flex items-center justify-between">

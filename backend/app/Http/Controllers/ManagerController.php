@@ -34,11 +34,11 @@ class ManagerController extends Controller
     /**
      * Get summary count for pending requests
      */
-    public function getPendingCount()
+    public function getPendingCount(Request $request)
     {
         return response()->json([
             'status' => 'success',
-            'data' => PendingRequestService::getPendingCount(Auth::user(), self::PERM_MAP),
+            'data' => PendingRequestService::getPendingCount(Auth::user(), self::PERM_MAP, $request),
         ]);
     }
 
@@ -67,16 +67,16 @@ class ManagerController extends Controller
     }
 
     /**
-     * Get team attendance status for today
+     * Get team attendance status for today or specified date
      */
-    public function getTeamAttendance(ManagerAttendanceService $attendanceService)
+    public function getTeamAttendance(Request $request, ManagerAttendanceService $attendanceService)
     {
         $user = Auth::user();
         $isCompanyAdmin = PendingRequestService::isExecutiveOrAdmin($user) || $user->hasPermission('view-attendances');
 
         return response()->json([
             'status' => 'success',
-            'data' => $attendanceService->getTeamAttendance($user, $isCompanyAdmin),
+            'data' => $attendanceService->getTeamAttendance($user, $isCompanyAdmin, $request->query('date')),
         ]);
     }
 

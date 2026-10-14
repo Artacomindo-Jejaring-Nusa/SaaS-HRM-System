@@ -7,22 +7,25 @@ use Carbon\Carbon;
 
 class ManagerAttendanceService
 {
-    public function getTeamAttendance(User $user, bool $isCompanyAdmin): array
+    public function getTeamAttendance(User $user, bool $isCompanyAdmin, ?string $targetDate = null): array
     {
-        $today = Carbon::today()->toDateString();
-        $isGlobalAdmin = $user->role_id === 1;
+        $date = $targetDate ? Carbon::parse($targetDate)->toDateString() : Carbon::today()->toDateString();
+        $isGlobalAdmin = $user->isSuperAdmin();
         $directSubordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
 
-        $query = User::with(['role', 'attendances' => function ($q) use ($today) {
-            $q->whereDate('check_in', $today);
+        $query = User::with(['role', 'attendances' => function ($q) use ($date) {
+            $q->whereDate('check_in', $date);
         }]);
 
-        if ($directSubordinateIds->isNotEmpty()) {
-            $query->whereIn('id', $directSubordinateIds);
-        } elseif ($isGlobalAdmin) {
-            $query->where('id', '!=', $user->id)->take(50);
+        if ($isGlobalAdmin) {
+            $query->where('id', '!=', $user->id);
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            }
         } elseif ($isCompanyAdmin) {
-            $query->where('company_id', $user->company_id)->where('id', '!=', $user->id)->take(50);
+            $query->where('company_id', $user->company_id)->where('id', '!=', $user->id);
+        } elseif ($directSubordinateIds->isNotEmpty()) {
+            $query->whereIn('id', $directSubordinateIds);
         } else {
             $query->where('supervisor_id', $user->id);
         }

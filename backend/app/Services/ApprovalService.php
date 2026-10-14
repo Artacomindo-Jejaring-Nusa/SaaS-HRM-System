@@ -505,12 +505,16 @@ class ApprovalService
 
     private static function canApproveRoleStep(WorkflowStep $step, User $approver): bool
     {
-        return $approver->role_id === $step->approver_role_id || $approver->role_id === 1;
+        return $approver->role_id === $step->approver_role_id 
+            || $approver->role_id === 1 
+            || (method_exists($approver, 'isSuperAdmin') && $approver->isSuperAdmin());
     }
 
     private static function canApproveUserStep(WorkflowStep $step, User $approver): bool
     {
-        return $approver->id === $step->approver_user_id || $approver->role_id === 1;
+        return $approver->id === $step->approver_user_id 
+            || $approver->role_id === 1 
+            || (method_exists($approver, 'isSuperAdmin') && $approver->isSuperAdmin());
     }
 
     private static function canApproveSupervisorStep(User $approver, User $submitter, bool $hasModulePermission): bool
@@ -519,7 +523,9 @@ class ApprovalService
             return $submitter->supervisor_id === $approver->id;
         }
 
-        return $approver->role_id === 1 || $hasModulePermission;
+        return $approver->role_id === 1 
+            || (method_exists($approver, 'isSuperAdmin') && $approver->isSuperAdmin()) 
+            || $hasModulePermission;
     }
 
     /**
@@ -527,13 +533,17 @@ class ApprovalService
      */
     private static function canUserApproveStep(WorkflowStep $step, User $approver, User $submitter, ?string $moduleKey = null): bool
     {
-        // Approver cannot approve their own submission
-        if ($approver->id === $submitter->id) {
+        $isSuperAdmin = $approver->role_id === 1 
+            || (method_exists($approver, 'isSuperAdmin') && $approver->isSuperAdmin()) 
+            || (method_exists($approver, 'canAccessAllCompanies') && $approver->canAccessAllCompanies());
+
+        // Approver cannot approve their own submission unless Super Admin
+        if ($approver->id === $submitter->id && !$isSuperAdmin) {
             return false;
         }
 
-        // Super Admin (Master Admin Role ID 1) memiliki wewenang override / persetujuan darurat di tahap mana pun
-        if ($approver->role_id === 1 || (method_exists($approver, 'canAccessAllCompanies') && $approver->canAccessAllCompanies())) {
+        // Super Admin memiliki wewenang override / persetujuan darurat di tahap mana pun
+        if ($isSuperAdmin || $approver->hasPermission('manage-approvals')) {
             return true;
         }
 
@@ -542,7 +552,7 @@ class ApprovalService
         $hasModulePermission = $permission ? $approver->hasPermission($permission) : false;
 
         return match ($step->approver_type) {
-            'super_admin' => ($approver->role_id === 1 || $approver->role?->name === self::ROLE_SUPER_ADMIN || (method_exists($approver, 'canAccessAllCompanies') && $approver->canAccessAllCompanies())),
+            'super_admin' => ($isSuperAdmin || $approver->role?->name === self::ROLE_SUPER_ADMIN),
             'supervisor' => self::canApproveSupervisorStep($approver, $submitter, $hasModulePermission),
             'role' => self::canApproveRoleStep($step, $approver),
             'user' => self::canApproveUserStep($step, $approver),

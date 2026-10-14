@@ -709,73 +709,118 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           floatingActionButton:
               (_selectedIndex == 0 && _attendanceData?['check_out'] == null)
-              ? FloatingActionButton.extended(
-                  onPressed: _onAbsenTapped,
-                  backgroundColor: primaryColor,
-                  elevation: 10,
-                  label: Text(
-                    _attendanceData?['check_in'] == null
-                        ? "ABSEN SEKARANG"
-                        : "ABSEN PULANG",
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 1.1,
+              ? Container(
+                  height: 50,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(28),
+                    gradient: LinearGradient(
+                      colors: [primaryColor, secondaryColor],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryColor.withValues(alpha: 0.35),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
-                  icon: const Icon(
-                    Icons.face_retouching_natural,
-                    color: Colors.white,
+                  child: ElevatedButton.icon(
+                    onPressed: _onAbsenTapped,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                    ),
+                    icon: const Icon(
+                      Icons.face_retouching_natural,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    label: Text(
+                      _attendanceData?['check_in'] == null
+                          ? "ABSEN SEKARANG"
+                          : "ABSEN PULANG",
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 0.8,
+                        fontSize: 13,
+                      ),
+                    ),
                   ),
                 )
               : null,
           floatingActionButtonLocation:
               FloatingActionButtonLocation.centerFloat,
-          bottomNavigationBar: BottomNavigationBar(
-            currentIndex: _selectedIndex.clamp(0, _isManager ? 5 : 4),
-            onTap: _onItemTapped,
-            selectedItemColor: primaryColor,
-            unselectedItemColor: Colors.grey,
-            showUnselectedLabels: true,
-            type: BottomNavigationBarType.fixed,
-            selectedFontSize: 11,
-            unselectedFontSize: 10,
-            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, height: 1.2),
-            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, height: 1.2),
-            iconSize: 22,
-            items: [
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.home_outlined),
-                activeIcon: const Icon(Icons.home),
-                label: "Beranda",
-              ),
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.smart_toy_outlined),
-                activeIcon: const Icon(Icons.smart_toy),
-                label: "Asisten",
-              ),
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.list_alt_outlined),
-                activeIcon: const Icon(Icons.list_alt),
-                label: "Riwayat",
-              ),
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.person_outline),
-                activeIcon: const Icon(Icons.person),
-                label: "Profil",
-              ),
-              if (_isManager)
-                BottomNavigationBarItem(
-                  icon: const Icon(Icons.admin_panel_settings_outlined),
-                  activeIcon: const Icon(Icons.admin_panel_settings),
-                  label: "Manajer",
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                top: BorderSide(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  width: 1,
                 ),
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.settings_outlined),
-                activeIcon: const Icon(Icons.settings),
-                label: "Pengaturan",
               ),
-            ],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 16,
+                  offset: const Offset(0, -4),
+                ),
+              ],
+            ),
+            child: BottomNavigationBar(
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              currentIndex: _selectedIndex.clamp(0, _isManager ? 5 : 4),
+              onTap: _onItemTapped,
+              selectedItemColor: primaryColor,
+              unselectedItemColor: const Color(0xFF94A3B8),
+              showUnselectedLabels: true,
+              type: BottomNavigationBarType.fixed,
+              selectedFontSize: 11,
+              unselectedFontSize: 10,
+              selectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, height: 1.3),
+              unselectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w500, height: 1.3),
+              iconSize: 22,
+              items: [
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.home_outlined),
+                  activeIcon: const Icon(Icons.home),
+                  label: "Beranda",
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.smart_toy_outlined),
+                  activeIcon: const Icon(Icons.smart_toy),
+                  label: "Asisten",
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.list_alt_outlined),
+                  activeIcon: const Icon(Icons.list_alt),
+                  label: "Riwayat",
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.person_outline),
+                  activeIcon: const Icon(Icons.person),
+                  label: "Profil",
+                ),
+                if (_isManager)
+                  BottomNavigationBarItem(
+                    icon: const Icon(Icons.admin_panel_settings_outlined),
+                    activeIcon: const Icon(Icons.admin_panel_settings),
+                    label: "Manajer",
+                  ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.settings_outlined),
+                  activeIcon: const Icon(Icons.settings),
+                  label: "Pengaturan",
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1273,40 +1318,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // HEADER
+          // 1. TOP PROFILE HEADER
           Padding(
-            padding: const EdgeInsets.all(25.0),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
                   child: Row(
                     children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: primaryColor, width: 2),
-                        ),
-                        child: CircleAvatar(
-                          radius: 25,
-                          backgroundColor: primaryColor.withOpacity(0.1),
-                          backgroundImage: (_profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty)
-                              ? NetworkImage(_profilePhotoUrl!)
-                              : null,
-                          child: (_profilePhotoUrl == null || _profilePhotoUrl!.isEmpty)
-                              ? Text(
-                                  _userName.isNotEmpty
-                                      ? _userName[0].toUpperCase()
-                                      : "U",
-                                  style: TextStyle(
-                                    color: primaryColor,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                )
-                              : null,
-                        ),
+                      Stack(
+                        children: [
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              gradient: LinearGradient(
+                                colors: [primaryColor, secondaryColor],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: primaryColor.withValues(alpha: 0.25),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            padding: const EdgeInsets.all(2),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: (_profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty)
+                                  ? Image.network(
+                                      _profilePhotoUrl!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => _buildAvatarFallback(),
+                                    )
+                                  : _buildAvatarFallback(),
+                            ),
+                          ),
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 14,
+                              height: 14,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2.5),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1316,9 +1384,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               _getGreeting(),
                               style: GoogleFonts.outfit(
                                 fontSize: 12,
-                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF64748B),
                               ),
                             ),
+                            const SizedBox(height: 1),
                             Text(
                               _userName,
                               maxLines: 1,
@@ -1326,28 +1396,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               style: GoogleFonts.outfit(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.black,
+                                color: const Color(0xFF0F172A),
+                                letterSpacing: -0.2,
                               ),
                             ),
                             if (_userRole.isNotEmpty)
-                              Container(
-                                margin: const EdgeInsets.only(top: 3),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: primaryColor.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(5),
-                                ),
-                                child: Text(
-                                  _userRole,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10,
-                                    color: primaryColor,
-                                    fontWeight: FontWeight.bold,
+                              Padding(
+                                padding: const EdgeInsets.only(top: 3),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: primaryColor.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: primaryColor.withValues(alpha: 0.15)),
+                                  ),
+                                  child: Text(
+                                    _userRole,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 10,
+                                      color: primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1357,316 +1428,275 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Stack(
-                  alignment: Alignment.topRight,
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.notifications_none_rounded,
-                        color: primaryColor,
-                        size: 30,
-                      ),
-                      onPressed: () async {
-                        await Navigator.pushNamed(context, '/notifications');
-                        _refreshData(); // Refresh dot when coming back
-                      },
-                    ),
-                    if (_hasUnreadNotification)
-                      Positioned(
-                        right: 12,
-                        top: 12,
-                        child: Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: () async {
+                    await Navigator.pushNamed(context, '/notifications');
+                    _refreshData();
+                  },
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
-                      ),
-                  ],
+                      ],
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        const Icon(
+                          Icons.notifications_none_rounded,
+                          color: Color(0xFF1E293B),
+                          size: 24,
+                        ),
+                        if (_hasUnreadNotification)
+                          Positioned(
+                            right: 10,
+                            top: 10,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEF4444),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 1.5),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
 
-          // KARTU ABSENSI
+          // 2. HERO ATTENDANCE CARD
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 25.0),
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
             child: Container(
               width: double.infinity,
-              padding: EdgeInsets.all(20),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [primaryColor, secondaryColor],
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF8B0000),
+                    Color(0xFF6F0000),
+                    Color(0xFF4A0000),
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: primaryColor.withOpacity(0.3),
-                    blurRadius: 15,
-                    offset: Offset(0, 8),
+                    color: const Color(0xFF8B0000).withValues(alpha: 0.35),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
                   ),
                 ],
               ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: -30,
+                      right: -30,
+                      child: Container(
+                        width: 140,
+                        height: 140,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(alpha: 0.06),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: -40,
+                      left: -20,
+                      child: Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(alpha: 0.04),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(22.0),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            "Absensi Hari Ini",
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "PRESENSI HARI INI",
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white.withValues(alpha: 0.75),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _attendanceData?['check_in'] != null
+                                        ? (_attendanceData?['check_out'] != null
+                                            ? "Selesai Kerja"
+                                            : "Sedang Bekerja")
+                                        : "Belum Absen",
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              _buildStatusBadge(),
+                            ],
                           ),
-                          SizedBox(height: 5),
-                          Text(
-                            _attendanceData?['check_in'] != null
-                                ? (_attendanceData?['check_out'] != null
-                                      ? "Selesai Kerja"
-                                      : "Sudah Check-In")
-                                : "Belum Absen",
-                            style: GoogleFonts.outfit(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
+                          const SizedBox(height: 16),
+                          if (_scheduleLabel != null) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.schedule_rounded, color: Colors.white, size: 13),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    "Jadwal: $_scheduleLabel",
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.face_retouching_natural,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  if (_scheduleLabel != null) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.schedule_rounded, color: Colors.white, size: 14),
-                          const SizedBox(width: 6),
-                          Text(
-                            "Jadwal: $_scheduleLabel",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            const SizedBox(height: 16),
+                          ] else
+                            const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildTimeTrackCard(
+                                  label: "Jam Masuk",
+                                  time: _formatTime(_attendanceData?['check_in']),
+                                  icon: Icons.login_rounded,
+                                  isActive: _attendanceData?['check_in'] != null,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildTimeTrackCard(
+                                  label: "Jam Pulang",
+                                  time: _formatTime(_attendanceData?['check_out']),
+                                  icon: Icons.logout_rounded,
+                                  isActive: _attendanceData?['check_out'] != null,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                  ] else
-                    const SizedBox(height: 25),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildAttendanceDetail(
-                        "Masuk",
-                        _formatTime(_attendanceData?['check_in']),
-                      ),
-                      Container(height: 30, width: 1, color: Colors.white24),
-                      _buildAttendanceDetail(
-                        "Pulang",
-                        _formatTime(_attendanceData?['check_out']),
-                      ),
-                    ],
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
 
-          // ANNOUNCEMENTS SECTION (NEW LAYOUT)
-          if (_announcements.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 25.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Pengumuman Perusahaan",
-                    style: GoogleFonts.outfit(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 15),
-            SizedBox(
-              height: 120,
-              child: ListView.builder(
-                padding: EdgeInsets.symmetric(horizontal: 25),
-                scrollDirection: Axis.horizontal,
-                itemCount: _announcements.length,
-                itemBuilder: (context, index) {
-                  final ann = _announcements[index];
-                  return Container(
-                    width: 300,
-                    margin: EdgeInsets.only(right: 15),
-                    padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.blue.withOpacity(0.2)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.campaign, color: Colors.blue[800], size: 18),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                ann['title'] ?? "Pengumuman",
-                                style: GoogleFonts.outfit(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 8),
-                        Expanded(
-                          child: Text(
-                            ann['content'] ?? "",
-                            style: GoogleFonts.outfit(
-                              fontSize: 11,
-                              color: Colors.grey[600],
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Align(
-                          alignment: Alignment.bottomRight,
-                          child: Text(
-                            DateFormat('dd MMM').format(DateTime.parse(ann['created_at'])),
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: Colors.blue[300],
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 10),
-
-          // TASK REMINDER (Persistent Note)
+          // 3. TASK ALERT (if pending tasks)
           if (_pendingTaskCount > 0) ...[
-            const SizedBox(height: 15),
+            const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 25.0),
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: Container(
-                padding: EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.red[50],
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.red.withOpacity(0.2)),
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.red.withOpacity(0.05),
+                      color: Colors.red.withValues(alpha: 0.04),
                       blurRadius: 10,
-                      offset: Offset(0, 4),
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
                 child: Row(
                   children: [
                     Container(
-                      padding: EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.red[100],
-                        shape: BoxShape.circle,
+                        color: const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(Icons.assignment_late, color: Colors.red[900], size: 20),
+                      child: const Icon(Icons.assignment_late_rounded, color: Color(0xFFB91C1C), size: 22),
                     ),
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            "Tugas Belum Selesai!",
+                            "Tugas Belum Selesai",
                             style: GoogleFonts.outfit(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: Colors.red[900],
+                              color: const Color(0xFF991B1B),
                             ),
                           ),
                           Text(
-                            "Ada $_pendingTaskCount tugas yang perlu Anda selesaikan segera.",
+                            "Ada $_pendingTaskCount tugas yang perlu segera dikerjakan.",
                             style: GoogleFonts.outfit(
-                              fontSize: 11,
-                              color: Colors.red[700],
+                              fontSize: 12,
+                              color: const Color(0xFFB91C1C),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Material(
-                      color: Colors.red[900],
-                      borderRadius: BorderRadius.circular(10),
-                      child: InkWell(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => TaskScreen()),
-                        ),
-                        borderRadius: BorderRadius.circular(10),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          child: Text(
-                            "KERJAKAN",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => TaskScreen()),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF991B1B),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        elevation: 0,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: Text(
+                        "Buka",
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
                       ),
                     ),
                   ],
@@ -1675,111 +1705,153 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
 
-          const SizedBox(height: 10),
-
-          // AKSES CEPAT
+          // 4. AKSES CEPAT (QUICK ACTIONS)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 25.0, vertical: 25),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    Container(
+                      width: 4,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        color: primaryColor,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Text(
                       "Akses Cepat",
                       style: GoogleFonts.outfit(
-                        fontSize: 18,
+                        fontSize: 17,
                         fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => _showAturModal(),
-                      child: Text(
-                        "Atur",
-                        style: TextStyle(
-                          color: primaryColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
+                        color: const Color(0xFF0F172A),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-                GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 5,
-                  mainAxisSpacing: 0,
-                  crossAxisSpacing: 8,
-                  childAspectRatio: 0.75,
-                  children: [
-                    ...pinnedItems.map(
-                      (item) => _buildQuickAction(
-                        item['icon'],
-                        item['label'],
-                        item['color'],
-                        item['onTap'],
-                      ),
+                GestureDetector(
+                  onTap: () => _showAturModal(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: primaryColor.withValues(alpha: 0.15)),
                     ),
-                    GestureDetector(
-                      onTap: () =>
-                          setState(() => _isMenuExpanded = !_isMenuExpanded),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: _isMenuExpanded
-                                  ? primaryColor
-                                  : Colors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 5,
-                                ),
-                              ],
-                            ),
-                            child: Icon(
-                              _isMenuExpanded ? Icons.close : Icons.apps,
-                              color: _isMenuExpanded
-                                  ? Colors.white
-                                  : primaryColor,
-                              size: 28,
-                            ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.tune_rounded, size: 13, color: primaryColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          "Atur",
+                          style: GoogleFonts.outfit(
+                            color: primaryColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "Lainnya",
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.outfit(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ],
             ),
           ),
 
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            child: GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 5,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 0.76,
+              children: [
+                ...pinnedItems.map(
+                  (item) => _buildQuickAction(
+                    item['icon'],
+                    item['label'],
+                    item['color'],
+                    item['onTap'],
+                  ),
+                ),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => setState(() => _isMenuExpanded = !_isMenuExpanded),
+                    borderRadius: BorderRadius.circular(18),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: _isMenuExpanded
+                                  ? primaryColor
+                                  : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: _isMenuExpanded
+                                    ? primaryColor
+                                    : const Color(0xFFE2E8F0),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              _isMenuExpanded ? Icons.close_rounded : Icons.apps_rounded,
+                              color: _isMenuExpanded ? Colors.white : const Color(0xFF475569),
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _isMenuExpanded ? "Tutup" : "Lainnya",
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.outfit(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF1E293B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // EXPANDED MENU DRAWER
           if (_isMenuExpanded)
             Padding(
-              padding: const EdgeInsets.only(left: 25, right: 25, bottom: 25),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
               child: Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 10,
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
@@ -1787,9 +1859,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisCount: 4,
-                  mainAxisSpacing: 20,
+                  mainAxisSpacing: 16,
                   crossAxisSpacing: 10,
-                  childAspectRatio: 0.85,
+                  childAspectRatio: 0.88,
                   children: [
                     ...otherItems.map(
                       (item) => _buildNavIcon(
@@ -1800,9 +1872,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     _buildNavIcon(
-                      Icons.logout,
+                      Icons.logout_rounded,
                       "Keluar",
-                      Colors.grey,
+                      const Color(0xFFEF4444),
                       onTap: _handleLogout,
                     ),
                   ],
@@ -1810,78 +1882,125 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
 
-          // HOLIDAYS & ANNOUNCEMENTS SECTION
+          // 5. UNIFIED AGENDA & ANNOUNCEMENTS SECTION
           if (_holidays.isNotEmpty || _announcements.isNotEmpty) ...[
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 25.0),
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 14),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  Container(
+                    width: 4,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: primaryColor,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Text(
-                    "Pengumuman & Hari Libur",
+                    "Agenda & Informasi",
                     style: GoogleFonts.outfit(
-                      fontSize: 18,
+                      fontSize: 17,
                       fontWeight: FontWeight.bold,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      "${_holidays.length + _announcements.length}",
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF64748B),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 15),
             SizedBox(
-              height: 100,
+              height: 110,
               child: ListView.builder(
-                padding: EdgeInsets.symmetric(horizontal: 25),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 scrollDirection: Axis.horizontal,
                 itemCount: _holidays.length + _announcements.length,
                 itemBuilder: (context, index) {
-                  // Tampilkan holidays dulu, lalu announcements
                   if (index < _holidays.length) {
                     final hol = _holidays[index];
                     return Container(
-                      width: 250,
-                      margin: EdgeInsets.only(right: 15),
-                      padding: EdgeInsets.all(15),
+                      width: 270,
+                      margin: const EdgeInsets.only(right: 12),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                        color: const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.amber.withValues(alpha: 0.05),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: Row(
                         children: [
                           Container(
-                            padding: EdgeInsets.all(10),
+                            width: 42,
+                            height: 42,
                             decoration: BoxDecoration(
-                              color: Colors.orange.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                            child: Icon(
-                              Icons.event_note,
-                              color: Colors.orange[800],
-                              size: 24,
+                            child: const Icon(
+                              Icons.event_available_rounded,
+                              color: Color(0xFFD97706),
+                              size: 22,
                             ),
                           ),
-                          SizedBox(width: 15),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFDE68A),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    "LIBUR NASIONAL",
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF92400E),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
                                 Text(
                                   hol['name'] ?? "Hari Libur",
                                   style: GoogleFonts.outfit(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF1E293B),
                                   ),
                                   maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 Text(
-                                  DateFormat(
-                                    'dd MMM yyyy',
-                                  ).format(DateTime.parse(hol['date'])),
-                                  style: TextStyle(
+                                  DateFormat('dd MMMM yyyy').format(DateTime.parse(hol['date'])),
+                                  style: GoogleFonts.outfit(
                                     fontSize: 11,
-                                    color: Colors.grey[600],
+                                    color: const Color(0xFF64748B),
                                   ),
                                 ),
                               ],
@@ -1892,59 +2011,88 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     );
                   } else {
                     final ann = _announcements[index - _holidays.length];
-                    return InkWell(
-                      onTap: () => _showAnnouncementDetail(ann),
-                      borderRadius: BorderRadius.circular(15),
-                      child: Container(
-                        width: 250,
-                        margin: EdgeInsets.only(right: 15),
-                        padding: EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          color: primaryColor.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(15),
-                          border: Border.all(color: primaryColor.withOpacity(0.2)),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: primaryColor.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(12),
+                    return Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _showAnnouncementDetail(ann),
+                        borderRadius: BorderRadius.circular(18),
+                        child: Container(
+                          width: 270,
+                          margin: const EdgeInsets.only(right: 12),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.04),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
                               ),
-                              child: Icon(
-                                Icons.campaign,
-                                color: primaryColor,
-                                size: 24,
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: primaryColor.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Icon(
+                                  Icons.campaign_rounded,
+                                  color: primaryColor,
+                                  size: 22,
+                                ),
                               ),
-                            ),
-                            SizedBox(width: 15),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    ann['title'] ?? "Pengumuman",
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: primaryColor.withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        "PENGUMUMAN",
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: primaryColor,
+                                        ),
+                                      ),
                                     ),
-                                    maxLines: 1,
-                                  ),
-                                  Text(
-                                    DateFormat(
-                                      'dd MMM yyyy',
-                                    ).format(DateTime.parse(ann['created_at'] ?? DateTime.now().toIso8601String())),
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey[600],
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      ann['title'] ?? "Pengumuman",
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF1E293B),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                ],
+                                    Text(
+                                      DateFormat('dd MMM yyyy').format(
+                                        DateTime.parse(ann['created_at'] ?? DateTime.now().toIso8601String()),
+                                      ),
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 11,
+                                        color: const Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -1954,27 +2102,151 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
 
-          SizedBox(height: 120),
+          const SizedBox(height: 110),
         ],
       ),
     );
   }
 
+  Widget _buildStatusBadge() {
+    final hasCheckIn = _attendanceData?['check_in'] != null;
+    final hasCheckOut = _attendanceData?['check_out'] != null;
 
-  Widget _buildAttendanceDetail(String label, String time) {
-    return Column(
-      children: [
-        Text(label, style: TextStyle(color: Colors.white70, fontSize: 11)),
-        SizedBox(height: 3),
-        Text(
-          time,
-          style: GoogleFonts.outfit(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
+    if (!hasCheckIn) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
         ),
-      ],
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.radio_button_unchecked, color: Colors.white70, size: 12),
+            const SizedBox(width: 5),
+            Text(
+              "Standby",
+              style: GoogleFonts.outfit(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (hasCheckOut) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: const Color(0xFF10B981).withValues(alpha: 0.25),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFF34D399)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Color(0xFF6EE7B7), size: 13),
+            const SizedBox(width: 5),
+            Text(
+              "Selesai",
+              style: GoogleFonts.outfit(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF10B981).withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF34D399)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+              color: Color(0xFF34D399),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            "Aktif Bekerja",
+            style: GoogleFonts.outfit(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeTrackCard({
+    required String label,
+    required String time,
+    required IconData icon,
+    required bool isActive,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: isActive ? 0.16 : 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: isActive ? 0.25 : 0.12),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isActive ? const Color(0xFFFCD34D) : Colors.white60,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label.toUpperCase(),
+                style: GoogleFonts.outfit(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            time,
+            style: GoogleFonts.outfit(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvatarFallback() {
+    return Container(
+      color: Colors.white.withValues(alpha: 0.15),
+      alignment: Alignment.center,
+      child: Text(
+        _userName.isNotEmpty ? _userName[0].toUpperCase() : "U",
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 20,
+        ),
+      ),
     );
   }
 
@@ -1984,56 +2256,77 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Color color,
     VoidCallback onTap,
   ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5),
-              ],
-            ),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(icon, color: color, size: 28),
-                if (label == 'Tugas' && _pendingTaskCount > 0)
-                  Positioned(
-                    right: -5,
-                    top: -5,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                      child: Text(
-                        "$_pendingTaskCount",
-                        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
-                      ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.09),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: color.withValues(alpha: 0.16)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
                     ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              style: GoogleFonts.outfit(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-                height: 1.1,
+                  ],
+                ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    Icon(icon, color: color, size: 24),
+                    if (label == 'Tugas' && _pendingTaskCount > 0)
+                      Positioned(
+                        right: -3,
+                        top: -3,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFEF4444),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            "$_pendingTaskCount",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF1E293B),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -2044,58 +2337,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Color color, {
     VoidCallback? onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 5,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(icon, color: color, size: 24),
-                if (label == 'Tugas' && _pendingTaskCount > 0)
-                  Positioned(
-                    right: -5,
-                    top: -5,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                      child: Text(
-                        "$_pendingTaskCount",
-                        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: color.withValues(alpha: 0.14)),
+              ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  Icon(icon, color: color, size: 22),
+                  if (label == 'Tugas' && _pendingTaskCount > 0)
+                    Positioned(
+                      right: -3,
+                      top: -3,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFEF4444),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          "$_pendingTaskCount",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.outfit(
-              fontSize: 9,
-              fontWeight: FontWeight.w500,
-              color: Colors.black87,
-              height: 1.1,
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF334155),
+                height: 1.1,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

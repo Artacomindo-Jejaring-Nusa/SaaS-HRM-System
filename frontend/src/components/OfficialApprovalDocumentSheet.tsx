@@ -22,7 +22,8 @@ export type ApprovalType =
   | "fund_request"
   | "vehicle_log"
   | "payroll"
-  | "early_out";
+  | "early_out"
+  | "attendance_correction";
 
 export interface OvertimeItemDetail {
   id?: number;
