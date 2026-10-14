@@ -64,3 +64,9 @@ Spend of Layer-Signature.xlsx
 face-recog-ArcFace/checkpoint/*.pth
 face-recog-ArcFace/venv/
 .aider*
+
+# Agent skills & local assistant configurations
+.agents/
+.claude/
+skills-lock.json
+
