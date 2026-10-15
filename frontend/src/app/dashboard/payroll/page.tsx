@@ -869,6 +869,33 @@ function PayrollBatchDetailView({
                   const otherDed = parseAmount(salary.deduction_others);
                   const net = parseAmount(salary.net_salary);
 
+                  let disciplineCellContent: React.ReactNode;
+                  if (salary.user?.attendance_type === "flexible") {
+                    disciplineCellContent = (
+                      <span className="inline-flex items-center text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg text-xs font-bold border border-emerald-100">
+                        Bebas Potongan
+                      </span>
+                    );
+                  } else if (discDeduction > 0) {
+                    const disciplineBreakdown = [
+                      lateDed > 0 ? `Telat: Rp ${formatRupiah(lateDed)}` : null,
+                      absenceDed > 0 ? `Mangkir: Rp ${formatRupiah(absenceDed)}` : null,
+                    ].filter(Boolean).join(' • ');
+
+                    disciplineCellContent = (
+                      <div>
+                        <span className="text-rose-600 font-semibold">-Rp {formatRupiah(discDeduction)}</span>
+                        {disciplineBreakdown && (
+                          <span className="block text-[10px] font-medium text-gray-400 mt-0.5">
+                            {disciplineBreakdown}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  } else {
+                    disciplineCellContent = <span className="text-gray-400 font-medium">Rp 0</span>;
+                  }
+
                   return (
                     <tr key={salary.id} className="hover:bg-gray-50/60 transition-colors">
                       <td className="px-6 py-4 pl-8">
@@ -901,23 +928,7 @@ function PayrollBatchDetailView({
                         )}
                       </td>
                       <td className="px-6 py-4 font-semibold text-sm">
-                        {salary.user?.attendance_type === "flexible" ? (
-                          <span className="inline-flex items-center text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg text-xs font-bold border border-emerald-100">
-                            Bebas Potongan
-                          </span>
-                        ) : discDeduction > 0 ? (
-                          <div>
-                            <span className="text-rose-600 font-semibold">-Rp {formatRupiah(discDeduction)}</span>
-                            <span className="block text-[10px] font-medium text-gray-400 mt-0.5">
-                              {[
-                                lateDed > 0 ? `Telat: Rp ${formatRupiah(lateDed)}` : null,
-                                absenceDed > 0 ? `Mangkir: Rp ${formatRupiah(absenceDed)}` : null,
-                              ].filter(Boolean).join(' • ')}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 font-medium">Rp 0</span>
-                        )}
+                        {disciplineCellContent}
                       </td>
                       <td className="px-6 py-4 font-semibold text-orange-600 text-sm">
                         -Rp {formatRupiah(taxAndBpjs)}

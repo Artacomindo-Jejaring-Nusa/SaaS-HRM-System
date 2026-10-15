@@ -502,18 +502,12 @@ class PayrollController extends Controller
     public function recalculateSalary(Request $request, $id)
     {
         $salary = Salary::findOrFail($id);
-        if (! in_array($salary->status, ['draft', 'rejected'])) {
-            return response()->json(['message' => 'Hanya gaji berstatus draft yang bisa dikalkulasi ulang.'], 422);
-        }
-
-        $batch = $salary->batch;
-        if (! $batch || ! in_array($batch->status, ['draft', 'rejected'])) {
-            return response()->json(['message' => 'Batch payroll sudah tidak berstatus draft.'], 422);
-        }
-
         $user = $salary->user;
-        if (! $user) {
-            return response()->json(['message' => 'Data pegawai tidak ditemukan.'], 404);
+        $settings = $user ? PayrollSetting::where('company_id', $user->company_id)->first() : null;
+
+        $validationError = $this->getRecalculationValidationError($salary, $user, $settings);
+        if ($validationError) {
+            return response()->json(['message' => $validationError['message']], $validationError['code']);
         }
 
         // If Super Admin chose to switch attendance_type to flexible or office_hour
@@ -522,11 +516,8 @@ class PayrollController extends Controller
             $user->save();
         }
 
+        $batch = $salary->batch;
         $companyId = $user->company_id;
-        $settings = PayrollSetting::where('company_id', $companyId)->first();
-        if (! $settings) {
-            return response()->json(['message' => 'Konfigurasi payroll tidak ditemukan.'], 422);
-        }
 
         $cutoffDay = $settings->cutoff_day ?? 20;
         $monthNum = Carbon::parse($batch->period_month)->month;
@@ -583,6 +574,24 @@ class PayrollController extends Controller
             'message' => 'Gaji karyawan berhasil dikalkulasi ulang.',
             'data' => $salary->fresh()->load(['user', 'detailsRecords']),
         ]);
+    }
+
+    private function getRecalculationValidationError(Salary $salary, ?User $user, ?PayrollSetting $settings): ?array
+    {
+        $batch = $salary->batch;
+        $error = null;
+
+        if (! in_array($salary->status, ['draft', 'rejected'])) {
+            $error = ['message' => 'Hanya gaji berstatus draft yang bisa dikalkulasi ulang.', 'code' => 422];
+        } elseif (! $batch || ! in_array($batch->status, ['draft', 'rejected'])) {
+            $error = ['message' => 'Batch payroll sudah tidak berstatus draft.', 'code' => 422];
+        } elseif (! $user) {
+            $error = ['message' => 'Data pegawai tidak ditemukan.', 'code' => 404];
+        } elseif (! $settings) {
+            $error = ['message' => 'Konfigurasi payroll tidak ditemukan.', 'code' => 422];
+        }
+
+        return $error;
     }
 
     // ─────────────────────────────────────────────

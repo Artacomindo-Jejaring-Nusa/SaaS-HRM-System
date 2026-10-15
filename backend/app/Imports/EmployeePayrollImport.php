@@ -26,33 +26,41 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
     {
         foreach ($rows as $row) {
             $rowArray = $row instanceof Collection ? $row->toArray() : (array) $row;
+            $user = $this->findUserByRow($rowArray);
 
-            $email = $this->getValue($rowArray, 'email');
-            $nik = $this->getValue($rowArray, 'nik');
-
-            if (empty($email) && empty($nik)) {
-                $this->skippedCount++;
-                continue;
+            if ($user) {
+                $this->updateUserPayroll($user, $rowArray);
             }
-
-            // Find user by email or NIK
-            $user = null;
-            if (! empty($email)) {
-                $user = User::where('company_id', $this->companyId)->where('email', trim($email))->first();
-            }
-
-            if (! $user && ! empty($nik)) {
-                $user = User::where('company_id', $this->companyId)->where('nik', trim($nik))->first();
-            }
-
-            if (! $user) {
-                $this->skippedCount++;
-                $this->errors[] = 'Employee with email/NIK ['.($email ?: $nik).'] not found.';
-                continue;
-            }
-
-            $this->updateUserPayroll($user, $rowArray);
         }
+    }
+
+    private function findUserByRow(array $rowArray): ?User
+    {
+        $email = trim((string) ($this->getValue($rowArray, 'email') ?? ''));
+        $nik = trim((string) ($this->getValue($rowArray, 'nik') ?? ''));
+
+        if ($email === '' && $nik === '') {
+            $this->skippedCount++;
+            return null;
+        }
+
+        $user = null;
+        if ($email !== '') {
+            $user = User::where('company_id', $this->companyId)->where('email', $email)->first();
+        }
+
+        if (! $user && $nik !== '') {
+            $user = User::where('company_id', $this->companyId)->where('nik', $nik)->first();
+        }
+
+        if (! $user) {
+            $this->skippedCount++;
+            $identifier = $email !== '' ? $email : $nik;
+            $this->errors[] = "Employee with email/NIK [{$identifier}] not found.";
+            return null;
+        }
+
+        return $user;
     }
 
     private function updateUserPayroll($user, array $row)
@@ -72,7 +80,7 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
             if ($val !== null && trim((string)$val) !== '') {
                 if ($config['type'] === 'float') {
                     // Clean currency format like 'Rp 5.000.000' or '5,000,000' or '5000000'
-                    $cleanVal = preg_replace('/[^0-9]/', '', (string)$val);
+                    $cleanVal = preg_replace('/\D/', '', (string) $val);
                     $updateData[$config['key']] = (float) $cleanVal;
                 } else {
                     $updateData[$config['key']] = trim((string)$val);
