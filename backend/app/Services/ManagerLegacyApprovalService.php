@@ -14,10 +14,6 @@ class ManagerLegacyApprovalService
 
     private const ROUTE_FUND_REQUESTS = '/dashboard/fund-requests';
 
-    public function __construct(
-        private readonly ?ManagerApprovalService $mainApprovalService = null
-    ) {}
-
     public function handleLegacyApproval($item, Request $request, User $user, bool $isGlobalAdmin, bool $isCompanyAdmin): JsonResponse
     {
         $this->determineLegacyTargetStatus($item, $request, $user, $isCompanyAdmin, $isGlobalAdmin);

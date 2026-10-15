@@ -375,6 +375,6 @@ class ManagerApprovalService
 
     private function handleLegacyApproval($item, Request $request, User $user, bool $isGlobalAdmin, bool $isCompanyAdmin)
     {
-        return (new ManagerLegacyApprovalService($this))->handleLegacyApproval($item, $request, $user, $isGlobalAdmin, $isCompanyAdmin);
+        return (new ManagerLegacyApprovalService())->handleLegacyApproval($item, $request, $user, $isGlobalAdmin, $isCompanyAdmin);
     }
 }
