@@ -281,7 +281,10 @@ class PendingRequestService
             return true;
         }
 
-        $submitter = ($type === 'payroll') ? ($item->creator ?: $user) : $item->user;
+        $submitter = $item->user;
+        if ($type === 'payroll') {
+            $submitter = $item->creator ?: $user;
+        }
 
         if (!empty($item->current_approval_step) && $submitter) {
             return ApprovalService::canApprove(

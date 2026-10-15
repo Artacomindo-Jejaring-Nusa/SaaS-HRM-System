@@ -448,6 +448,34 @@ const renderMemberStatusBadge = (member: TeamMemberAttendance) => {
   );
 };
 
+const isDateInMonth = (d: Date, createdAt: string, now: Date): boolean => {
+  const inMonth = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  const cDate = new Date(createdAt);
+  const cInMonth = !Number.isNaN(cDate.getTime()) && cDate.getFullYear() === now.getFullYear() && cDate.getMonth() === now.getMonth();
+  return inMonth || cInMonth;
+};
+
+const isDateInYear = (d: Date, createdAt: string, now: Date): boolean => {
+  const inYear = d.getFullYear() === now.getFullYear();
+  const cDate = new Date(createdAt);
+  const cInYear = !Number.isNaN(cDate.getTime()) && cDate.getFullYear() === now.getFullYear();
+  return inYear || cInYear;
+};
+
+const isDateInCustomRange = (d: Date, customStart: string, customEnd: string): boolean => {
+  if (customStart) {
+    const s = new Date(customStart);
+    s.setHours(0, 0, 0, 0);
+    if (d < s) return false;
+  }
+  if (customEnd) {
+    const e = new Date(customEnd);
+    e.setHours(23, 59, 59, 999);
+    if (d > e) return false;
+  }
+  return true;
+};
+
 const isItemWithinPeriod = (
   item: ApprovalItem,
   period: string,
@@ -464,30 +492,15 @@ const isItemWithinPeriod = (
 
   const now = new Date();
   if (period === "this_month") {
-    const inMonth = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    const cDate = new Date(item.created_at);
-    const cInMonth = !Number.isNaN(cDate.getTime()) && cDate.getFullYear() === now.getFullYear() && cDate.getMonth() === now.getMonth();
-    return inMonth || cInMonth;
+    return isDateInMonth(d, item.created_at, now);
   }
 
   if (period === "this_year") {
-    const inYear = d.getFullYear() === now.getFullYear();
-    const cDate = new Date(item.created_at);
-    const cInYear = !Number.isNaN(cDate.getTime()) && cDate.getFullYear() === now.getFullYear();
-    return inYear || cInYear;
+    return isDateInYear(d, item.created_at, now);
   }
 
   if (period === "custom") {
-    if (customStart) {
-      const s = new Date(customStart);
-      s.setHours(0, 0, 0, 0);
-      if (d < s) return false;
-    }
-    if (customEnd) {
-      const e = new Date(customEnd);
-      e.setHours(23, 59, 59, 999);
-      if (d > e) return false;
-    }
+    return isDateInCustomRange(d, customStart, customEnd);
   }
 
   return true;
