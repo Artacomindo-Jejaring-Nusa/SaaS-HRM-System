@@ -86,9 +86,13 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
         $this->rowNumber++;
         $row = $this->rowNumber + 3; // Row 1 is title, rows 2-3 are headers. Data starts at row 4.
         $cc = strtolower($salary->cost_center ?? '');
-        $artacomindoVal = (str_contains($cc, 'artacomindo')) ? "=W{$row}" : "";
-        $narwasthuVal = (str_contains($cc, 'narwastu') || str_contains($cc, 'narwasthu')) ? "=W{$row}" : "";
-        $ajnusaVal = (str_contains($cc, 'ajnusa')) ? "=W{$row}" : "";
+        $isArtacomindo = str_contains($cc, 'artacomindo');
+        $isNarwasthu = str_contains($cc, 'narwastu') || str_contains($cc, 'narwasthu');
+
+        $artacomindoVal = $isArtacomindo ? "=W{$row}" : "";
+        $narwasthuVal = $isNarwasthu ? "=W{$row}" : "";
+        // If not matching specific sub-entities, assign to primary column so THP is always fully accounted for
+        $ajnusaVal = (! $isArtacomindo && ! $isNarwasthu) ? "=W{$row}" : "";
 
         return [
             $this->rowNumber,
@@ -99,8 +103,8 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
             $salary->working_days,
             $salary->earning_bpjs_kes_premium,
             "=D{$row}+G{$row}", // Col H: Jumlah (Gaji+Premi)
-            "=D{$row}*2%",      // Col I: Pot. JHT-TK (2%)
-            "=D{$row}*1%",      // Col J: Pot. JP-TK (1%)
+            $salary->deduction_bpjs_jht, // Col I: Pot. JHT-TK (2%)
+            $salary->deduction_bpjs_jp,  // Col J: Pot. JP-TK (1%)
             $salary->earning_position_allowance,
             $salary->earning_attendance_allowance,
             $salary->earning_communication_allowance,
@@ -111,9 +115,9 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
             $salary->earning_diligence_bonus,
             $salary->earning_backpay,
             $salary->earning_others,
-            "=SUM(H{$row}:T{$row})-I{$row}-J{$row}", // Col U: Jumlah
-            $salary->deduction_absence,
-            "=U{$row}-I{$row}-J{$row}-V{$row}", // Col W: THP
+            "=D{$row}+SUM(K{$row}:T{$row})", // Col U: Total Pendapatan Tunai Karyawan
+            (float) $salary->deduction_absence + (float) $salary->deduction_late, // Col V: Pot. Absensi & Disiplin
+            "=U{$row}-I{$row}-J{$row}-V{$row}", // Col W: THP (Take Home Pay)
             $salary->bank_name ?? '-',
             $salary->bank_account_no ?? '-',
             $artacomindoVal,  // Col Z

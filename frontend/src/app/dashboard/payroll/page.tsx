@@ -8,7 +8,7 @@ import {
   DollarSign, Loader2, X, Printer, ArrowLeft, CheckCircle2, Clock, AlertTriangle,
   ChevronRight, Edit2, Trash2,
   Sparkles, Plus, Check, Play, RefreshCw, AlertCircle,
-  FileDown, FileUp } from "lucide-react";
+  FileDown, FileUp, Send } from "lucide-react";
 import { PayrollSkeleton } from "@/components/Skeleton";
 import { toast } from "sonner";
 import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
@@ -18,6 +18,7 @@ interface UserInfo {
   name: string;
   email: string;
   department?: string;
+  attendance_type?: string;
 }
 
 interface PayslipDetailItem {
@@ -45,13 +46,24 @@ interface SalaryRecord {
   total_working_days: number;
   earning_bpjs_kes_premium?: string | number;
   earning_attendance_allowance?: string | number;
+  earning_position_allowance?: string | number;
+  earning_communication_allowance?: string | number;
+  earning_shift_premium?: string | number;
+  earning_shift_meal?: string | number;
   earning_overtime?: string | number;
+  earning_operational?: string | number;
+  earning_diligence_bonus?: string | number;
+  earning_backpay?: string | number;
+  earning_others?: string | number;
+  earning_others_note?: string;
   deduction_bpjs_jht?: string | number;
   deduction_bpjs_jp?: string | number;
   deduction_bpjs_kes?: string | number;
   deduction_absence?: string | number;
   deduction_late?: string | number;
   deduction_tax?: string | number;
+  deduction_others?: string | number;
+  deduction_others_note?: string;
   total_earnings: string | number;
   total_deductions: string | number;
   net_salary: string | number;
@@ -108,13 +120,13 @@ function getStatusBadge(status: string) {
     case 'paid':
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-black rounded-full border border-emerald-200">
-          <CheckCircle2 size={13} /> Selesai Dibayar
+          <CheckCircle2 size={13} /> Selesai & Dibagikan
         </span>
       );
     case 'approved':
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 text-xs font-black rounded-full border border-blue-200">
-          <CheckCircle2 size={13} /> Disetujui
+          <CheckCircle2 size={13} /> Disetujui (Belum Dibagikan)
         </span>
       );
     case 'pending_approval':
@@ -242,10 +254,10 @@ function BatchTableContent({
 }
 
 const ACTION_LABELS: Record<PayrollAction, string> = {
-  submit: 'Submit ke CEO / Approver',
+  submit: 'Submit ke Approver',
   approve: 'Setujui Payroll',
   reject: 'Tolak (Revisi)',
-  paid: 'Tandai Sudah Dibayar'
+  paid: 'Bagikan Slip Gaji ke Karyawan'
 };
 
 function filterPayrollBatches(
@@ -346,6 +358,28 @@ function confirmPayrollStatusChange(
   note?: string
 ) {
   if (!selectedBatch) return;
+
+  if (action === 'paid') {
+    toast(`Bagikan slip gaji periode ${selectedBatch.period_month} ${selectedBatch.period_year} ke seluruh karyawan?`, {
+      description: "Karyawan akan dapat melihat dan mengunduh slip gaji di portal masing-masing. Notifikasi otomatis akan dikirimkan.",
+      action: {
+        label: "Bagikan Sekarang",
+        onClick: async () => {
+          try {
+            setActionSubmitting(true);
+            await executeBatchStatusAction(selectedBatch.id, action, note);
+            toast.success("Slip gaji berhasil dibagikan ke seluruh karyawan!");
+            refreshCurrentBatch();
+          } catch (e: any) {
+            toast.error(e.response?.data?.message || "Gagal membagikan slip gaji.");
+          } finally {
+            setActionSubmitting(false);
+          }
+        },
+      },
+    });
+    return;
+  }
 
   toast(`Apakah Anda yakin ingin melakukan "${ACTION_LABELS[action]}"?`, {
     action: {
@@ -713,9 +747,17 @@ function PayrollBatchDetailView({
               onClick={() => onStatusChange('paid')}
               disabled={actionSubmitting}
               className="h-11 px-5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-md flex items-center gap-2"
+              title="Terbitkan slip gaji ke portal seluruh karyawan dan tandai selesai"
             >
-              <CheckCircle2 size={16} /> Tandai Sudah Dibayar (Transfer Selesai)
+              <Send size={15} /> 📢 Bagikan Slip Gaji ke Karyawan
             </button>
+          )}
+
+          {/* Paid status badge & label */}
+          {selectedBatch.status === 'paid' && (
+            <span className="h-11 px-4 text-xs font-bold text-emerald-800 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center gap-2">
+              <CheckCircle2 size={16} className="text-emerald-600" /> Slip Gaji Telah Dibagikan
+            </span>
           )}
 
           {/* Rekap Excel button */}
@@ -737,14 +779,20 @@ function PayrollBatchDetailView({
           <span className="text-2xl font-black text-gray-900">
             Rp {formatRupiah(selectedBatch.total_gross)}
           </span>
+          <span className="text-[11px] text-gray-400 font-medium block mt-1">
+            Gaji Pokok + Semua Tunjangan & Lembur
+          </span>
         </div>
 
         <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
           <span className="text-xs font-black text-gray-400 uppercase tracking-wider block mb-1">
-            Total Potongan (Pajak + BPJS + Disiplin)
+            Total Potongan (Disiplin + BPJS + Pajak + Lainnya)
           </span>
           <span className="text-2xl font-black text-rose-600">
             -Rp {formatRupiah(selectedBatch.total_deductions)}
+          </span>
+          <span className="text-[11px] text-gray-400 font-medium block mt-1">
+            Total seluruh potongan yang memotong gaji
           </span>
         </div>
 
@@ -755,11 +803,14 @@ function PayrollBatchDetailView({
           <span className="text-2xl font-black text-white">
             Rp {formatRupiah(selectedBatch.total_net)}
           </span>
+          <span className="text-[11px] text-red-200 font-medium block mt-1">
+            Gross dikurangi seluruh potongan
+          </span>
         </div>
       </div>
 
       {/* Search inside batch */}
-      <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex items-center justify-between gap-4">
+      <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="relative w-full max-w-md">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
@@ -770,9 +821,14 @@ function PayrollBatchDetailView({
             className="w-full h-11 pl-11 pr-4 bg-gray-50 border-none rounded-2xl text-xs font-medium focus:ring-2 focus:ring-[#8B0000]/20 outline-none"
           />
         </div>
-        <span className="text-xs font-bold text-gray-400">
-          Menampilkan {filteredSalaries.length} dari {selectedBatch.salaries?.length || 0} Karyawan
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] font-semibold text-gray-400 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100">
+            Rumus: (Gaji Pokok + Tunjangan) − (Pot. Disiplin + Pajak/BPJS + Pot. Lain) = Net THP
+          </span>
+          <span className="text-xs font-bold text-gray-500 shrink-0">
+            {filteredSalaries.length} dari {selectedBatch.salaries?.length || 0} Karyawan
+          </span>
+        </div>
       </div>
 
       {/* Salaries Table */}
@@ -786,6 +842,7 @@ function PayrollBatchDetailView({
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Tunjangan & Variabel</th>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Pot. Disiplin</th>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Pajak & BPJS</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Pot. Lain</th>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Net THP</th>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Aksi</th>
               </tr>
@@ -793,41 +850,100 @@ function PayrollBatchDetailView({
             <tbody className="divide-y divide-gray-50">
               {filteredSalaries.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-400 italic text-sm">
+                  <td colSpan={8} className="text-center py-12 text-gray-400 italic text-sm">
                     Tidak ada data karyawan yang cocok dengan pencarian.
                   </td>
                 </tr>
               ) : (
                 filteredSalaries.map((salary: SalaryRecord) => {
-                  const discDeduction = (parseAmount(salary.deduction_late)) + (parseAmount(salary.deduction_absence));
-                  const taxAndBpjs = (parseAmount(salary.deduction_tax)) + 
-                                     (parseAmount(salary.deduction_bpjs_jht)) + 
-                                     (parseAmount(salary.deduction_bpjs_jp)) + 
-                                     (parseAmount(salary.deduction_bpjs_kes));
-                  const allowances = parseAmount(salary.total_earnings) - parseAmount(salary.basic_salary);
+                  const basic = parseAmount(salary.basic_salary);
+                  const allowances = parseAmount(salary.total_earnings) - basic;
+                  const lateDed = parseAmount(salary.deduction_late);
+                  const absenceDed = parseAmount(salary.deduction_absence);
+                  const discDeduction = lateDed + absenceDed;
+                  const bpjsTotal = parseAmount(salary.deduction_bpjs_jht) + 
+                                     parseAmount(salary.deduction_bpjs_jp) + 
+                                     parseAmount(salary.deduction_bpjs_kes);
+                  const taxDed = parseAmount(salary.deduction_tax);
+                  const taxAndBpjs = bpjsTotal + taxDed;
+                  const otherDed = parseAmount(salary.deduction_others);
+                  const net = parseAmount(salary.net_salary);
 
                   return (
                     <tr key={salary.id} className="hover:bg-gray-50/60 transition-colors">
                       <td className="px-6 py-4 pl-8">
-                        <span className="font-bold text-gray-900 block text-sm">{salary.user?.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-gray-900 block text-sm">{salary.user?.name}</span>
+                          {salary.user?.attendance_type === "flexible" && (
+                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-bold rounded-full border border-amber-200" title="Khusus Atasan - Bebas Jam & Bebas Potongan">
+                              ⭐ Fleksibel
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[11px] text-gray-400 font-medium block mt-0.5">
-                          {salary.department} • {salary.bank_name} {salary.bank_account_no}
+                          {salary.department} • {salary.bank_name || '-'} {salary.bank_account_no || ''} • {salary.working_days || 0}/{salary.total_working_days || 0} Hadir
                         </span>
                       </td>
                       <td className="px-6 py-4 font-semibold text-gray-700 text-sm">
-                        Rp {formatRupiah(salary.basic_salary)}
+                        Rp {formatRupiah(basic)}
                       </td>
                       <td className="px-6 py-4 font-bold text-emerald-600 text-sm">
                         +Rp {formatRupiah(allowances)}
+                        {allowances > 0 && (
+                          <span className="block text-[10px] font-medium text-gray-400 mt-0.5">
+                            {[
+                              parseAmount(salary.earning_attendance_allowance) > 0 ? `Hadir: Rp ${formatRupiah(salary.earning_attendance_allowance)}` : null,
+                              parseAmount(salary.earning_overtime) > 0 ? `Lembur: Rp ${formatRupiah(salary.earning_overtime)}` : null,
+                              parseAmount(salary.earning_position_allowance) > 0 ? `Jabatan: Rp ${formatRupiah(salary.earning_position_allowance)}` : null,
+                              parseAmount(salary.earning_others) > 0 ? `Lainnya: Rp ${formatRupiah(salary.earning_others)}` : null,
+                            ].filter(Boolean).slice(0, 2).join(' • ')}
+                          </span>
+                        )}
                       </td>
-                      <td className="px-6 py-4 font-semibold text-rose-600 text-sm">
-                        {discDeduction > 0 ? `-Rp ${formatRupiah(discDeduction)}` : 'Rp 0'}
+                      <td className="px-6 py-4 font-semibold text-sm">
+                        {salary.user?.attendance_type === "flexible" ? (
+                          <span className="inline-flex items-center text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg text-xs font-bold border border-emerald-100">
+                            Bebas Potongan
+                          </span>
+                        ) : discDeduction > 0 ? (
+                          <div>
+                            <span className="text-rose-600 font-semibold">-Rp {formatRupiah(discDeduction)}</span>
+                            <span className="block text-[10px] font-medium text-gray-400 mt-0.5">
+                              {[
+                                lateDed > 0 ? `Telat: Rp ${formatRupiah(lateDed)}` : null,
+                                absenceDed > 0 ? `Mangkir: Rp ${formatRupiah(absenceDed)}` : null,
+                              ].filter(Boolean).join(' • ')}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 font-medium">Rp 0</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 font-semibold text-orange-600 text-sm">
                         -Rp {formatRupiah(taxAndBpjs)}
+                        <span className="block text-[10px] font-medium text-gray-400 mt-0.5">
+                          BPJS: Rp {formatRupiah(bpjsTotal)}{taxDed > 0 ? ` • PPh: Rp ${formatRupiah(taxDed)}` : ''}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 font-semibold text-sm">
+                        {otherDed > 0 ? (
+                          <div>
+                            <span className="text-rose-600 font-semibold">-Rp {formatRupiah(otherDed)}</span>
+                            {salary.deduction_others_note && (
+                              <span className="block text-[10px] font-medium text-gray-400 mt-0.5 italic">
+                                {salary.deduction_others_note}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 font-medium">Rp 0</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 font-black text-[#8B0000] text-sm">
-                        Rp {formatRupiah(salary.net_salary)}
+                        Rp {formatRupiah(net)}
+                        <span className="block text-[10px] font-semibold text-gray-400 mt-0.5">
+                          Transfer Bersih
+                        </span>
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex items-center justify-center gap-1">
@@ -861,6 +977,39 @@ function PayrollBatchDetailView({
                 })
               )}
             </tbody>
+            {filteredSalaries.length > 0 && (
+              <tfoot className="bg-gray-50/90 border-t-2 border-gray-200">
+                <tr>
+                  <td className="px-6 py-4 pl-8">
+                    <span className="font-black text-gray-900 block text-xs uppercase tracking-wider">
+                      TOTAL PERIODE ({filteredSalaries.length} Karyawan)
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-semibold block mt-0.5">
+                      (Gaji Pokok + Tunjangan) − Seluruh Potongan
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 font-black text-gray-900 text-sm">
+                    Rp {formatRupiah(filteredSalaries.reduce((acc, s) => acc + parseAmount(s.basic_salary), 0))}
+                  </td>
+                  <td className="px-6 py-4 font-black text-emerald-600 text-sm">
+                    +Rp {formatRupiah(filteredSalaries.reduce((acc, s) => acc + (parseAmount(s.total_earnings) - parseAmount(s.basic_salary)), 0))}
+                  </td>
+                  <td className="px-6 py-4 font-black text-rose-600 text-sm">
+                    -Rp {formatRupiah(filteredSalaries.reduce((acc, s) => acc + parseAmount(s.deduction_late) + parseAmount(s.deduction_absence), 0))}
+                  </td>
+                  <td className="px-6 py-4 font-black text-orange-600 text-sm">
+                    -Rp {formatRupiah(filteredSalaries.reduce((acc, s) => acc + parseAmount(s.deduction_tax) + parseAmount(s.deduction_bpjs_jht) + parseAmount(s.deduction_bpjs_jp) + parseAmount(s.deduction_bpjs_kes), 0))}
+                  </td>
+                  <td className="px-6 py-4 font-black text-rose-600 text-sm">
+                    -Rp {formatRupiah(filteredSalaries.reduce((acc, s) => acc + parseAmount(s.deduction_others), 0))}
+                  </td>
+                  <td className="px-6 py-4 font-black text-[#8B0000] text-base">
+                    Rp {formatRupiah(filteredSalaries.reduce((acc, s) => acc + parseAmount(s.net_salary), 0))}
+                  </td>
+                  <td className="px-6 py-4"></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
@@ -1115,6 +1264,8 @@ interface PayrollSalaryEditModalProps {
   readonly submittingAdhoc: boolean;
   readonly onAddAdhocItem: (e: React.FormEvent | React.MouseEvent) => void;
   readonly onRemoveAdhocItem: (detailId: number) => void;
+  readonly onRecalculateAsFlexible?: (salaryId: number) => void;
+  readonly recalculatingSalary?: boolean;
 }
 
 function PayrollSalaryEditModal({
@@ -1131,6 +1282,8 @@ function PayrollSalaryEditModal({
   submittingAdhoc,
   onAddAdhocItem,
   onRemoveAdhocItem,
+  onRecalculateAsFlexible,
+  recalculatingSalary,
 }: PayrollSalaryEditModalProps) {
   if (!editingSalary) return null;
 
@@ -1214,10 +1367,58 @@ function PayrollSalaryEditModal({
 
             {/* Right Column: Disciplinary Deductions */}
             <div className="space-y-4">
-              <h4 className="font-bold text-sm text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
-                <Clock size={16} className="text-rose-600" />
-                Potongan Disiplin Kehadiran
-              </h4>
+              <div className="border-b border-gray-100 pb-2 flex items-center justify-between">
+                <h4 className="font-bold text-sm text-gray-900 flex items-center gap-2">
+                  <Clock size={16} className="text-rose-600" />
+                  Potongan Disiplin Kehadiran
+                </h4>
+                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                  editingSalary.user?.attendance_type === 'flexible'
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-gray-100 text-gray-600 border-gray-200'
+                }`}>
+                  {editingSalary.user?.attendance_type === 'flexible' ? '⭐ Fleksibel (Atasan)' : '🏢 Office Hour / Shift'}
+                </span>
+              </div>
+
+              {editingSalary.user?.attendance_type === 'flexible' ? (
+                <div className="p-3 bg-emerald-50/70 border border-emerald-200/60 rounded-2xl text-emerald-800 text-xs space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                    <CheckCircle2 size={15} className="text-emerald-600" /> Pola Kehadiran Fleksibel Aktif
+                  </div>
+                  <p className="text-[11px] text-emerald-700 leading-relaxed">
+                    Khusus atasan/pimpinan: jam kerja bebas, bebas denda keterlambatan dan potongan mangkir, serta tunjangan kehadiran dihitung penuh 100%.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-amber-50/70 p-3 rounded-2xl border border-amber-200/60 gap-2">
+                  <span className="text-amber-900 text-[11px] font-medium">
+                    Atasan/Pimpinan terkena potongan?
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingSalary({ ...editingSalary, deduction_late: 0, deduction_absence: 0 })}
+                      className="px-2.5 py-1 bg-white hover:bg-amber-100/70 text-amber-900 font-bold text-[11px] rounded-lg border border-amber-300 transition-all shadow-2xs"
+                      title="Nol-kan potongan disiplin untuk karyawan ini"
+                    >
+                      Bebaskan Potongan (Set 0)
+                    </button>
+                    {onRecalculateAsFlexible && (
+                      <button
+                        type="button"
+                        disabled={recalculatingSalary}
+                        onClick={() => onRecalculateAsFlexible(editingSalary.id)}
+                        className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] rounded-lg transition-all shadow-2xs flex items-center gap-1"
+                        title="Setel pegawai ke pola Fleksibel dan hitung ulang otomatis"
+                      >
+                        {recalculatingSalary ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                        Jadikan Fleksibel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label htmlFor="edit-deduction-late-input" className="text-xs font-bold text-gray-600">Potongan Keterlambatan (Rp)</label>
@@ -1704,6 +1905,25 @@ export default function PayrollManagementPage() {
     }
   };
 
+  const [recalculatingSalary, setRecalculatingSalary] = useState(false);
+
+  const handleRecalculateAsFlexible = async (salaryId: number) => {
+    setRecalculatingSalary(true);
+    try {
+      const res = await axiosInstance.post(`/payroll/salaries/${salaryId}/recalculate`, {
+        attendance_type: 'flexible',
+      });
+      toast.success("Pegawai berhasil diubah ke Fleksibel & gaji dihitung ulang!");
+      setEditingSalary(res.data.data);
+      refreshCurrentBatch();
+    } catch (err: unknown) {
+      const errorResponse = err as { response?: { data?: { message?: string } } };
+      toast.error(errorResponse.response?.data?.message || "Gagal menghitung ulang gaji.");
+    } finally {
+      setRecalculatingSalary(false);
+    }
+  };
+
   // Save Salary (Base & Discipline)
   const handleSaveSalary = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1830,6 +2050,8 @@ export default function PayrollManagementPage() {
         submittingAdhoc={submittingAdhoc}
         onAddAdhocItem={handleAddAdhocItem}
         onRemoveAdhocItem={handleRemoveAdhocItem}
+        onRecalculateAsFlexible={handleRecalculateAsFlexible}
+        recalculatingSalary={recalculatingSalary}
       />
 
       <PayrollSlipPreviewModal

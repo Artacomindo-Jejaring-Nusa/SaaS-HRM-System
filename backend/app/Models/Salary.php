@@ -55,6 +55,8 @@ class Salary extends Model
         'deduction_absence',
         'deduction_late',
         'deduction_tax',
+        'deduction_others',
+        'deduction_others_note',
 
         // Totals
         'total_earnings',
@@ -86,8 +88,8 @@ class Salary extends Model
      */
     public function calculateTotals()
     {
+        // Cash earnings received by employee (Employer BPJS is recorded separately on the model for tax & reporting, not added to cash Take Home Pay)
         $baseEarnings = (float) $this->basic_salary
-            + (float) $this->earning_bpjs_kes_premium
             + (float) $this->earning_position_allowance
             + (float) $this->earning_attendance_allowance
             + (float) $this->earning_communication_allowance
@@ -104,7 +106,8 @@ class Salary extends Model
             + (float) $this->deduction_bpjs_kes
             + (float) $this->deduction_absence
             + (float) $this->deduction_late
-            + (float) $this->deduction_tax;
+            + (float) $this->deduction_tax
+            + (float) ($this->deduction_others ?? 0);
 
         // If dynamic custom ad-hoc or additional components are present
         if ($this->exists && $this->relationLoaded('detailsRecords')) {
@@ -120,7 +123,7 @@ class Salary extends Model
         // Legacy columns kept in sync
         $this->allowance = $this->total_earnings - (float) $this->basic_salary;
         $this->deduction = $this->total_deductions;
-        $this->net_salary = $this->total_earnings - $this->total_deductions;
+        $this->net_salary = max(0, $this->total_earnings - $this->total_deductions);
 
         return $this;
     }

@@ -421,6 +421,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
 
             // Individual Salary Edit (HR adjustments)
             Route::put('/salaries/{id}', [PayrollController::class, 'updateSalary']);
+            Route::post('/salaries/{id}/recalculate', [PayrollController::class, 'recalculateSalary']);
         });
 
         // History & Export (Accessible by Payroll Managers and Report Viewers)

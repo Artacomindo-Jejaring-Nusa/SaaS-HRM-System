@@ -294,6 +294,22 @@ class DynamicPayrollEngine
             'updated_at' => now(),
         ];
 
+        // Tunjangan Jabatan (if any)
+        if ((float) $salary->earning_position_allowance > 0) {
+            $details[] = [
+                'salary_id' => $salary->id,
+                'component_id' => null,
+                'component_name' => 'Tunjangan Jabatan',
+                'type' => 'earning',
+                'calculation_rule' => 'fixed',
+                'amount' => (float) $salary->earning_position_allowance,
+                'note' => 'Tunjangan Jabatan Struktural',
+                'is_adhoc' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
         // Tunjangan Kehadiran (if any)
         if ((float) $salary->earning_attendance_allowance > 0) {
             $details[] = [
@@ -304,6 +320,54 @@ class DynamicPayrollEngine
                 'calculation_rule' => 'attendance',
                 'amount' => (float) $salary->earning_attendance_allowance,
                 'note' => "{$salary->working_days} hari hadir",
+                'is_adhoc' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        // Tunjangan Komunikasi / Pulsa (if any)
+        if ((float) $salary->earning_communication_allowance > 0) {
+            $details[] = [
+                'salary_id' => $salary->id,
+                'component_id' => null,
+                'component_name' => 'Tunjangan Komunikasi',
+                'type' => 'earning',
+                'calculation_rule' => 'fixed',
+                'amount' => (float) $salary->earning_communication_allowance,
+                'note' => 'Tunjangan Pulsa / Komunikasi',
+                'is_adhoc' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        // Premi Shift (if any)
+        if ((float) $salary->earning_shift_premium > 0) {
+            $details[] = [
+                'salary_id' => $salary->id,
+                'component_id' => null,
+                'component_name' => 'Premi Shift',
+                'type' => 'earning',
+                'calculation_rule' => 'shift',
+                'amount' => (float) $salary->earning_shift_premium,
+                'note' => 'Premi Shift 24 Jam',
+                'is_adhoc' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        // Uang Makan Shift (if any)
+        if ((float) $salary->earning_shift_meal > 0) {
+            $details[] = [
+                'salary_id' => $salary->id,
+                'component_id' => null,
+                'component_name' => 'Uang Makan Shift',
+                'type' => 'earning',
+                'calculation_rule' => 'shift',
+                'amount' => (float) $salary->earning_shift_meal,
+                'note' => 'Uang Makan Shift Malam',
                 'is_adhoc' => false,
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -326,16 +390,48 @@ class DynamicPayrollEngine
             ];
         }
 
-        // Premi BPJS Kesehatan Ditanggung Perusahaan (if any)
-        if ((float) $salary->earning_bpjs_kes_premium > 0) {
+        // Operasional (if any)
+        if ((float) $salary->earning_operational > 0) {
             $details[] = [
                 'salary_id' => $salary->id,
                 'component_id' => null,
-                'component_name' => 'Premi BPJS Kesehatan (Perusahaan)',
+                'component_name' => 'Tunjangan Operasional',
                 'type' => 'earning',
-                'calculation_rule' => 'percentage',
-                'amount' => (float) $salary->earning_bpjs_kes_premium,
-                'note' => 'Iuran BPJS-Kes 4% dari perusahaan',
+                'calculation_rule' => 'fixed',
+                'amount' => (float) $salary->earning_operational,
+                'note' => 'Biaya Operasional Lapangan',
+                'is_adhoc' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        // Bonus Kerajinan (if any)
+        if ((float) $salary->earning_diligence_bonus > 0) {
+            $details[] = [
+                'salary_id' => $salary->id,
+                'component_id' => null,
+                'component_name' => 'Bonus Kerajinan',
+                'type' => 'earning',
+                'calculation_rule' => 'fixed',
+                'amount' => (float) $salary->earning_diligence_bonus,
+                'note' => 'Bonus Kerajinan Kerja',
+                'is_adhoc' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        // Rapel (if any)
+        if ((float) $salary->earning_backpay > 0) {
+            $details[] = [
+                'salary_id' => $salary->id,
+                'component_id' => null,
+                'component_name' => 'Rapel Gaji',
+                'type' => 'earning',
+                'calculation_rule' => 'fixed',
+                'amount' => (float) $salary->earning_backpay,
+                'note' => 'Rapel Kekurangan Gaji Periode Lalu',
                 'is_adhoc' => false,
                 'created_at' => now(),
                 'updated_at' => now(),

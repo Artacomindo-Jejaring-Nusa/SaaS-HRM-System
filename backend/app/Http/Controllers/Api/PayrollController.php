@@ -302,7 +302,7 @@ class PayrollController extends Controller
         ];
     }
 
-    private function processEmployeePayroll($user, array $ctx)
+    private function processEmployeePayroll($user, array $ctx, ?Salary $existingSalary = null)
     {
         $companyId = $ctx['company_id'];
         $batch = $ctx['batch'];
@@ -333,16 +333,22 @@ class PayrollController extends Controller
         $lateResult = $attMetrics['late_result'];
         $absenceResult = $attMetrics['absence_result'];
 
-        $regularRate = $settings->overtime_rate_per_hour ?? 30000;
-        $holidayRate = $settings->overtime_rate_holiday_per_hour ?? 50000;
-        
-        $otMetrics = $this->getOvertimeMetrics($user->overtimes, $holidays, $regularRate, $holidayRate);
-        $totalOvertimeHours = $otMetrics['hours'];
-        $overtimeAmount = $otMetrics['amount'];
+        // PP 35/2021: Pola fleksibel khusus atasan/jabatan tertentu bebas jam & tidak menerima klaim lembur otomatis
+        if ($user->attendance_type === 'flexible') {
+            $totalOvertimeHours = 0;
+            $overtimeAmount = 0;
+        } else {
+            $regularRate = $settings->overtime_rate_per_hour ?? 30000;
+            $holidayRate = $settings->overtime_rate_holiday_per_hour ?? 50000;
+            
+            $otMetrics = $this->getOvertimeMetrics($user->overtimes, $holidays, $regularRate, $holidayRate);
+            $totalOvertimeHours = $otMetrics['hours'];
+            $overtimeAmount = $otMetrics['amount'];
+        }
 
         $bpjs = $this->payrollService->calculateBPJS($basicSalary, $settings);
 
-        $salary = new Salary;
+        $salary = $existingSalary ?? new Salary;
         $salary->user_id = $user->id;
         $salary->company_id = $companyId;
         $salary->batch_id = $batch->id;
@@ -362,7 +368,19 @@ class PayrollController extends Controller
         $salary->deduction_late = $totalLateDeduction;
 
         // Calculate PPh 21 dynamically based on settings tax method (TER, Gross, Gross-Up)
-        $taxGrossSalary = $basicSalary + $overtimeAmount + $salary->earning_attendance_allowance + ($bpjs['kesehatan']['company'] ?? 0);
+        $taxGrossSalary = (float) $basicSalary
+            + (float) $overtimeAmount
+            + (float) $salary->earning_attendance_allowance
+            + (float) ($salary->earning_position_allowance ?? 0)
+            + (float) ($salary->earning_communication_allowance ?? 0)
+            + (float) ($salary->earning_shift_premium ?? 0)
+            + (float) ($salary->earning_shift_meal ?? 0)
+            + (float) ($salary->earning_operational ?? 0)
+            + (float) ($salary->earning_diligence_bonus ?? 0)
+            + (float) ($salary->earning_backpay ?? 0)
+            + (float) ($bpjs['kesehatan']['company'] ?? 0)
+            + (float) ($bpjs['jkm']['company'] ?? 0)
+            + (float) ($bpjs['jkk']['company'] ?? 0);
         $taxMethod = $settings->tax_method ?? 'TER';
         $taxResult = $this->payrollService->calculatePPh21($taxGrossSalary, $user->ptkp_status, $taxMethod);
         
@@ -376,7 +394,7 @@ class PayrollController extends Controller
 
         $salary->bank_name = $user->bank_name ?? '-';
         $salary->bank_account_no = $user->bank_account_no ?? '-';
-        $salary->cost_center = $user->cost_center ?? 'PT. Artacomindotama';
+        $salary->cost_center = $user->cost_center ?: ($user->company?->name ?? 'Cost Center Utama');
         $salary->status = 'draft';
 
         $salary->calculateTotals();
@@ -420,9 +438,20 @@ class PayrollController extends Controller
             (int) $year
         );
 
-        if ($dynamicResults['dynamic_earnings'] > 0) {
+        $hasDynamicUpdates = false;
+        if (($dynamicResults['dynamic_earnings'] ?? 0) > 0) {
             $salary->earning_others = ($salary->earning_others ?? 0) + $dynamicResults['dynamic_earnings'];
+            $hasDynamicUpdates = true;
+        }
+        if (($dynamicResults['dynamic_deductions'] ?? 0) > 0) {
+            $salary->deduction_others = ($salary->deduction_others ?? 0) + $dynamicResults['dynamic_deductions'];
+            $hasDynamicUpdates = true;
+        }
+        if ($hasDynamicUpdates) {
             $salary->calculateTotals();
+            $detailsData = json_decode($salary->details, true) ?? [];
+            $detailsData['breakdown'] = ['gross' => $salary->total_earnings, 'net' => $salary->net_salary];
+            $salary->details = json_encode($detailsData);
             $salary->save();
         }
     }
@@ -441,8 +470,9 @@ class PayrollController extends Controller
             'earning_communication_allowance', 'earning_shift_premium',
             'earning_shift_meal', 'earning_overtime', 'earning_operational',
             'earning_diligence_bonus', 'earning_backpay', 'earning_others',
-            'earning_others_note', 'deduction_absence', 'deduction_late', 'cost_center',
-            'bank_name', 'bank_account_no', 'bank_account_name',
+            'earning_others_note', 'deduction_absence', 'deduction_late',
+            'deduction_tax', 'deduction_others', 'deduction_others_note',
+            'cost_center', 'bank_name', 'bank_account_no', 'bank_account_name',
         ];
 
         $salary->fill($request->only($editableFields));
@@ -466,6 +496,92 @@ class PayrollController extends Controller
         return response()->json([
             'message' => 'Data gaji berhasil diperbarui.',
             'data' => $salary->fresh()->load('user'),
+        ]);
+    }
+
+    public function recalculateSalary(Request $request, $id)
+    {
+        $salary = Salary::findOrFail($id);
+        if (! in_array($salary->status, ['draft', 'rejected'])) {
+            return response()->json(['message' => 'Hanya gaji berstatus draft yang bisa dikalkulasi ulang.'], 422);
+        }
+
+        $batch = $salary->batch;
+        if (! $batch || ! in_array($batch->status, ['draft', 'rejected'])) {
+            return response()->json(['message' => 'Batch payroll sudah tidak berstatus draft.'], 422);
+        }
+
+        $user = $salary->user;
+        if (! $user) {
+            return response()->json(['message' => 'Data pegawai tidak ditemukan.'], 404);
+        }
+
+        // If Super Admin chose to switch attendance_type to flexible or office_hour
+        if ($request->filled('attendance_type')) {
+            $user->attendance_type = $request->attendance_type;
+            $user->save();
+        }
+
+        $companyId = $user->company_id;
+        $settings = PayrollSetting::where('company_id', $companyId)->first();
+        if (! $settings) {
+            return response()->json(['message' => 'Konfigurasi payroll tidak ditemukan.'], 422);
+        }
+
+        $cutoffDay = $settings->cutoff_day ?? 20;
+        $monthNum = Carbon::parse($batch->period_month)->month;
+        $year = $batch->period_year;
+
+        if ($cutoffDay >= 28 || $cutoffDay <= 0) {
+            $startDate = Carbon::createFromDate($year, $monthNum, 1)->startOfDay();
+            $endDate = $startDate->copy()->endOfMonth()->endOfDay();
+        } else {
+            $endDate = Carbon::createFromDate($year, $monthNum, $cutoffDay)->endOfDay();
+            $startDate = $endDate->copy()->subMonth()->addDay()->startOfDay();
+        }
+
+        $user->load([
+            'role',
+            'attendances' => fn ($q) => $q->whereBetween('check_in', [$startDate, $endDate]),
+            'overtimes' => fn ($q) => $q->where('status', 'approved')->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()]),
+            'permits' => fn ($q) => $q->where('status', 'approved')->where(function ($query) use ($startDate, $endDate) {
+                $query->whereBetween('start_date', [$startDate->toDateString(), $endDate->toDateString()])
+                    ->orWhereBetween('end_date', [$startDate->toDateString(), $endDate->toDateString()]);
+            }),
+            'schedules' => fn ($q) => $q->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()])->with('shift'),
+        ]);
+
+        $totalWorkingDays = 0;
+        for ($d = $startDate->copy(); $d->lte($endDate); $d->addDay()) {
+            if (! $d->isWeekend()) {
+                $totalWorkingDays++;
+            }
+        }
+
+        $holidays = Holiday::where('company_id', $companyId)
+            ->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()])
+            ->pluck('date')
+            ->toArray();
+
+        $ctx = [
+            'company_id' => $companyId,
+            'batch' => $batch,
+            'month_name' => $batch->period_month,
+            'year' => $year,
+            'holidays' => $holidays,
+            'settings' => $settings,
+            'total_working_days' => $totalWorkingDays,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'month_num' => $monthNum,
+        ];
+
+        $this->processEmployeePayroll($user, $ctx, $salary);
+        $batch->recalculateTotals();
+
+        return response()->json([
+            'message' => 'Gaji karyawan berhasil dikalkulasi ulang.',
+            'data' => $salary->fresh()->load(['user', 'detailsRecords']),
         ]);
     }
 
@@ -789,17 +905,31 @@ class PayrollController extends Controller
     public function markAsPaid(Request $request, $batchId)
     {
         $batch = PayrollBatch::where('company_id', $request->user()->company_id)
+            ->with(['salaries.user'])
             ->findOrFail($batchId);
 
         if ($batch->status !== 'approved') {
-            return response()->json(['message' => 'Batch harus disetujui terlebih dahulu sebelum dibayar.'], 422);
+            return response()->json(['message' => 'Batch harus disetujui (Approved) terlebih dahulu sebelum dibagikan dan dibayar.'], 422);
         }
 
         $batch->update(['status' => 'paid']);
         Salary::where('batch_id', $batch->id)->update(['status' => 'paid']);
 
+        // Send notifications to all employees in the batch that their payslip is published
+        foreach ($batch->salaries as $salary) {
+            if ($salary->user) {
+                $this->notify(
+                    $salary->user,
+                    'SLIP GAJI TERBIT',
+                    "Slip gaji periode {$batch->period_month} {$batch->period_year} Anda telah dibagikan dan dapat dilihat di portal payroll.",
+                    'success',
+                    '/dashboard/payroll'
+                );
+            }
+        }
+
         return response()->json([
-            'message' => 'Payroll ditandai sudah dibayar.',
+            'message' => 'Slip gaji berhasil dibagikan ke seluruh karyawan dan periode ditandai selesai.',
             'data' => $batch->fresh(),
         ]);
     }
@@ -830,8 +960,9 @@ class PayrollController extends Controller
 
     public function myPayroll(Request $request)
     {
+        // Only show payslips that have been published / paid by HR
         $salaries = Salary::where('user_id', $request->user()->id)
-            ->whereIn('status', ['approved', 'paid'])
+            ->where('status', 'paid')
             ->orderBy('year', 'desc')
             ->orderBy('month', 'desc')
             ->get();
@@ -931,6 +1062,12 @@ class PayrollController extends Controller
             abort(403);
         }
 
+        // Regular employees can only access their slip if HR has published / marked as paid
+        $isPayrollAdmin = $user->role_id === 1 || $user->isSuperAdmin() || $user->hasPermission('manage-payroll');
+        if (! $isPayrollAdmin && $salary->status !== 'paid') {
+            abort(403, 'Slip gaji periode ini belum dibagikan oleh HR.');
+        }
+
         $pdf = Pdf::loadView('pdf.payslip', compact('salary'));
 
         return $pdf->download("slip_gaji_{$salary->user->name}_{$salary->month}_{$salary->year}.pdf");
@@ -959,6 +1096,12 @@ class PayrollController extends Controller
 
         if ($salary->company_id !== $user->company_id && $salary->user_id !== $user->id) {
             abort(403);
+        }
+
+        // Regular employees can only access their slip if HR has published / marked as paid
+        $isPayrollAdmin = $user->role_id === 1 || $user->isSuperAdmin() || $user->hasPermission('manage-payroll');
+        if (! $isPayrollAdmin && $salary->status !== 'paid') {
+            abort(403, 'Slip gaji periode ini belum dibagikan oleh HR.');
         }
 
         $html = view('pdf.payslip', compact('salary'))->render();

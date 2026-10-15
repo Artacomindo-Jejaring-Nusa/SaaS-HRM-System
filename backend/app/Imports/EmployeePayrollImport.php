@@ -25,12 +25,13 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
     public function collection(Collection $rows)
     {
         foreach ($rows as $row) {
-            $email = $this->getValue($row, 'email');
-            $nik = $this->getValue($row, 'nik');
+            $rowArray = $row instanceof Collection ? $row->toArray() : (array) $row;
+
+            $email = $this->getValue($rowArray, 'email');
+            $nik = $this->getValue($rowArray, 'nik');
 
             if (empty($email) && empty($nik)) {
                 $this->skippedCount++;
-
                 continue;
             }
 
@@ -47,11 +48,10 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
             if (! $user) {
                 $this->skippedCount++;
                 $this->errors[] = 'Employee with email/NIK ['.($email ?: $nik).'] not found.';
-
                 continue;
             }
 
-            $this->updateUserPayroll($user, $row);
+            $this->updateUserPayroll($user, $rowArray);
         }
     }
 
@@ -69,8 +69,14 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
 
         foreach ($fields as $prefix => $config) {
             $val = $this->getValue($row, $prefix);
-            if ($val !== null) {
-                $updateData[$config['key']] = $config['type'] === 'float' ? (float)$val : (string)trim($val);
+            if ($val !== null && trim((string)$val) !== '') {
+                if ($config['type'] === 'float') {
+                    // Clean currency format like 'Rp 5.000.000' or '5,000,000' or '5000000'
+                    $cleanVal = preg_replace('/[^0-9]/', '', (string)$val);
+                    $updateData[$config['key']] = (float) $cleanVal;
+                } else {
+                    $updateData[$config['key']] = trim((string)$val);
+                }
             }
         }
 
@@ -82,9 +88,10 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
 
     private function getValue(array $row, $keyPrefix)
     {
+        $keyPrefix = strtolower(trim($keyPrefix));
         foreach ($row as $key => $value) {
-            // Slugified keys usually convert "Nomor Rekening" to "nomor_rekening"
-            if (str_starts_with($key, $keyPrefix)) {
+            $normalizedKey = strtolower(trim((string)$key));
+            if (str_starts_with($normalizedKey, $keyPrefix) || str_contains($normalizedKey, $keyPrefix)) {
                 return $value;
             }
         }
