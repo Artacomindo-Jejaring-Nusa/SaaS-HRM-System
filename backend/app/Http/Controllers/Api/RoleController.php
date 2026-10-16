@@ -88,21 +88,10 @@ class RoleController extends Controller
     }
 
     public const SUPERADMIN_ONLY_PERMISSIONS = [
-        'create-employees',
-        'edit-employees',
-        'delete-employees',
         'manage-company',
         'manage-roles',
-        'manage-wfh',
+        'delete-employees',
         'manage-offices',
-        'view-directory',
-        'manage-shifts',
-        'manage-schedules',
-        'manage-holidays',
-        'manage-announcements',
-        'manage-approvals',
-        'manage-documents',
-        'manage-kpis',
     ];
 
     public function permissions()

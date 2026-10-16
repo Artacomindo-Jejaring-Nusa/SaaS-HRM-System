@@ -27,14 +27,14 @@ class ManagerAttendanceService
             return;
         }
 
-        if ($isCompanyAdmin) {
+        if ($isCompanyAdmin || $user->hasPermission('view-attendances')) {
             $this->scopeCompanyAdminQuery($query, $user, $companyId);
             return;
         }
 
-        $directSubordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
-        if ($directSubordinateIds->isNotEmpty()) {
-            $query->whereIn('id', $directSubordinateIds);
+        $allSubordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        if (!empty($allSubordinateIds)) {
+            $query->whereIn('id', $allSubordinateIds);
             return;
         }
 
@@ -45,9 +45,15 @@ class ManagerAttendanceService
     {
         $query->where('id', '!=', $user->id);
         if ($companyId && $companyId !== 'all') {
-            $query->where('company_id', $companyId);
+            $query->where(function ($q) use ($companyId) {
+                $q->where('company_id', $companyId)
+                  ->orWhereNull('company_id');
+            });
         } elseif ($user->company_id && !$user->canAccessAllCompanies()) {
-            $query->where('company_id', $user->company_id);
+            $query->where(function ($q) use ($user) {
+                $q->where('company_id', $user->company_id)
+                  ->orWhereNull('company_id');
+            });
         }
     }
 
@@ -55,7 +61,10 @@ class ManagerAttendanceService
     {
         $comp = ($companyId && $companyId !== 'all') ? $companyId : $user->company_id;
         if ($comp) {
-            $query->where('company_id', $comp);
+            $query->where(function ($q) use ($comp) {
+                $q->where('company_id', $comp)
+                  ->orWhereNull('company_id');
+            });
         }
         $query->where('id', '!=', $user->id);
     }

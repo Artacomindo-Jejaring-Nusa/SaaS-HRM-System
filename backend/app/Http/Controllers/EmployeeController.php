@@ -107,7 +107,7 @@ class EmployeeController extends Controller
         $employee->name = $request->name;
         $employee->email = $request->email;
         $employee->password = Hash::make($request->password);
-        $employee->company_id = $request->user()->company_id;
+        $employee->company_id = $request->user()?->company_id ?? $request->input('company_id') ?? 1;
         $employee->role_id = $request->role_id;
         $employee->can_access_manager_portal = $portalAccess;
         $employee->nik = $request->nik;
@@ -284,7 +284,8 @@ class EmployeeController extends Controller
         ]);
 
         try {
-            $import = new EmployeeImport($request->user()->company_id);
+            $companyId = $request->user()?->company_id ?? $request->input('company_id') ?? 1;
+            $import = new EmployeeImport($companyId);
             Excel::import($import, $request->file('file'));
 
             if ($import->importedCount === 0) {
@@ -428,7 +429,7 @@ class EmployeeController extends Controller
         } catch (\Exception $e) {
             Log::error('Gagal mengirim ulang email: '.$e->getMessage());
 
-            return $this->errorResponse('Gagal mengirim ulang email verifikasi.', 500);
+            return $this->errorResponse('Gagal mengirim ulang email verifikasi: '.$e->getMessage(), 500);
         }
     }
 

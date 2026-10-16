@@ -270,6 +270,32 @@ const validateCustomSteps = (steps: BackendStep[]): string | null => {
   return null;
 };
 
+const getDefaultStepsForModule = (moduleKey: string, roles: AppRole[]): BackendStep[] => {
+  const hrdRole = roles.find((r) => r.name.toLowerCase().includes("hrd") || r.name.toLowerCase().includes("admin"));
+  const financeRole = roles.find((r) => r.name.toLowerCase().includes("finance") || r.name.toLowerCase().includes("keuangan")) || hrdRole;
+  const hrdRoleId = hrdRole?.id || (roles.length > 0 ? roles[0].id : null);
+  const finRoleId = financeRole?.id || hrdRoleId;
+
+  if (moduleKey === "payroll") {
+    return [
+      { step_number: 1, approver_type: "role", approver_role_id: finRoleId, sla_hours: 48 },
+      { step_number: 2, approver_type: "super_admin", approver_role_id: null, sla_hours: 72 },
+    ];
+  }
+
+  if (["leave", "reimbursement", "fund_request", "attendance_correction"].includes(moduleKey)) {
+    const roleId = ["reimbursement", "fund_request"].includes(moduleKey) ? finRoleId : hrdRoleId;
+    return [
+      { step_number: 1, approver_type: "supervisor", approver_role_id: null, sla_hours: 24 },
+      { step_number: 2, approver_type: "role", approver_role_id: roleId, sla_hours: 48 },
+    ];
+  }
+
+  return [
+    { step_number: 1, approver_type: "supervisor", approver_role_id: null, sla_hours: 24 },
+  ];
+};
+
 const calculateNextDuplicateName = (
   rawBase: string,
   variants?: WorkflowVariant[]
@@ -493,28 +519,29 @@ function getDynamicFlowData(
     const x = 40 + (idx + 1) * GAP_X;
     const meta = getStepNodeMeta(step, idx, steps.length, roles, users);
 
-    nodes.push({
-      id: stepId,
-      x,
-      y: 100,
-      label: meta.stageTitle,
-      sub: meta.subText,
-      type: meta.type,
-      icon: meta.icon,
-    });
-
     const rejectId = `reject_${step.step_number}`;
     const rejectLabel = getRejectNodeLabel(idx, steps.length);
 
-    nodes.push({
-      id: rejectId,
-      x,
-      y: 270,
-      label: rejectLabel,
-      sub: "Alasan Penolakan",
-      type: "rejected",
-      icon: "❌",
-    });
+    nodes.push(
+      {
+        id: stepId,
+        x,
+        y: 100,
+        label: meta.stageTitle,
+        sub: meta.subText,
+        type: meta.type,
+        icon: meta.icon,
+      },
+      {
+        id: rejectId,
+        x,
+        y: 270,
+        label: rejectLabel,
+        sub: "Alasan Penolakan",
+        type: "rejected",
+        icon: "❌",
+      }
+    );
 
     const prevId = idx === 0 ? "submit" : `step_${steps[idx - 1].step_number}`;
     edges.push({
@@ -697,8 +724,11 @@ function checkIsSuperAdminUser(user: any): boolean {
 
 function checkIsAuthorizedWorkflowUser(user: any, isSuperAdmin: boolean): boolean {
   if (isSuperAdmin) return true;
+  if (user?.permissions && Array.isArray(user.permissions) && user.permissions.includes("manage-approvals")) {
+    return true;
+  }
   const roleName = user?.role?.name?.toLowerCase() || "";
-  return roleName === "admin" || roleName.includes("hrd") || roleName.includes("admin");
+  return roleName === "admin" || roleName.includes("hrd") || roleName.includes("admin") || roleName.includes("management");
 }
 
 function buildWorkflowSavePayload(
@@ -1626,13 +1656,15 @@ export default function ApprovalWorkflowPage() {
         if (res.data.status === "success" && res.data.data) {
           const wf = res.data.data as BackendWorkflow;
           setActiveWorkflow(wf);
-          setSelectedWorkflowId(wf.id);
+          if (wf.id) {
+            setSelectedWorkflowId(wf.id);
+          }
           setCustomActive(wf.is_active);
           setSteps(wf.steps || []);
         } else {
           setActiveWorkflow(null);
-          setCustomActive(false);
-          setSteps([]);
+          setCustomActive(true);
+          setSteps(getDefaultStepsForModule(selected, roles));
         }
       })
       .catch((err) => console.error("Gagal memuat workflow:", err))
@@ -1691,6 +1723,10 @@ const flow = getDynamicFlowData(customActive, steps, selected, activeModule, rol
       if (res.data.status === "success") {
         toast.success("Konfigurasi alur persetujuan berhasil disimpan.");
         setIsEditing(false);
+        if (res.data.data) {
+          setActiveWorkflow(res.data.data);
+          setSelectedWorkflowId(res.data.data.id);
+        }
         fetchModuleKeys();
       } else {
         toast.error("Gagal menyimpan alur persetujuan.");

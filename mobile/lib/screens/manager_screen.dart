@@ -749,6 +749,50 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
       }
     }
 
+    // Extract any attachments (attachment, doctor_note, etc.)
+    List<String> attachments = [];
+    if (item['attachment'] != null) {
+      if (item['attachment'] is List) {
+        attachments.addAll((item['attachment'] as List).map((e) => e.toString()));
+      } else if (item['attachment'] is String && item['attachment'].toString().isNotEmpty) {
+        final str = item['attachment'].toString();
+        if (str.trim().startsWith('[') && str.trim().endsWith(']')) {
+          try {
+            final decoded = jsonDecode(str);
+            if (decoded is List) attachments.addAll(decoded.map((e) => e.toString()));
+          } catch (_) {}
+        } else {
+          attachments.add(str);
+        }
+      }
+    }
+    if (item['doctor_note'] != null && item['doctor_note'].toString().isNotEmpty) {
+      final dn = item['doctor_note'].toString();
+      if (!attachments.contains(dn)) attachments.add(dn);
+    }
+
+    // Extract Vehicle Photos
+    List<Map<String, String>> vehiclePhotos = [];
+    if (item['odometer_start_photo'] != null && item['odometer_start_photo'].toString().isNotEmpty) {
+      vehiclePhotos.add({'label': 'Speedometer Awal', 'url': item['odometer_start_photo'].toString()});
+    }
+    if (item['odometer_end_photo'] != null && item['odometer_end_photo'].toString().isNotEmpty) {
+      vehiclePhotos.add({'label': 'Speedometer Akhir', 'url': item['odometer_end_photo'].toString()});
+    }
+
+    // Overtime Items
+    List<dynamic> overtimeItems = [];
+    if (type == 'overtime' && item['items'] is List) {
+      overtimeItems = item['items'];
+    }
+
+    // Leave Address & Emergency Contact
+    final leaveAddress = item['leave_address']?.toString() ?? '';
+    final emergencyPhone = item['emergency_phone']?.toString() ?? '';
+
+    // Signature
+    final signature = item['signature']?.toString() ?? '';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -855,6 +899,241 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
             info,
             style: const TextStyle(fontSize: 13, height: 1.4, color: Colors.black87),
           ),
+
+          // Leave Address & Emergency Phone
+          if (type == 'leave' && (leaveAddress.isNotEmpty || emergencyPhone.isNotEmpty)) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.amber[50]?.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (leaveAddress.isNotEmpty)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.location_on_outlined, size: 14, color: Colors.amber),
+                        const SizedBox(width: 4),
+                        Expanded(child: Text("Alamat Cuti: $leaveAddress", style: TextStyle(fontSize: 11, color: Colors.amber[900]))),
+                      ],
+                    ),
+                  if (emergencyPhone.isNotEmpty) ...[
+                    if (leaveAddress.isNotEmpty) const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.phone_outlined, size: 14, color: Colors.amber),
+                        const SizedBox(width: 4),
+                        Text("No. Darurat: $emergencyPhone", style: TextStyle(fontSize: 11, color: Colors.amber[900])),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+
+          // Overtime Items Breakdown Table
+          if (type == 'overtime' && overtimeItems.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text("Rincian Tugas Lembur (${overtimeItems.length}):", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey[800])),
+            const SizedBox(height: 6),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.grey.withOpacity(0.15)),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: overtimeItems.length,
+                separatorBuilder: (ctx, i) => Divider(height: 1, color: Colors.grey.withOpacity(0.12)),
+                itemBuilder: (ctx, idx) {
+                  final itm = overtimeItems[idx];
+                  final itmStartTime = itm['start_time'] ?? '-';
+                  final itmEndTime = itm['end_time'] ?? '-';
+                  final itmTask = itm['notes'] ?? itm['reason'] ?? itm['task'] ?? '-';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                          child: Text("$itmStartTime - $itmEndTime", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(itmTask.toString(), style: const TextStyle(fontSize: 12, color: Colors.black87))),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+
+          // Vehicle Odometer Photos
+          if (type == 'vehicle_log' && vehiclePhotos.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text("Bukti Foto Speedometer (${vehiclePhotos.length}):", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey[800])),
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 80,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: vehiclePhotos.length,
+                itemBuilder: (ctx, idx) {
+                  final photo = vehiclePhotos[idx];
+                  final rawUrl = photo['url']!;
+                  final fullUrl = rawUrl.startsWith('http')
+                      ? ApiClient.fixUrl(rawUrl)
+                      : ApiClient.fixUrl("${ApiClient.storageUrl}/$rawUrl");
+                  return GestureDetector(
+                    onTap: () => _showImagePreviewDialog(fullUrl),
+                    child: Container(
+                      width: 90,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.withOpacity(0.25)),
+                        image: DecorationImage(image: NetworkImage(fullUrl), fit: BoxFit.cover),
+                      ),
+                      child: Container(
+                        alignment: Alignment.bottomCenter,
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          gradient: LinearGradient(
+                            colors: [Colors.transparent, Colors.black.withOpacity(0.7)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                        child: Text(
+                          photo['label']!,
+                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+
+          // Attachments (Surat Dokter, Nota, Dokumen Lampiran)
+          if (attachments.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              type == 'permit' ? "Surat Dokter / Dokumen Pendukung (${attachments.length}):" : "Bukti Lampiran (${attachments.length}):",
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey[800]),
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 75,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: attachments.length,
+                itemBuilder: (ctx, aIdx) {
+                  final rawPath = attachments[aIdx];
+                  final isPdf = rawPath.toLowerCase().endsWith('.pdf');
+                  final fullUrl = rawPath.startsWith('http')
+                      ? ApiClient.fixUrl(rawPath)
+                      : ApiClient.fixUrl("${ApiClient.storageUrl}/$rawPath");
+                  return GestureDetector(
+                    onTap: () {
+                      if (isPdf) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => PdfViewerScreen(url: fullUrl, title: "Lampiran Dokumen"),
+                          ),
+                        );
+                      } else {
+                        _showImagePreviewDialog(fullUrl);
+                      }
+                    },
+                    child: Container(
+                      width: 75,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: isPdf ? Colors.red[50] : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.withOpacity(0.25)),
+                        image: isPdf ? null : DecorationImage(image: NetworkImage(fullUrl), fit: BoxFit.cover),
+                      ),
+                      child: isPdf
+                          ? const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.picture_as_pdf, color: Colors.red, size: 24),
+                                SizedBox(height: 2),
+                                Text("PDF", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.red)),
+                              ],
+                            )
+                          : Container(
+                              alignment: Alignment.bottomRight,
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                gradient: LinearGradient(
+                                  colors: [Colors.transparent, Colors.black.withOpacity(0.6)],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
+                              ),
+                              child: const Icon(Icons.zoom_in, color: Colors.white, size: 14),
+                            ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+
+          // Signature
+          if (signature.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.draw_rounded, size: 14, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text("Tanda Tangan Pemohon:", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey[700])),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Container(
+              height: 44,
+              width: 120,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              ),
+              child: signature.startsWith('data:image') || signature.contains('base64')
+                  ? Image.memory(
+                      base64Decode(signature.split(',').last),
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    )
+                  : Image.network(
+                      signature.startsWith('http') ? ApiClient.fixUrl(signature) : ApiClient.fixUrl("${ApiClient.storageUrl}/$signature"),
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
+            ),
+          ],
+
           const SizedBox(height: 16),
           Row(
             children: [
@@ -1230,7 +1509,7 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
                     const Text("TOTAL PENGAJUAN", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF065F46), letterSpacing: 0.5)),
                     const SizedBox(height: 2),
                     Text(
-                      "Rp " + NumberFormat("#,###", "id_ID").format(amount),
+                      "Rp ${NumberFormat('#,###', 'id_ID').format(amount)}",
                       style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF047857)),
                     ),
                   ],
@@ -1403,7 +1682,7 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
               child: Image.memory(
                 base64Decode(item['signature'].toString().split(',').last),
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
               ),
             ),
           ],
@@ -1615,11 +1894,11 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
                     ),
                   ],
                 ),
-                if (tujuan != '-' && !tujuan.isEmpty) ...[
+                if (tujuan != '-' && tujuan.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text("Tujuan / Keperluan: $tujuan", style: TextStyle(fontSize: 12, color: Colors.grey[700])),
                 ],
-                if (reason != '-' && !reason.isEmpty && reason != title) ...[
+                if (reason != '-' && reason.isNotEmpty && reason != title) ...[
                   const SizedBox(height: 4),
                   Text("Keterangan: $reason", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                 ],
@@ -1649,7 +1928,7 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
                     const Text("TOTAL PENGAJUAN DANA", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF92400E), letterSpacing: 0.5)),
                     const SizedBox(height: 2),
                     Text(
-                      "Rp " + NumberFormat("#,###", "id_ID").format(amount),
+                      "Rp ${NumberFormat('#,###', 'id_ID').format(amount)}",
                       style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF78350F)),
                     ),
                   ],
@@ -1849,7 +2128,7 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
               child: Image.memory(
                 base64Decode(item['signature'].toString().split(',').last),
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
               ),
             ),
           ],

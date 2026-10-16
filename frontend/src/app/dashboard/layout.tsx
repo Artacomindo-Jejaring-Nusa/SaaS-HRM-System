@@ -48,6 +48,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
 import echo from '@/lib/echo';
 
+import HeaderSearchModal from "@/components/header/HeaderSearchModal";
+import LanguageDropdown from "@/components/header/LanguageDropdown";
+import NotificationDropdown from "@/components/header/NotificationDropdown";
+import MailDropdown from "@/components/header/MailDropdown";
+import SettingsDropdown from "@/components/header/SettingsDropdown";
+import ProfileModal from "@/components/header/ProfileModal";
+import AppSettingsModal from "@/components/header/AppSettingsModal";
+
 type SubmenuItem = {
   name: string;
   href: string;
@@ -121,7 +129,7 @@ const sidebarLinks: SidebarLink[] = [
     permission: 'view-leaves',
     submenus: [
       { name: "leave_requests", href: "/dashboard/leaves", permission: 'view-leaves' },
-      { name: "leave_balances", href: "/dashboard/leave-balances", permission: 'approve-leaves' }, 
+      { name: "leave_balances", href: "/dashboard/leave-balances", permission: 'edit-employees' }, 
       { name: "leave_calendar", href: "/dashboard/leave-calendar", permission: 'view-leaves' },
       { name: "mass_leaves", href: "/dashboard/mass-leaves", permission: 'approve-leaves' },
     ]
@@ -270,8 +278,34 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const [activeHeaderDropdown, setActiveHeaderDropdown] = useState<'mail' | 'notif' | 'settings' | 'search' | null>(null);
   const [managerPendingTotal, setManagerPendingTotal] = useState<number>(0);
+
+  // Modal states
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const [isAppSettingsModalOpen, setIsAppSettingsModalOpen] = useState(false);
+
+  // Security password state
+  const [passwordData, setPasswordData] = useState({ current_password: '', new_password: '', new_password_confirmation: '' });
+  const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
+
+  // Notifications & Mails
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [inboxMessages, setInboxMessages] = useState<any[]>([]);
+  const isSuperAdmin = Boolean(user?.role?.name?.toLowerCase().includes('super admin') || user?.role_id === 1);
+
+  // Global Ctrl+K / Cmd+K listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsSearchModalOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Fetch manager pending approvals count if user is a manager
   const fetchManagerPendingCount = useCallback(async () => {
@@ -291,77 +325,6 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     const interval = setInterval(fetchManagerPendingCount, 45000);
     return () => clearInterval(interval);
   }, [fetchManagerPendingCount]);
-
-  // Search Logic
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<{title: string, href: string, category: string}[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      setIsSearching(false);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      setIsSearching(true);
-      const results: any[] = [];
-      
-      // 1. Search Menu Items
-      sidebarLinks.forEach(link => {
-        if (link.isHeading) return;
-        if (t(link.name).toLowerCase().includes(searchQuery.toLowerCase())) {
-          results.push({ title: t(link.name), href: link.href || "#", category: "Menu" });
-        }
-        if (link.submenus) {
-          link.submenus.forEach(sub => {
-            if (t(sub.name).toLowerCase().includes(searchQuery.toLowerCase())) {
-              results.push({ title: t(sub.name), href: sub.href, category: "Menu" });
-            }
-          });
-        }
-      });
-
-      // 2. Search Employees (Async)
-      try {
-        const res = await axiosInstance.get(`/employees?search=${searchQuery}&per_page=5`);
-        const employees = res.data.data.data || [];
-        employees.forEach((emp: any) => {
-          results.push({ title: emp.name, href: `/dashboard/employees?id=${emp.id}`, category: "Pegawai" });
-        });
-      } catch (e) { console.error(e); }
-
-      setSearchResults(results);
-      setIsSearching(false);
-      if (results.length > 0) setActiveHeaderDropdown('search');
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery, t]);
-  
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
-  const [isAppSettingsModalOpen, setIsAppSettingsModalOpen] = useState(false);
-  const [profileData, setProfileData] = useState({ name: '', email: '', phone: '', address: '' });
-  const [passwordData, setPasswordData] = useState({ current_password: '', new_password: '', new_password_confirmation: '' });
-  const [isSubmittingProfile, setIsSubmittingProfile] = useState(false);
-  const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [inboxMessages, setInboxMessages] = useState<any[]>([]);
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const isSuperAdmin = Boolean(user?.role?.name?.toLowerCase().includes('super admin') || user?.role_id === 1);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLDivElement>(null);
-
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setPhotoFile(file);
-      setPhotoPreview(URL.createObjectURL(file));
-    }
-  };
 
   const fetchNotifications = async () => {
     try {
@@ -405,33 +368,27 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (user) {
-      setProfileData({
-        name: user.name || '',
-        email: user.email || '',
-        phone: (user as any).phone || '',
-        address: (user as any).address || ''
-      });
-
       // Listen on private Laravel Reverb Channel
       if (echo) {
-        // We use .notifSound to maintain reference
         const channelName = `notifications.${user.id}`;
         echo.private(channelName)
           .listen('NotificationCreated', (e: any) => {
             console.log("New realtime notification received: ", e);
             fetchNotifications(); // Refresh list
 
-            // Play sound effect using an elegant bubble pop sound
+            // Play sound effect if enabled in AppSettings
             try {
-               const audio = new window.Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-               audio.volume = 0.6;
-               const playPromise = audio.play();
-               if (playPromise !== undefined) {
-                 playPromise.then(_ => {}).catch(error => {
-                   // Auto-play might be blocked by browser without interaction
-                   console.log("Audio play blocked by browser:", error);
-                 });
-               }
+              const soundAllowed = typeof window !== 'undefined' && localStorage.getItem('app_sound_enabled') !== 'false';
+              if (soundAllowed) {
+                const audio = new window.Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                audio.volume = 0.6;
+                const playPromise = audio.play();
+                if (playPromise !== undefined) {
+                  playPromise.catch(error => {
+                    console.log("Audio play blocked by browser:", error);
+                  });
+                }
+              }
             } catch (err) {}
           });
       }
@@ -448,36 +405,6 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       }
     };
   }, [user]);
-
-  const handleProfileSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmittingProfile(true);
-    try {
-      if (isSuperAdmin) {
-        // Super Admin can update personal data directly
-        await axiosInstance.post('/profile/update', profileData);
-      }
-
-      // Upload photo if exists
-      if (photoFile) {
-        const formData = new FormData();
-        formData.append('photo', photoFile);
-        await axiosInstance.post('/profile/upload-photo', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-      }
-
-      toast.success(isSuperAdmin ? "Profil berhasil diperbarui!" : "Foto profil berhasil diperbarui!");
-      setIsProfileModalOpen(false);
-      setPhotoFile(null);
-      setPhotoPreview(null);
-      refreshUser();
-    } catch (e: any) {
-      toast.error("Gagal memperbarui profil: " + (e.response?.data?.message || e.message));
-    } finally {
-      setIsSubmittingProfile(false);
-    }
-  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -518,23 +445,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Close dropdown on click outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      const isInsideDropdown = dropdownRef.current?.contains(event.target as Node);
-      const isInsideSearch = searchRef.current?.contains(event.target as Node);
 
-      if (!isInsideDropdown && !isInsideSearch) {
-        setActiveHeaderDropdown(null);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const toggleHeaderDropdown = (name: any) => {
-    setActiveHeaderDropdown((prev) => prev === name ? null : name);
-  };
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -750,23 +661,44 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       {/* Main Content */}
       <div className="dash-main">
         {/* Mobile Header */}
-        <header className="dash-mobile-header">
-          <button
-            className="dash-menu-btn"
-            onClick={() => setMobileMenuOpen(true)}
-          >
-            <Menu size={20} />
-          </button>
-          <div className="dash-mobile-brand">
-            <Image
-              src="/logo.png"
-              alt="On Time HRMS"
-              width={42}
-              height={32}
-              className="dash-sidebar-logo"
-              unoptimized={true}
+        <header className="dash-mobile-header flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-100 md:hidden">
+          <div className="flex items-center gap-3">
+            <button
+              className="dash-menu-btn"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Buka Menu"
+            >
+              <Menu size={20} />
+            </button>
+            <div className="dash-mobile-brand">
+              <Image
+                src="/logo.png"
+                alt="On Time HRMS"
+                width={38}
+                height={28}
+                className="dash-sidebar-logo"
+                unoptimized={true}
+              />
+              <span className="dash-sidebar-title text-sm">On Time HRMS</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setIsSearchModalOpen(true)}
+              className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 transition-colors"
+              aria-label="Pencarian Cepat"
+              title="Cari (Ctrl+K)"
+            >
+              <Search size={18} />
+            </button>
+            <LanguageDropdown />
+            <NotificationDropdown
+              notifications={notifications}
+              onMarkAsRead={handleMarkAsRead}
+              onMarkAllAsRead={handleMarkAllAsRead}
             />
-            <span className="dash-sidebar-title">On Time HRMS</span>
           </div>
         </header>
 
@@ -825,209 +757,54 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
             >
               <Menu size={20} />
             </button>
-            <div className="dash-header-search relative" ref={searchRef}>
-              <Search size={16} className="text-gray-400" />
-              <input 
-                type="text" 
-                placeholder={t('search')} 
-                aria-label="Search" 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => { if (searchResults.length > 0) setActiveHeaderDropdown('search'); }}
-              />
-              {isSearching && <Loader2 size={14} className="animate-spin text-gray-400 absolute right-3" />}
 
-              {/* Search Results Dropdown */}
-              {activeHeaderDropdown === 'search' && searchResults.length > 0 && (
-                <div className="absolute top-full left-0 w-80 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-100 animate-in slide-in-from-top-2">
-                  <div className="p-3 border-b border-gray-50 flex items-center justify-between bg-gray-50/50">
-                    <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Hasil Pencarian</span>
-                    <button onClick={() => {setSearchQuery(""); setActiveHeaderDropdown(null)}} className="text-gray-400 hover:text-gray-600">
-                      <X size={14} />
-                    </button>
-                  </div>
-                  <div className="max-h-96 overflow-y-auto p-2">
-                    {searchResults.map((result, idx) => (
-                      <Link
-                        key={idx}
-                        href={result.href}
-                        onClick={() => {
-                          setActiveHeaderDropdown(null);
-                          setSearchQuery("");
-                        }}
-                        className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 rounded-xl transition-all group"
-                      >
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${result.category === 'Menu' ? 'bg-blue-50 text-blue-500' : 'bg-emerald-50 text-emerald-500'}`}>
-                          {result.category === 'Menu' ? <LayoutDashboard size={14} /> : <Users size={14} />}
-                        </div>
-                        <div className="text-left flex-1 min-w-0">
-                          <p className="text-xs font-bold text-gray-900 truncate group-hover:text-[#8B0000] transition-colors">{result.title}</p>
-                          <p className="text-[10px] text-gray-400 font-medium">{result.category}</p>
-                        </div>
-                        <ChevronRight size={14} className="text-gray-300 group-hover:translate-x-1 transition-transform" />
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* Spotlight Command Search Trigger */}
+            <button
+              type="button"
+              onClick={() => setIsSearchModalOpen(true)}
+              className="flex items-center gap-3 h-10 px-3.5 bg-gray-50 hover:bg-gray-100/80 border border-gray-200/80 hover:border-gray-300 text-gray-500 hover:text-gray-700 rounded-xl text-xs font-medium transition-all shadow-xs group cursor-pointer"
+              title="Cari menu, pegawai, atau modul (Ctrl+K)"
+            >
+              <Search size={15} className="text-gray-400 group-hover:text-[#8B0000] transition-colors" />
+              <span className="hidden sm:inline text-gray-400 group-hover:text-gray-600 font-normal">
+                {t('search')}...
+              </span>
+              <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold text-gray-400 bg-white border border-gray-200 rounded shadow-2xs">
+                <span className="text-[9px]">Ctrl</span>K
+              </kbd>
+            </button>
           </div>
 
           {/* Kanan: Icons & Profile */}
           <div className="dash-header-right">
-            <div className="dash-header-icons" ref={dropdownRef}>
-              {/* Language Switcher */}
-              <button 
-                className="dash-header-icon-btn flex items-center gap-1.5 px-2 hover:bg-gray-100 rounded-lg transition-colors border border-transparent mr-1"
-                onClick={() => setLanguage(language === 'id' ? 'en' : 'id')}
-                title={language === 'id' ? 'Ganti ke English' : 'Switch to Indonesian'}
-              >
-                <div className="w-5 h-5 rounded-full overflow-hidden border border-gray-200 flex items-center justify-center bg-gray-50 uppercase text-[10px] font-black text-gray-500">
-                   {language}
-                </div>
-              </button>
-
-              <button 
-                className={`dash-header-icon-btn ${activeHeaderDropdown === 'mail' ? 'text-[#8B0000]' : ''}`} 
-                title={t('messages')}
-                onClick={() => toggleHeaderDropdown('mail')}
-              >
-                <Mail size={18} />
-                {inboxMessages.some(m => !m.is_read) && <span className="dash-notification-dot"></span>}
-              </button>
-
-              <button 
-                className={`dash-header-icon-btn ${activeHeaderDropdown === 'notif' ? 'text-[#8B0000]' : ''}`} 
-                title={t('notifications')}
-                onClick={() => toggleHeaderDropdown('notif')}
-              >
-                <Bell size={18} />
-                {notifications.some(n => !n.is_read) && <span className="dash-notification-dot"></span>}
-              </button>
-
-              <button 
-                className={`dash-header-icon-btn ${activeHeaderDropdown === 'settings' ? 'text-[#8B0000]' : ''}`} 
-                title={t('settings')}
-                onClick={() => toggleHeaderDropdown('settings')}
-              >
-                <Settings size={18} />
-              </button>
-
-              {/* Dropdown Panels */}
-              {activeHeaderDropdown === 'mail' && (
-                <div className="dash-header-dropdown">
-                  <div className="dash-dropdown-header">
-                    <span className="dash-dropdown-title">Kotak Pesan</span>
-                    {inboxMessages.filter(m => !m.is_read).length > 0 && (
-                      <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">
-                        {inboxMessages.filter(m => !m.is_read).length} BARU
-                      </span>
-                    )}
-                  </div>
-                  <ul className="dash-dropdown-list">
-                    {inboxMessages.filter(m => !m.is_read).length > 0 ? (
-                      inboxMessages.filter(m => !m.is_read).map(m => (
-                        <li 
-                          key={m.id} 
-                          className="dash-dropdown-item cursor-pointer hover:bg-gray-50 transition-colors bg-amber-50/50 border-l-2 border-amber-400"
-                          onClick={() => handleMarkAsRead(m.id)}
-                        >
-                          <div className="dash-dropdown-icon"><User size={16} /></div>
-                          <div className="dash-dropdown-content">
-                            <span className="dash-dropdown-label">{m.from_name || 'Sistem'}</span>
-                            <span className="dash-dropdown-desc">{m.message}</span>
-                            <span className="dash-dropdown-time">{new Date(m.created_at).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
-                          </div>
-                        </li>
-                      ))
-                    ) : (
-                      <li className="px-6 py-8 text-center">
-                        <Mail className="mx-auto mb-2 text-gray-200" size={32} />
-                        <p className="text-xs text-gray-400">Tidak ada pesan baru</p>
-                      </li>
-                    )}
-                  </ul>
-                  <div className="dash-dropdown-footer flex items-center justify-between px-4!">
-                    <button onClick={handleMarkAllAsRead} className="text-[10px] font-black text-[#8B0000] hover:underline uppercase tracking-widest">Bersihkan Pesan</button>
-                    <button className="dash-dropdown-all-btn">Lihat Semua Pesan</button>
-                  </div>
-                </div>
-              )}
-
-              {activeHeaderDropdown === 'notif' && (
-                <div className="dash-header-dropdown">
-                  <div className="dash-dropdown-header">
-                    <span className="dash-dropdown-title">Notifikasi Terkini</span>
-                  </div>
-                  <ul className="dash-dropdown-list">
-                    {notifications.filter(n => !n.is_read).length > 0 ? (
-                      notifications.filter(n => !n.is_read).map(n => (
-                        <li 
-                          key={n.id} 
-                          className="dash-dropdown-item cursor-pointer hover:bg-gray-50 transition-colors bg-blue-50/50 border-l-2 border-[#8B0000]"
-                          onClick={() => {
-                            handleMarkAsRead(n.id);
-                            if (n.link) {
-                                router.push(n.link);
-                                setActiveHeaderDropdown(null);
-                            }
-                          }}
-                        >
-                          <div className="dash-dropdown-icon text-[#8B0000]">
-                            {n.type === 'warning' ? <Bell size={16} /> : <Bell size={16} />}
-                          </div>
-                          <div className="dash-dropdown-content">
-                            <span className="dash-dropdown-label uppercase text-[10px] font-black">{n.title}</span>
-                            <span className="dash-dropdown-desc text-[11px] leading-tight">{n.message}</span>
-                            <span className="dash-dropdown-time">{new Date(n.created_at).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
-                          </div>
-                        </li>
-                      ))
-                    ) : (
-                      <li className="px-6 py-8 text-center text-sm text-gray-400">
-                        Belum ada notifikasi baru
-                      </li>
-                    )}
-                  </ul>
-                  <div className="dash-dropdown-footer">
-                    <button onClick={handleMarkAllAsRead} className="dash-dropdown-all-btn">Tandai Semua Sudah Dibaca</button>
-                  </div>
-                </div>
-              )}
-
-              {activeHeaderDropdown === 'settings' && (
-                <div className="dash-header-dropdown w-[220px]!">
-                  <div className="dash-dropdown-header">
-                    <span className="dash-dropdown-title">Pengaturan</span>
-                  </div>
-                  <ul className="dash-dropdown-list">
-                    <li className="dash-dropdown-item items-center! cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => { setIsProfileModalOpen(true); setActiveHeaderDropdown(null); }}>
-                      <div className="dash-dropdown-icon w-8! h-8!"><User size={14} /></div>
-                      <div className="dash-dropdown-content">
-                        <span className="dash-dropdown-label mb-0! text-sm">Profil Saya</span>
-                      </div>
-                    </li>
-                    <li className="dash-dropdown-item items-center! cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => { setIsSecurityModalOpen(true); setActiveHeaderDropdown(null); }}>
-                      <div className="dash-dropdown-icon w-8! h-8! text-[#8B0000]"><Shield size={14} /></div>
-                      <div className="dash-dropdown-content">
-                        <span className="dash-dropdown-label mb-0! text-sm">Keamanan</span>
-                      </div>
-                    </li>
-                    <li className="dash-dropdown-item items-center! cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => { setIsAppSettingsModalOpen(true); setActiveHeaderDropdown(null); }}>
-                      <div className="dash-dropdown-icon w-8! h-8!"><Laptop size={14} /></div>
-                      <div className="dash-dropdown-content">
-                        <span className="dash-dropdown-label mb-0! text-sm">Aplikasi</span>
-                      </div>
-                    </li>
-                  </ul>
-                  <div className="dash-dropdown-footer">
-                    <button onClick={handleLogout} className="text-xs font-bold text-red-600 hover:scale-105 transition-transform">KELUAR SEKARANG</button>
-                  </div>
-                </div>
-              )}
+            <div className="dash-header-icons flex items-center gap-1.5">
+              <LanguageDropdown />
+              <MailDropdown 
+                messages={inboxMessages}
+                onMarkAsRead={handleMarkAsRead}
+                onMarkAllAsRead={handleMarkAllAsRead}
+              />
+              <NotificationDropdown 
+                notifications={notifications}
+                onMarkAsRead={handleMarkAsRead}
+                onMarkAllAsRead={handleMarkAllAsRead}
+              />
+              <SettingsDropdown 
+                user={user}
+                isSuperAdmin={isSuperAdmin}
+                onOpenProfile={() => setIsProfileModalOpen(true)}
+                onOpenSecurity={() => setIsSecurityModalOpen(true)}
+                onOpenAppSettings={() => setIsAppSettingsModalOpen(true)}
+                onLogout={handleLogout}
+                isLoggingOut={isLoggingOut}
+              />
             </div>
             
-            <div className="dash-header-user">
+            <div 
+              className="dash-header-user cursor-pointer select-none"
+              onClick={() => setIsProfileModalOpen(true)}
+              title="Klik untuk membuka profil saya"
+            >
               {authLoading ? (
                 <div className="flex items-center gap-2">
                   <div className="w-16 h-4 bg-gray-200 animate-pulse rounded" />
@@ -1039,7 +816,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                     <span className="dash-header-name">{user?.name || "Super Admin"}</span>
                     <span className="dash-header-role">{user?.role?.name || (isSuperAdminUser(user) ? "Super Admin" : "Karyawan")}</span>
                   </div>
-                  <div className="dash-header-avatar overflow-hidden">
+                  <div className="dash-header-avatar overflow-hidden ring-2 ring-transparent hover:ring-[#8B0000]/30 transition-all">
                     {user?.profile_photo_url ? (
                       <img src={user.profile_photo_url} alt="Profile" className="w-full h-full object-cover" />
                     ) : (
@@ -1080,140 +857,22 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         </footer>
       </div>
 
-      {/* Profile Edit Modal */}
-      {isProfileModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-100 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-gray-900">Edit Profil Saya</h3>
-              <button 
-                onClick={() => setIsProfileModalOpen(false)}
-                className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <X size={20} className="text-gray-400" />
-              </button>
-            </div>
-            
-            <form onSubmit={handleProfileSubmit} className="p-6 space-y-4">
-              {/* Informative Banner for non-superadmin */}
-              {!isSuperAdmin && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2.5">
-                  <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-800 leading-relaxed">
-                    Data identitas karyawan (Nama, Email, Telepon, Alamat) dikelola terpusat oleh <strong>Super Admin / HRD</strong>. Karyawan hanya dapat mengganti foto profil.
-                  </p>
-                </div>
-              )}
+      {/* Search Palette Modal */}
+      <HeaderSearchModal
+        isOpen={isSearchModalOpen}
+        onClose={() => setIsSearchModalOpen(false)}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
+        onToggleLanguage={() => setLanguage(language === 'id' ? 'en' : 'id')}
+      />
 
-              {/* Photo Upload Section */}
-              <div className="flex flex-col items-center mb-4">
-                <div className="relative group cursor-pointer" onClick={() => document.getElementById('profile-photo-input')?.click()}>
-                  <div className="w-24 h-24 rounded-full border-4 border-gray-50 overflow-hidden bg-gray-100 flex items-center justify-center shadow-inner relative">
-                    {photoPreview || user?.profile_photo_url ? (
-                      <img src={photoPreview || user?.profile_photo_url} alt="Preview" className="w-full h-full object-cover" />
-                    ) : (
-                      <User size={40} className="text-gray-300" />
-                    )}
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <Camera size={20} className="text-white" />
-                    </div>
-                  </div>
-                  <input 
-                    type="file" 
-                    id="profile-photo-input" 
-                    className="hidden" 
-                    accept="image/*" 
-                    onChange={handlePhotoChange} 
-                  />
-                  <div className="absolute -bottom-1 -right-1 bg-white p-1.5 rounded-full shadow-md border border-gray-100 text-[#8B0000]">
-                    <Camera size={14} />
-                  </div>
-                </div>
-                <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-tight">Klik untuk ganti foto</p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500 uppercase">Nama Lengkap</label>
-                <input 
-                  type="text" 
-                  value={profileData.name}
-                  onChange={e => setProfileData({...profileData, name: e.target.value})}
-                  disabled={!isSuperAdmin}
-                  className={`w-full h-11 px-4 border rounded-xl text-sm transition-all ${
-                    isSuperAdmin
-                      ? "bg-gray-50 border-gray-200 focus:outline-none focus:border-[#8B0000] focus:ring-1 focus:ring-[#8B0000]"
-                      : "bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed"
-                  }`}
-                  placeholder="Masukkan nama lengkap..."
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500 uppercase">Email</label>
-                <input 
-                  type="email" 
-                  value={profileData.email}
-                  disabled
-                  className="w-full h-11 px-4 bg-gray-100 border border-gray-200 rounded-xl text-gray-500 cursor-not-allowed text-sm"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500 uppercase">Nomor Telepon</label>
-                <input 
-                  type="text" 
-                  value={profileData.phone}
-                  onChange={e => setProfileData({...profileData, phone: e.target.value})}
-                  disabled={!isSuperAdmin}
-                  className={`w-full h-11 px-4 border rounded-xl text-sm transition-all ${
-                    isSuperAdmin
-                      ? "bg-gray-50 border-gray-200 focus:outline-none focus:border-[#8B0000]"
-                      : "bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed"
-                  }`}
-                  placeholder="Contoh: 0812..."
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500 uppercase">Alamat Gedung/Rumah</label>
-                <textarea 
-                  value={profileData.address}
-                  onChange={e => setProfileData({...profileData, address: e.target.value})}
-                  disabled={!isSuperAdmin}
-                  className={`w-full p-4 border rounded-xl text-sm min-h-[80px] resize-none transition-all ${
-                    isSuperAdmin
-                      ? "bg-gray-50 border-gray-200 focus:outline-none focus:border-[#8B0000]"
-                      : "bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed"
-                  }`}
-                  placeholder="Masukkan alamat lengkap..."
-                />
-              </div>
-
-              <div className="pt-4 flex gap-3">
-                <button 
-                  type="button"
-                  onClick={() => setIsProfileModalOpen(false)}
-                  className="flex-1 h-11 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors"
-                >
-                  Batal
-                </button>
-                <button 
-                  type="submit"
-                  disabled={isSubmittingProfile || (!isSuperAdmin && !photoFile)}
-                  className="flex-1 h-11 bg-[#8B0000] text-white rounded-xl text-sm font-bold hover:bg-[#660000] transition-all shadow-lg shadow-red-900/20 disabled:opacity-50"
-                >
-                  {(() => {
-                    if (isSubmittingProfile) return "Menyimpan...";
-                    if (isSuperAdmin) return "Simpan Perubahan";
-                    return "Simpan Foto";
-                  })()}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Profile Edit Modal with Super Admin Email Input */}
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        user={user}
+        isSuperAdmin={isSuperAdmin}
+        onProfileUpdated={refreshUser}
+      />
 
       {/* Security Modal - Change Password */}
       {isSecurityModalOpen && (
@@ -1279,44 +938,10 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       )}
 
       {/* App Settings Modal */}
-      {isAppSettingsModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-100 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-gray-900">Pengaturan Aplikasi</h3>
-              <button onClick={() => setIsAppSettingsModalOpen(false)} className="p-1 hover:bg-gray-100 rounded-full transition-colors text-gray-400">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-bold text-gray-800">Suara Notifikasi</p>
-                  <p className="text-[10px] text-gray-400">Mainkan suara saat ada pemberitahuan baru</p>
-                </div>
-                <div className="w-10 h-6 bg-green-500 rounded-full cursor-pointer relative transition-all">
-                  <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-bold text-gray-800">Email Digest Mingguan</p>
-                  <p className="text-[10px] text-gray-400">Kirim ringkasan absensi mingguan ke email</p>
-                </div>
-                <div className="w-10 h-6 bg-gray-200 rounded-full cursor-pointer relative transition-all">
-                  <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full"></div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-gray-100">
-                <p className="text-[10px] text-gray-400 text-center italic">Versi Aplikasi: 1.0.5-MVP (Build 2026.03)</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <AppSettingsModal
+        isOpen={isAppSettingsModalOpen}
+        onClose={() => setIsAppSettingsModalOpen(false)}
+      />
     </div>
   );
 }

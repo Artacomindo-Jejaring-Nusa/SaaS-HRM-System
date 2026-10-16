@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
 import { User, Calendar, Filter, AlertCircle, ArrowRightLeft, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "sonner";
@@ -36,13 +36,13 @@ export default function ReportsShiftSwapPage() {
   const [selectedUser, setSelectedUser] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
 
-  const handlePeriodChange = (period: PeriodState) => {
+  const handlePeriodChange = useCallback((period: PeriodState) => {
     setCurrentPeriod(period);
     if (!period.isAllTime) {
       if (period.startDate) setStartDate(period.startDate);
       if (period.endDate) setEndDate(period.endDate);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchEmployees();
@@ -66,7 +66,15 @@ export default function ReportsShiftSwapPage() {
   const fetchReport = async (pageNumber = 1) => {
     try {
       setFetchingPreview(true);
-      const res = await axiosInstance.get(`/shift-swap/report?page=${pageNumber}&start_date=${startDate}&end_date=${endDate}${selectedUser ? `&user_id=${selectedUser}` : ""}${selectedStatus ? `&status=${selectedStatus}` : ""}`);
+      const params = new URLSearchParams({
+        page: String(pageNumber),
+        start_date: startDate,
+        end_date: endDate,
+      });
+      if (selectedUser) params.append("user_id", selectedUser);
+      if (selectedStatus) params.append("status", selectedStatus);
+
+      const res = await axiosInstance.get(`/shift-swap/report?${params.toString()}`);
       const rawData = res.data.data;
       setReportData(Array.isArray(rawData) ? rawData : (rawData?.data || []));
       setPagination(rawData);
@@ -80,11 +88,18 @@ export default function ReportsShiftSwapPage() {
 
   const exportShiftSwapToExcel = async () => {
     try {
-      const response = await axiosInstance.get(`/shift-swap/export?start_date=${startDate}&end_date=${endDate}${selectedUser ? `&user_id=${selectedUser}` : ""}${selectedStatus ? `&status=${selectedStatus}` : ""}`, {
+      const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+      });
+      if (selectedUser) params.append("user_id", selectedUser);
+      if (selectedStatus) params.append("status", selectedStatus);
+
+      const response = await axiosInstance.get(`/shift-swap/export?${params.toString()}`, {
         responseType: 'blob',
       });
       const periodSlug = currentPeriod.periodLabel.replaceAll(/[\s()/]+/g, '_');
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = globalThis.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `Laporan_Tukar_Shift_${periodSlug}.xlsx`);
@@ -105,6 +120,89 @@ export default function ReportsShiftSwapPage() {
       case 'pending_manager': return <span className="text-amber-600 font-bold text-[10px] bg-amber-50 px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1 w-fit"><Clock size={10} /> Menunggu Atasan</span>;
       default: return <span className="text-gray-600 font-bold text-[10px] bg-gray-50 px-2 py-0.5 rounded uppercase tracking-wider w-fit">{status}</span>;
     }
+  };
+
+  const renderTableContent = () => {
+    if (fetchingPreview) {
+      return (
+        <div className="p-20 text-center flex flex-col items-center">
+          <div className="w-10 h-10 border-4 border-gray-100 border-t-[#8B0000] rounded-full animate-spin mb-4" />
+          <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">Memuat Data Report...</p>
+        </div>
+      );
+    }
+
+    if (reportData.length === 0) {
+      return (
+        <div className="p-16 text-center flex flex-col items-center justify-center opacity-60">
+          <AlertCircle size={48} className="text-gray-200 mb-4" />
+          <h3 className="font-bold text-gray-400 text-sm tracking-widest uppercase">Laporan Kosong</h3>
+          <p className="text-gray-400 text-xs mt-1">Gunakan filter untuk memperluas pencarian Anda.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="dash-table-wrapper">
+        <table className="dash-table">
+          <thead>
+            <tr>
+              <th>Waktu Pengajuan</th>
+              <th>Pengaju</th>
+              <th>Rekan Kerja</th>
+              <th>Pertukaran Jadwal</th>
+              <th>Status</th>
+              <th>Disetujui Oleh</th>
+            </tr>
+          </thead>
+          <tbody>
+            {reportData.map((row) => (
+              <tr key={row.id}>
+                <td className="whitespace-nowrap text-[11px] text-gray-500">
+                   {new Date(row.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </td>
+                <td>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-gray-900 text-xs">{row.requester?.name}</span>
+                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Requester</span>
+                  </div>
+                </td>
+                <td>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-gray-900 text-xs">{row.receiver?.name}</span>
+                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Receiver</span>
+                  </div>
+                </td>
+                <td>
+                  <div className="flex items-center gap-2 py-1">
+                    <div className="px-2 py-1 bg-gray-50 rounded border border-gray-100 flex flex-col items-center min-w-[70px]">
+                       <span className="text-[9px] font-black text-gray-400">{new Date(row.requester_schedule?.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}</span>
+                       <span className="text-[10px] font-bold text-[#8B0000]">{row.requester_schedule?.shift?.name}</span>
+                    </div>
+                    <ArrowRightLeft size={12} className="text-gray-300" />
+                    <div className="px-2 py-1 bg-gray-50 rounded border border-gray-100 flex flex-col items-center min-w-[70px]">
+                       <span className="text-[9px] font-black text-gray-400">{new Date(row.receiver_schedule?.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}</span>
+                       <span className="text-[10px] font-bold text-blue-600">{row.receiver_schedule?.shift?.name}</span>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  {getStatusLabel(row.status)}
+                </td>
+                <td>
+                   {row.approver ? (
+                     <div className="flex flex-col">
+                       <span className="text-xs font-bold text-gray-700">{row.approver.name}</span>
+                       <span className="text-[9px] text-gray-400">Atasan/Manager</span>
+                     </div>
+                   ) : '-'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
   };
 
   if (loading) {
@@ -195,78 +293,7 @@ export default function ReportsShiftSwapPage() {
       </div>
 
       <div className="dash-table-container min-h-[400px]">
-        {fetchingPreview ? (
-          <div className="p-20 text-center flex flex-col items-center">
-            <div className="w-10 h-10 border-4 border-gray-100 border-t-[#8B0000] rounded-full animate-spin mb-4" />
-            <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">Memuat Data Report...</p>
-          </div>
-        ) : reportData.length === 0 ? (
-          <div className="p-16 text-center flex flex-col items-center justify-center opacity-60">
-            <AlertCircle size={48} className="text-gray-200 mb-4" />
-            <h3 className="font-bold text-gray-400 text-sm tracking-widest uppercase">Laporan Kosong</h3>
-            <p className="text-gray-400 text-xs mt-1">Gunakan filter untuk memperluas pencarian Anda.</p>
-          </div>
-        ) : (
-          <div className="dash-table-wrapper">
-            <table className="dash-table">
-              <thead>
-                <tr>
-                  <th>Waktu Pengajuan</th>
-                  <th>Pengaju</th>
-                  <th>Rekan Kerja</th>
-                  <th>Pertukaran Jadwal</th>
-                  <th>Status</th>
-                  <th>Disetujui Oleh</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reportData.map((row) => (
-                  <tr key={row.id}>
-                    <td className="whitespace-nowrap text-[11px] text-gray-500">
-                       {new Date(row.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                    <td>
-                      <div className="flex flex-col">
-                        <span className="font-bold text-gray-900 text-xs">{row.requester?.name}</span>
-                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Requester</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="flex flex-col">
-                        <span className="font-bold text-gray-900 text-xs">{row.receiver?.name}</span>
-                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Receiver</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-2 py-1">
-                        <div className="px-2 py-1 bg-gray-50 rounded border border-gray-100 flex flex-col items-center min-w-[70px]">
-                           <span className="text-[9px] font-black text-gray-400">{new Date(row.requester_schedule?.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}</span>
-                           <span className="text-[10px] font-bold text-[#8B0000]">{row.requester_schedule?.shift?.name}</span>
-                        </div>
-                        <ArrowRightLeft size={12} className="text-gray-300" />
-                        <div className="px-2 py-1 bg-gray-50 rounded border border-gray-100 flex flex-col items-center min-w-[70px]">
-                           <span className="text-[9px] font-black text-gray-400">{new Date(row.receiver_schedule?.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}</span>
-                           <span className="text-[10px] font-bold text-blue-600">{row.receiver_schedule?.shift?.name}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      {getStatusLabel(row.status)}
-                    </td>
-                    <td>
-                       {row.approver ? (
-                         <div className="flex flex-col">
-                           <span className="text-xs font-bold text-gray-700">{row.approver.name}</span>
-                           <span className="text-[9px] text-gray-400">Atasan/Manager</span>
-                         </div>
-                       ) : '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {renderTableContent()}
 
         {pagination && pagination.total > 0 && (
            <div className="border-t border-gray-50 flex items-center justify-between p-4 bg-gray-50/20">

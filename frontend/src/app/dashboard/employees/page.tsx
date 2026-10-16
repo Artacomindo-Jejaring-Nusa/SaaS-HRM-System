@@ -273,7 +273,7 @@ async function downloadEmployeeImportTemplate(availableRoles: Role[]) {
 
 
 function checkIsHRorAdmin(hasPermission: (perm: string) => boolean, roleName?: string): boolean {
-  if (hasPermission('manage-employees')) return true;
+  if (hasPermission('manage-employees') || hasPermission('edit-employees')) return true;
   const lowerRole = roleName?.toLowerCase() || '';
   return lowerRole.includes('admin') || lowerRole.includes('hr');
 }
@@ -972,6 +972,10 @@ function EmployeeActionsDropdown({
   onResetDevice,
   onAutoValidation,
 }: EmployeeActionsDropdownProps) {
+  const { hasPermission } = useAuth();
+  const canEdit = hasPermission('edit-employees') || hasPermission('manage-employees');
+  const canDelete = hasPermission('delete-employees');
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors cursor-pointer outline-none ml-auto">
@@ -997,18 +1001,20 @@ function EmployeeActionsDropdown({
           </div>
         </DropdownMenuItem>
 
-        <DropdownMenuItem 
-          onClick={() => onEdit(emp)}
-          className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
-        >
-          <div className="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-100 group-hover/item:text-orange-700 transition-colors">
-            <UserCog size={18} />
-          </div>
-          <div>
-            <p className="text-sm font-black text-gray-900 group-hover/item:text-orange-600 transition-colors">Edit Profil Karyawan</p>
-            <p className="text-[10px] text-gray-400 font-medium">Ubah profil lengkap, jabatan, & akses</p>
-          </div>
-        </DropdownMenuItem>
+        {canEdit && (
+          <DropdownMenuItem 
+            onClick={() => onEdit(emp)}
+            className="w-full flex items-center gap-3 p-3 text-left hover:bg-orange-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
+          >
+            <div className="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 group-hover/item:bg-orange-100 group-hover/item:text-orange-700 transition-colors">
+              <UserCog size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-black text-gray-900 group-hover/item:text-orange-600 transition-colors">Edit Profil Karyawan</p>
+              <p className="text-[10px] text-gray-400 font-medium">Ubah profil lengkap, jabatan, & akses</p>
+            </div>
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuItem 
           onClick={() => onAutoValidation?.(emp)}
@@ -1023,18 +1029,20 @@ function EmployeeActionsDropdown({
           </div>
         </DropdownMenuItem>
         
-        <DropdownMenuItem 
-          onClick={() => onDelete(emp.id)}
-          className="w-full flex items-center gap-3 p-3 text-left hover:bg-red-50/50 rounded-xl transition-colors cursor-pointer group/item outline-none"
-        >
-          <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-red-100 group-hover/item:text-red-600 transition-colors">
-            <UserX size={18} />
-          </div>
-          <div>
-            <p className="text-sm font-black text-gray-900 group-hover/item:text-red-600 transition-colors">Penghentian</p>
-            <p className="text-[10px] text-gray-400 font-medium">Proses pengunduran diri</p>
-          </div>
-        </DropdownMenuItem>
+        {canDelete && (
+          <DropdownMenuItem 
+            onClick={() => onDelete(emp.id)}
+            className="w-full flex items-center gap-3 p-3 text-left hover:bg-red-50/50 rounded-xl transition-colors cursor-pointer group/item outline-none"
+          >
+            <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 group-hover/item:bg-red-100 group-hover/item:text-red-600 transition-colors">
+              <UserX size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-black text-gray-900 group-hover/item:text-red-600 transition-colors">Penghentian</p>
+              <p className="text-[10px] text-gray-400 font-medium">Proses pengunduran diri</p>
+            </div>
+          </DropdownMenuItem>
+        )}
 
         {!emp.email_verified_at && (
           <DropdownMenuItem 
@@ -1205,9 +1213,22 @@ function EmployeeTableRow({
             Verified
           </div>
         ) : (
-          <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-amber-100 uppercase tracking-tighter shadow-sm">
-            <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-            Pending
+          <div className="inline-flex items-center gap-1.5">
+            <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-600 px-2.5 py-1 rounded-xl text-[10px] font-black border border-amber-100 uppercase tracking-tighter shadow-xs">
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              Pending
+            </div>
+            {isHRorAdmin && (
+              <button
+                type="button"
+                onClick={() => onResendVerification(emp.id)}
+                title="Kirim email verifikasi ke karyawan ini"
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-amber-700 bg-amber-100/80 hover:bg-amber-200 rounded-lg border border-amber-300/80 transition-all cursor-pointer shadow-2xs hover:scale-105"
+              >
+                <Mail size={11} />
+                Kirim
+              </button>
+            )}
           </div>
         )}
       </td>

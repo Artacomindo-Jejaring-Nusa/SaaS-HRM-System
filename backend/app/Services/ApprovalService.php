@@ -387,7 +387,10 @@ class ApprovalService
                 $moduleKey = $step->workflow->module_key ?? '';
                 $permission = self::getApprovalPermissionForModule($moduleKey);
                 if ($permission) {
-                    return User::where('company_id', $companyId)
+                    return User::where(function ($q) use ($companyId) {
+                            $q->where('company_id', $companyId)
+                                ->orWhereNull('company_id');
+                        })
                         ->where('id', '!=', $submitter->id)
                         ->get()
                         ->filter(fn ($u) => $u->hasPermission($permission))
@@ -400,7 +403,10 @@ class ApprovalService
                 if (! $step->approver_role_id) {
                     return collect();
                 }
-                return User::where('company_id', $companyId)
+                return User::where(function ($q) use ($companyId) {
+                        $q->where('company_id', $companyId)
+                            ->orWhereNull('company_id');
+                    })
                     ->where('role_id', $step->approver_role_id)
                     ->where('id', '!=', $submitter->id) // Don't include the submitter
                     ->get();
@@ -543,7 +549,7 @@ class ApprovalService
         }
 
         // Super Admin memiliki wewenang override / persetujuan darurat di tahap mana pun
-        if ($isSuperAdmin || $approver->hasPermission('manage-approvals')) {
+        if ($isSuperAdmin) {
             return true;
         }
 

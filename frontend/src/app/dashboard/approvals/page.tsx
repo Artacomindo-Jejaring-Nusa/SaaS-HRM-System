@@ -677,12 +677,12 @@ export default function ApprovalsPage() {
   const [historyFilterStatus, setHistoryFilterStatus] = useState<string>("all");
   const [historySearchQuery, setHistorySearchQuery] = useState<string>("");
 
-  // Purge Current Month State (Super Admin Only)
+  // Server Data Purge State (Super Admin Only)
   const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
-  const [purgePeriod, setPurgePeriod] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  });
+  const [purgeType, setPurgeType] = useState<"month" | "year" | "all">("month");
+  const [purgeYear, setPurgeYear] = useState<number>(new Date().getFullYear());
+  const [purgeMonth, setPurgeMonth] = useState<string>(() => String(new Date().getMonth() + 1).padStart(2, "0"));
+  const [purgeModule, setPurgeModule] = useState<string>("all");
   const [purgeConfirmation, setPurgeConfirmation] = useState("");
   const [isPurging, setIsPurging] = useState(false);
 
@@ -1054,7 +1054,22 @@ export default function ApprovalsPage() {
     }
     try {
       setIsPurging(true);
-      const res = await axiosInstance.post("/manager/purge-current-month", { period: purgePeriod });
+      let computedPeriod = "all";
+      if (purgeType === "year") {
+        computedPeriod = String(purgeYear);
+      } else if (purgeType === "month") {
+        computedPeriod = `${purgeYear}-${purgeMonth}`;
+      }
+
+      const payload: { period: string; module: string; company_id?: number } = {
+        period: computedPeriod,
+        module: purgeModule,
+      };
+      if (selectedCompanyId) {
+        payload.company_id = selectedCompanyId;
+      }
+
+      const res = await axiosInstance.post("/manager/purge-current-month", payload);
       toast.success(res.data?.message || "Pembersihan data periode berhasil dilakukan.");
       setIsPurgeModalOpen(false);
       setPurgeConfirmation("");
@@ -1062,8 +1077,9 @@ export default function ApprovalsPage() {
       if (activeTab === "history") {
         fetchHistory();
       }
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || "Gagal melakukan pembersihan data.");
+    } catch (e) {
+      const err = e as { response?: { data?: { message?: string } } };
+      toast.error(err?.response?.data?.message || "Gagal melakukan pembersihan data.");
     } finally {
       setIsPurging(false);
     }
@@ -1350,35 +1366,27 @@ export default function ApprovalsPage() {
           <div className="space-y-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-xs font-bold text-rose-100 backdrop-blur-md">
               <ShieldCheck size={14} className="text-amber-300" />
-              <span>Portal Manager & Pusat Persetujuan</span>
+              <span>Pusat Persetujuan & Monitoring</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              Pusat Persetujuan & Monitoring Tim
+              Persetujuan & Monitoring Tim
             </h1>
             <p className="text-xs sm:text-sm text-rose-100/90 max-w-2xl leading-relaxed">
-              Tinjau permohonan bawahan/tim secara cepat dan pantau kehadiran seluruh anggota tim secara real-time.
+              Kelola persetujuan permohonan bawahan serta pantau presensi dan aktivitas tim secara real-time.
             </p>
           </div>
 
           {/* Action & Refresh Button */}
           <div className="flex items-center gap-3">
-            {(isSuperAdmin || hasPermission("approve-payroll") || hasPermission("manage-payroll")) && (
-              <Link
-                href="/dashboard/payroll/approval"
-                className="px-4 py-2.5 bg-white text-[#8B0000] hover:bg-rose-50 rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-sm"
-              >
-                <CreditCard size={14} />
-                <span>Persetujuan Payroll</span>
-              </Link>
-            )}
             {isSuperAdmin && (
               <button
+                type="button"
                 onClick={() => setIsPurgeModalOpen(true)}
-                className="px-4 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-sm border border-rose-400/30"
-                title="Hapus transaksi dan berkas fisik bulan ini dari server untuk menghemat storage"
+                className="px-4 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm border border-rose-400/30"
+                title="Hapus data riwayat transaksi dan berkas fisik lama per bulan atau per tahun"
               >
                 <Trash2 size={14} />
-                <span>Pembersihan Periode Bulan Ini</span>
+                <span>Hapus Data Kedaluwarsa</span>
               </button>
             )}
             <button
@@ -3159,21 +3167,22 @@ export default function ApprovalsPage() {
         </div>
       )}
 
-      {/* MODAL PEMBERSIHAN PERIODE (SUPER ADMIN ONLY) */}
+      {/* MODAL PEMBERSIHAN DATA KEDALUWARSA (SUPER ADMIN ONLY) */}
       {isPurgeModalOpen && (
         <div className="fixed inset-0 z-120 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
             <div className="p-6 border-b border-rose-100 bg-rose-50/60 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
                   <ShieldAlert size={20} />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-900 text-base">Pembersihan Periode Server</h3>
-                  <p className="text-[11px] text-rose-700 font-medium">Manajemen Penyimpanan & Database</p>
+                  <h3 className="font-black text-slate-900 text-base">Hapus Data Kedaluwarsa</h3>
+                  <p className="text-[11px] text-rose-700 font-medium">Pembersihan Transaksi & Berkas Fisik Server</p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsPurgeModalOpen(false)}
                 disabled={isPurging}
                 className="p-1 hover:bg-white rounded-full transition-colors text-slate-400 hover:text-slate-600"
@@ -3182,36 +3191,146 @@ export default function ApprovalsPage() {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
               <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-amber-900 text-xs leading-relaxed flex items-start gap-2.5">
                 <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-bold">Perhatian Penting:</p>
+                  <p className="font-bold">Peringatan Keamanan:</p>
                   <p className="mt-0.5 text-amber-800">
-                    Fitur ini akan menghapus semua riwayat transaksi pengajuan (cuti, izin, lembur, reimbursement, pengajuan dana, koreksi absen) dan <strong>menghapus berkas fisik/lampiran bukti di server</strong> pada periode yang dipilih agar server tidak penuh.
+                    Fitur ini akan menghapus riwayat transaksi pengajuan dan <strong>menghapus berkas fisik/lampiran di storage server</strong> pada bulan/tahun yang dipilih agar kapasitas server tetap hemat.
                   </p>
                 </div>
               </div>
 
+              {/* Scope Selection: Per Bulan vs Per Tahun vs Semua Waktu */}
               <div>
-                <label htmlFor="purge-period-input" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Periode Bulan & Tahun (YYYY-MM)
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Tipe Rentang Waktu yang Dihapus:
                 </label>
-                <input
-                  id="purge-period-input"
-                  type="month"
-                  value={purgePeriod}
-                  onChange={(e) => setPurgePeriod(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/10"
-                />
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPurgeType("month")}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                      purgeType === "month"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    Per Bulan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPurgeType("year")}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                      purgeType === "year"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    Satu Tahun Penuh
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPurgeType("all")}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                      purgeType === "all"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    Semua Waktu
+                  </button>
+                </div>
               </div>
 
+              {/* Month & Year Selectors */}
+              {purgeType === "month" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="purge-month-select" className="block text-xs font-bold text-slate-600 mb-1">Pilih Bulan</label>
+                    <select
+                      id="purge-month-select"
+                      value={purgeMonth}
+                      onChange={(e) => setPurgeMonth(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-rose-500"
+                    >
+                      <option value="01">Januari</option>
+                      <option value="02">Februari</option>
+                      <option value="03">Maret</option>
+                      <option value="04">April</option>
+                      <option value="05">Mei</option>
+                      <option value="06">Juni</option>
+                      <option value="07">Juli</option>
+                      <option value="08">Agustus</option>
+                      <option value="09">September</option>
+                      <option value="10">Oktober</option>
+                      <option value="11">November</option>
+                      <option value="12">Desember</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="purge-year-month-select" className="block text-xs font-bold text-slate-600 mb-1">Pilih Tahun</label>
+                    <select
+                      id="purge-year-month-select"
+                      value={purgeYear}
+                      onChange={(e) => setPurgeYear(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-rose-500"
+                    >
+                      {[2023, 2024, 2025, 2026, 2027].map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {purgeType === "year" && (
+                <div>
+                  <label htmlFor="purge-year-select" className="block text-xs font-bold text-slate-600 mb-1">Pilih Tahun yang Dihapus Seluruhnya</label>
+                  <select
+                    id="purge-year-select"
+                    value={purgeYear}
+                    onChange={(e) => setPurgeYear(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-rose-500"
+                  >
+                    {[2023, 2024, 2025, 2026, 2027].map((y) => (
+                      <option key={y} value={y}>Semua Data Tahun {y}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Module selection */}
               <div>
-                <label htmlFor="purge-confirmation-input" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Konfirmasi Tindakan
+                <label htmlFor="purge-module-select" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Kategori Modul yang Dihapus:
+                </label>
+                <select
+                  id="purge-module-select"
+                  value={purgeModule}
+                  onChange={(e) => setPurgeModule(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-rose-500"
+                >
+                  <option value="all">Semua Modul & Transaksi (Cuti, Lembur, Reimburse, Dana, Absen, Payroll)</option>
+                  <option value="leaves">Hanya Pengajuan Cuti & Lampiran</option>
+                  <option value="permits">Hanya Pengajuan Izin & Surat Dokter</option>
+                  <option value="overtimes">Hanya Pengajuan Lembur</option>
+                  <option value="reimbursements">Hanya Klaim Biaya (Reimbursement) & Struk</option>
+                  <option value="fund_requests">Hanya Pengajuan Dana & Bukti Pengeluaran</option>
+                  <option value="attendance_corrections">Hanya Koreksi Absensi</option>
+                  <option value="attendances">Hanya Data Log Absensi</option>
+                  <option value="payroll">Hanya Riwayat Rekap Payroll</option>
+                </select>
+              </div>
+
+              {/* Confirmation input */}
+              <div>
+                <label htmlFor="purge-confirmation-input" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Konfirmasi Tindakan Permanen
                 </label>
                 <p className="text-[11px] text-slate-500 mb-1.5">
-                  Ketik kata <span className="font-mono font-bold text-rose-600">HAPUS</span> di bawah untuk melanjutkan:
+                  Ketik kata <span className="font-mono font-bold text-rose-600">HAPUS</span> di bawah untuk membuka tombol konfirmasi:
                 </p>
                 <input
                   id="purge-confirmation-input"
@@ -3226,6 +3345,7 @@ export default function ApprovalsPage() {
 
             <div className="p-5 bg-slate-50 border-t border-slate-200 flex gap-3">
               <button
+                type="button"
                 onClick={() => setIsPurgeModalOpen(false)}
                 disabled={isPurging}
                 className="flex-1 py-2.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition disabled:opacity-50"
@@ -3233,6 +3353,7 @@ export default function ApprovalsPage() {
                 Batal
               </button>
               <button
+                type="button"
                 onClick={handleExecutePurge}
                 disabled={isPurging || purgeConfirmation.trim().toUpperCase() !== "HAPUS"}
                 className="flex-1 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md transition disabled:opacity-50 flex items-center justify-center gap-1.5"
@@ -3245,7 +3366,7 @@ export default function ApprovalsPage() {
                 ) : (
                   <>
                     <Trash2 size={14} />
-                    <span>Bersihkan Server</span>
+                    <span>Konfirmasi Hapus Data</span>
                   </>
                 )}
               </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { 
   FileSpreadsheet, 
   Trash2, 
@@ -131,10 +131,18 @@ export default function ReportPeriodFilter({
     return computePeriodState(selectedMonth, selectedYear);
   }, [selectedMonth, selectedYear]);
 
-  // Notify parent on change
+  const onPeriodChangeRef = useRef(onPeriodChange);
   useEffect(() => {
-    onPeriodChange(activePeriod);
-  }, [activePeriod, onPeriodChange]);
+    onPeriodChangeRef.current = onPeriodChange;
+  });
+
+  const lastPeriodKeyRef = useRef<string>("");
+  useEffect(() => {
+    if (lastPeriodKeyRef.current !== activePeriod.periodKey) {
+      lastPeriodKeyRef.current = activePeriod.periodKey;
+      onPeriodChangeRef.current(activePeriod);
+    }
+  }, [activePeriod]);
 
   const handlePreset = (type: "this_month" | "last_month" | "this_year" | "all") => {
     if (type === "this_month") {

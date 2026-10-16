@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
 import { 
@@ -947,13 +947,13 @@ export default function ReportsAttendancePage() {
   });
   const [selectedUser, setSelectedUser] = useState("");
 
-  const handlePeriodChange = (period: PeriodState) => {
+  const handlePeriodChange = useCallback((period: PeriodState) => {
     setCurrentPeriod(period);
     if (!period.isAllTime) {
       if (period.startDate) setStartDate(period.startDate);
       if (period.endDate) setEndDate(period.endDate);
     }
-  };
+  }, []);
 
   const handlePurgePeriod = async (period: PeriodState) => {
     try {

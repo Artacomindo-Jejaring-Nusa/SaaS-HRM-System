@@ -89,7 +89,7 @@ export default function ReportsPayrollPage() {
     return computePeriodState(String(now.getMonth() + 1).padStart(2, "0"), now.getFullYear());
   });
 
-  const handlePeriodChange = (period: PeriodState) => {
+  const handlePeriodChange = useCallback((period: PeriodState) => {
     setCurrentPeriod(period);
     setSelectedIds([]);
     if (period.isAllTime) {
@@ -104,7 +104,7 @@ export default function ReportsPayrollPage() {
       }
       setYearFilter(period.year);
     }
-  };
+  }, []);
 
   const fetchPayrollReport = useCallback(async () => {
     try {

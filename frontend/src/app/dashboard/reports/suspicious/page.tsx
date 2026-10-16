@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
 import { 
@@ -49,13 +49,13 @@ export default function SuspiciousAttendanceReportPage() {
   const [selectedUser, setSelectedUser] = useState("");
   const [suspiciousType, setSuspiciousType] = useState("");
 
-  const handlePeriodChange = (period: PeriodState) => {
+  const handlePeriodChange = useCallback((period: PeriodState) => {
     setCurrentPeriod(period);
     if (!period.isAllTime) {
       if (period.startDate) setStartDate(period.startDate);
       if (period.endDate) setEndDate(period.endDate);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchEmployees();
@@ -78,7 +78,15 @@ export default function SuspiciousAttendanceReportPage() {
   const fetchHistory = async (pageNumber = 1) => {
     try {
       setFetchingPreview(true);
-      const res = await axiosInstance.get(`/attendance/suspicious?page=${pageNumber}&start_date=${startDate}&end_date=${endDate}${selectedUser ? `&user_id=${selectedUser}` : ""}${suspiciousType ? `&type=${suspiciousType}` : ""}`);
+      const params = new URLSearchParams({
+        page: String(pageNumber),
+        start_date: startDate,
+        end_date: endDate,
+      });
+      if (selectedUser) params.append("user_id", selectedUser);
+      if (suspiciousType) params.append("type", suspiciousType);
+
+      const res = await axiosInstance.get(`/attendance/suspicious?${params.toString()}`);
       const rawData = res.data.data;
       setHistory(Array.isArray(rawData) ? rawData : (rawData?.data || []));
       setPagination(rawData);
@@ -90,17 +98,20 @@ export default function SuspiciousAttendanceReportPage() {
     }
   };
 
-  if (loading) {
-    return <ReportSkeleton />;
-  }
-
   const exportToExcel = async () => {
     try {
-      const response = await axiosInstance.get(`/attendance/export?is_suspicious=1&start_date=${startDate}&end_date=${endDate}${selectedUser ? `&user_id=${selectedUser}` : ""}`, {
+      const params = new URLSearchParams({
+        is_suspicious: "1",
+        start_date: startDate,
+        end_date: endDate,
+      });
+      if (selectedUser) params.append("user_id", selectedUser);
+
+      const response = await axiosInstance.get(`/attendance/export?${params.toString()}`, {
         responseType: 'blob',
       });
       const periodSlug = currentPeriod.periodLabel.replaceAll(/[\s()/]+/g, '_');
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = globalThis.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `Laporan_Kehadiran_Mencurigakan_${periodSlug}.xlsx`);
@@ -112,6 +123,111 @@ export default function SuspiciousAttendanceReportPage() {
       toast.error("Gagal mengunduh Laporan Excel.");
     }
   };
+
+  const renderTableContent = () => {
+    if (fetchingPreview) {
+      return (
+        <div className="p-32 text-center flex flex-col items-center">
+          <div className="w-14 h-14 border-4 border-rose-100 border-t-rose-600 rounded-full animate-spin mb-6" />
+          <p className="text-rose-900/40 text-xs font-black tracking-widest uppercase">Menganalisis Data...</p>
+        </div>
+      );
+    }
+
+    if (history.length === 0) {
+      return (
+        <div className="p-24 text-center flex flex-col items-center justify-center">
+          <div className="w-24 h-24 rounded-full bg-rose-50 flex items-center justify-center text-rose-200 mb-6">
+             <AlertCircle size={48} />
+          </div>
+          <h3 className="font-black text-rose-900/30 text-lg tracking-widest uppercase">Aman Terkendali</h3>
+          <p className="text-gray-400 text-sm mt-2 max-w-xs mx-auto">Tidak ada penemuan absensi mencurigakan pada rentang waktu ini.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="dash-table-wrapper overflow-x-auto">
+        <table className="dash-table w-full">
+          <thead>
+            <tr className="bg-gray-50/50">
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Tanggal & Jam</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Karyawan</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Kategori Kecurigaan</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Bukti Foto</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Koordinat Peserta</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Aksi</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {history.map((row) => (
+              <tr key={row.id} className="hover:bg-rose-50/30 transition-colors group">
+                <td className="px-6 py-4 whitespace-nowrap">
+                   <div className="flex flex-col">
+                     <span className="font-bold text-gray-900 text-sm">
+                       {new Date(row.check_in).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                     </span>
+                     <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wide">
+                       {new Date(row.check_in).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                     </span>
+                   </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border border-gray-200 overflow-hidden shadow-sm">
+                       {row.user?.profile_photo_path ? (
+                         <img src={`/storage/${row.user.profile_photo_path}`} alt="" className="w-full h-full object-cover" />
+                       ) : <User size={20} />}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-black text-gray-900 text-sm group-hover:text-rose-700 transition-colors">{row.user?.name}</span>
+                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest font-mono">ID: {row.user?.id}</span>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  {getSuspiciousBadge(row.suspicious_reason || row.status)}
+                </td>
+                <td className="px-6 py-4">
+                   {row.image_in ? (
+                     <div className="relative w-12 h-12 rounded-lg border-2 border-white shadow-sm overflow-hidden bg-gray-50 cursor-zoom-in group-hover:scale-110 transition-transform">
+                        <img 
+                          src={`/storage/${row.image_in}`} 
+                          alt="Selfie" 
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                           <Camera size={12} className="text-white" />
+                        </div>
+                     </div>
+                   ) : (
+                     <span className="text-[10px] font-bold text-gray-300 uppercase">Tidak Ada Foto</span>
+                   )}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                   <div className="flex items-center gap-2 text-gray-500 hover:text-rose-600 transition-colors">
+                      <MapPin size={14} className="shrink-0" />
+                      <span className="text-[11px] font-bold font-mono tracking-tighter">
+                        {Number(row.latitude_in).toFixed(5)}, {Number(row.longitude_in).toFixed(5)}
+                      </span>
+                   </div>
+                </td>
+                <td className="px-6 py-4 text-center">
+                   <button className="p-2 hover:bg-white rounded-xl text-gray-400 hover:text-rose-600 shadow-sm border border-transparent hover:border-rose-100 transition-all">
+                      <ChevronRight size={18} />
+                   </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  if (loading) {
+    return <ReportSkeleton />;
+  }
 
   const getSuspiciousBadge = (reason: string) => {
     if (!reason) return <span className="text-gray-400 font-bold text-[10px] bg-gray-50 px-2 py-0.5 rounded uppercase tracking-wider">Unmarked</span>;
@@ -236,96 +352,7 @@ export default function SuspiciousAttendanceReportPage() {
 
       {/* Results Section */}
       <div className="dash-table-container min-h-[400px] border border-gray-100 shadow-2xl shadow-gray-200/50 rounded-3xl overflow-hidden bg-white">
-        {fetchingPreview ? (
-          <div className="p-32 text-center flex flex-col items-center">
-            <div className="w-14 h-14 border-4 border-rose-100 border-t-rose-600 rounded-full animate-spin mb-6" />
-            <p className="text-rose-900/40 text-xs font-black tracking-widest uppercase">Menganalisis Data...</p>
-          </div>
-        ) : history.length === 0 ? (
-          <div className="p-24 text-center flex flex-col items-center justify-center">
-            <div className="w-24 h-24 rounded-full bg-rose-50 flex items-center justify-center text-rose-200 mb-6">
-               <AlertCircle size={48} />
-            </div>
-            <h3 className="font-black text-rose-900/30 text-lg tracking-widest uppercase">Aman Terkendali</h3>
-            <p className="text-gray-400 text-sm mt-2 max-w-xs mx-auto">Tidak ada penemuan absensi mencurigakan pada rentang waktu ini.</p>
-          </div>
-        ) : (
-          <div className="dash-table-wrapper overflow-x-auto">
-            <table className="dash-table w-full">
-              <thead>
-                <tr className="bg-gray-50/50">
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Tanggal & Jam</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Karyawan</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Kategori Kecurigaan</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Bukti Foto</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-left">Koordinat Peserta</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {history.map((row) => (
-                  <tr key={row.id} className="hover:bg-rose-50/30 transition-colors group">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                       <div className="flex flex-col">
-                         <span className="font-bold text-gray-900 text-sm">
-                           {new Date(row.check_in).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
-                         </span>
-                         <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wide">
-                           {new Date(row.check_in).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
-                         </span>
-                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border border-gray-200 overflow-hidden shadow-sm">
-                           {row.user?.profile_photo_path ? (
-                             <img src={`/storage/${row.user.profile_photo_path}`} alt="" className="w-full h-full object-cover" />
-                           ) : <User size={20} />}
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="font-black text-gray-900 text-sm group-hover:text-rose-700 transition-colors">{row.user?.name}</span>
-                          <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest font-mono">ID: {row.user?.id}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {getSuspiciousBadge(row.suspicious_reason || row.status)}
-                    </td>
-                    <td className="px-6 py-4">
-                       {row.image_in ? (
-                         <div className="relative w-12 h-12 rounded-lg border-2 border-white shadow-sm overflow-hidden bg-gray-50 cursor-zoom-in group-hover:scale-110 transition-transform">
-                            <img 
-                              src={`/storage/${row.image_in}`} 
-                              alt="Selfie" 
-                              className="w-full h-full object-cover"
-                            />
-                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                               <Camera size={12} className="text-white" />
-                            </div>
-                         </div>
-                       ) : (
-                         <span className="text-[10px] font-bold text-gray-300 uppercase">Tidak Ada Foto</span>
-                       )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                       <div className="flex items-center gap-2 text-gray-500 hover:text-rose-600 transition-colors">
-                          <MapPin size={14} className="shrink-0" />
-                          <span className="text-[11px] font-bold font-mono tracking-tighter">
-                            {Number(row.latitude_in).toFixed(5)}, {Number(row.longitude_in).toFixed(5)}
-                          </span>
-                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                       <button className="p-2 hover:bg-white rounded-xl text-gray-400 hover:text-rose-600 shadow-sm border border-transparent hover:border-rose-100 transition-all">
-                          <ChevronRight size={18} />
-                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {renderTableContent()}
 
         {pagination && pagination.total > 0 && (
            <div className="border-t border-gray-50 flex items-center justify-between p-6 bg-gray-50/30">

@@ -37,6 +37,117 @@ interface DocWithInternal {
   };
 }
 
+const getOvertimeHours = (record: Overtime | null | undefined) => {
+  if (!record?.start_time || !record?.end_time) return 0;
+  const [sh, sm] = record.start_time.split(':').map(Number);
+  const [eh, em] = record.end_time.split(':').map(Number);
+  const diff = (eh * 60 + em) - (sh * 60 + sm);
+  return Number.parseFloat((diff / 60).toFixed(1));
+};
+
+const getLocalDateKey = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const getRecordBadgeClass = (status: string) => {
+  if (status === 'approved') {
+    return 'bg-amber-50 text-amber-800 border-amber-100/70 shadow-[inset_0_0_0_1px_rgba(217,119,6,0.1)]';
+  }
+  if (status === 'rejected') {
+    return 'bg-rose-50 text-rose-800 border-rose-100/70 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.1)]';
+  }
+  return 'bg-gray-50 text-gray-800 border-gray-100/70 shadow-[inset_0_0_0_1px_rgba(156,163,175,0.1)]';
+};
+
+const getOvertimeStatusText = (status: string) => {
+  if (status === 'approved') return 'Disetujui';
+  if (status === 'rejected') return 'Ditolak';
+  return 'Menunggu';
+};
+
+interface OvertimeTableRowProps {
+  emp: Employee;
+  rowIdx: number;
+  dateList: Date[];
+  overtimeMap: Record<string, Overtime>;
+  onSelectRecord: (record: Overtime) => void;
+}
+
+const OvertimeTableRow = ({ emp, rowIdx, dateList, overtimeMap, onSelectRecord }: OvertimeTableRowProps) => {
+  let totalDays = 0;
+  let totalHours = 0;
+
+  dateList.forEach((date) => {
+    const dateStr = getLocalDateKey(date);
+    const key = `${emp.id}_${dateStr}`;
+    const record = overtimeMap[key];
+    if (record?.status === 'approved') {
+      totalDays++;
+      totalHours += getOvertimeHours(record);
+    }
+  });
+
+  return (
+    <tr className="hover:bg-[#f9f9fb] transition-colors group">
+      <td className="sticky left-0 bg-white group-hover:bg-[#f9f9fb] z-20 px-4 py-3 border-r border-[#ebedf0] shadow-[2px_0_5px_rgba(0,0,0,0.04)] transition-colors min-w-[220px] max-w-[220px] w-[220px]">
+        <div className="flex items-center gap-2.5">
+          <div 
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-sm"
+            style={{ 
+              background: `hsl(${(rowIdx * 53 + 20) % 360}, 50%, 45%)` 
+            }}
+          >
+            {emp.name.charAt(0).toUpperCase()}
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="font-semibold text-xs text-[#1a1a2e] truncate">{emp.name}</span>
+            <span className="text-[9px] text-[#8c8fa3] font-mono leading-none mt-0.5">NIK: {emp.nik || `EMP${emp.id}`}</span>
+          </div>
+        </div>
+      </td>
+
+      {dateList.map((date) => {
+        const dateStr = getLocalDateKey(date);
+        const key = `${emp.id}_${dateStr}`;
+        const record = overtimeMap[key];
+        const isWk = date.getDay() === 0 || date.getDay() === 6;
+
+        const hours = getOvertimeHours(record);
+        const range = record ? `${record.start_time.substring(0, 5)} - ${record.end_time.substring(0, 5)}` : "";
+
+        return (
+          <td 
+            key={date.toISOString()}
+            onClick={record ? () => onSelectRecord(record) : undefined}
+            className={`px-1 py-1.5 text-center text-[10px] border-r border-[#ebedf0] align-middle select-none transition-all ${record ? 'cursor-pointer hover:brightness-95 hover:scale-95' : ''} ${isWk && !record ? 'bg-gray-50/40' : ''}`}
+          >
+            {record ? (
+              <div className={`py-1 px-1 flex flex-col items-center justify-center font-bold font-mono tracking-tighter rounded-md border text-[9px] ${getRecordBadgeClass(record.status)}`}>
+                <span className="leading-tight">{hours} Jam</span>
+                <span className="text-[7.5px] leading-tight opacity-65 mt-0.5">{range}</span>
+              </div>
+            ) : (
+              <span className="text-gray-300 font-normal">
+                {isWk ? <span className="text-[9px] text-gray-300">Off</span> : "-"}
+              </span>
+            )}
+          </td>
+        );
+      })}
+
+      <td className="px-2 py-3 text-center text-xs font-bold text-[#03543f] bg-[#def7ec]/15 border-r border-[#ebedf0]">
+        {totalDays} Hari
+      </td>
+      <td className="px-2 py-3 text-center text-xs font-bold text-[#723b13] bg-[#fdf6b2]/15">
+        {totalHours.toFixed(1)} Jam
+      </td>
+    </tr>
+  );
+};
+
 export default function OvertimeReportsPage() {
   const [data, setData] = useState<Overtime[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -72,13 +183,13 @@ export default function OvertimeReportsPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Overtime | null>(null);
 
-  const handlePeriodChange = (period: PeriodState) => {
+  const handlePeriodChange = useCallback((period: PeriodState) => {
     setCurrentPeriod(period);
     if (!period.isAllTime) {
       if (period.startDate) setStartDate(period.startDate);
       if (period.endDate) setEndDate(period.endDate);
     }
-  };
+  }, []);
 
   const handlePurgePeriod = async (period: PeriodState) => {
     try {
@@ -133,11 +244,15 @@ export default function OvertimeReportsPage() {
   const fetchData = useCallback(async () => {
     try {
       setDataLoading(true);
-      const response = await axiosInstance.get(
-        `/overtimes?per_page=1000&start_date=${startDate}&end_date=${endDate}${
-          selectedUser ? `&user_id=${selectedUser}` : ""
-        }${statusFilter !== 'all' ? `&status=${statusFilter}` : ""}`
-      );
+      const params = new URLSearchParams({
+        per_page: "1000",
+        start_date: startDate,
+        end_date: endDate,
+      });
+      if (selectedUser) params.append("user_id", selectedUser);
+      if (statusFilter !== 'all') params.append("status", statusFilter);
+
+      const response = await axiosInstance.get(`/overtimes?${params.toString()}`);
       setData(response.data.data?.data || response.data.data || []);
     } catch (e) {
       console.error("Gagal ambil data lembur", e);
@@ -163,21 +278,7 @@ export default function OvertimeReportsPage() {
     }
   };
 
-  const getOvertimeHours = (record: Overtime | null | undefined) => {
-    if (!record || !record.start_time || !record.end_time) return 0;
-    const [sh, sm] = record.start_time.split(':').map(Number);
-    const [eh, em] = record.end_time.split(':').map(Number);
-    const diff = (eh * 60 + em) - (sh * 60 + sm);
-    return parseFloat((diff / 60).toFixed(1));
-  };
 
-  // Helper to format local date key "YYYY-MM-DD"
-  const getLocalDateKey = (date: Date) => {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  };
 
   // Generate date list between startDate and endDate
   const dateList: Date[] = [];
@@ -228,7 +329,7 @@ export default function OvertimeReportsPage() {
       "Waktu Selesai": item.end_time.substring(0, 5),
       "Durasi (Jam)": getOvertimeHours(item),
       "Alasan Lembur": item.reason || "-",
-      "Status": item.status === 'approved' ? 'Disetujui' : item.status === 'rejected' ? 'Ditolak' : 'Menunggu',
+      "Status": getOvertimeStatusText(item.status),
       "Catatan Admin": item.remark || "-"
     }));
 
@@ -387,91 +488,19 @@ export default function OvertimeReportsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-[#ebedf0]">
-            {filteredEmployees.map((emp: Employee, rowIdx: number) => {
-              let totalDays = 0;
-              let totalHours = 0;
-
-              dateList.forEach((date) => {
-                const dateStr = getLocalDateKey(date);
-                const key = `${emp.id}_${dateStr}`;
-                const record = overtimeMap[key];
-                if (record && record.status === 'approved') {
-                  totalDays++;
-                  totalHours += getOvertimeHours(record);
-                }
-              });
-
-              return (
-                <tr key={emp.id} className="hover:bg-[#f9f9fb] transition-colors group">
-                  {/* Sticky left Employee cell */}
-                  <td className="sticky left-0 bg-white group-hover:bg-[#f9f9fb] z-20 px-4 py-3 border-r border-[#ebedf0] shadow-[2px_0_5px_rgba(0,0,0,0.04)] transition-colors min-w-[220px] max-w-[220px] w-[220px]">
-                    <div className="flex items-center gap-2.5">
-                      <div 
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-sm"
-                        style={{ 
-                          background: `hsl(${(rowIdx * 53 + 20) % 360}, 50%, 45%)` 
-                        }}
-                      >
-                        {emp.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-semibold text-xs text-[#1a1a2e] truncate">{emp.name}</span>
-                        <span className="text-[9px] text-[#8c8fa3] font-mono leading-none mt-0.5">NIK: {emp.nik || `EMP${emp.id}`}</span>
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* Render Overtime cells */}
-                  {dateList.map((date) => {
-                    const dateStr = getLocalDateKey(date);
-                    const key = `${emp.id}_${dateStr}`;
-                    const record = overtimeMap[key];
-                    const isWk = date.getDay() === 0 || date.getDay() === 6;
-
-                    const hours = getOvertimeHours(record);
-                    const range = record ? `${record.start_time.substring(0, 5)} - ${record.end_time.substring(0, 5)}` : "";
-
-                    const cellClickHandler = record ? () => {
-                      setSelectedItem(record);
-                      setIsDetailModalOpen(true);
-                    } : undefined;
-
-                    return (
-                      <td 
-                        key={date.toISOString()}
-                        onClick={cellClickHandler}
-                        className={`px-1 py-1.5 text-center text-[10px] border-r border-[#ebedf0] align-middle select-none transition-all ${record ? 'cursor-pointer hover:brightness-95 hover:scale-95' : ''} ${isWk && !record ? 'bg-gray-50/40' : ''}`}
-                      >
-                        {record ? (
-                          <div className={`py-1 px-1 flex flex-col items-center justify-center font-bold font-mono tracking-tighter rounded-md border text-[9px] ${
-                            record.status === 'approved' 
-                              ? 'bg-amber-50 text-amber-800 border-amber-100/70 shadow-[inset_0_0_0_1px_rgba(217,119,6,0.1)]' 
-                              : record.status === 'rejected'
-                              ? 'bg-rose-50 text-rose-800 border-rose-100/70 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.1)]'
-                              : 'bg-gray-50 text-gray-800 border-gray-100/70 shadow-[inset_0_0_0_1px_rgba(156,163,175,0.1)]'
-                          }`}>
-                            <span className="leading-tight">{hours} Jam</span>
-                            <span className="text-[7.5px] leading-tight opacity-65 mt-0.5">{range}</span>
-                          </div>
-                        ) : (
-                          <span className="text-gray-300 font-normal">
-                            {isWk ? <span className="text-[9px] text-gray-300">Off</span> : "-"}
-                          </span>
-                        )}
-                      </td>
-                    );
-                  })}
-
-                  {/* Summary Columns */}
-                  <td className="px-2 py-3 text-center text-xs font-bold text-[#03543f] bg-[#def7ec]/15 border-r border-[#ebedf0]">
-                    {totalDays} Hari
-                  </td>
-                  <td className="px-2 py-3 text-center text-xs font-bold text-[#723b13] bg-[#fdf6b2]/15">
-                    {totalHours.toFixed(1)} Jam
-                  </td>
-                </tr>
-              );
-            })}
+            {filteredEmployees.map((emp: Employee, rowIdx: number) => (
+              <OvertimeTableRow
+                key={emp.id}
+                emp={emp}
+                rowIdx={rowIdx}
+                dateList={dateList}
+                overtimeMap={overtimeMap}
+                onSelectRecord={(rec) => {
+                  setSelectedItem(rec);
+                  setIsDetailModalOpen(true);
+                }}
+              />
+            ))}
           </tbody>
         </table>
       </div>

@@ -14,7 +14,7 @@ trait HandlesApprovalWorkflowHelpers
         if ($user && ($user->role_id === 1 || (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies())) && $request->filled('company_id')) {
             return (int) $request->company_id;
         }
-        return $user ? $user->company_id : 1;
+        return $user ? ($user->company_id ?? 1) : 1;
     }
 
     private function isSuperAdmin(User $user): bool
@@ -31,6 +31,7 @@ trait HandlesApprovalWorkflowHelpers
         $roleName = $user->role ? $user->role->name : '';
 
         return $this->isSuperAdmin($user) ||
+            $user->hasPermission('manage-approvals') ||
             in_array($roleName, ['Super Admin', 'Admin', 'HRD Manager', 'HRD Staff', 'Management']) ||
             str_contains(strtolower($roleName), 'hrd') ||
             str_contains(strtolower($roleName), 'admin');
@@ -131,7 +132,7 @@ trait HandlesApprovalWorkflowHelpers
             'description' => $meta['description'] ?? '',
             'layers' => $stepCount,
             'is_custom' => false,
-            'is_active' => $defaultVariant ? $defaultVariant->is_active : false,
+            'is_active' => $defaultVariant ? (bool) $defaultVariant->is_active : true,
             'is_configured' => $variants->isNotEmpty(),
             'active_workflow_id' => $defaultVariant ? $defaultVariant->id : null,
             'variants' => $mappedVariants,
@@ -162,6 +163,69 @@ trait HandlesApprovalWorkflowHelpers
                 'layers' => $wf->steps->count(),
                 'is_default' => true,
             ])->values(),
+        ];
+    }
+
+    private function getDefaultStepsForModule(string $moduleKey, int $companyId): array
+    {
+        $hrRole = \App\Models\Role::where('name', 'like', '%HR%')->orWhere('name', 'like', '%Admin%')->first();
+        $financeRole = \App\Models\Role::where('name', 'like', '%Finance%')->orWhere('name', 'like', '%Keuangan%')->first() ?? $hrRole;
+
+        $meta = \App\Services\ApprovalService::SYSTEM_MODULES[$moduleKey] ?? [];
+        $layers = $meta['default_layers'] ?? 1;
+
+        if ($moduleKey === 'payroll') {
+            return [
+                [
+                    'step_number' => 1,
+                    'approver_type' => 'role',
+                    'approver_role_id' => $financeRole?->id,
+                    'approver_user_id' => null,
+                    'sla_hours' => 48,
+                    'role' => $financeRole ? ['id' => $financeRole->id, 'name' => $financeRole->name] : null,
+                ],
+                [
+                    'step_number' => 2,
+                    'approver_type' => 'super_admin',
+                    'approver_role_id' => null,
+                    'approver_user_id' => null,
+                    'sla_hours' => 72,
+                    'role' => null,
+                ],
+            ];
+        }
+
+        if ($layers >= 2) {
+            $secondRole = in_array($moduleKey, ['reimbursement', 'fund_request']) ? $financeRole : $hrRole;
+            return [
+                [
+                    'step_number' => 1,
+                    'approver_type' => 'supervisor',
+                    'approver_role_id' => null,
+                    'approver_user_id' => null,
+                    'sla_hours' => 24,
+                    'role' => null,
+                ],
+                [
+                    'step_number' => 2,
+                    'approver_type' => 'role',
+                    'approver_role_id' => $secondRole?->id,
+                    'approver_user_id' => null,
+                    'sla_hours' => 48,
+                    'role' => $secondRole ? ['id' => $secondRole->id, 'name' => $secondRole->name] : null,
+                ],
+            ];
+        }
+
+        return [
+            [
+                'step_number' => 1,
+                'approver_type' => 'supervisor',
+                'approver_role_id' => null,
+                'approver_user_id' => null,
+                'sla_hours' => 24,
+                'role' => null,
+            ],
         ];
     }
 }

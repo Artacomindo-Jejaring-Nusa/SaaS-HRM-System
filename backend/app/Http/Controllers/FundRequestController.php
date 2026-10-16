@@ -26,7 +26,7 @@ class FundRequestController extends Controller
 
         if ($user->role_id === 1) {
             // Master Admin sees all
-        } elseif ($user->is_manager || $user->hasPermission('approve-fund-requests') || $user->hasPermission('approve-permits')) {
+        } elseif ($user->is_manager || $user->hasPermission('approve-fund-requests')) {
             $query->where('company_id', $user->company_id);
 
             // If strictly a manager/supervisor (not HRD/Admin/Finance Approver), see only subordinates OR assigned approvals

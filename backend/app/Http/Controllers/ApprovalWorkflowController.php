@@ -13,6 +13,8 @@ use App\Models\Permit;
 use App\Models\Reimbursement;
 use App\Models\FundRequest;
 use App\Models\AttendanceCorrection;
+use App\Models\ShiftSwap;
+use App\Models\VehicleLog;
 use App\Services\ApprovalService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -61,6 +63,26 @@ class ApprovalWorkflowController extends Controller
         }
 
         if (! $workflow) {
+            if (! is_numeric($idOrModuleKey) && array_key_exists($idOrModuleKey, ApprovalService::SYSTEM_MODULES)) {
+                $meta = ApprovalService::SYSTEM_MODULES[$idOrModuleKey];
+                $defaultSteps = $this->getDefaultStepsForModule($idOrModuleKey, $companyId);
+                return $this->successResponse([
+                    'id' => null,
+                    'company_id' => $companyId,
+                    'module_key' => $idOrModuleKey,
+                    'name' => $meta['name'],
+                    'description' => $meta['description'] ?? '',
+                    'icon' => $meta['icon'] ?? 'GitBranch',
+                    'category' => $meta['category'] ?? 'operasional',
+                    'is_custom' => false,
+                    'is_active' => true,
+                    'flow_json' => null,
+                    'scope_type' => 'company',
+                    'scope_id' => null,
+                    'steps' => $defaultSteps,
+                ], 'Loaded standard system workflow default.');
+            }
+
             return $this->successResponse(null, 'No custom workflow set. Using default hardcoded hierarchy.');
         }
 
@@ -388,7 +410,7 @@ class ApprovalWorkflowController extends Controller
         $workflow = ApprovalWorkflow::findOrFail($id);
 
         // Security check: non-super-admin can only delete workflows belonging to their company
-        if (! $this->isSuperAdmin($user) && $workflow->company_id !== $user->company_id) {
+        if (! $this->isSuperAdmin($user) && $workflow->company_id !== ($user->company_id ?? 1)) {
             return $this->errorResponse('Tidak memiliki izin menghapus alur persetujuan ini.', 403);
         }
 
@@ -578,6 +600,25 @@ class ApprovalWorkflowController extends Controller
                 \App\Models\Salary::where('batch_id', $item->id)->update(['status' => $payrollStatus]);
                 break;
 
+            case 'shift_swap':
+                $item = ShiftSwap::findOrFail($request->target_id);
+                $item->update([
+                    'status' => $status,
+                    'approved_by' => $user->id,
+                    'remark' => $reason,
+                ]);
+                break;
+
+            case 'vehicle_log':
+                $item = VehicleLog::findOrFail($request->target_id);
+                $item->update([
+                    'status' => $status,
+                    'current_approval_step' => null,
+                    'approved_by' => $user->id,
+                    'remark' => $reason,
+                ]);
+                break;
+
             default:
                 return $this->errorResponse("Modul '{$request->module_key}' belum mendukung override instan.", 400);
         }
@@ -596,7 +637,8 @@ class ApprovalWorkflowController extends Controller
         if ($user->role_id === 1 || $user->canAccessAllCompanies()) {
             $companies = Company::select('id', 'name')->orderBy('name')->get();
         } else {
-            $companies = Company::where('id', $user->company_id)->select('id', 'name')->get();
+            $companyId = $user->company_id ?? 1;
+            $companies = Company::where('id', $companyId)->select('id', 'name')->get();
         }
 
         return $this->successResponse($companies, 'Companies retrieved successfully.');
@@ -605,7 +647,7 @@ class ApprovalWorkflowController extends Controller
     /**
      * Get list of all roles (for dropdown in UI).
      */
-    public function getRoles(Request $request)
+    public function getRoles()
     {
         $roles = Role::orderBy('name')->get();
 
@@ -619,7 +661,10 @@ class ApprovalWorkflowController extends Controller
     {
         $companyId = $this->resolveCompanyId($request);
 
-        $users = User::where('company_id', $companyId)
+        $users = User::where(function ($q) use ($companyId) {
+                $q->where('company_id', $companyId)
+                    ->orWhereNull('company_id');
+            })
             ->select('id', 'name', 'email', 'role_id')
             ->with('role:id,name')
             ->orderBy('name')

@@ -21,21 +21,10 @@ interface Role {
 }
 
 const SUPERADMIN_ONLY_SLUGS = new Set([
-  'create-employees',
-  'edit-employees',
-  'delete-employees',
   'manage-company',
   'manage-roles',
-  'manage-wfh',
+  'delete-employees',
   'manage-offices',
-  'view-directory',
-  'manage-shifts',
-  'manage-schedules',
-  'manage-holidays',
-  'manage-announcements',
-  'manage-approvals',
-  'manage-documents',
-  'manage-kpis',
 ]);
 
 export default function RolesPage() {
@@ -132,7 +121,8 @@ export default function RolesPage() {
       fetchRoles();
       setModalOpen(false);
       toast.success(selectedRole ? "Jabatan diperbarui!" : "Jabatan berhasil ditambahkan!");
-    } catch (e) {
+    } catch (err) {
+      console.error("Gagal menyimpan role:", err);
       toast.error("Gagal menyimpan role. Pastikan nama unik.");
     } finally {
       setIsSubmitting(false);
@@ -148,7 +138,8 @@ export default function RolesPage() {
       });
       toast.success("Hak akses berhasil diperbarui!");
       setPermissionModalOpen(false);
-    } catch (e) {
+    } catch (err) {
+      console.error("Gagal sinkron hak akses:", err);
       toast.error("Gagal sinkron hak akses");
     } finally {
       setIsSubmitting(false);
