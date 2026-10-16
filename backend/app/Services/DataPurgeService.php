@@ -93,27 +93,37 @@ class DataPurgeService
         if ($request->filled('start_date') && $request->filled('end_date')) {
             $start = Carbon::parse($request->input('start_date'))->startOfDay();
             $end = Carbon::parse($request->input('end_date'))->endOfDay();
-            return [$start, $end, $start->format('d/m/Y') . ' - ' . $end->format('d/m/Y')];
-        }
-
-        if ($period === 'all') {
+            $label = $start->format('d/m/Y') . ' - ' . $end->format('d/m/Y');
+        } elseif ($period === 'all') {
             $start = Carbon::parse('2000-01-01')->startOfDay();
             $end = Carbon::now()->addYears(5)->endOfDay();
-            return [$start, $end, 'Semua Periode'];
-        }
-
-        if (preg_match('/^\d{4}$/', $period)) {
+            $label = 'Semua Periode';
+        } elseif (preg_match('/^\d{4}$/', $period)) {
             $start = Carbon::parse($period . '-01-01')->startOfYear();
             $end = Carbon::parse($period . '-12-31')->endOfYear();
-            return [$start, $end, "Tahun {$period}"];
+            $label = "Tahun {$period}";
+        } else {
+            $start = Carbon::parse($period . '-01')->startOfMonth();
+            $end = Carbon::parse($period . '-01')->endOfMonth();
+            $label = Carbon::parse($period . '-01')->translatedFormat('F Y');
         }
 
-        $start = Carbon::parse($period . '-01')->startOfMonth();
-        $end = Carbon::parse($period . '-01')->endOfMonth();
-        return [$start, $end, Carbon::parse($period . '-01')->translatedFormat('F Y')];
+        return [$start, $end, $label];
     }
 
     private static function executeModulePurge(
+        string $module,
+        \Closure $companyScope,
+        $start,
+        $end,
+        ?array $bulkIds,
+        array &$deletedCounts
+    ): void {
+        self::purgeOperationalRecords($module, $companyScope, $start, $end, $bulkIds, $deletedCounts);
+        self::purgeAttendanceAndTaskRecords($module, $companyScope, $start, $end, $bulkIds, $deletedCounts);
+    }
+
+    private static function purgeOperationalRecords(
         string $module,
         \Closure $companyScope,
         $start,
@@ -148,7 +158,16 @@ class DataPurgeService
             $deletedCounts['permits'] = $permitResult['count'];
             $deletedCounts['files'] += $permitResult['files'];
         }
+    }
 
+    private static function purgeAttendanceAndTaskRecords(
+        string $module,
+        \Closure $companyScope,
+        $start,
+        $end,
+        ?array $bulkIds,
+        array &$deletedCounts
+    ): void {
         if ($module === 'all' || $module === 'attendance_corrections') {
             $deletedCounts['attendance_corrections'] = self::purgeAttendanceCorrections($companyScope, $start, $end, $bulkIds);
         }

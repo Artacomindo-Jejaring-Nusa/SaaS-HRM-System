@@ -444,9 +444,13 @@ const handleDinasLuarApproval = async (
       remark: remarkInput
     });
   } catch {
-    const actionSuffix = action === "approve"
-      ? (isHR && item.status === "waiting_approval" ? "approve-hr" : "approve-spv")
-      : "reject";
+    let actionSuffix = "reject";
+    if (action === "approve") {
+      actionSuffix = "approve-spv";
+      if (isHR && item.status === "waiting_approval") {
+        actionSuffix = "approve-hr";
+      }
+    }
     return axiosInstance.post(`/attendance/dinas-luar/${item.id}/${actionSuffix}`, { reason: remarkInput });
   }
 };
