@@ -3,8 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { 
-  Mail, Inbox, Send, ArrowRight, CheckCheck, 
-  FileText, Sparkles, User, Megaphone 
+  Mail, Inbox, ArrowRight, CheckCheck, Megaphone 
 } from "lucide-react";
 
 export interface MailItem {
@@ -18,9 +17,9 @@ export interface MailItem {
 }
 
 interface MailDropdownProps {
-  messages: MailItem[];
-  onMarkAsRead: (id: number) => Promise<void>;
-  onMarkAllAsRead: () => Promise<void>;
+  readonly messages: MailItem[];
+  readonly onMarkAsRead: (id: number) => Promise<void>;
+  readonly onMarkAllAsRead: () => Promise<void>;
 }
 
 export default function MailDropdown({
@@ -144,7 +143,7 @@ export default function MailDropdown({
                   type="button"
                   onClick={() => handleItemClick(item)}
                   className={`w-full p-3.5 flex items-start gap-3 text-left transition-colors hover:bg-gray-50/80 ${
-                    !item.is_read ? "bg-blue-50/20" : ""
+                    item.is_read ? "" : "bg-blue-50/20"
                   }`}
                 >
                   <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 font-bold text-xs">
@@ -152,7 +151,7 @@ export default function MailDropdown({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className={`text-xs truncate ${!item.is_read ? "font-extrabold text-gray-900" : "font-semibold text-gray-700"}`}>
+                      <p className={`text-xs truncate ${item.is_read ? "font-semibold text-gray-700" : "font-extrabold text-gray-900"}`}>
                         {item.from_name || "Manajemen HRD"}
                       </p>
                       <span className="text-[10px] text-gray-400 shrink-0 font-medium">

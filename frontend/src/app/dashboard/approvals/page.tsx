@@ -3204,9 +3204,9 @@ export default function ApprovalsPage() {
 
               {/* Scope Selection: Per Bulan vs Per Tahun vs Semua Waktu */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                <span className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Tipe Rentang Waktu yang Dihapus:
-                </label>
+                </span>
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"

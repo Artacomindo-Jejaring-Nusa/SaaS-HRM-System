@@ -7,8 +7,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Language } from "@/lib/translations";
 
 interface AppSettingsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
 }
 
 export default function AppSettingsModal({ isOpen, onClose }: AppSettingsModalProps) {
@@ -49,14 +49,14 @@ export default function AppSettingsModal({ isOpen, onClose }: AppSettingsModalPr
   if (!isOpen) return null;
 
   return (
-    <div 
-      className="fixed inset-0 bg-black/60 z-100 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"
-      onClick={onClose}
-    >
-      <div 
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+      <button 
+        type="button" 
+        aria-label="Tutup modal"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm cursor-default border-0"
+        onClick={onClose}
+      />
+      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100 z-10">
         {/* Header */}
         <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/70">
           <div className="flex items-center gap-2.5">
@@ -81,9 +81,9 @@ export default function AppSettingsModal({ isOpen, onClose }: AppSettingsModalPr
         <div className="p-6 space-y-5">
           {/* Bahasa Tampilan */}
           <div>
-            <label className="text-xs font-bold text-gray-700 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+            <span className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Globe size={14} className="text-gray-400" /> Bahasa Tampilan
-            </label>
+            </span>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"

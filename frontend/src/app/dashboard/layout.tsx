@@ -19,19 +19,12 @@ import {
   ChevronRight,
   ChevronDown,
   Search,
-  Mail,
-  Bell,
-  Loader2,
   UserCheck,
   UserX,
   MoreVertical,
   Eye,
   Plus,
   Filter,
-  User,
-  Shield,
-  Laptop,
-  Camera,
   HardHat,
   Building2,
   Car,
@@ -40,11 +33,9 @@ import {
   ShieldCheck,
   Wallet,
   HelpCircle,
-  AlertCircle,
 } from "lucide-react";
-import { toast } from "sonner";
 import Cookies from "js-cookie";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
 import echo from '@/lib/echo';
 
@@ -303,8 +294,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         setIsSearchModalOpen((prev) => !prev);
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    globalThis.addEventListener("keydown", handleKeyDown);
+    return () => globalThis.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   // Fetch manager pending approvals count if user is a manager
@@ -378,9 +369,9 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
             // Play sound effect if enabled in AppSettings
             try {
-              const soundAllowed = typeof window !== 'undefined' && localStorage.getItem('app_sound_enabled') !== 'false';
+              const soundAllowed = typeof globalThis.window !== 'undefined' && localStorage.getItem('app_sound_enabled') !== 'false';
               if (soundAllowed) {
-                const audio = new window.Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                const audio = new globalThis.Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
                 audio.volume = 0.6;
                 const playPromise = audio.play();
                 if (playPromise !== undefined) {
@@ -800,8 +791,9 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
               />
             </div>
             
-            <div 
-              className="dash-header-user cursor-pointer select-none"
+            <button 
+              type="button"
+              className="dash-header-user cursor-pointer select-none bg-transparent border-0 text-left p-0"
               onClick={() => setIsProfileModalOpen(true)}
               title="Klik untuk membuka profil saya"
             >
@@ -825,7 +817,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                   </div>
                 </>
               )}
-            </div>
+            </button>
           </div>
         </header>
 

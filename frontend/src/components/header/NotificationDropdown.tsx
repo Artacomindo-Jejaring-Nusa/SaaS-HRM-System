@@ -3,15 +3,14 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { 
-  Bell, CheckCircle2, Clock, AlertTriangle, ArrowRight, 
-  CheckCheck, Info, Sparkles 
+  Bell, CheckCircle2, AlertTriangle, ArrowRight, CheckCheck 
 } from "lucide-react";
 
 export interface NotificationItem {
   id: number;
   title: string;
   message: string;
-  type?: "info" | "warning" | "success" | "error" | string;
+  type?: "info" | "warning" | "success" | "error";
   category?: string;
   is_read: boolean;
   link?: string;
@@ -19,9 +18,9 @@ export interface NotificationItem {
 }
 
 interface NotificationDropdownProps {
-  notifications: NotificationItem[];
-  onMarkAsRead: (id: number) => Promise<void>;
-  onMarkAllAsRead: () => Promise<void>;
+  readonly notifications: NotificationItem[];
+  readonly onMarkAsRead: (id: number) => Promise<void>;
+  readonly onMarkAllAsRead: () => Promise<void>;
 }
 
 export default function NotificationDropdown({
@@ -188,13 +187,13 @@ export default function NotificationDropdown({
                   type="button"
                   onClick={() => handleItemClick(item)}
                   className={`w-full p-3.5 flex items-start gap-3 text-left transition-colors hover:bg-gray-50/80 ${
-                    !item.is_read ? "bg-amber-50/30" : ""
+                    item.is_read ? "" : "bg-amber-50/30"
                   }`}
                 >
                   {getNotificationIcon(item.type)}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className={`text-xs truncate ${!item.is_read ? "font-extrabold text-gray-900" : "font-semibold text-gray-700"}`}>
+                      <p className={`text-xs truncate ${item.is_read ? "font-semibold text-gray-700" : "font-extrabold text-gray-900"}`}>
                         {item.title}
                       </p>
                       <span className="text-[10px] text-gray-400 shrink-0 font-medium">

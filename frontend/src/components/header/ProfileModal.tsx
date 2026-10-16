@@ -6,11 +6,11 @@ import { toast } from "sonner";
 import axiosInstance from "@/lib/axios";
 
 interface ProfileModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  user: any;
-  isSuperAdmin: boolean;
-  onProfileUpdated: () => void;
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
+  readonly user: any;
+  readonly isSuperAdmin: boolean;
+  readonly onProfileUpdated: () => void;
 }
 
 export default function ProfileModal({
@@ -92,17 +92,23 @@ export default function ProfileModal({
     }
   };
 
+  const getSubmitButtonLabel = () => {
+    if (isSubmitting) return "Menyimpan...";
+    if (isSuperAdmin) return "Simpan Perubahan & Email";
+    return "Simpan Foto";
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div 
-      className="fixed inset-0 bg-black/60 z-100 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"
-      onClick={onClose}
-    >
-      <div 
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100 flex flex-col max-h-[90vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Tutup modal"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm cursor-default border-0"
+        onClick={onClose}
+      />
+      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100 flex flex-col max-h-[90vh] z-10">
         {/* Header */}
         <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-gray-50 to-red-50/30">
           <div className="flex items-center gap-2.5">
@@ -151,8 +157,9 @@ export default function ProfileModal({
 
           {/* Photo Section */}
           <div className="flex flex-col items-center py-2">
-            <div 
-              className="relative group cursor-pointer" 
+            <button 
+              type="button"
+              className="relative group cursor-pointer bg-transparent border-0 p-0 rounded-full" 
               onClick={() => document.getElementById("profile-photo-file-input")?.click()}
             >
               <div className="w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-gray-100 flex items-center justify-center relative">
@@ -179,7 +186,7 @@ export default function ProfileModal({
               <div className="absolute -bottom-1 -right-1 bg-[#8B0000] text-white p-2 rounded-full shadow-md hover:scale-105 transition-transform">
                 <Camera size={14} />
               </div>
-            </div>
+            </button>
             <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-wider">
               {photoFile ? photoFile.name : "Klik foto untuk mengganti (Max 2MB)"}
             </p>
@@ -288,7 +295,7 @@ export default function ProfileModal({
               disabled={isSubmitting || (!isSuperAdmin && !photoFile)}
               className="flex-1 h-11 bg-[#8B0000] text-white rounded-xl text-sm font-bold hover:bg-[#660000] transition-all shadow-md shadow-red-900/20 disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {isSubmitting ? "Menyimpan..." : isSuperAdmin ? "Simpan Perubahan & Email" : "Simpan Foto"}
+              {getSubmitButtonLabel()}
             </button>
           </div>
         </form>

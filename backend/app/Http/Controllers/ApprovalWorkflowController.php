@@ -65,7 +65,7 @@ class ApprovalWorkflowController extends Controller
         if (! $workflow) {
             if (! is_numeric($idOrModuleKey) && array_key_exists($idOrModuleKey, ApprovalService::SYSTEM_MODULES)) {
                 $meta = ApprovalService::SYSTEM_MODULES[$idOrModuleKey];
-                $defaultSteps = $this->getDefaultStepsForModule($idOrModuleKey, $companyId);
+                $defaultSteps = $this->getDefaultStepsForModule($idOrModuleKey);
                 return $this->successResponse([
                     'id' => null,
                     'company_id' => $companyId,

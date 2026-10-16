@@ -19,10 +19,10 @@ export interface SearchItem {
 }
 
 interface HeaderSearchModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onOpenProfile?: () => void;
-  onToggleLanguage?: () => void;
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
+  readonly onOpenProfile?: () => void;
+  readonly onToggleLanguage?: () => void;
 }
 
 const STATIC_MENU_ITEMS: SearchItem[] = [
@@ -106,7 +106,7 @@ export default function HeaderSearchModal({
     const q = query.toLowerCase();
     return (
       item.title.toLowerCase().includes(q) ||
-      (item.description && item.description.toLowerCase().includes(q))
+      item.description?.toLowerCase().includes(q)
     );
   }).slice(0, 8);
 
@@ -172,13 +172,15 @@ export default function HeaderSearchModal({
   if (!isOpen) return null;
 
   return (
-    <div 
-      className="fixed inset-0 z-100 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-100 flex items-start justify-center pt-16 sm:pt-24 px-4">
+      <button 
+        type="button" 
+        aria-label="Tutup pencarian"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm cursor-default border-0"
+        onClick={onClose}
+      />
       <div 
-        className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-150"
-        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-150 z-10"
         onKeyDown={handleKeyDown}
       >
         {/* Search Input Bar */}

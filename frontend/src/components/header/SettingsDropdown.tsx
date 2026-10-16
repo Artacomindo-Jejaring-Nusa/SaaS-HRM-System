@@ -4,17 +4,17 @@ import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Settings, User, Shield, Laptop, HelpCircle, LogOut, 
-  ChevronRight, Mail, Sparkles 
+  ChevronRight, Mail 
 } from "lucide-react";
 
 interface SettingsDropdownProps {
-  user: any;
-  isSuperAdmin: boolean;
-  onOpenProfile: () => void;
-  onOpenSecurity: () => void;
-  onOpenAppSettings: () => void;
-  onLogout: () => void;
-  isLoggingOut: boolean;
+  readonly user: any;
+  readonly isSuperAdmin: boolean;
+  readonly onOpenProfile: () => void;
+  readonly onOpenSecurity: () => void;
+  readonly onOpenAppSettings: () => void;
+  readonly onLogout: () => void;
+  readonly isLoggingOut: boolean;
 }
 
 export default function SettingsDropdown({

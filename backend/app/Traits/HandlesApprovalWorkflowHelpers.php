@@ -166,7 +166,7 @@ trait HandlesApprovalWorkflowHelpers
         ];
     }
 
-    private function getDefaultStepsForModule(string $moduleKey, int $companyId): array
+    private function getDefaultStepsForModule(string $moduleKey): array
     {
         $hrRole = \App\Models\Role::where('name', 'like', '%HR%')->orWhere('name', 'like', '%Admin%')->first();
         $financeRole = \App\Models\Role::where('name', 'like', '%Finance%')->orWhere('name', 'like', '%Keuangan%')->first() ?? $hrRole;
