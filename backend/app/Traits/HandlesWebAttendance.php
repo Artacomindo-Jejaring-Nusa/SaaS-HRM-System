@@ -321,10 +321,15 @@ trait HandlesWebAttendance
             return $this->errorResponse('Hanya Super Admin yang berhak mengakses antrean persetujuan absen web.', 403);
         }
 
-        $query = Attendance::with(['user:id,name,email,role_id,office_id,nik,profile_photo_path,auto_validate_web_attendance', 'user.role', 'user.office'])
-            ->where('company_id', $user->company_id)
+        $query = Attendance::with(['user:id,name,email,role_id,office_id,nik,profile_photo_path,auto_validate_web_attendance,attendance_type', 'user.role', 'user.office'])
             ->where('channel', 'web')
             ->where('web_approval_status', 'pending');
+
+        if ($request->company_id && $request->company_id !== 'all') {
+            $query->where('company_id', $request->company_id);
+        } elseif ($user->company_id && !$user->canAccessAllCompanies()) {
+            $query->where('company_id', $user->company_id);
+        }
 
         if ($request->search) {
             $search = $request->search;
@@ -355,7 +360,13 @@ trait HandlesWebAttendance
             return $this->errorResponse('Hanya Super Admin yang berhak menyetujui absensi web.', 403);
         }
 
-        $attendance = Attendance::with('user')->where('company_id', $admin->company_id)->findOrFail($id);
+        $query = Attendance::with('user');
+        if ($request->company_id && $request->company_id !== 'all') {
+            $query->where('company_id', $request->company_id);
+        } elseif ($admin->company_id && !$admin->canAccessAllCompanies()) {
+            $query->where('company_id', $admin->company_id);
+        }
+        $attendance = $query->findOrFail($id);
 
         if ($attendance->web_approval_status === 'valid') {
             return $this->errorResponse('Absensi ini sudah disetujui sebelumnya.', 400);
@@ -397,7 +408,13 @@ trait HandlesWebAttendance
             return $this->errorResponse('Hanya Super Admin yang berhak menolak absensi web.', 403);
         }
 
-        $attendance = Attendance::with('user')->where('company_id', $admin->company_id)->findOrFail($id);
+        $query = Attendance::with('user');
+        if ($request->company_id && $request->company_id !== 'all') {
+            $query->where('company_id', $request->company_id);
+        } elseif ($admin->company_id && !$admin->canAccessAllCompanies()) {
+            $query->where('company_id', $admin->company_id);
+        }
+        $attendance = $query->findOrFail($id);
 
         $request->validate([
             'reason' => 'nullable|string|max:500',
@@ -438,17 +455,22 @@ trait HandlesWebAttendance
             ], 'Ringkasan persetujuan kehadiran berhasil diambil.');
         }
 
-        $companyId = $user->company_id;
+        $webQuery = Attendance::where('channel', 'web')
+            ->where('web_approval_status', 'pending');
 
-        $webPendingCount = Attendance::where('company_id', $companyId)
-            ->where('channel', 'web')
-            ->where('web_approval_status', 'pending')
-            ->count();
+        $dinasQuery = Attendance::where('attendance_type', 'dinas_luar')
+            ->whereIn('dinas_luar_status', ['pending', 'waiting_approval', 'approved_spv']);
 
-        $dinasLuarPendingCount = Attendance::where('company_id', $companyId)
-            ->where('attendance_type', 'dinas_luar')
-            ->whereIn('dinas_luar_status', ['pending', 'approved_spv'])
-            ->count();
+        if ($request->company_id && $request->company_id !== 'all') {
+            $webQuery->where('company_id', $request->company_id);
+            $dinasQuery->where('company_id', $request->company_id);
+        } elseif ($user->company_id && !$user->canAccessAllCompanies()) {
+            $webQuery->where('company_id', $user->company_id);
+            $dinasQuery->where('company_id', $user->company_id);
+        }
+
+        $webPendingCount = $webQuery->count();
+        $dinasLuarPendingCount = $dinasQuery->count();
 
         return $this->successResponse([
             'web_pending_count' => $webPendingCount,

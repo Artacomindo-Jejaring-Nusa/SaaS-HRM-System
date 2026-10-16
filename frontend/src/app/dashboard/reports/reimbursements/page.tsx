@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
 import { 
@@ -10,6 +10,7 @@ import {
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import ReportPeriodFilter, { PeriodState, computePeriodState } from "@/components/ReportPeriodFilter";
 
 export default function ReimbursementReportsPage() {
   const [data, setData] = useState<any[]>([]);
@@ -19,6 +20,14 @@ export default function ReimbursementReportsPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+  // Period state
+  const [currentPeriod, setCurrentPeriod] = useState<PeriodState>(() => {
+    const now = new Date();
+    return computePeriodState(String(now.getMonth() + 1).padStart(2, "0"), now.getFullYear());
+  });
+  const [isPurging, setIsPurging] = useState(false);
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
 
   const getStorageUrl = (path: string) => {
     const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:8000";
@@ -41,6 +50,51 @@ export default function ReimbursementReportsPage() {
     }
   };
 
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+    toast(`Hapus ${selectedIds.length} data reimbursement terpilih?`, {
+      action: {
+        label: "Hapus",
+        onClick: async () => {
+          try {
+            setIsDeletingSelected(true);
+            await axiosInstance.post("/manager/purge-current-month", {
+              module: "reimbursements",
+              ids: selectedIds
+            });
+            toast.success(`${selectedIds.length} data reimbursement berhasil dihapus.`);
+            setSelectedIds([]);
+            await fetchData();
+          } catch (e: any) {
+            toast.error(e?.response?.data?.message || "Gagal menghapus data reimbursement.");
+          } finally {
+            setIsDeletingSelected(false);
+          }
+        }
+      }
+    });
+  };
+
+  const handlePurgePeriod = async (period: PeriodState) => {
+    try {
+      setIsPurging(true);
+      const res = await axiosInstance.post("/manager/purge-current-month", {
+        module: "reimbursements",
+        period: period.periodKey,
+        start_date: period.startDate,
+        end_date: period.endDate,
+      });
+      toast.success(res.data?.message || "Data reimbursement pada periode berhasil dibersihkan.");
+      setSelectedIds([]);
+      await fetchData();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Gagal membersihkan data reimbursement periode ini.");
+      throw e;
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending': return <span className="dash-badge dash-badge-warning italic">Menunggu</span>;
@@ -50,12 +104,26 @@ export default function ReimbursementReportsPage() {
     }
   };
 
-  const filteredData = data.filter(item => {
-    const matchSearch = item.title?.toLowerCase().includes(search.toLowerCase()) || 
-                      item.user?.name?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'all' || item.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  const filteredData = useMemo(() => {
+    return data.filter(item => {
+      const matchSearch = item.title?.toLowerCase().includes(search.toLowerCase()) || 
+                        item.user?.name?.toLowerCase().includes(search.toLowerCase());
+      const matchStatus = statusFilter === 'all' || item.status === statusFilter;
+
+      // Period filter
+      let matchPeriod = true;
+      if (!currentPeriod.isAllTime) {
+        const itemDate = item.date || item.created_at;
+        if (itemDate) {
+          const d = itemDate.substring(0, 10);
+          if (currentPeriod.startDate && d < currentPeriod.startDate) matchPeriod = false;
+          if (currentPeriod.endDate && d > currentPeriod.endDate) matchPeriod = false;
+        }
+      }
+
+      return matchSearch && matchStatus && matchPeriod;
+    });
+  }, [data, search, statusFilter, currentPeriod]);
 
   const selectedData = filteredData.filter(item => selectedIds.includes(item.id));
 
@@ -100,9 +168,10 @@ export default function ReimbursementReportsPage() {
       { wch: 40 }, { wch: 15 }, { wch: 15 }, { wch: 30 }
     ];
 
+    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Reimbursement");
-    XLSX.writeFile(workbook, `Laporan_Reimbursement_${new Date().getTime()}.xlsx`);
+    XLSX.writeFile(workbook, `Laporan_Reimbursement_${periodSlug}.xlsx`);
   };
 
   const generatePDF = async () => {
@@ -139,7 +208,7 @@ export default function ReimbursementReportsPage() {
     doc.setFontSize(10);
     doc.setTextColor(100);
     doc.setFont("helvetica", "normal");
-    doc.text("LAPORAN REKAPITULASI REIMBURSEMENT KARYAWAN", 45, 26);
+    doc.text(`LAPORAN REKAPITULASI REIMBURSEMENT - ${currentPeriod.periodLabel.toUpperCase()}`, 45, 26);
     doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 45, 31);
 
     // Decorative Line
@@ -154,9 +223,9 @@ export default function ReimbursementReportsPage() {
     doc.setTextColor(0);
     doc.setFont("helvetica", "bold");
     const total = dataToPrint.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
-    doc.text(`TOTAL REKAPITULASI: Rp ${total.toLocaleString('id-ID')}`, 20, 51.5);
+    doc.text(`TOTAL: Rp ${total.toLocaleString('id-ID')}`, 20, 51.5);
     doc.setFontSize(9);
-    doc.text(`Jumlah Baris: ${dataToPrint.length}`, 160, 51.5);
+    doc.text(`Periode: ${currentPeriod.periodLabel} | Baris: ${dataToPrint.length}`, 130, 51.5);
 
     // Table
     const tableData = dataToPrint.map((item, index) => [
@@ -196,7 +265,8 @@ export default function ReimbursementReportsPage() {
         doc.text(`Halaman ${i} dari ${pageCount} | On Time HRMS System`, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, { align: "center" });
     }
 
-    doc.save(`Laporan_Reimbursement_${new Date().getTime()}.pdf`);
+    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+    doc.save(`Laporan_Reimbursement_${periodSlug}.pdf`);
   };
 
   return (
@@ -215,16 +285,22 @@ export default function ReimbursementReportsPage() {
                 Rp {(selectedIds.length > 0 ? selectedData.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0) : totalAmount).toLocaleString()}
               </span>
            </div>
-          <button className="dash-btn dash-btn-primary bg-[#107c41] hover:bg-[#0c6130] text-white!" onClick={exportToExcel}>
-            <FileSpreadsheet size={15} />
-            Export Excel
-          </button>
-          <button className="dash-btn" onClick={generatePDF}>
-            <Download size={15} />
-            Cetak PDF
-          </button>
         </div>
       </div>
+
+      {/* Period Filter with Export & Purge */}
+      <ReportPeriodFilter
+        reportTitle="Laporan Reimbursement Karyawan"
+        onPeriodChange={setCurrentPeriod}
+        onExportExcel={exportToExcel}
+        onExportPdf={generatePDF}
+        selectedCount={selectedIds.length}
+        onDeleteSelected={handleDeleteSelected}
+        isDeletingSelected={isDeletingSelected}
+        canPurge={true}
+        onPurgePeriod={handlePurgePeriod}
+        isPurging={isPurging}
+      />
 
       <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row gap-4">
         <div className="relative flex-1">

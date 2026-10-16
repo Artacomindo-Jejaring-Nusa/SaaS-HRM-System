@@ -76,7 +76,12 @@ class ManagerController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $attendanceService->getTeamAttendance($user, $isCompanyAdmin, $request->query('date')),
+            'data' => $attendanceService->getTeamAttendance(
+                $user,
+                $isCompanyAdmin,
+                $request->query('date'),
+                $request->query('company_id')
+            ),
         ]);
     }
 

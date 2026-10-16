@@ -397,9 +397,10 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
             Route::post('/salaries/{salaryId}/adhoc-item', [PayrollComponentController::class, 'addAdhocItem']);
             Route::delete('/salaries/{salaryId}/adhoc-item/{detailId}', [PayrollComponentController::class, 'removeAdhocItem']);
 
-            // Settings
+            // Settings & Bulk Data
             Route::get('/settings', [PayrollController::class, 'getSettings']);
             Route::post('/settings', [PayrollController::class, 'updateSettings']);
+            Route::get('/template', [PayrollController::class, 'exportPayrollTemplate']);
             Route::post('/import-data', [PayrollController::class, 'importPayrollData']);
 
             // Generate

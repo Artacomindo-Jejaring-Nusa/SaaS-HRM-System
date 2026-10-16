@@ -7,10 +7,10 @@ use Carbon\Carbon;
 
 class ManagerAttendanceService
 {
-    public function getTeamAttendance(User $user, bool $isCompanyAdmin, ?string $targetDate = null): array
+    public function getTeamAttendance(User $user, bool $isCompanyAdmin, ?string $targetDate = null, ?string $companyId = null): array
     {
         $date = $targetDate ? Carbon::parse($targetDate)->toDateString() : Carbon::today()->toDateString();
-        $isGlobalAdmin = $user->isSuperAdmin();
+        $isGlobalAdmin = $user->isSuperAdmin() || $user->canAccessAllCompanies();
         $directSubordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
 
         $query = User::with(['role', 'attendances' => function ($q) use ($date) {
@@ -19,11 +19,17 @@ class ManagerAttendanceService
 
         if ($isGlobalAdmin) {
             $query->where('id', '!=', $user->id);
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($companyId && $companyId !== 'all') {
+                $query->where('company_id', $companyId);
+            } elseif ($user->company_id && !$user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
         } elseif ($isCompanyAdmin) {
-            $query->where('company_id', $user->company_id)->where('id', '!=', $user->id);
+            $comp = ($companyId && $companyId !== 'all') ? $companyId : $user->company_id;
+            if ($comp) {
+                $query->where('company_id', $comp);
+            }
+            $query->where('id', '!=', $user->id);
         } elseif ($directSubordinateIds->isNotEmpty()) {
             $query->whereIn('id', $directSubordinateIds);
         } else {
@@ -57,6 +63,13 @@ class ManagerAttendanceService
             $checkOutFormatted = Carbon::parse($attendance->check_out)->format('H:i');
         }
 
+        $rawPattern = $sub->attendance_type ?: 'office_hour';
+        $normalizedPattern = match ($rawPattern) {
+            'shift', 'shift_hour' => 'shift',
+            'flexible', 'flexi' => 'flexible',
+            default => 'office_hour',
+        };
+
         return [
             'id' => $sub->id,
             'name' => $sub->name,
@@ -70,6 +83,8 @@ class ManagerAttendanceService
             'dinas_luar_destination' => $attendance?->dinas_luar_destination,
             'dinas_luar_status' => $attendance?->dinas_luar_status,
             'location_label' => $locationLabel,
+            'work_pattern' => $normalizedPattern,
+            'user_attendance_type' => $sub->attendance_type,
         ];
     }
 }

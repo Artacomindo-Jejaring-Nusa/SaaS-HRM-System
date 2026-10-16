@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
 import { 
@@ -10,6 +10,7 @@ import {
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import ReportPeriodFilter, { PeriodState, computePeriodState } from "@/components/ReportPeriodFilter";
 
 export default function LeaveReportsPage() {
   const [data, setData] = useState<any[]>([]);
@@ -19,6 +20,14 @@ export default function LeaveReportsPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+  // Period state
+  const [currentPeriod, setCurrentPeriod] = useState<PeriodState>(() => {
+    const now = new Date();
+    return computePeriodState(String(now.getMonth() + 1).padStart(2, "0"), now.getFullYear());
+  });
+  const [isPurging, setIsPurging] = useState(false);
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -36,6 +45,51 @@ export default function LeaveReportsPage() {
     }
   };
 
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+    toast(`Hapus ${selectedIds.length} data cuti terpilih?`, {
+      action: {
+        label: "Hapus",
+        onClick: async () => {
+          try {
+            setIsDeletingSelected(true);
+            await axiosInstance.post("/manager/purge-current-month", {
+              module: "leaves",
+              ids: selectedIds
+            });
+            toast.success(`${selectedIds.length} data cuti berhasil dihapus.`);
+            setSelectedIds([]);
+            await fetchData();
+          } catch (e: any) {
+            toast.error(e?.response?.data?.message || "Gagal menghapus data cuti.");
+          } finally {
+            setIsDeletingSelected(false);
+          }
+        }
+      }
+    });
+  };
+
+  const handlePurgePeriod = async (period: PeriodState) => {
+    try {
+      setIsPurging(true);
+      const res = await axiosInstance.post("/manager/purge-current-month", {
+        module: "leaves",
+        period: period.periodKey,
+        start_date: period.startDate,
+        end_date: period.endDate,
+      });
+      toast.success(res.data?.message || "Data cuti pada periode berhasil dibersihkan.");
+      setSelectedIds([]);
+      await fetchData();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Gagal membersihkan data cuti periode ini.");
+      throw e;
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending': return <span className="dash-badge dash-badge-warning italic">Menunggu</span>;
@@ -45,12 +99,26 @@ export default function LeaveReportsPage() {
     }
   };
 
-  const filteredData = data.filter(item => {
-    const matchSearch = item.reason?.toLowerCase().includes(search.toLowerCase()) || 
-                      item.user?.name?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'all' || item.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  const filteredData = useMemo(() => {
+    return data.filter(item => {
+      const matchSearch = item.reason?.toLowerCase().includes(search.toLowerCase()) || 
+                        item.user?.name?.toLowerCase().includes(search.toLowerCase());
+      const matchStatus = statusFilter === 'all' || item.status === statusFilter;
+      
+      // Period filter
+      let matchPeriod = true;
+      if (!currentPeriod.isAllTime) {
+        const itemDate = item.start_date || item.created_at;
+        if (itemDate) {
+          const d = itemDate.substring(0, 10);
+          if (currentPeriod.startDate && d < currentPeriod.startDate) matchPeriod = false;
+          if (currentPeriod.endDate && d > currentPeriod.endDate) matchPeriod = false;
+        }
+      }
+
+      return matchSearch && matchStatus && matchPeriod;
+    });
+  }, [data, search, statusFilter, currentPeriod]);
 
   const selectedData = filteredData.filter(item => selectedIds.includes(item.id));
 
@@ -94,7 +162,8 @@ export default function LeaveReportsPage() {
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Cuti");
-    XLSX.writeFile(workbook, `Laporan_Cuti_${new Date().getTime()}.xlsx`);
+    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+    XLSX.writeFile(workbook, `Laporan_Cuti_${periodSlug}.xlsx`);
   };
 
   const generatePDF = async () => {
@@ -130,7 +199,7 @@ export default function LeaveReportsPage() {
     doc.setFontSize(10);
     doc.setTextColor(100);
     doc.setFont("helvetica", "normal");
-    doc.text("LAPORAN REKAPITULASI CUTI KARYAWAN", 45, 26);
+    doc.text(`LAPORAN REKAPITULASI CUTI - ${currentPeriod.periodLabel.toUpperCase()}`, 45, 26);
     doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 45, 31);
 
     doc.setDrawColor(139, 0, 0);
@@ -140,8 +209,8 @@ export default function LeaveReportsPage() {
     // Filter Info
     doc.setFontSize(9);
     doc.setTextColor(50);
-    doc.text(`Status Filter: ${statusFilter.toUpperCase()}`, 15, 45);
-    doc.text(`Total Baris: ${dataToPrint.length}`, 170, 45);
+    doc.text(`Periode: ${currentPeriod.periodLabel} | Filter: ${statusFilter.toUpperCase()}`, 15, 45);
+    doc.text(`Total Baris: ${dataToPrint.length}`, 160, 45);
 
     // Table
     const tableData = dataToPrint.map((item, index) => [
@@ -180,7 +249,8 @@ export default function LeaveReportsPage() {
         doc.text(`Halaman ${i} dari ${pageCount} | On Time HRMS System`, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, { align: "center" });
     }
 
-    doc.save(`Laporan_Cuti_${new Date().getTime()}.pdf`);
+    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+    doc.save(`Laporan_Cuti_${periodSlug}.pdf`);
   };
 
   return (
@@ -199,16 +269,22 @@ export default function LeaveReportsPage() {
                 {selectedIds.length > 0 ? selectedIds.length : filteredData.length} Baris
               </span>
            </div>
-          <button className="dash-btn dash-btn-primary bg-[#107c41] hover:bg-[#0c6130] text-white!" onClick={exportToExcel}>
-            <FileSpreadsheet size={15} />
-            Export Excel
-          </button>
-          <button className="dash-btn" onClick={generatePDF}>
-            <Download size={15} />
-            Cetak PDF
-          </button>
         </div>
       </div>
+
+      {/* Period Filter with Export & Purge */}
+      <ReportPeriodFilter
+        reportTitle="Laporan Cuti Karyawan"
+        onPeriodChange={setCurrentPeriod}
+        onExportExcel={exportToExcel}
+        onExportPdf={generatePDF}
+        selectedCount={selectedIds.length}
+        onDeleteSelected={handleDeleteSelected}
+        isDeletingSelected={isDeletingSelected}
+        canPurge={true}
+        onPurgePeriod={handlePurgePeriod}
+        isPurging={isPurging}
+      />
 
       <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row gap-4">
         <div className="relative flex-1">

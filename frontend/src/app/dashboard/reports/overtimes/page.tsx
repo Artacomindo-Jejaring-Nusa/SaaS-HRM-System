@@ -5,12 +5,13 @@ import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
 import { 
   Download, Search, Calendar, User, Clock, Filter, 
-  XCircle, FileSpreadsheet, AlertCircle
+  XCircle, FileSpreadsheet, AlertCircle, Trash2
 } from "lucide-react";
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ReportSkeleton } from "@/components/Skeleton";
+import ReportPeriodFilter, { PeriodState, computePeriodState } from "@/components/ReportPeriodFilter";
 
 interface Employee {
   id: number;
@@ -44,15 +45,78 @@ export default function OvertimeReportsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   
+  // Period filter state
+  const [currentPeriod, setCurrentPeriod] = useState<PeriodState>(() => {
+    const now = new Date();
+    return computePeriodState(String(now.getMonth() + 1).padStart(2, "0"), now.getFullYear());
+  });
+  const [isPurging, setIsPurging] = useState(false);
+  const [isDeletingItem, setIsDeletingItem] = useState(false);
+
   // Date Filters
-  const [startDate, setStartDate] = useState(
-    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
-  );
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}-01`;
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth() + 1;
+    const lastDay = new Date(y, m, 0).getDate();
+    return `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  });
   const [selectedUser, setSelectedUser] = useState("");
 
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Overtime | null>(null);
+
+  const handlePeriodChange = (period: PeriodState) => {
+    setCurrentPeriod(period);
+    if (!period.isAllTime) {
+      if (period.startDate) setStartDate(period.startDate);
+      if (period.endDate) setEndDate(period.endDate);
+    }
+  };
+
+  const handlePurgePeriod = async (period: PeriodState) => {
+    try {
+      setIsPurging(true);
+      const res = await axiosInstance.post("/manager/purge-current-month", {
+        module: "overtimes",
+        period: period.periodKey,
+        start_date: period.startDate,
+        end_date: period.endDate,
+      });
+      toast.success(res.data?.message || "Data lembur pada periode berhasil dibersihkan.");
+      await fetchData();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Gagal membersihkan data lembur periode ini.");
+      throw e;
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
+  const handleDeleteSingleItem = async (id: number) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus catatan lembur ini?")) return;
+    try {
+      setIsDeletingItem(true);
+      const res = await axiosInstance.post("/manager/purge-current-month", {
+        module: "overtimes",
+        ids: [id],
+      });
+      toast.success(res.data?.message || "Catatan lembur berhasil dihapus.");
+      setIsDetailModalOpen(false);
+      setSelectedItem(null);
+      await fetchData();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Gagal menghapus data lembur.");
+    } finally {
+      setIsDeletingItem(false);
+    }
+  };
 
   const fetchInitialData = useCallback(async () => {
     try {
@@ -174,9 +238,10 @@ export default function OvertimeReportsPage() {
       { wch: 15 }, { wch: 15 }, { wch: 40 }, { wch: 15 }, { wch: 30 }
     ];
 
+    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Lembur");
-    XLSX.writeFile(workbook, `Laporan_Lembur_${new Date().getTime()}.xlsx`);
+    XLSX.writeFile(workbook, `Laporan_Lembur_${periodSlug}.xlsx`);
   };
 
   const generatePDF = async () => {
@@ -210,7 +275,7 @@ export default function OvertimeReportsPage() {
     doc.setFontSize(10);
     doc.setTextColor(100);
     doc.setFont("helvetica", "normal");
-    doc.text("LAPORAN REKAPITULASI LEMBUR KARYAWAN", 45, 26);
+    doc.text(`LAPORAN REKAPITULASI LEMBUR - ${currentPeriod.periodLabel.toUpperCase()}`, 45, 26);
     doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 45, 31);
 
     doc.setDrawColor(139, 0, 0);
@@ -219,7 +284,7 @@ export default function OvertimeReportsPage() {
 
     doc.setFontSize(9);
     doc.setTextColor(50);
-    doc.text(`Periode: ${startDate} s.d. ${endDate}`, 15, 45);
+    doc.text(`Periode: ${currentPeriod.periodLabel}`, 15, 45);
     doc.text(`Total Baris: ${data.length}`, 170, 45);
 
     // Table
@@ -262,7 +327,8 @@ export default function OvertimeReportsPage() {
         doc.text(`Halaman ${i} dari ${pageCount} | On Time HRMS System`, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, { align: "center" });
     }
 
-    doc.save(`Laporan_Lembur_${new Date().getTime()}.pdf`);
+    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+    doc.save(`Laporan_Lembur_${periodSlug}.pdf`);
   };
 
   const renderPivotContent = () => {
@@ -427,16 +493,23 @@ export default function OvertimeReportsPage() {
            </div>
         </div>
         <div className="dash-page-actions">
-          <button className="dash-btn shadow-lg shadow-rose-100 bg-[#107c41] hover:bg-[#0c6130] text-white flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all" onClick={exportToExcel}>
-            <FileSpreadsheet size={15} />
-            Export Excel
-          </button>
-          <button className="dash-btn" onClick={generatePDF}>
-            <Download size={15} />
-            Cetak PDF
-          </button>
+           <div className="bg-gray-100 px-4 py-2 rounded-xl flex items-center gap-2">
+              <span className="text-[10px] font-black text-gray-400 uppercase">Total Data:</span>
+              <span className="text-sm font-bold text-[#8B0000]">{data.length} Baris</span>
+           </div>
         </div>
       </div>
+
+      {/* Period Filter with Export & Purge */}
+      <ReportPeriodFilter
+        reportTitle="Laporan Lembur Karyawan"
+        onPeriodChange={handlePeriodChange}
+        onExportExcel={exportToExcel}
+        onExportPdf={generatePDF}
+        canPurge={true}
+        onPurgePeriod={handlePurgePeriod}
+        isPurging={isPurging}
+      />
 
       {/* Filters Toolbar */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6 bg-white p-4 rounded-xl border border-[#ebedf0] shadow-sm">
@@ -562,8 +635,17 @@ export default function OvertimeReportsPage() {
 
             <div className="p-6 bg-gray-50/50 border-t border-gray-100 flex gap-3">
                <button 
+                  type="button"
+                  disabled={isDeletingItem}
+                  onClick={() => handleDeleteSingleItem(selectedItem.id)}
+                  className="px-4 py-3.5 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-50"
+               >
+                  <Trash2 size={16} />
+                  {isDeletingItem ? "Menghapus..." : "Hapus Lembur"}
+               </button>
+               <button 
                   onClick={() => setIsDetailModalOpen(false)}
-                  className="w-full py-3.5 text-sm font-bold text-white bg-gray-900 rounded-xl hover:bg-black transition shadow-lg active:scale-95"
+                  className="flex-1 py-3.5 text-sm font-bold text-white bg-gray-900 rounded-xl hover:bg-black transition shadow-lg active:scale-95"
                 >
                   Tutup Laporan
                </button>

@@ -30,7 +30,15 @@ import {
   Filter,
   ShieldAlert,
   DollarSign,
-  CalendarDays
+  CalendarDays,
+  Laptop,
+  Globe,
+  Repeat,
+  Sparkles,
+  MapPinned,
+  UserCheck,
+  UserX,
+  Smartphone
 } from "lucide-react";
 import { ListPageSkeleton } from "@/components/Skeleton";
 import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
@@ -50,7 +58,8 @@ type ApprovalType =
   | "vehicle_log"
   | "payroll"
   | "early_out"
-  | "attendance_correction";
+  | "attendance_correction"
+  | "web_attendance";
 
 type FilterType = "all" | ApprovalType;
 type ActionType = "approve" | "reject";
@@ -113,6 +122,13 @@ interface ApprovalItem {
   distance?: number;
   purpose?: string;
   destination?: string;
+  // Web Attendance-specific
+  web_approval_status?: string;
+  ip_address?: string;
+  is_suspicious?: boolean;
+  latitude_in?: string;
+  longitude_in?: string;
+  image_in?: string;
   // Dynamic approval workflow
   current_approval_step?: number | null;
   current_step_info?: Record<string, any>;
@@ -131,6 +147,8 @@ interface TeamMemberAttendance {
   dinas_luar_destination?: string | null;
   dinas_luar_status?: string | null;
   location_label?: string | null;
+  work_pattern?: "office_hour" | "shift" | "flexible";
+  user_attendance_type?: string;
 }
 
 const typeLabel: Record<ApprovalType, string> = {
@@ -144,6 +162,7 @@ const typeLabel: Record<ApprovalType, string> = {
   payroll: "Payroll",
   early_out: "Pulang Awal",
   attendance_correction: "Koreksi Absen",
+  web_attendance: "Absen Web",
 };
 
 const typeColor: Record<ApprovalType, string> = {
@@ -157,6 +176,7 @@ const typeColor: Record<ApprovalType, string> = {
   payroll: "bg-emerald-50 text-emerald-700 border-emerald-200",
   early_out: "bg-orange-50 text-orange-700 border-orange-200",
   attendance_correction: "bg-cyan-50 text-cyan-700 border-cyan-200",
+  web_attendance: "bg-indigo-50 text-indigo-700 border-indigo-200",
 };
 
 const extractStoragePath = (url?: string): string | undefined => {
@@ -378,6 +398,33 @@ const normalizeCorrections = (rawCorrections: any[]): ApprovalItem[] =>
     target_supervisor_id: c.user?.supervisor_id
   }));
 
+const normalizeWebAttendances = (rawItems: any[]): ApprovalItem[] =>
+  rawItems.map((w: any) => {
+    const checkInDate = w.check_in ? new Date(w.check_in) : new Date();
+    const timeFormatted = checkInDate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+    const dateFormatted = checkInDate.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+    
+    return {
+      id: w.id,
+      type: "web_attendance",
+      user_name: w.user?.name || "Karyawan",
+      user_email: w.user?.email,
+      user_role: w.user?.role?.name || w.user?.role || "Karyawan",
+      category: "Presensi Web (Browser)",
+      description: `Absen Masuk Browser via Web pada ${dateFormatted} pukul ${timeFormatted} WIB (IP: ${w.ip_address || "127.0.0.1"})` + (w.is_suspicious ? " — Anomali Terdeteksi" : ""),
+      status: w.web_approval_status || w.status || "pending",
+      created_at: w.check_in || w.created_at,
+      web_approval_status: w.web_approval_status,
+      ip_address: w.ip_address,
+      is_suspicious: w.is_suspicious,
+      latitude_in: w.latitude_in,
+      longitude_in: w.longitude_in,
+      image_in: w.image_in,
+      attachment: extractStoragePath(w.image_in),
+      target_supervisor_id: null,
+    };
+  });
+
 const dispatchApprovalRequest = async (
   item: ApprovalItem,
   action: ActionType,
@@ -386,12 +433,31 @@ const dispatchApprovalRequest = async (
   permitOverrideDoctorNote: boolean,
   isHR: boolean
 ) => {
-  if (item.type === "dinas_luar") {
-    let actionSuffix = "reject";
+  if (item.type === "web_attendance") {
     if (action === "approve") {
-      actionSuffix = (isHR && item.status === "waiting_approval") ? "approve-hr" : "approve-spv";
+      return await axiosInstance.post(`/attendance/web-approve/${item.id}`);
+    } else {
+      return await axiosInstance.post(`/attendance/web-reject/${item.id}`, {
+        reason: remarkInput || "Ditolak oleh Admin/Super Admin"
+      });
     }
-    return axiosInstance.post(`/attendance/dinas-luar/${item.id}/${actionSuffix}`, { reason: remarkInput });
+  }
+
+  if (item.type === "dinas_luar") {
+    try {
+      return await axiosInstance.post("/manager/update-status", {
+        type: "dinas_luar",
+        id: item.id,
+        status: action === "approve" ? "approved" : "rejected",
+        remark: remarkInput
+      });
+    } catch {
+      let actionSuffix = "reject";
+      if (action === "approve") {
+        actionSuffix = (isHR && item.status === "waiting_approval") ? "approve-hr" : "approve-spv";
+      }
+      return axiosInstance.post(`/attendance/dinas-luar/${item.id}/${actionSuffix}`, { reason: remarkInput });
+    }
   }
   const payload: Record<string, any> = { 
     remark: remarkInput,
@@ -484,10 +550,12 @@ const isItemWithinPeriod = (
 ): boolean => {
   if (period === "all") return true;
 
-  const itemDateStr = item.start_date || item.created_at;
-  if (!itemDateStr) return true;
+  const rawDateStr = item.created_at || item.start_date;
+  if (!rawDateStr) return true;
 
-  const d = new Date(itemDateStr);
+  // Clean date string if it contains schedule/hours in parentheses e.g. "2026-10-15 (08:00 - 17:00)"
+  const cleanDateStr = rawDateStr.includes("(") ? rawDateStr.split("(")[0].trim() : rawDateStr;
+  const d = new Date(cleanDateStr);
   if (Number.isNaN(d.getTime())) return true;
 
   const now = new Date();
@@ -566,6 +634,8 @@ export default function ApprovalsPage() {
         return hasPermission("approve-attendances") || hasPermission("view-attendances") || isSuperAdmin;
       case "attendance_correction":
         return hasPermission("approve-attendances") || hasPermission("edit-attendances") || isSuperAdmin;
+      case "web_attendance":
+        return isSuperAdmin || hasPermission("view-attendances");
       default:
         return false;
     }
@@ -583,17 +653,22 @@ export default function ApprovalsPage() {
     canApprove("payroll") ||
     canApprove("dinas_luar") ||
     canApprove("early_out") ||
-    canApprove("attendance_correction");
+    canApprove("attendance_correction") ||
+    canApprove("web_attendance");
 
   // Date Period state (Presets & Custom Range)
   type PeriodType = "this_month" | "this_year" | "all" | "custom";
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("this_month");
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
   const [customStartDate, setCustomStartDate] = useState<string>("");
   const [customEndDate, setCustomEndDate] = useState<string>("");
   const [teamDate, setTeamDate] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
+
+  // Company filtering state for Super Admin
+  const [companies, setCompanies] = useState<Array<{ id: number; name: string }>>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
 
   // Approval state
   const [items, setItems] = useState<ApprovalItem[]>([]);
@@ -607,6 +682,8 @@ export default function ApprovalsPage() {
     payroll?: number;
     early_out?: number;
     attendance_correction?: number;
+    dinas_luar?: number;
+    web_attendance?: number;
     total: number;
   }>({
     leave: 0,
@@ -618,6 +695,8 @@ export default function ApprovalsPage() {
     payroll: 0,
     early_out: 0,
     attendance_correction: 0,
+    dinas_luar: 0,
+    web_attendance: 0,
     total: 0,
   });
 
@@ -628,15 +707,28 @@ export default function ApprovalsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Team attendance state
+  // Team attendance state & Pattern filter
   const [teamMembers, setTeamMembers] = useState<TeamMemberAttendance[]>([]);
   const [loadingTeam, setLoadingTeam] = useState(false);
   const [teamSearchQuery, setTeamSearchQuery] = useState("");
+  const [patternFilter, setPatternFilter] = useState<"all" | "office_hour" | "shift" | "flexible">("all");
+
+  // Tab 3 Attendance History State
+  const [historyTab, setHistoryTab] = useState<"requests" | "attendance">("requests");
+  const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
+  const [loadingAttHistory, setLoadingAttHistory] = useState(false);
+  const [attHistoryPage, setAttHistoryPage] = useState(1);
+  const [attHistoryLastPage, setAttHistoryLastPage] = useState(1);
+  const [attHistoryTotal, setAttHistoryTotal] = useState(0);
+  const [attHistoryFilterStatus, setAttHistoryFilterStatus] = useState("all");
+  const [attHistoryFilterChannel, setAttHistoryFilterChannel] = useState("all");
+  const [attHistorySearch, setAttHistorySearch] = useState("");
 
   // Modals state
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ApprovalItem | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
   const [actionModal, setActionModal] = useState<{
     isOpen: boolean;
@@ -650,50 +742,17 @@ export default function ApprovalsPage() {
   const [permitOverrideCategory, setPermitOverrideCategory] = useState<string>("I");
   const [permitOverrideDoctorNote, setPermitOverrideDoctorNote] = useState(false);
 
-  // 1. Fetch Manager Pending Counts
-  const fetchCounts = useCallback(async () => {
-    try {
-      const params = new URLSearchParams();
-      params.append("period", selectedPeriod);
-      if (selectedPeriod === "custom") {
-        if (customStartDate) params.append("start_date", customStartDate);
-        if (customEndDate) params.append("end_date", customEndDate);
-      }
-      const res = await axiosInstance.get(`/manager/pending-count?${params.toString()}`);
-      if (res.data?.data) {
-        setPendingCounts(res.data.data);
-      }
-    } catch (e) {
-      console.warn("Could not fetch manager pending count:", e);
-    }
-  }, [selectedPeriod, customStartDate, customEndDate]);
-
-  // 2. Fetch Team Attendance
-  const fetchTeamAttendance = useCallback(async (targetDate?: string) => {
-    try {
-      setLoadingTeam(true);
-      const queryDate = targetDate || teamDate;
-      const res = await axiosInstance.get(`/manager/team-attendance?date=${queryDate}`);
-      if (res.data?.data && Array.isArray(res.data.data)) {
-        setTeamMembers(res.data.data);
-      }
-    } catch (e) {
-      console.warn("Could not fetch team attendance:", e);
-    } finally {
-      setLoadingTeam(false);
-    }
-  }, [teamDate]);
-
-const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> => {
-  if (!allowed) return [];
-  try {
-    const res = await axiosInstance.get(url);
-    const data = res.data?.data;
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
-};
+  // Load companies for Super Admin
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    axiosInstance.get("/approval-workflows/companies")
+      .then((res) => {
+        if (Array.isArray(res.data?.data)) {
+          setCompanies(res.data.data);
+        }
+      })
+      .catch(() => {});
+  }, [isSuperAdmin]);
 
   const buildPeriodQuery = useCallback(() => {
     const params = new URLSearchParams();
@@ -702,8 +761,61 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
       if (customStartDate) params.append("start_date", customStartDate);
       if (customEndDate) params.append("end_date", customEndDate);
     }
+    if (selectedCompanyId) {
+      params.append("company_id", String(selectedCompanyId));
+    }
     return params.toString();
-  }, [selectedPeriod, customStartDate, customEndDate]);
+  }, [selectedPeriod, customStartDate, customEndDate, selectedCompanyId]);
+
+  // 1. Fetch Manager Pending Counts
+  const fetchCounts = useCallback(async () => {
+    try {
+      const periodQuery = buildPeriodQuery();
+      const res = await axiosInstance.get(`/manager/pending-count?${periodQuery}`);
+      if (res.data?.data) {
+        setPendingCounts(prev => ({
+          ...res.data.data,
+          web_attendance: prev.web_attendance || 0,
+          total: (res.data.data.total || 0) + (prev.web_attendance || 0),
+        }));
+      }
+    } catch (e) {
+      console.warn("Could not fetch manager pending count:", e);
+    }
+  }, [buildPeriodQuery]);
+
+  // 2. Fetch Team Attendance
+  const fetchTeamAttendance = useCallback(async (targetDate?: string) => {
+    try {
+      setLoadingTeam(true);
+      const queryDate = targetDate || teamDate;
+      let url = `/manager/team-attendance?date=${queryDate}`;
+      if (selectedCompanyId) {
+        url += `&company_id=${selectedCompanyId}`;
+      }
+      const res = await axiosInstance.get(url);
+      if (res.data?.data && Array.isArray(res.data.data)) {
+        setTeamMembers(res.data.data);
+      }
+    } catch (e) {
+      console.warn("Could not fetch team attendance:", e);
+    } finally {
+      setLoadingTeam(false);
+    }
+  }, [teamDate, selectedCompanyId]);
+
+  const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> => {
+    if (!allowed) return [];
+    try {
+      const res = await axiosInstance.get(url);
+      const data = res.data?.data;
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data?.data)) return data.data;
+      return [];
+    } catch {
+      return [];
+    }
+  };
 
   // 3. Fetch All Pending Approvals (filtered dynamically by allowed categories & period)
   const fetchApprovals = useCallback(async (isSilent = false) => {
@@ -724,7 +836,8 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         dinasData,
         earlyOutData,
         payrollData,
-        correctionData
+        correctionData,
+        webPendingData
       ] = await Promise.all([
         fetchCategoryData(canApprove("leave"), `/manager/pending-requests?type=leave&${periodQuery}`),
         fetchCategoryData(canApprove("reimbursement"), `/manager/pending-requests?type=reimbursement&${periodQuery}`),
@@ -732,11 +845,14 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         fetchCategoryData(canApprove("permit"), `/manager/pending-requests?type=permit&${periodQuery}`),
         fetchCategoryData(canApprove("fund_request"), `/manager/pending-requests?type=fund_request&${periodQuery}`),
         fetchCategoryData(canApprove("vehicle_log"), `/manager/pending-requests?type=vehicle_log&${periodQuery}`),
-        fetchCategoryData(canApprove("dinas_luar"), "/attendance/dinas-luar/pending"),
+        fetchCategoryData(canApprove("dinas_luar"), `/manager/pending-requests?type=dinas_luar&${periodQuery}`),
         fetchCategoryData(canApprove("early_out"), `/manager/pending-requests?type=early_out&${periodQuery}`),
         fetchCategoryData(canApprove("payroll"), `/manager/pending-requests?type=payroll&${periodQuery}`),
         fetchCategoryData(canApprove("attendance_correction"), `/manager/pending-requests?type=attendance_correction&${periodQuery}`),
+        fetchCategoryData(canApprove("web_attendance"), `/attendance/web-pending${selectedCompanyId ? `?company_id=${selectedCompanyId}` : ""}`),
       ]);
+
+      const normalizedWeb = normalizeWebAttendances(webPendingData);
 
       const allMerged = [
         ...normalizeLeaves(leaveData),
@@ -748,10 +864,15 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         ...normalizeDinas(dinasData),
         ...normalizeEarlyOut(earlyOutData),
         ...normalizePayroll(payrollData),
-        ...normalizeCorrections(correctionData)
+        ...normalizeCorrections(correctionData),
+        ...normalizedWeb,
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setItems(allMerged);
+      setPendingCounts(prev => ({
+        ...prev,
+        web_attendance: normalizedWeb.length,
+      }));
       await fetchCounts();
     } catch (e) {
       console.error("Gagal mengambil daftar persetujuan:", e);
@@ -759,7 +880,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
       setLoading(false);
       setRefreshing(false);
     }
-  }, [canApprove, fetchCounts, buildPeriodQuery]);
+  }, [canApprove, fetchCounts, buildPeriodQuery, selectedCompanyId]);
 
   useEffect(() => {
     fetchApprovals();
@@ -768,6 +889,46 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
   useEffect(() => {
     fetchTeamAttendance();
   }, [fetchTeamAttendance]);
+
+  // Fetch Attendance History for Tab 3
+  const fetchAttendanceHistory = useCallback(async (pageNumber = 1) => {
+    try {
+      setLoadingAttHistory(true);
+      const params = new URLSearchParams();
+      params.append("page", String(pageNumber));
+      if (selectedPeriod === "custom") {
+        if (customStartDate) params.append("start_date", customStartDate);
+        if (customEndDate) params.append("end_date", customEndDate);
+      }
+      if (selectedCompanyId) {
+        params.append("company_id", String(selectedCompanyId));
+      }
+      if (attHistoryFilterStatus !== "all") params.append("status", attHistoryFilterStatus);
+      if (attHistoryFilterChannel !== "all") params.append("channel", attHistoryFilterChannel);
+      if (attHistorySearch.trim()) params.append("search", attHistorySearch.trim());
+
+      const res = await axiosInstance.get(`/attendance/history?${params.toString()}`);
+      const data = res.data?.data?.data || res.data?.data || [];
+      setAttendanceHistory(Array.isArray(data) ? data : []);
+      if (res.data?.data?.total !== undefined) {
+        setAttHistoryTotal(res.data.data.total);
+      }
+      if (res.data?.data?.last_page !== undefined) {
+        setAttHistoryLastPage(res.data.data.last_page);
+      }
+      setAttHistoryPage(pageNumber);
+    } catch (e) {
+      console.warn("Could not fetch attendance history:", e);
+    } finally {
+      setLoadingAttHistory(false);
+    }
+  }, [selectedPeriod, customStartDate, customEndDate, selectedCompanyId, attHistoryFilterStatus, attHistoryFilterChannel, attHistorySearch]);
+
+  useEffect(() => {
+    if (activeTab === "history" && historyTab === "attendance") {
+      fetchAttendanceHistory(1);
+    }
+  }, [activeTab, historyTab, fetchAttendanceHistory]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -787,6 +948,9 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         if (customStartDate) params.append("start_date", customStartDate);
         if (customEndDate) params.append("end_date", customEndDate);
       }
+      if (selectedCompanyId) {
+        params.append("company_id", String(selectedCompanyId));
+      }
       const res = await axiosInstance.get(`/manager/history-requests?${params.toString()}`);
       setHistoryItems(res.data?.data || []);
     } catch (e) {
@@ -794,7 +958,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
     } finally {
       setLoadingHistory(false);
     }
-  }, [historyFilterType, historyFilterStatus, selectedPeriod, customStartDate, customEndDate]);
+  }, [historyFilterType, historyFilterStatus, selectedPeriod, customStartDate, customEndDate, selectedCompanyId]);
 
   useEffect(() => {
     if (activeTab === "history") {
@@ -917,11 +1081,38 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / itemsPerPage));
   const paginatedItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // Filtered team members
+  // Pattern breakdown counts: Office Hour vs Shift Hour vs Flexible
+  const patternStats = useMemo(() => {
+    const officeMembers = teamMembers.filter(m => (m.work_pattern || "office_hour") === "office_hour");
+    const officeTotal = officeMembers.length;
+    const officePresent = officeMembers.filter(m => m.status === "Hadir" || m.status === "Selesai").length;
+    const officeAbsent = officeMembers.filter(m => m.status === "Belum Masuk").length;
+
+    const shiftMembers = teamMembers.filter(m => m.work_pattern === "shift");
+    const shiftTotal = shiftMembers.length;
+    const shiftPresent = shiftMembers.filter(m => m.status === "Hadir" || m.status === "Selesai").length;
+    const shiftAbsent = shiftMembers.filter(m => m.status === "Belum Masuk").length;
+
+    const flexMembers = teamMembers.filter(m => m.work_pattern === "flexible");
+    const flexTotal = flexMembers.length;
+    const flexPresent = flexMembers.filter(m => m.status === "Hadir" || m.status === "Selesai").length;
+
+    return {
+      office: { total: officeTotal, present: officePresent, absent: officeAbsent },
+      shift: { total: shiftTotal, present: shiftPresent, absent: shiftAbsent },
+      flexible: { total: flexTotal, present: flexPresent },
+    };
+  }, [teamMembers]);
+
+  // Filtered team members based on search and patternFilter
   const filteredTeam = useMemo(() => {
-    if (!teamSearchQuery.trim()) return teamMembers;
+    let list = teamMembers;
+    if (patternFilter !== "all") {
+      list = list.filter(m => (m.work_pattern || "office_hour") === patternFilter);
+    }
+    if (!teamSearchQuery.trim()) return list;
     const q = teamSearchQuery.toLowerCase();
-    return teamMembers.filter(m => 
+    return list.filter(m => 
       m.name.toLowerCase().includes(q) || 
       m.role.toLowerCase().includes(q) ||
       m.status.toLowerCase().includes(q) ||
@@ -929,7 +1120,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
       (m.is_dinas_luar && "dinas luar".includes(q)) ||
       (!m.is_dinas_luar && "di kantor".includes(q))
     );
-  }, [teamMembers, teamSearchQuery]);
+  }, [teamMembers, patternFilter, teamSearchQuery]);
 
   // Team summary counts
   const teamStats = useMemo(() => {
@@ -945,7 +1136,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
   // Reset page when filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [filter, searchQuery, selectedPeriod, customStartDate, customEndDate]);
+  }, [filter, searchQuery, selectedPeriod, customStartDate, customEndDate, selectedCompanyId]);
 
   const getDinasLuarStatusText = (status?: string | null) => {
     if (status === 'approved_hr') return 'Disetujui HRD';
@@ -969,7 +1160,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
         <div className="col-span-full py-16 bg-white rounded-2xl border border-slate-200 text-center">
           <Users size={32} className="mx-auto text-slate-300 mb-2" />
           <p className="text-sm font-bold text-slate-700">Tidak ada data anggota tim ditemukan</p>
-          <p className="text-xs text-slate-400">Pastikan bawahan telah diset pada struktur organisasi</p>
+          <p className="text-xs text-slate-400">Pastikan anggota tim telah terdaftar pada sistem atau ubah filter pola kehadiran</p>
         </div>
       );
     }
@@ -999,6 +1190,21 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
             <div>
               <h3 className="text-sm font-bold text-slate-900 leading-snug">{member.name}</h3>
               <p className="text-xs text-slate-500">{member.role}</p>
+              <div className="mt-1">
+                {member.work_pattern === "shift" ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-purple-50 text-purple-700 border border-purple-200">
+                    <Repeat size={10} /> Shift Hour
+                  </span>
+                ) : member.work_pattern === "flexible" ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-teal-50 text-teal-700 border border-teal-200">
+                    <Sparkles size={10} /> Fleksibel
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-blue-50 text-blue-700 border border-blue-200">
+                    <Clock size={10} /> Office Hour
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1123,13 +1329,23 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
 
       {/* Clean Date Period Filter Bar */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-700 mr-1">
             <CalendarDays size={16} className="text-[#8B0000]" />
-            <span>Filter Rentang Waktu:</span>
+            <span>Filter Waktu:</span>
           </div>
 
           <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200">
+            <button
+              onClick={() => setSelectedPeriod("all")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                selectedPeriod === "all"
+                  ? "bg-[#8B0000] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Semua Waktu
+            </button>
             <button
               onClick={() => setSelectedPeriod("this_month")}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -1149,16 +1365,6 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
               }`}
             >
               Tahun Ini ({new Date().getFullYear()})
-            </button>
-            <button
-              onClick={() => setSelectedPeriod("all")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                selectedPeriod === "all"
-                  ? "bg-[#8B0000] text-white shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Semua Waktu
             </button>
             <button
               onClick={() => setSelectedPeriod("custom")}
@@ -1191,13 +1397,31 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
               />
             </div>
           )}
+
+          {/* Super Admin Company Selector */}
+          {isSuperAdmin && companies.length > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+              <Building2 size={14} className="text-[#8B0000] shrink-0" />
+              <span className="font-bold text-slate-700">Perusahaan:</span>
+              <select
+                value={selectedCompanyId || ""}
+                onChange={(e) => setSelectedCompanyId(e.target.value ? Number(e.target.value) : null)}
+                className="bg-transparent font-semibold text-slate-800 outline-none cursor-pointer text-xs"
+              >
+                <option value="">Semua Perusahaan</option>
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Super Admin Notice / Status Badge */}
         {isSuperAdmin && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium">
             <ShieldCheck size={14} className="text-amber-600 shrink-0" />
-            <span>Mode Super Admin: Menampilkan seluruh pengajuan & tim tanpa batasan hierarki</span>
+            <span>Mode Super Admin: Menampilkan seluruh pengajuan tanpa batasan hierarki</span>
           </div>
         )}
       </div>
@@ -1465,6 +1689,52 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
                 <div className="text-[10px] text-slate-400">Pengajuan Jam Absen</div>
               </button>
             )}
+
+            {/* Dinas Luar */}
+            {canApprove("dinas_luar") && (
+              <button
+                onClick={() => setFilter(filter === "dinas_luar" ? "all" : "dinas_luar")}
+                className={`p-4 rounded-2xl border text-left transition-all ${
+                  filter === "dinas_luar"
+                    ? "bg-rose-50/80 border-rose-300 ring-2 ring-rose-500/20 shadow-sm"
+                    : "bg-white border-slate-200 hover:border-slate-300 shadow-xs"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-800 flex items-center justify-center">
+                    <MapPin size={16} />
+                  </div>
+                  <span className="text-base font-black text-rose-900">
+                    {pendingCounts.dinas_luar || items.filter(i => i.type === "dinas_luar").length}
+                  </span>
+                </div>
+                <div className="text-xs font-bold text-slate-800">Dinas Luar</div>
+                <div className="text-[10px] text-slate-400">Tugas Luar Kantor</div>
+              </button>
+            )}
+
+            {/* Absen Web */}
+            {canApprove("web_attendance") && (
+              <button
+                onClick={() => setFilter(filter === "web_attendance" ? "all" : "web_attendance")}
+                className={`p-4 rounded-2xl border text-left transition-all ${
+                  filter === "web_attendance"
+                    ? "bg-sky-50/80 border-sky-300 ring-2 ring-sky-500/20 shadow-sm"
+                    : "bg-white border-slate-200 hover:border-slate-300 shadow-xs"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center">
+                    <Laptop size={16} />
+                  </div>
+                  <span className="text-base font-black text-sky-900">
+                    {pendingCounts.web_attendance || items.filter(i => i.type === "web_attendance").length}
+                  </span>
+                </div>
+                <div className="text-xs font-bold text-slate-800">Absen Web</div>
+                <div className="text-[10px] text-slate-400">Persetujuan Presensi Browser</div>
+              </button>
+            )}
           </div>
 
           {/* Search and Category Filter Pills */}
@@ -1611,6 +1881,18 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
                   }`}
                 >
                   Koreksi Absen
+                </button>
+              )}
+              {canApprove("web_attendance") && (
+                <button
+                  onClick={() => setFilter("web_attendance")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    filter === "web_attendance"
+                      ? "bg-sky-600 text-white shadow-sm"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Absen Web
                 </button>
               )}
             </div>
@@ -1893,7 +2175,7 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
               <div>
                 <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Tim</div>
                 <div className="text-xl font-black text-slate-900 mt-0.5">{teamStats.total}</div>
-                <div className="text-[10px] text-slate-400">Bawahan terdaftar</div>
+                <div className="text-[10px] text-slate-400">Karyawan terdaftar</div>
               </div>
               <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
                 <Users size={20} />
@@ -1945,20 +2227,241 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
             </div>
           </div>
 
-          {/* Search bar */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex items-center justify-between gap-4">
+          {/* Pola Kehadiran Card Boxes (Office Hour vs Shift Hour vs Fleksibel) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Office Hour Card */}
+            <div
+              onClick={() => setPatternFilter(patternFilter === "office_hour" ? "all" : "office_hour")}
+              className={`p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+                patternFilter === "office_hour"
+                  ? "bg-indigo-50/60 border-indigo-400 ring-2 ring-indigo-500/20 shadow-sm"
+                  : "bg-white border-slate-200 hover:border-indigo-200 hover:shadow-xs"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+                    <Building2 size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Office Hour</h4>
+                    <p className="text-[10px] text-slate-400 font-medium">Jam Kerja Reguler Kantor</p>
+                  </div>
+                </div>
+                {patternFilter === "office_hour" ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-600 text-white">
+                    Aktif
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-semibold text-slate-400">Klik Filter</span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 text-center">
+                <div className="bg-slate-50/80 rounded-xl p-2">
+                  <div className="text-[10px] text-slate-500 font-bold uppercase">Total</div>
+                  <div className="text-base font-black text-slate-900">{patternStats.office.total}</div>
+                </div>
+                <div className="bg-emerald-50/80 rounded-xl p-2">
+                  <div className="text-[10px] text-emerald-600 font-bold uppercase">Hadir</div>
+                  <div className="text-base font-black text-emerald-700">{patternStats.office.present}</div>
+                </div>
+                <div className="bg-amber-50/80 rounded-xl p-2">
+                  <div className="text-[10px] text-amber-600 font-bold uppercase">Belum</div>
+                  <div className="text-base font-black text-amber-700">{patternStats.office.absent}</div>
+                </div>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+                <span>Rasio Kehadiran</span>
+                <span className="font-bold text-slate-700">
+                  {patternStats.office.total > 0
+                    ? Math.round((patternStats.office.present / patternStats.office.total) * 100)
+                    : 0}%
+                </span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-1.5 mt-1 overflow-hidden">
+                <div
+                  className="bg-indigo-600 h-1.5 rounded-full transition-all duration-500"
+                  style={{
+                    width: `${
+                      patternStats.office.total > 0
+                        ? Math.round((patternStats.office.present / patternStats.office.total) * 100)
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Shift Hour Card */}
+            <div
+              onClick={() => setPatternFilter(patternFilter === "shift" ? "all" : "shift")}
+              className={`p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+                patternFilter === "shift"
+                  ? "bg-purple-50/60 border-purple-400 ring-2 ring-purple-500/20 shadow-sm"
+                  : "bg-white border-slate-200 hover:border-purple-200 hover:shadow-xs"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                    <Repeat size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Shift Hour</h4>
+                    <p className="text-[10px] text-slate-400 font-medium">Jadwal Jam Kerja Shift</p>
+                  </div>
+                </div>
+                {patternFilter === "shift" ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-600 text-white">
+                    Aktif
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-semibold text-slate-400">Klik Filter</span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 text-center">
+                <div className="bg-slate-50/80 rounded-xl p-2">
+                  <div className="text-[10px] text-slate-500 font-bold uppercase">Total</div>
+                  <div className="text-base font-black text-slate-900">{patternStats.shift.total}</div>
+                </div>
+                <div className="bg-emerald-50/80 rounded-xl p-2">
+                  <div className="text-[10px] text-emerald-600 font-bold uppercase">Hadir</div>
+                  <div className="text-base font-black text-emerald-700">{patternStats.shift.present}</div>
+                </div>
+                <div className="bg-amber-50/80 rounded-xl p-2">
+                  <div className="text-[10px] text-amber-600 font-bold uppercase">Belum</div>
+                  <div className="text-base font-black text-amber-700">{patternStats.shift.absent}</div>
+                </div>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+                <span>Rasio Kehadiran</span>
+                <span className="font-bold text-slate-700">
+                  {patternStats.shift.total > 0
+                    ? Math.round((patternStats.shift.present / patternStats.shift.total) * 100)
+                    : 0}%
+                </span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-1.5 mt-1 overflow-hidden">
+                <div
+                  className="bg-purple-600 h-1.5 rounded-full transition-all duration-500"
+                  style={{
+                    width: `${
+                      patternStats.shift.total > 0
+                        ? Math.round((patternStats.shift.present / patternStats.shift.total) * 100)
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Flexible Pattern Card */}
+            <div
+              onClick={() => setPatternFilter(patternFilter === "flexible" ? "all" : "flexible")}
+              className={`p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                patternFilter === "flexible"
+                  ? "bg-teal-50/60 border-teal-400 ring-2 ring-teal-500/20 shadow-sm"
+                  : "bg-white border-slate-200 hover:border-teal-200 hover:shadow-xs"
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
+                      <Sparkles size={18} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Pola Fleksibel</h4>
+                      <p className="text-[10px] text-slate-400 font-medium">Jam Kerja Bebas Mandiri</p>
+                    </div>
+                  </div>
+                  {patternFilter === "flexible" ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-teal-600 text-white">
+                      Aktif
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-semibold text-slate-400">Klik Filter</span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 text-center">
+                  <div className="bg-slate-50/80 rounded-xl p-2">
+                    <div className="text-[10px] text-slate-500 font-bold uppercase">Total Karyawan</div>
+                    <div className="text-base font-black text-slate-900">{patternStats.flexible.total}</div>
+                  </div>
+                  <div className="bg-teal-50/80 rounded-xl p-2">
+                    <div className="text-[10px] text-teal-700 font-bold uppercase">Sudah Check-In</div>
+                    <div className="text-base font-black text-teal-700">{patternStats.flexible.present}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 p-2 rounded-xl bg-teal-50/80 border border-teal-200/60 flex items-center gap-2 text-[11px] text-teal-800 font-medium">
+                <Sparkles size={13} className="text-teal-600 shrink-0" />
+                <span>Bebas jam kerja, tanpa perhitungan terlambat / alpa.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Search bar & Pattern Filter Pills */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="relative flex-1 max-w-md">
               <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Cari anggota tim berdasarkan nama atau jabatan..."
+                placeholder="Cari anggota tim berdasarkan nama, jabatan, atau pola..."
                 value={teamSearchQuery}
                 onChange={(e) => setTeamSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#8B0000] focus:ring-2 focus:ring-[#8B0000]/10 transition-all"
               />
             </div>
-            <div className="text-xs text-slate-500 font-medium">
-              Total {filteredTeam.length} karyawan
+
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-bold text-slate-500 mr-1">Filter Pola:</span>
+              <button
+                onClick={() => setPatternFilter("all")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  patternFilter === "all"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Semua ({teamMembers.length})
+              </button>
+              <button
+                onClick={() => setPatternFilter("office_hour")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  patternFilter === "office_hour"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Office Hour ({patternStats.office.total})
+              </button>
+              <button
+                onClick={() => setPatternFilter("shift")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  patternFilter === "shift"
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Shift Hour ({patternStats.shift.total})
+              </button>
+              <button
+                onClick={() => setPatternFilter("flexible")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  patternFilter === "flexible"
+                    ? "bg-teal-600 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Fleksibel ({patternStats.flexible.total})
+              </button>
             </div>
           </div>
 
@@ -1972,159 +2475,511 @@ const fetchCategoryData = async (allowed: boolean, url: string): Promise<any[]> 
       {/* TAB 3: RIWAYAT & AUDIT LOG */}
       {activeTab === "history" && (
         <div className="space-y-6">
-          {/* Filter Bar */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                <Filter size={14} className="text-slate-400" />
-                <span className="font-bold text-slate-600">Modul:</span>
-                <select
-                  value={historyFilterType}
-                  onChange={(e) => setHistoryFilterType(e.target.value)}
-                  className="bg-transparent text-xs font-semibold text-slate-800 outline-none cursor-pointer"
-                >
-                  <option value="all">Semua Modul</option>
-                  <option value="leave">Cuti</option>
-                  <option value="permit">Izin</option>
-                  <option value="overtime">Lembur</option>
-                  <option value="reimbursement">Reimbursement</option>
-                  <option value="fund_request">Pengajuan Dana</option>
-                  <option value="attendance_correction">Koreksi Absen</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                <span className="font-bold text-slate-600">Status:</span>
-                <select
-                  value={historyFilterStatus}
-                  onChange={(e) => setHistoryFilterStatus(e.target.value)}
-                  className="bg-transparent text-xs font-semibold text-slate-800 outline-none cursor-pointer"
-                >
-                  <option value="all">Semua Status</option>
-                  <option value="approved">Disetujui</option>
-                  <option value="rejected">Ditolak</option>
-                  <option value="edited">Diedit Pemohon</option>
-                  <option value="deleted">Dihapus Pemohon/Admin</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="relative w-full md:w-72">
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Cari riwayat atau pemohon..."
-                value={historySearchQuery}
-                onChange={(e) => setHistorySearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#8B0000] focus:ring-2 focus:ring-[#8B0000]/10 transition-all"
-              />
-            </div>
+          {/* Sub-tab Switcher: Persetujuan vs Riwayat Absen */}
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+            <button
+              onClick={() => setHistoryTab("requests")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                historyTab === "requests"
+                  ? "bg-[#8B0000] text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              <ClipboardList size={15} />
+              <span>Riwayat Pengajuan & Persetujuan</span>
+            </button>
+            <button
+              onClick={() => {
+                setHistoryTab("attendance");
+                if (attendanceHistory.length === 0) {
+                  fetchAttendanceHistory(1);
+                }
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                historyTab === "attendance"
+                  ? "bg-[#8B0000] text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              <CalendarCheck size={15} />
+              <span>Log Riwayat Absensi Karyawan</span>
+              {attHistoryTotal > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                  historyTab === "attendance" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+                }`}>
+                  {attHistoryTotal}
+                </span>
+              )}
+            </button>
           </div>
 
-          {/* History List */}
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-            {loadingHistory ? (
-              <div className="p-8"><ListPageSkeleton /></div>
-            ) : (() => {
-              const filtered = historyItems.filter((item) => {
-                if (!historySearchQuery.trim()) return true;
-                const q = historySearchQuery.toLowerCase();
-                return (
-                  item.user_name?.toLowerCase().includes(q) ||
-                  item.description?.toLowerCase().includes(q) ||
-                  item.category?.toLowerCase().includes(q) ||
-                  item.actor_name?.toLowerCase().includes(q)
-                );
-              });
-
-              if (filtered.length === 0) {
-                return (
-                  <div className="py-16 text-center">
-                    <History size={36} className="mx-auto text-slate-300 mb-2" />
-                    <p className="text-sm font-bold text-slate-700">Belum ada riwayat aktivitas ditemukan</p>
-                    <p className="text-xs text-slate-400 mt-1">Semua persetujuan, penolakan, perubahan, atau penghapusan akan tercatat di sini</p>
+          {/* SUB-TAB 1: REQUESTS AUDIT LOG */}
+          {historyTab === "requests" && (
+            <div className="space-y-6">
+              {/* Filter Bar */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                    <Filter size={14} className="text-slate-400" />
+                    <span className="font-bold text-slate-600">Modul:</span>
+                    <select
+                      value={historyFilterType}
+                      onChange={(e) => setHistoryFilterType(e.target.value)}
+                      className="bg-transparent text-xs font-semibold text-slate-800 outline-none cursor-pointer"
+                    >
+                      <option value="all">Semua Modul</option>
+                      <option value="leave">Cuti</option>
+                      <option value="permit">Izin</option>
+                      <option value="overtime">Lembur</option>
+                      <option value="reimbursement">Reimbursement</option>
+                      <option value="fund_request">Pengajuan Dana</option>
+                      <option value="attendance_correction">Koreksi Absen</option>
+                      <option value="dinas_luar">Dinas Luar</option>
+                    </select>
                   </div>
-                );
-              }
 
-              return (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                        <th className="py-3 px-4">Waktu</th>
-                        <th className="py-3 px-4">Pemohon</th>
-                        <th className="py-3 px-4">Kategori & Tindakan</th>
-                        <th className="py-3 px-4">Deskripsi / Detail</th>
-                        <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4">Diproses Oleh</th>
-                        <th className="py-3 px-4">Catatan</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {filtered.map((item, idx) => {
-                        const isApproved = item.status === "approved";
-                        const isRejected = item.status === "rejected";
-                        const isDeleted = item.status === "deleted";
-                        const isUpdated = item.status === "updated";
-
-                        return (
-                          <tr key={item.id || idx} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="py-3 px-4 whitespace-nowrap text-slate-500 font-mono text-[11px]">
-                              {item.created_at ? new Date(item.created_at).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" }) : "-"}
-                            </td>
-                            <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">
-                              {item.user_name}
-                            </td>
-                            <td className="py-3 px-4 whitespace-nowrap">
-                              <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
-                                {item.category || item.type}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-slate-700 max-w-xs truncate" title={item.description}>
-                              {item.description}
-                            </td>
-                            <td className="py-3 px-4 whitespace-nowrap">
-                              {isApproved && (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  <CheckCircle2 size={11} /> Disetujui
-                                </span>
-                              )}
-                              {isRejected && (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
-                                  <XCircle size={11} /> Ditolak
-                                </span>
-                              )}
-                              {isDeleted && (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                                  <Trash2 size={11} /> Dihapus
-                                </span>
-                              )}
-                              {isUpdated && (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                  <Clock size={11} /> Diedit
-                                </span>
-                              )}
-                              {!isApproved && !isRejected && !isDeleted && !isUpdated && (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                                  {item.status}
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-3 px-4 whitespace-nowrap text-slate-600 font-medium">
-                              {item.actor_name || "Sistem"}
-                            </td>
-                            <td className="py-3 px-4 text-slate-400 italic text-[11px] max-w-xs truncate" title={item.remark || ""}>
-                              {item.remark || "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                    <span className="font-bold text-slate-600">Status:</span>
+                    <select
+                      value={historyFilterStatus}
+                      onChange={(e) => setHistoryFilterStatus(e.target.value)}
+                      className="bg-transparent text-xs font-semibold text-slate-800 outline-none cursor-pointer"
+                    >
+                      <option value="all">Semua Status</option>
+                      <option value="approved">Disetujui</option>
+                      <option value="rejected">Ditolak</option>
+                      <option value="edited">Diedit Pemohon</option>
+                      <option value="deleted">Dihapus Pemohon/Admin</option>
+                    </select>
+                  </div>
                 </div>
-              );
-            })()}
+
+                <div className="relative w-full md:w-72">
+                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Cari riwayat atau pemohon..."
+                    value={historySearchQuery}
+                    onChange={(e) => setHistorySearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#8B0000] focus:ring-2 focus:ring-[#8B0000]/10 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* History List */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+                {loadingHistory ? (
+                  <div className="p-8"><ListPageSkeleton /></div>
+                ) : (() => {
+                  const filtered = historyItems.filter((item) => {
+                    if (!historySearchQuery.trim()) return true;
+                    const q = historySearchQuery.toLowerCase();
+                    return (
+                      item.user_name?.toLowerCase().includes(q) ||
+                      item.description?.toLowerCase().includes(q) ||
+                      item.category?.toLowerCase().includes(q) ||
+                      item.actor_name?.toLowerCase().includes(q)
+                    );
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="py-16 text-center">
+                        <History size={36} className="mx-auto text-slate-300 mb-2" />
+                        <p className="text-sm font-bold text-slate-700">Belum ada riwayat aktivitas ditemukan</p>
+                        <p className="text-xs text-slate-400 mt-1">Semua persetujuan, penolakan, perubahan, atau penghapusan akan tercatat di sini</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                            <th className="py-3 px-4">Waktu</th>
+                            <th className="py-3 px-4">Pemohon</th>
+                            <th className="py-3 px-4">Kategori & Tindakan</th>
+                            <th className="py-3 px-4">Deskripsi / Detail</th>
+                            <th className="py-3 px-4">Status</th>
+                            <th className="py-3 px-4">Diproses Oleh</th>
+                            <th className="py-3 px-4">Catatan</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {filtered.map((item, idx) => {
+                            const isApproved = item.status === "approved";
+                            const isRejected = item.status === "rejected";
+                            const isDeleted = item.status === "deleted";
+                            const isUpdated = item.status === "updated";
+
+                            return (
+                              <tr key={item.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                                <td className="py-3 px-4 whitespace-nowrap text-slate-500 font-mono text-[11px]">
+                                  {item.created_at ? new Date(item.created_at).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" }) : "-"}
+                                </td>
+                                <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">
+                                  {item.user_name}
+                                </td>
+                                <td className="py-3 px-4 whitespace-nowrap">
+                                  <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
+                                    {item.category || item.type}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-slate-700 max-w-xs truncate" title={item.description}>
+                                  {item.description}
+                                </td>
+                                <td className="py-3 px-4 whitespace-nowrap">
+                                  {isApproved && (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      <CheckCircle2 size={11} /> Disetujui
+                                    </span>
+                                  )}
+                                  {isRejected && (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                                      <XCircle size={11} /> Ditolak
+                                    </span>
+                                  )}
+                                  {isDeleted && (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                      <Trash2 size={11} /> Dihapus
+                                    </span>
+                                  )}
+                                  {isUpdated && (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                      <Clock size={11} /> Diedit
+                                    </span>
+                                  )}
+                                  {!isApproved && !isRejected && !isDeleted && !isUpdated && (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                      {item.status}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 whitespace-nowrap text-slate-600 font-medium">
+                                  {item.actor_name || "Sistem"}
+                                </td>
+                                <td className="py-3 px-4 text-slate-400 italic text-[11px] max-w-xs truncate" title={item.remark || ""}>
+                                  {item.remark || "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* SUB-TAB 2: LOG RIWAYAT ABSENSI KARYAWAN */}
+          {historyTab === "attendance" && (
+            <div className="space-y-6">
+              {/* Attendance Filter Bar */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                    <Filter size={14} className="text-slate-400" />
+                    <span className="font-bold text-slate-600">Status:</span>
+                    <select
+                      value={attHistoryFilterStatus}
+                      onChange={(e) => setAttHistoryFilterStatus(e.target.value)}
+                      className="bg-transparent text-xs font-semibold text-slate-800 outline-none cursor-pointer"
+                    >
+                      <option value="all">Semua Status</option>
+                      <option value="present">Tepat Waktu / Hadir</option>
+                      <option value="late">Terlambat</option>
+                      <option value="absent">Belum Absen</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                    <span className="font-bold text-slate-600">Kanal / Metode:</span>
+                    <select
+                      value={attHistoryFilterChannel}
+                      onChange={(e) => setAttHistoryFilterChannel(e.target.value)}
+                      className="bg-transparent text-xs font-semibold text-slate-800 outline-none cursor-pointer"
+                    >
+                      <option value="all">Semua Kanal</option>
+                      <option value="web">Presensi Web (Browser)</option>
+                      <option value="mobile">Aplikasi Mobile</option>
+                    </select>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchAttendanceHistory(attHistoryPage)}
+                    disabled={loadingAttHistory}
+                    className="h-8 px-2.5 text-xs font-bold text-slate-700 rounded-xl"
+                  >
+                    <RefreshCw size={13} className={`mr-1 text-slate-500 ${loadingAttHistory ? "animate-spin" : ""}`} />
+                    Refresh
+                  </Button>
+                </div>
+
+                <div className="relative w-full md:w-72">
+                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Cari nama karyawan atau email..."
+                    value={attHistorySearch}
+                    onChange={(e) => setAttHistorySearch(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#8B0000] focus:ring-2 focus:ring-[#8B0000]/10 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Attendance Table */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+                {loadingAttHistory ? (
+                  <div className="p-8"><ListPageSkeleton /></div>
+                ) : attendanceHistory.length === 0 ? (
+                  <div className="py-16 text-center">
+                    <CalendarCheck size={36} className="mx-auto text-slate-300 mb-2" />
+                    <p className="text-sm font-bold text-slate-700">Belum ada riwayat absensi pada filter ini</p>
+                    <p className="text-xs text-slate-400 mt-1">Gunakan tombol filter waktu atau filter kanal di atas untuk memperluas pencarian</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                          <th className="py-3 px-4">Tanggal & Jam</th>
+                          <th className="py-3 px-4">Karyawan</th>
+                          <th className="py-3 px-4">Pola Kehadiran</th>
+                          <th className="py-3 px-4">Kanal Absen</th>
+                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4">Lokasi & Tipe</th>
+                          <th className="py-3 px-4 text-center">Bukti Selfie</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {attendanceHistory.map((att: any, idx: number) => {
+                          const checkInDate = att.check_in ? new Date(att.check_in) : null;
+                          const checkOutDate = att.check_out ? new Date(att.check_out) : null;
+                          const pattern = att.user?.attendance_type || "office_hour";
+                          const isDinas = att.attendance_type === "dinas_luar" || Boolean(att.dinas_luar_destination);
+                          const photoIn = att.check_in_photo || att.image_in_url || att.image_in;
+                          const photoOut = att.check_out_photo || att.image_out_url || att.image_out;
+
+                          return (
+                            <tr key={att.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                              {/* Tanggal & Jam */}
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                <div className="font-bold text-slate-900">
+                                  {checkInDate
+                                    ? checkInDate.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
+                                    : (att.date || "-")}
+                                </div>
+                                <div className="text-[11px] text-slate-500 font-mono flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-emerald-700 font-semibold">
+                                    IN: {checkInDate ? checkInDate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "--:--"}
+                                  </span>
+                                  <span>•</span>
+                                  <span className="text-blue-700 font-semibold">
+                                    OUT: {checkOutDate ? checkOutDate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "--:--"}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Karyawan */}
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                <div className="font-bold text-slate-900">{att.user?.name || "Karyawan"}</div>
+                                <div className="text-[11px] text-slate-400">{att.user?.role?.name || att.user?.email || "-"}</div>
+                              </td>
+
+                              {/* Pola Kehadiran */}
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                {pattern === "shift" ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                    <Repeat size={10} /> Shift Hour
+                                  </span>
+                                ) : pattern === "flexible" ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                                    <Sparkles size={10} /> Fleksibel
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    <Building2 size={10} /> Office Hour
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Kanal Absen */}
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                {att.channel === "web" ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+                                    <Laptop size={11} /> Presensi Web
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <Smartphone size={11} /> Mobile App
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Status */}
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                {att.status === "late" ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                    <Clock size={10} /> Terlambat
+                                  </span>
+                                ) : att.status === "present" ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <CheckCircle2 size={10} /> Tepat Waktu
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                    {att.status || "Hadir"}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Lokasi & Tipe */}
+                              <td className="py-3 px-4 max-w-xs">
+                                {isDinas ? (
+                                  <div>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 mb-0.5">
+                                      <MapPin size={10} /> Dinas Luar
+                                    </span>
+                                    <p className="text-[11px] text-slate-600 truncate" title={att.dinas_luar_destination || att.check_in_address}>
+                                      {att.dinas_luar_destination || att.check_in_address || "Tugas Luar Kantor"}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 mb-0.5">
+                                      <Building2 size={10} /> Di Kantor
+                                    </span>
+                                    <p className="text-[11px] text-slate-500 truncate" title={att.check_in_address || att.user?.office?.name}>
+                                      {att.user?.office?.name || att.check_in_address || "Lokasi Kantor"}
+                                    </p>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Bukti Selfie */}
+                              <td className="py-3 px-4 text-center whitespace-nowrap">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  {photoIn ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewImage({
+                                        url: getStorageUrl(photoIn),
+                                        title: `Selfie Masuk - ${att.user?.name || "Karyawan"} (${checkInDate ? checkInDate.toLocaleDateString("id-ID") : ""})`
+                                      })}
+                                      className="group relative w-8 h-8 rounded-lg overflow-hidden border border-slate-200 hover:border-[#8B0000] shadow-xs transition"
+                                      title="Lihat Foto Masuk"
+                                    >
+                                      <img
+                                        src={getStorageUrl(photoIn)}
+                                        alt="IN"
+                                        className="w-full h-full object-cover group-hover:scale-110 transition duration-200"
+                                      />
+                                      <span className="absolute bottom-0 right-0 bg-emerald-600 text-white text-[8px] font-black px-1 rounded-tl">IN</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-300 italic">-</span>
+                                  )}
+
+                                  {photoOut ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewImage({
+                                        url: getStorageUrl(photoOut),
+                                        title: `Selfie Pulang - ${att.user?.name || "Karyawan"} (${checkOutDate ? checkOutDate.toLocaleDateString("id-ID") : ""})`
+                                      })}
+                                      className="group relative w-8 h-8 rounded-lg overflow-hidden border border-slate-200 hover:border-[#8B0000] shadow-xs transition"
+                                      title="Lihat Foto Pulang"
+                                    >
+                                      <img
+                                        src={getStorageUrl(photoOut)}
+                                        alt="OUT"
+                                        className="w-full h-full object-cover group-hover:scale-110 transition duration-200"
+                                      />
+                                      <span className="absolute bottom-0 right-0 bg-blue-600 text-white text-[8px] font-black px-1 rounded-tl">OUT</span>
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Pagination */}
+                {attHistoryLastPage > 1 && (
+                  <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-white">
+                    <p className="text-xs text-slate-500 font-medium">
+                      Halaman {attHistoryPage} dari {attHistoryLastPage} (Total {attHistoryTotal} Riwayat)
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchAttendanceHistory(Math.max(1, attHistoryPage - 1))}
+                        disabled={attHistoryPage <= 1 || loadingAttHistory}
+                        className="h-8 px-3 text-xs font-bold"
+                      >
+                        <ChevronLeft size={14} className="mr-1" /> Sebelumnya
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchAttendanceHistory(Math.min(attHistoryLastPage, attHistoryPage + 1))}
+                        disabled={attHistoryPage >= attHistoryLastPage || loadingAttHistory}
+                        className="h-8 px-3 text-xs font-bold"
+                      >
+                        Selanjutnya <ChevronRight size={14} className="ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* PHOTO PREVIEW MODAL */}
+      {previewImage && (
+        <div className="fixed inset-0 z-130 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <h3 className="text-xs font-bold text-slate-800 truncate mr-2">{previewImage.title}</h3>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="p-1 hover:bg-slate-200 rounded-full transition text-slate-400 hover:text-slate-600"
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
+            <div className="p-4 flex items-center justify-center bg-slate-900/5 min-h-[320px]">
+              <img
+                src={previewImage.url}
+                alt="Preview"
+                className="max-h-[75vh] w-auto max-w-full rounded-2xl object-contain shadow-md"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "https://placehold.co/600x400?text=Foto+Gagal+Dimuat";
+                }}
+              />
+            </div>
+            <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPreviewImage(null)}
+                className="text-xs font-bold px-4"
+              >
+                Tutup
+              </Button>
+            </div>
           </div>
         </div>
       )}

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import Pagination from "@/components/Pagination";
 import { ReportSkeleton } from "@/components/Skeleton";
 import { useAuth } from "@/contexts/AuthContext";
+import ReportPeriodFilter, { PeriodState, computePeriodState } from "@/components/ReportPeriodFilter";
 
 export default function ReportsShiftSwapPage() {
   const { hasPermission } = useAuth();
@@ -17,6 +18,12 @@ export default function ReportsShiftSwapPage() {
   const [pagination, setPagination] = useState<any>(null);
   const [page, setPage] = useState(1);
   
+  // Period filter state
+  const [currentPeriod, setCurrentPeriod] = useState<PeriodState>(() => {
+    const now = new Date();
+    return computePeriodState(String(now.getMonth() + 1).padStart(2, "0"), now.getFullYear());
+  });
+
   // Utils to get local date string YYYY-MM-DD
   const getLocalDateString = (date: Date) => {
     const year = date.getFullYear();
@@ -31,6 +38,14 @@ export default function ReportsShiftSwapPage() {
   const [selectedUser, setSelectedUser] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
 
+  const handlePeriodChange = (period: PeriodState) => {
+    setCurrentPeriod(period);
+    if (!period.isAllTime) {
+      if (period.startDate) setStartDate(period.startDate);
+      if (period.endDate) setEndDate(period.endDate);
+    }
+  };
+
   useEffect(() => {
     fetchEmployees();
     fetchReport(1);
@@ -38,7 +53,7 @@ export default function ReportsShiftSwapPage() {
 
   useEffect(() => {
     fetchReport(page);
-  }, [page]);
+  }, [page, startDate, endDate]);
 
   const fetchEmployees = async () => {
     try {
@@ -70,10 +85,11 @@ export default function ReportsShiftSwapPage() {
       const response = await axiosInstance.get(`/shift-swap/export?start_date=${startDate}&end_date=${endDate}${selectedUser ? `&user_id=${selectedUser}` : ""}${selectedStatus ? `&status=${selectedStatus}` : ""}`, {
         responseType: 'blob',
       });
+      const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Laporan_Tukar_Shift_${startDate}_to_${endDate}.xlsx`);
+      link.setAttribute('download', `Laporan_Tukar_Shift_${periodSlug}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -98,21 +114,20 @@ export default function ReportsShiftSwapPage() {
   }
 
   return (
-    <div>
+    <div className="space-y-6">
       <div className="dash-page-header">
         <div>
           <h1 className="dash-page-title">Laporan Pertukaran Shift</h1>
           <p className="dash-page-desc">Audit riwayat pertukaran jadwal antar karyawan dalam periode tertentu.</p>
         </div>
-        <div className="dash-page-actions">
-          {hasPermission('export-shift-swaps') && (
-            <button className="dash-btn dash-btn-primary bg-[#107c41] hover:bg-[#0c6130] text-white!" onClick={exportShiftSwapToExcel}>
-              <FileSpreadsheet size={15} />
-              Export Excel
-            </button>
-          )}
-        </div>
       </div>
+
+      {/* Period Filter with Export */}
+      <ReportPeriodFilter
+        reportTitle="Laporan Pertukaran Shift"
+        onPeriodChange={handlePeriodChange}
+        onExportExcel={exportShiftSwapToExcel}
+      />
 
       {/* Filters */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">

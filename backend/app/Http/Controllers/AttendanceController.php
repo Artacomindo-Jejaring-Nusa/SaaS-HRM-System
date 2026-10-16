@@ -348,29 +348,57 @@ class AttendanceController extends Controller
 
     public function history(Request $request)
     {
-        $query = Attendance::with('user')->where('company_id', $request->user()->company_id);
-
         $user = $request->user();
+        $query = Attendance::with(['user.role', 'user.office']);
 
-        if ($user->canAccessAllCompanies()) {
-            // Master Admin sees all
-        } elseif ($user->is_manager) {
-            $query->where('company_id', $user->company_id);
+        if ($request->company_id && $request->company_id !== 'all') {
+            $query->where('company_id', $request->company_id);
+        } elseif ($user->canAccessAllCompanies()) {
+            // Master Admin sees all companies if not filtered
+        } elseif ($user->is_manager || \App\Services\PendingRequestService::isExecutiveOrAdmin($user) || $user->hasPermission('view-attendances')) {
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
         } else {
-            $query->where('user_id', $user->id)
-                ->where('company_id', $user->company_id);
+            $query->where('user_id', $user->id);
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
         }
 
         if ($request->start_date && $request->end_date) {
             $query->whereDate('check_in', '>=', $request->start_date)
                 ->whereDate('check_in', '<=', $request->end_date);
+        } elseif ($request->date) {
+            $query->whereDate('check_in', $request->date);
         }
 
-        if ($request->user_id) { // Tambahan filter ID karyawan jika dikirim
+        if ($request->user_id) {
             $query->where('user_id', $request->user_id);
         }
 
-        $history = $query->orderBy('id', 'desc')->paginate(10);
+        if ($request->channel && $request->channel !== 'all') {
+            $query->where('channel', $request->channel);
+        }
+
+        if ($request->status && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->attendance_type && $request->attendance_type !== 'all') {
+            $query->where('attendance_type', $request->attendance_type);
+        }
+
+        if ($request->search) {
+            $search = $request->search;
+            $query->whereHas('user', function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        $perPage = min((int) ($request->per_page ?? 15), 100);
+        $history = $query->orderBy('check_in', 'desc')->paginate($perPage);
 
         return $this->successResponse($history, 'Riwayat absensi berhasil diambil.');
     }

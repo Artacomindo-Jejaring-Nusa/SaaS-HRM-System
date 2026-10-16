@@ -13,6 +13,8 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
 
     public $updatedCount = 0;
 
+    public $createdCount = 0;
+
     public $skippedCount = 0;
 
     public $errors = [];
@@ -54,13 +56,35 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
         }
 
         if (! $user) {
-            $this->skippedCount++;
-            $identifier = $email !== '' ? $email : $nik;
-            $this->errors[] = "Employee with email/NIK [{$identifier}] not found.";
-            return null;
+            $name = trim((string) ($this->getValue($rowArray, 'nama') ?? ''));
+            if ($name !== '' && $email !== '') {
+                $user = $this->createEmployeeFromRow($name, $email, $nik);
+            } else {
+                $this->skippedCount++;
+                $identifier = $email !== '' ? $email : $nik;
+                $this->errors[] = "Employee with email/NIK [{$identifier}] not found.";
+            }
         }
 
         return $user;
+    }
+
+    private function createEmployeeFromRow(string $name, string $email, string $nik): User
+    {
+        $this->createdCount++;
+
+        return User::create([
+            'name' => $name,
+            'email' => $email,
+            'nik' => $nik !== '' ? $nik : null,
+            'password' => \Illuminate\Support\Facades\Hash::make('password123'),
+            'company_id' => $this->companyId,
+            'role_id' => 3,
+            'attendance_type' => 'office_hour',
+            'employment_status' => 'Permanent',
+            'join_date' => now()->toDateString(),
+            'ptkp_status' => 'TK/0',
+        ]);
     }
 
     private function updateUserPayroll($user, array $row)
@@ -73,6 +97,7 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
             'cost_center' => ['key' => 'cost_center', 'type' => 'string'],
             'gaji_pokok' => ['key' => 'basic_salary', 'type' => 'float'],
             'tunjangan_tetap' => ['key' => 'fixed_allowance', 'type' => 'float'],
+            'ptkp' => ['key' => 'ptkp_status', 'type' => 'string'],
         ];
 
         foreach ($fields as $prefix => $config) {

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exports\EmployeePayrollTemplateExport;
 use App\Exports\PayrollExport;
 use App\Exports\PayrollRekapExport;
 use App\Http\Controllers\Controller;
@@ -478,6 +479,11 @@ class PayrollController extends Controller
         $salary->fill($request->only($editableFields));
         $salary->calculateTotals();
 
+        if ($request->filled('ptkp_status') && $salary->user) {
+            $salary->user->ptkp_status = $request->ptkp_status;
+            $salary->user->save();
+        }
+
         // Update legacy details JSON
         $details = json_decode($salary->details, true) ?? [];
         $details['breakdown'] = [
@@ -510,9 +516,17 @@ class PayrollController extends Controller
             return response()->json(['message' => $validationError['message']], $validationError['code']);
         }
 
-        // If Super Admin chose to switch attendance_type to flexible or office_hour
+        // If Super Admin chose to switch attendance_type or ptkp_status
+        $userUpdated = false;
         if ($request->filled('attendance_type')) {
             $user->attendance_type = $request->attendance_type;
+            $userUpdated = true;
+        }
+        if ($request->filled('ptkp_status')) {
+            $user->ptkp_status = $request->ptkp_status;
+            $userUpdated = true;
+        }
+        if ($userUpdated) {
             $user->save();
         }
 
@@ -1031,6 +1045,16 @@ class PayrollController extends Controller
         );
     }
 
+    public function exportPayrollTemplate(Request $request)
+    {
+        $companyId = $request->user()->company_id;
+
+        return Excel::download(
+            new EmployeePayrollTemplateExport($companyId),
+            'Template_Data_Payroll_Karyawan.xlsx'
+        );
+    }
+
     public function importPayrollData(Request $request)
     {
         $request->validate([
@@ -1040,9 +1064,13 @@ class PayrollController extends Controller
         $import = new EmployeePayrollImport($request->user()->company_id);
         Excel::import($import, $request->file('file'));
 
+        $totalProcessed = $import->updatedCount + $import->createdCount;
+        $msg = "Berhasil memproses {$totalProcessed} data karyawan ({$import->updatedCount} diperbarui, {$import->createdCount} baru ditambahkan).";
+
         return response()->json([
-            'message' => "Berhasil memperbarui {$import->updatedCount} data karyawan.",
+            'message' => $msg,
             'updated' => $import->updatedCount,
+            'created' => $import->createdCount,
             'skipped' => $import->skippedCount,
             'errors' => $import->errors,
         ]);

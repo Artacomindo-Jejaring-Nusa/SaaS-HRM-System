@@ -28,6 +28,7 @@ import {
 import { ReportSkeleton } from "@/components/Skeleton";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getStorageUrl } from "@/lib/utils";
+import ReportPeriodFilter, { PeriodState, computePeriodState } from "@/components/ReportPeriodFilter";
 
 const getCheckInOutStrings = (record: any) => {
   if (!record) return { checkInStr: "", checkOutStr: "" };
@@ -923,10 +924,54 @@ export default function ReportsAttendancePage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<"logs" | "summary" | "suspicious" | "location" | "corrections" | "shifts">("logs");
   
+  // Period filter state
+  const [currentPeriod, setCurrentPeriod] = useState<PeriodState>(() => {
+    const now = new Date();
+    return computePeriodState(String(now.getMonth() + 1).padStart(2, "0"), now.getFullYear());
+  });
+  const [isPurging, setIsPurging] = useState(false);
+
   // Filters Persistence
-  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}-01`;
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth() + 1;
+    const lastDay = new Date(y, m, 0).getDate();
+    return `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  });
   const [selectedUser, setSelectedUser] = useState("");
+
+  const handlePeriodChange = (period: PeriodState) => {
+    setCurrentPeriod(period);
+    if (!period.isAllTime) {
+      if (period.startDate) setStartDate(period.startDate);
+      if (period.endDate) setEndDate(period.endDate);
+    }
+  };
+
+  const handlePurgePeriod = async (period: PeriodState) => {
+    try {
+      setIsPurging(true);
+      const res = await axiosInstance.post("/manager/purge-current-month", {
+        module: "attendances",
+        period: period.periodKey,
+        start_date: period.startDate,
+        end_date: period.endDate,
+      });
+      toast.success(res.data?.message || "Data absensi pada periode berhasil dibersihkan.");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Gagal membersihkan data absensi periode ini.");
+      throw e;
+    } finally {
+      setIsPurging(false);
+    }
+  };
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -949,10 +994,11 @@ export default function ReportsAttendancePage() {
       const response = await axiosInstance.get(`/attendance/export?start_date=${startDate}&end_date=${endDate}${selectedUser ? `&user_id=${selectedUser}` : ""}`, {
         responseType: 'blob',
       });
+      const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Rekap_Kehadiran_${startDate}_to_${endDate}.xlsx`);
+      link.setAttribute('download', `Rekap_Kehadiran_${periodSlug}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -962,7 +1008,7 @@ export default function ReportsAttendancePage() {
   };
 
   return (
-    <div className="animate-in fade-in duration-700 w-full">
+    <div className="animate-in fade-in duration-700 w-full space-y-6">
       <div className="dash-page-header">
         <div className="flex items-center gap-4">
            <div className="w-14 h-14 rounded-2xl bg-[#8B0000] text-white flex items-center justify-center shadow-xl shadow-rose-100/50 group transition-transform hover:rotate-3 border-4 border-rose-50/50 shrink-0">
@@ -973,13 +1019,17 @@ export default function ReportsAttendancePage() {
               <p className="dash-page-desc font-medium text-gray-500">Monitoring pergerakan, ringkasan kinerja, dan audit kepatuhan absensi karyawan.</p>
            </div>
         </div>
-        <div className="dash-page-actions">
-          <button className="dash-btn shadow-lg shadow-rose-100 bg-[#8B0000] hover:bg-[#6d0000] text-white flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all" onClick={exportExcel}>
-            <FileSpreadsheet size={15} />
-            {t('export')} Excel
-          </button>
-        </div>
       </div>
+
+      {/* Period Filter with Export & Purge */}
+      <ReportPeriodFilter
+        reportTitle="Laporan Kehadiran Karyawan"
+        onPeriodChange={handlePeriodChange}
+        onExportExcel={exportExcel}
+        canPurge={true}
+        onPurgePeriod={handlePurgePeriod}
+        isPurging={isPurging}
+      />
 
       {/* Segmented Tabs Control */}
       <div className="flex items-center gap-1 p-1 bg-gray-100/80 backdrop-blur-md rounded-xl mb-6 w-full md:w-fit border border-gray-200 overflow-x-auto no-scrollbar">

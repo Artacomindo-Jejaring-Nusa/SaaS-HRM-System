@@ -19,6 +19,7 @@ interface UserInfo {
   email: string;
   department?: string;
   attendance_type?: string;
+  ptkp_status?: string;
 }
 
 interface PayslipDetailItem {
@@ -308,7 +309,11 @@ async function executeDeleteBatch(batchId: number) {
 }
 
 async function executeSaveSalary(salary: SalaryRecord) {
-  await axiosInstance.put(`/payroll/salaries/${salary.id}`, salary);
+  const payload = {
+    ...salary,
+    ptkp_status: salary.user?.ptkp_status,
+  };
+  await axiosInstance.put(`/payroll/salaries/${salary.id}`, payload);
 }
 
 async function executeAddAdhocItem(
@@ -1374,6 +1379,34 @@ function PayrollSalaryEditModal({
                   className="w-full h-11 bg-gray-50 border-none rounded-xl px-4 text-xs font-medium"
                 />
               </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="edit-ptkp-select" className="text-xs font-bold text-gray-600">Status PTKP (PPh 21)</label>
+                  <span className="text-[10px] text-gray-400">Acuan pemotongan PPh 21</span>
+                </div>
+                <select
+                  id="edit-ptkp-select"
+                  value={editingSalary.user?.ptkp_status || "TK/0"}
+                  onChange={(e) => {
+                    const newPtkp = e.target.value;
+                    setEditingSalary({
+                      ...editingSalary,
+                      user: editingSalary.user ? { ...editingSalary.user, ptkp_status: newPtkp } : undefined,
+                    });
+                  }}
+                  className="w-full h-11 bg-gray-50 border-none rounded-xl px-4 text-xs font-bold text-gray-800"
+                >
+                  <option value="TK/0">TK/0 - Tidak Kawin (0 Tanggungan)</option>
+                  <option value="TK/1">TK/1 - Tidak Kawin (1 Tanggungan)</option>
+                  <option value="TK/2">TK/2 - Tidak Kawin (2 Tanggungan)</option>
+                  <option value="TK/3">TK/3 - Tidak Kawin (3 Tanggungan)</option>
+                  <option value="K/0">K/0 - Kawin (0 Tanggungan)</option>
+                  <option value="K/1">K/1 - Kawin (1 Tanggungan)</option>
+                  <option value="K/2">K/2 - Kawin (2 Tanggungan)</option>
+                  <option value="K/3">K/3 - Kawin (3 Tanggungan)</option>
+                </select>
+              </div>
             </div>
 
             {/* Right Column: Disciplinary Deductions */}
@@ -1822,44 +1855,18 @@ export default function PayrollManagementPage() {
   const handleExportBatchRekap = (batchId: number, month: string, year: number) =>
     executeExportBatchRekapAction(batchId, month, year);
 
-  // Download Template Excel for Payroll Bank & Basic Salary Import
-  const downloadPayrollTemplate = () => {
-    const templateData = [
-      {
-        "Email (WAJIB)": "karyawan@example.com",
-        "NIK (OPSIONAL)": "12345678",
-        "Bank": "BCA",
-        "Nomor Rekening": "1234567890",
-        "Nama Rekening": "Ahmad Rizki",
-        "Cost Center": "PT. Artacomindo Jejaring Nusa",
-        "Gaji Pokok (OPSIONAL)": 5000000,
-        "Tunjangan Tetap (OPSIONAL)": 1000000,
-      },
-      {},
-      { "Email (WAJIB)": ">>> PANDUAN PENGISIAN DATA REKENING & GAJI POKOK <<<" },
-      { "Email (WAJIB)": "1. Email atau NIK digunakan sebagai kunci pencarian identitas karyawan di sistem." },
-      { "Email (WAJIB)": "2. Data Bank & No Rekening akan otomatis tercatat pada slip & rekap penggajian." },
-      { "Email (WAJIB)": "3. Cost Center bisa diisi unit kerja/PT/cabang yang bersangkutan." },
-      { "Email (WAJIB)": "4. Gaji Pokok & Tunjangan Tetap otomatis menjadi baseline saat Generate Payroll bulanan." },
-      { "Email (WAJIB)": "5. Hapus baris contoh karyawan@example.com jika tidak diperlukan sebelum upload." }
-    ];
-
-    const worksheet = XLSX.utils.json_to_sheet(templateData);
-    worksheet['!cols'] = [
-      { wch: 30 },
-      { wch: 18 },
-      { wch: 15 },
-      { wch: 22 },
-      { wch: 25 },
-      { wch: 30 },
-      { wch: 22 },
-      { wch: 25 }
-    ];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Data Rekening & Gaji");
-    XLSX.writeFile(workbook, "Template_Data_Rekening_Gaji_Karyawan.xlsx");
-    toast.success("Template Payroll Excel berhasil diunduh.");
+  // Download Template Excel pre-populated with current employee data
+  const downloadPayrollTemplate = async () => {
+    try {
+      const response = await axiosInstance.get('/payroll/template', {
+        responseType: 'blob',
+      });
+      triggerBlobDownload(response.data, `Template_Data_Payroll_Karyawan_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      toast.success("Template data payroll berhasil diunduh.");
+    } catch (e) {
+      console.error(e);
+      toast.error("Gagal mengunduh template payroll.");
+    }
   };
 
   // Bulk Import Payroll Data (Bank Info & Basic Salary)
@@ -1881,6 +1888,10 @@ export default function PayrollManagementPage() {
         headers: { "Content-Type": "multipart/form-data" }
       });
       toast.success(res.data.message || "Data rekening dan gaji karyawan berhasil diimpor!");
+
+      if (selectedBatch) {
+        refreshCurrentBatch();
+      }
 
       // Refresh stats if modal is active
       try {

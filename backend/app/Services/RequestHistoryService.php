@@ -54,6 +54,10 @@ class RequestHistoryService
             $historyItems = $historyItems->concat(self::fetchHistoryCorrections($companyScope, $status, $request));
         }
 
+        if (in_array($type, ['all', 'dinas_luar'])) {
+            $historyItems = $historyItems->concat(self::fetchHistoryDinasLuar($companyScope, $status, $request));
+        }
+
         if (in_array($status, ['all', 'edited', 'deleted'])) {
             $historyItems = $historyItems->concat(self::fetchHistoryLogs($companyScope, $status, $request));
         }
@@ -294,6 +298,41 @@ class RequestHistoryService
                 'remark' => $log->ip_address ? "IP: {$log->ip_address}" : null,
                 'created_at' => $log->created_at?->toISOString() ?? (string)$log->created_at,
                 'updated_at' => $log->created_at?->toISOString() ?? (string)$log->created_at,
+            ];
+        });
+    }
+
+    private static function fetchHistoryDinasLuar(\Closure $companyScope, string $status, Request $request)
+    {
+        $q = \App\Models\Attendance::with(['user', 'spvApprover', 'hrApprover'])
+            ->where('attendance_type', 'dinas_luar')
+            ->whereIn('dinas_luar_status', ['approved_hr', 'approved_spv', 'rejected']);
+        $companyScope($q);
+        self::applyDateFilter($q, $request, 'updated_at');
+
+        if ($status !== 'all') {
+            if ($status === 'approved') {
+                $q->whereIn('dinas_luar_status', ['approved_hr', 'approved_spv']);
+            } elseif ($status === 'rejected') {
+                $q->where('dinas_luar_status', 'rejected');
+            }
+        }
+
+        return $q->orderBy('updated_at', 'desc')->take(50)->get()->map(function ($item) {
+            $isApproved = in_array($item->dinas_luar_status, ['approved_hr', 'approved_spv']);
+            return [
+                'id' => 'dinas-' . $item->id,
+                'record_id' => $item->id,
+                'type' => 'dinas_luar',
+                'category' => 'Dinas Luar',
+                'user_name' => $item->user?->name ?? 'Karyawan',
+                'description' => "Tujuan: {$item->dinas_luar_destination}" . ($item->dinas_luar_notes ? " ({$item->dinas_luar_notes})" : ''),
+                'status' => $isApproved ? 'approved' : 'rejected',
+                'action_type' => 'processed',
+                'actor_name' => $item->hrApprover?->name ?? $item->spvApprover?->name ?? 'Approver',
+                'remark' => $item->rejection_reason ?? $item->remark,
+                'created_at' => $item->created_at?->toISOString() ?? (string)$item->created_at,
+                'updated_at' => $item->updated_at?->toISOString() ?? (string)$item->updated_at,
             ];
         });
     }

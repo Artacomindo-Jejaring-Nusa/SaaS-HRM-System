@@ -84,6 +84,12 @@ class EmployeeController extends Controller
             'office_id' => 'nullable|exists:offices,id',
             'cost_center' => self::RULE_NULLABLE_STRING,
             'can_access_manager_portal' => 'nullable|boolean',
+            'ptkp_status' => 'nullable|string|in:TK/0,TK/1,TK/2,TK/3,K/0,K/1,K/2,K/3',
+            'bank_name' => self::RULE_NULLABLE_STRING,
+            'bank_account_no' => self::RULE_NULLABLE_STRING,
+            'bank_account_name' => self::RULE_NULLABLE_STRING,
+            'basic_salary' => 'nullable|numeric|min:0',
+            'fixed_allowance' => 'nullable|numeric|min:0',
         ]);
 
         $path = null;
@@ -124,6 +130,12 @@ class EmployeeController extends Controller
         $employee->emergency_contact_phone = $request->emergency_contact_phone;
         $employee->office_id = $request->office_id;
         $employee->cost_center = $request->cost_center;
+        $employee->ptkp_status = $request->ptkp_status ?? 'TK/0';
+        $employee->bank_name = $request->bank_name;
+        $employee->bank_account_no = $request->bank_account_no;
+        $employee->bank_account_name = $request->bank_account_name;
+        $employee->basic_salary = $request->basic_salary ?? 0;
+        $employee->fixed_allowance = $request->fixed_allowance ?? 0;
         $employee->save();
 
         // Send Welcome & Verification Email
@@ -183,6 +195,9 @@ class EmployeeController extends Controller
             'bank_account_no' => self::RULE_NULLABLE_STRING,
             'bank_account_name' => self::RULE_NULLABLE_STRING,
             'can_access_manager_portal' => 'nullable|boolean',
+            'ptkp_status' => 'nullable|string|in:TK/0,TK/1,TK/2,TK/3,K/0,K/1,K/2,K/3',
+            'basic_salary' => 'nullable|numeric|min:0',
+            'fixed_allowance' => 'nullable|numeric|min:0',
             'password' => 'nullable|min:6',
         ]);
 

@@ -60,6 +60,9 @@ interface Employee {
   bank_name?: string;
   bank_account_no?: string;
   bank_account_name?: string;
+  ptkp_status?: string;
+  basic_salary?: number | string;
+  fixed_allowance?: number | string;
   can_access_manager_portal?: boolean | null;
   auto_validate_web_attendance?: boolean;
   auto_validate_until?: string;
@@ -96,6 +99,9 @@ interface EmployeeFormData {
   bank_name?: string;
   bank_account_no?: string;
   bank_account_name?: string;
+  ptkp_status?: string;
+  basic_salary?: number | string;
+  fixed_allowance?: number | string;
   can_access_manager_portal?: boolean | null;
 }
 
@@ -319,6 +325,9 @@ function getInitialAddFormData(): EmployeeFormData {
     bank_name: "",
     bank_account_no: "",
     bank_account_name: "",
+    ptkp_status: "TK/0",
+    basic_salary: 0,
+    fixed_allowance: 0,
     can_access_manager_portal: null,
   };
 }
@@ -352,6 +361,9 @@ function getEditEmployeeFormData(emp: Employee): EmployeeFormData {
     bank_name: emp.bank_name || "",
     bank_account_no: emp.bank_account_no || "",
     bank_account_name: emp.bank_account_name || "",
+    ptkp_status: emp.ptkp_status || "TK/0",
+    basic_salary: emp.basic_salary ?? 0,
+    fixed_allowance: emp.fixed_allowance ?? 0,
     can_access_manager_portal: emp.can_access_manager_portal ?? null,
   };
 }
@@ -1744,8 +1756,55 @@ function EmployeeAddEditModal({
 
               {/* Data Rekening & Payroll */}
               <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
-                <h4 className="font-bold border-b border-gray-200 pb-2 mb-4 text-emerald-600 text-sm uppercase tracking-wider">Informasi Rekening & Payroll</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <h4 className="font-bold border-b border-gray-200 pb-2 mb-4 text-emerald-600 text-sm uppercase tracking-wider flex items-center justify-between">
+                  <span>Informasi Rekening & Payroll</span>
+                  <span className="text-[11px] font-normal text-gray-500 lowercase">Disinkronkan otomatis ke modul payroll</span>
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label htmlFor="employee-basic-salary-input" className="text-sm font-medium text-gray-700">Gaji Pokok (Rp)</label>
+                    <input 
+                      id="employee-basic-salary-input"
+                      type="number" 
+                      min="0"
+                      step="10000"
+                      placeholder="Contoh: 5000000"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                      value={formData.basic_salary ?? 0}
+                      onChange={(e) => setFormData({...formData, basic_salary: e.target.value === '' ? '' : Number(e.target.value)})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="employee-fixed-allowance-input" className="text-sm font-medium text-gray-700">Tunjangan Tetap (Rp)</label>
+                    <input 
+                      id="employee-fixed-allowance-input"
+                      type="number" 
+                      min="0"
+                      step="10000"
+                      placeholder="Contoh: 1000000"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                      value={formData.fixed_allowance ?? 0}
+                      onChange={(e) => setFormData({...formData, fixed_allowance: e.target.value === '' ? '' : Number(e.target.value)})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="employee-ptkp-select" className="text-sm font-medium text-gray-700">Status PTKP (PPh 21)*</label>
+                    <select
+                      id="employee-ptkp-select"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                      value={formData.ptkp_status || "TK/0"}
+                      onChange={(e) => setFormData({...formData, ptkp_status: e.target.value})}
+                    >
+                      <option value="TK/0">TK/0 - Tidak Kawin (0 Tanggungan)</option>
+                      <option value="TK/1">TK/1 - Tidak Kawin (1 Tanggungan)</option>
+                      <option value="TK/2">TK/2 - Tidak Kawin (2 Tanggungan)</option>
+                      <option value="TK/3">TK/3 - Tidak Kawin (3 Tanggungan)</option>
+                      <option value="K/0">K/0 - Kawin (0 Tanggungan)</option>
+                      <option value="K/1">K/1 - Kawin (1 Tanggungan)</option>
+                      <option value="K/2">K/2 - Kawin (2 Tanggungan)</option>
+                      <option value="K/3">K/3 - Kawin (3 Tanggungan)</option>
+                    </select>
+                  </div>
                   <div className="space-y-1.5">
                     <label htmlFor="employee-bank-name-input" className="text-sm font-medium text-gray-700">Nama Bank</label>
                     <input 
@@ -1912,7 +1971,15 @@ function EmployeeViewModal({
 
           <section>
             <h4 className="font-bold border-b pb-2 mb-4 text-emerald-600 text-sm uppercase tracking-wider">Rekening & Payroll</h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div><p className="text-xs text-gray-400">Gaji Pokok</p><p className="text-sm font-bold text-gray-900">Rp {Number(employee.basic_salary || 0).toLocaleString('id-ID')}</p></div>
+              <div><p className="text-xs text-gray-400">Tunjangan Tetap</p><p className="text-sm font-bold text-emerald-600">+Rp {Number(employee.fixed_allowance || 0).toLocaleString('id-ID')}</p></div>
+              <div>
+                <p className="text-xs text-gray-400">Status PTKP (PPh 21)</p>
+                <span className="inline-flex items-center px-2.5 py-0.5 mt-0.5 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {employee.ptkp_status || 'TK/0'}
+                </span>
+              </div>
               <div><p className="text-xs text-gray-400">Nama Bank</p><p className="text-sm font-semibold">{employee.bank_name || '-'}</p></div>
               <div><p className="text-xs text-gray-400">Nomor Rekening</p><p className="text-sm font-semibold">{employee.bank_account_no || '-'}</p></div>
               <div><p className="text-xs text-gray-400">Atas Nama Rekening</p><p className="text-sm font-semibold">{employee.bank_account_name || '-'}</p></div>

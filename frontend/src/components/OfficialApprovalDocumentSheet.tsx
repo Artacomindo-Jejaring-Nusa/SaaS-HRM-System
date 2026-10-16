@@ -23,7 +23,8 @@ export type ApprovalType =
   | "vehicle_log"
   | "payroll"
   | "early_out"
-  | "attendance_correction";
+  | "attendance_correction"
+  | "web_attendance";
 
 export interface OvertimeItemDetail {
   id?: number;
@@ -86,6 +87,9 @@ export interface ApprovalItem {
   // Dynamic approval workflow
   current_approval_step?: number | null;
   current_step_info?: Record<string, any>;
+  // Web attendance specific
+  ip_address?: string;
+  is_suspicious?: boolean;
 }
 
 export interface ApprovalTimelineStep {
@@ -163,6 +167,8 @@ export const getDocumentCode = (item: ApprovalItem) => {
       return `OPS/F-SPPD/${dateStr}/${idStr}`;
     case "payroll":
       return `PAY/F-BATCH/${dateStr}/${idStr}`;
+    case "web_attendance":
+      return `HRD/F-WEB/${dateStr}/${idStr}`;
     default:
       return `DOC/${dateStr}/${idStr}`;
   }
@@ -186,6 +192,8 @@ export const getFormTitle = (type?: string) => {
       return "SURAT TUGAS & LAPORAN DINAS LUAR KANTOR";
     case "payroll":
       return "BERITA ACARA & PERSETUJUAN BATCH PAYROLL";
+    case "web_attendance":
+      return "VERIFIKASI & PERSETUJUAN ABSENSI WEB BROWSER";
     default:
       return "FORMULIR PENGAJUAN RESMI PERUSAHAAN";
   }
@@ -583,6 +591,61 @@ function OfficialApprovalFormDetails({ item, numericAmount }: OfficialApprovalFo
               &ldquo;{item.description || "Meeting diluar sampai jam pulang sebenarnya"}&rdquo;
             </p>
           </div>
+        </div>
+      )}
+
+      {/* I. VERIFIKASI ABSENSI WEB */}
+      {item.type === "web_attendance" && (
+        <div className="space-y-3">
+          <div className="border border-slate-300 rounded overflow-hidden">
+            <table className="w-full text-xs border-collapse">
+              <tbody>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Metode Kehadiran</th>
+                  <td className="p-2.5 font-black text-slate-900">
+                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-900 font-bold rounded mr-2 border border-indigo-300">
+                      Web Browser Check-In
+                    </span>
+                    <span>Validasi Berbasis Foto Selfie & Lokasi IP</span>
+                  </td>
+                </tr>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Masuk</th>
+                  <td className="p-2.5 font-bold text-slate-900">
+                    {item.created_at ? new Date(item.created_at).toLocaleString("id-ID", { dateStyle: "full", timeStyle: "medium" }) : "-"}
+                  </td>
+                </tr>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Alamat IP / Jaringan</th>
+                  <td className="p-2.5 font-mono text-slate-800">
+                    {item.ip_address || "127.0.0.1"}
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Status Verifikasi</th>
+                  <td className="p-2.5 font-bold">
+                    <span className="text-amber-700">Menunggu Persetujuan Super Admin</span>
+                    {item.is_suspicious && (
+                      <span className="ml-2 px-1.5 py-0.5 bg-rose-100 text-rose-800 rounded text-[10px] font-bold">
+                        Anomali Terdeteksi
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {item.attachment && (
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded text-center">
+              <p className="font-bold text-[11px] text-slate-700 uppercase mb-2">Foto Selfie Presensi Web:</p>
+              <img 
+                src={item.attachment.startsWith("http") ? item.attachment : `/storage/${item.attachment.replace(/^\/?storage\//, "")}`}
+                alt="Selfie Presensi Web"
+                className="max-h-64 rounded-lg border border-slate-300 mx-auto object-cover shadow-sm"
+              />
+            </div>
+          )}
         </div>
       )}
     </>

@@ -37,6 +37,7 @@ class ManagerApprovalService
         'payroll' => 'approve-payroll',
         'early_out' => 'approve-attendances',
         'attendance_correction' => 'approve-attendance-corrections',
+        'dinas_luar' => 'approve-attendances',
     ];
 
     public const TYPE_TEXTS = [
@@ -49,6 +50,7 @@ class ManagerApprovalService
         'payroll' => 'Payroll',
         'early_out' => 'Pulang Awal',
         'attendance_correction' => 'Koreksi Absen',
+        'dinas_luar' => 'Dinas Luar',
     ];
 
     public const ROUTE_PATHS = [
@@ -61,6 +63,7 @@ class ManagerApprovalService
         'payroll' => self::ROUTE_PAYROLL_APPROVAL,
         'early_out' => self::ROUTE_ATTENDANCE,
         'attendance_correction' => '/dashboard/attendance-corrections',
+        'dinas_luar' => self::ROUTE_ATTENDANCE,
     ];
 
     /**
@@ -69,7 +72,7 @@ class ManagerApprovalService
     public function updateRequestStatus(Request $request, User $user)
     {
         $request->validate([
-            'type' => 'required|in:leave,overtime,reimbursement,permit,vehicle_log,fund_request,payroll,early_out,attendance_correction',
+            'type' => 'required|in:leave,overtime,reimbursement,permit,vehicle_log,fund_request,payroll,early_out,attendance_correction,dinas_luar',
             'id' => 'required|integer',
             'status' => 'required|in:approved,rejected',
             'remark' => 'nullable|string',
@@ -88,6 +91,7 @@ class ManagerApprovalService
         return match ($request->type) {
             'payroll' => $this->handlePayrollApproval($request, $user, $isGlobalAdmin),
             'early_out' => $this->handleEarlyOutApproval($request, $user, $isGlobalAdmin),
+            'dinas_luar' => $this->handleDinasLuarApproval($request, $user, $isGlobalAdmin),
             default => $this->handleGeneralRequestApproval($request, $user, $isGlobalAdmin, $isCompanyAdmin),
         };
     }
@@ -149,6 +153,63 @@ class ManagerApprovalService
         return response()->json([
             'status' => 'success',
             'message' => $isApproved ? 'Absensi pulang awal berhasil disetujui.' : 'Absensi pulang awal berhasil ditolak.',
+            'data' => $attendance->fresh(),
+        ]);
+    }
+
+    private function handleDinasLuarApproval(Request $request, User $user, bool $isGlobalAdmin)
+    {
+        $attendance = Attendance::with('user')
+            ->where('id', $request->id)
+            ->where('attendance_type', 'dinas_luar')
+            ->when(!$isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))
+            ->first();
+
+        if (!$attendance) {
+            return response()->json(['status' => 'error', 'message' => 'Data absensi dinas luar tidak ditemukan.'], 404);
+        }
+
+        $isApproved = $request->status === 'approved';
+
+        if ($isApproved) {
+            $targetStatus = ($isGlobalAdmin || $user->hasPermission('manage-attendances') || $attendance->dinas_luar_status === 'approved_spv')
+                ? 'approved_hr'
+                : 'approved_spv';
+
+            $attendance->update([
+                'dinas_luar_status' => $targetStatus,
+                'approved_by_hr' => ($targetStatus === 'approved_hr') ? $user->id : $attendance->approved_by_hr,
+                'approved_at_hr' => ($targetStatus === 'approved_hr') ? now() : $attendance->approved_at_hr,
+                'approved_by_spv' => ($targetStatus === 'approved_spv') ? $user->id : ($attendance->approved_by_spv ?? $user->id),
+                'approved_at_spv' => ($targetStatus === 'approved_spv') ? now() : ($attendance->approved_at_spv ?? now()),
+                'status' => ($targetStatus === 'approved_hr') ? 'present' : $attendance->status,
+                'remark' => $request->remark,
+            ]);
+        } else {
+            $attendance->update([
+                'dinas_luar_status' => 'rejected',
+                'rejection_reason' => $request->remark ?? 'Ditolak oleh Admin/Manager',
+                'status' => 'alfa',
+                'remark' => $request->remark,
+            ]);
+        }
+
+        $dest = $attendance->dinas_luar_destination ?? 'Luar Kantor';
+        if ($attendance->user) {
+            $this->notify(
+                $attendance->user,
+                $isApproved ? 'ABSEN DINAS LUAR DISETUJUI' : 'ABSEN DINAS LUAR DITOLAK',
+                $isApproved
+                    ? "Permohonan Dinas Luar Anda ke {$dest} telah DISETUJUI." . ($request->remark ? " Catatan: {$request->remark}" : '')
+                    : "Permohonan Dinas Luar Anda ke {$dest} DITOLAK. Alasan: " . ($request->remark ?? '-'),
+                $isApproved ? 'success' : 'danger',
+                self::ROUTE_ATTENDANCE
+            );
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $isApproved ? 'Absensi dinas luar berhasil disetujui.' : 'Absensi dinas luar berhasil ditolak.',
             'data' => $attendance->fresh(),
         ]);
     }

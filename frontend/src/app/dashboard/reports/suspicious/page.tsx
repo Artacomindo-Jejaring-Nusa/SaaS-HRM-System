@@ -19,6 +19,8 @@ import {
 import Pagination from "@/components/Pagination";
 import { ReportSkeleton } from "@/components/Skeleton";
 import { useLanguage } from "@/contexts/LanguageContext";
+import ReportPeriodFilter, { PeriodState, computePeriodState } from "@/components/ReportPeriodFilter";
+
 export default function SuspiciousAttendanceReportPage() {
   const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
@@ -28,6 +30,12 @@ export default function SuspiciousAttendanceReportPage() {
   const [pagination, setPagination] = useState<any>(null);
   const [page, setPage] = useState(1);
   
+  // Period filter state
+  const [currentPeriod, setCurrentPeriod] = useState<PeriodState>(() => {
+    const now = new Date();
+    return computePeriodState(String(now.getMonth() + 1).padStart(2, "0"), now.getFullYear());
+  });
+
   // Utils to get local date string YYYY-MM-DD
   const getLocalDateString = (date: Date) => {
     const year = date.getFullYear();
@@ -41,6 +49,14 @@ export default function SuspiciousAttendanceReportPage() {
   const [endDate, setEndDate] = useState(getLocalDateString(new Date()));
   const [selectedUser, setSelectedUser] = useState("");
   const [suspiciousType, setSuspiciousType] = useState("");
+
+  const handlePeriodChange = (period: PeriodState) => {
+    setCurrentPeriod(period);
+    if (!period.isAllTime) {
+      if (period.startDate) setStartDate(period.startDate);
+      if (period.endDate) setEndDate(period.endDate);
+    }
+  };
 
   useEffect(() => {
     fetchEmployees();
@@ -84,10 +100,11 @@ export default function SuspiciousAttendanceReportPage() {
       const response = await axiosInstance.get(`/attendance/export?is_suspicious=1&start_date=${startDate}&end_date=${endDate}${selectedUser ? `&user_id=${selectedUser}` : ""}`, {
         responseType: 'blob',
       });
+      const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Laporan_Kehadiran_Mencurigakan_${startDate}_to_${endDate}.xlsx`);
+      link.setAttribute('download', `Laporan_Kehadiran_Mencurigakan_${periodSlug}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -132,7 +149,7 @@ export default function SuspiciousAttendanceReportPage() {
   };
 
   return (
-    <div className="animate-in fade-in duration-500">
+    <div className="animate-in fade-in duration-500 space-y-6">
       <div className="dash-page-header">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600 shadow-sm border border-rose-100">
@@ -143,13 +160,14 @@ export default function SuspiciousAttendanceReportPage() {
             <p className="dash-page-desc font-medium">Audit dan pantau aktivitas absensi yang terdeteksi sebagai anomali atau kecurangan.</p>
           </div>
         </div>
-        <div className="dash-page-actions">
-          <button className="dash-btn dash-btn-primary bg-rose-600 hover:bg-rose-700 text-white! shadow-lg shadow-rose-200" onClick={exportToExcel}>
-            <FileSpreadsheet size={15} />
-            Unduh Laporan (Excel)
-          </button>
-        </div>
       </div>
+
+      {/* Period Filter with Export */}
+      <ReportPeriodFilter
+        reportTitle="Laporan Kehadiran Mencurigakan"
+        onPeriodChange={handlePeriodChange}
+        onExportExcel={exportToExcel}
+      />
 
       {/* Filters Container */}
       <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 mb-8 overflow-hidden relative group">

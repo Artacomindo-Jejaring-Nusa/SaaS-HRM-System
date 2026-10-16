@@ -117,6 +117,10 @@ class PendingRequestService
             ? self::countDirectAttendancePending(AttendanceCorrection::class, ['status' => 'pending'], $user, $isGlobalAdmin, $request)
             : 0;
 
+        $dinasLuarCount = $canApprove('dinas_luar')
+            ? self::countDirectAttendancePending(Attendance::class, ['attendance_type' => 'dinas_luar'], $user, $isGlobalAdmin, $request, ['dinas_luar_status' => ['pending', 'waiting_approval', 'approved_spv']])
+            : 0;
+
         return [
             'leave' => $leaveCount,
             'overtime' => $overtimeCount,
@@ -127,7 +131,8 @@ class PendingRequestService
             'payroll' => $payrollCount,
             'early_out' => $earlyOutCount,
             'attendance_correction' => $correctionCount,
-            'total' => $leaveCount + $overtimeCount + $reimbursementCount + $permitCount + $vehicleCount + $fundRequestCount + $payrollCount + $earlyOutCount + $correctionCount,
+            'dinas_luar' => $dinasLuarCount,
+            'total' => $leaveCount + $overtimeCount + $reimbursementCount + $permitCount + $vehicleCount + $fundRequestCount + $payrollCount + $earlyOutCount + $correctionCount + $dinasLuarCount,
         ];
     }
 
@@ -140,11 +145,16 @@ class PendingRequestService
         return isset($permMap[$type]) && $user->hasPermission($permMap[$type]);
     }
 
-    private static function countDirectAttendancePending(string $modelClass, array $whereConditions, User $user, bool $isGlobalAdmin, ?Request $request): int
+    private static function countDirectAttendancePending(string $modelClass, array $whereConditions, User $user, bool $isGlobalAdmin, ?Request $request, array $whereInConditions = []): int
     {
         $query = $modelClass::where($whereConditions);
+        foreach ($whereInConditions as $col => $vals) {
+            $query->whereIn($col, $vals);
+        }
         if (!$isGlobalAdmin && $user->company_id) {
             $query->where('company_id', $user->company_id);
+        } elseif ($request && $request->filled('company_id')) {
+            $query->where('company_id', $request->company_id);
         }
         self::applyDateFilter($query, $request);
         return $query->count();
@@ -177,7 +187,7 @@ class PendingRequestService
 
         $items = $query->orderBy('created_at', 'desc')->get();
 
-        if (! $isGlobalAdmin && ! in_array($type, ['vehicle_log', 'early_out', 'attendance_correction'])) {
+        if (! $isGlobalAdmin && ! in_array($type, ['vehicle_log', 'early_out', 'attendance_correction', 'dinas_luar'])) {
             $items = self::filterPendingItems($items, $type, $user);
         }
 
@@ -239,7 +249,7 @@ class PendingRequestService
 
         self::applyDateFilter($query, $request);
 
-        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'early_out', 'attendance_correction'])) {
+        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'early_out', 'attendance_correction', 'dinas_luar'])) {
             $items = $query->with(['user.supervisor', 'user.role', 'creator.supervisor', 'creator.role'])->get();
             return self::filterPendingItems($items, $type, $user)->count();
         }
@@ -258,6 +268,7 @@ class PendingRequestService
             'payroll' => PayrollBatch::with(['creator'])->where('status', 'pending_approval'),
             'early_out' => Attendance::with(['user.role', 'user.office', 'user.supervisor'])->where('is_early_out', true)->where('early_out_status', 'pending'),
             'attendance_correction' => AttendanceCorrection::with(['user.role', 'user.office', 'user.supervisor', 'attendance'])->where('status', 'pending'),
+            'dinas_luar' => Attendance::with(['user.role', 'user.office', 'user.supervisor'])->where('attendance_type', 'dinas_luar')->whereIn('dinas_luar_status', ['pending', 'waiting_approval', 'approved_spv']),
             'fund_request' => FundRequest::with(['user.role', 'user.office', 'user.supervisor', 'supervisor', 'hrd'])->where(function ($q) use ($isGlobalAdmin, $isCompanyAdmin) {
                 if ($isGlobalAdmin || $isCompanyAdmin) {
                     $q->whereIn('status', ['pending', 'approved_by_supervisor']);

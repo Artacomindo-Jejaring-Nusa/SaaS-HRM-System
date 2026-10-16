@@ -4,10 +4,11 @@ import { useEffect, useState, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
 import { 
   Search, FileSpreadsheet, Calendar, 
-  Users, TrendingUp, DollarSign, Loader2, Clock
+  Users, TrendingUp, DollarSign, Loader2, Clock, CheckSquare, Square
 } from "lucide-react";
 import { toast } from "sonner";
 import { ReportSkeleton } from "@/components/Skeleton";
+import ReportPeriodFilter, { PeriodState, computePeriodState } from "@/components/ReportPeriodFilter";
 
 interface SalaryRow {
   id: number;
@@ -64,20 +65,47 @@ function getPayrollStatusLabel(status?: string): string {
   return 'Draft';
 }
 
+const MONTH_NAMES_EN = [
+  "", "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
 export default function ReportsPayrollPage() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [salaries, setSalaries] = useState<SalaryRow[]>([]);
-  const [monthFilter, setMonthFilter] = useState("all");
+  const [monthFilter, setMonthFilter] = useState(() => {
+    const m = new Date().getMonth() + 1;
+    return MONTH_NAMES_EN[m];
+  });
   const [yearFilter, setYearFilter] = useState<string | number>(new Date().getFullYear());
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
 
-  const months = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
-  const currentYear = new Date().getFullYear();
-  const availableYears = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+  // Period filter state
+  const [currentPeriod, setCurrentPeriod] = useState<PeriodState>(() => {
+    const now = new Date();
+    return computePeriodState(String(now.getMonth() + 1).padStart(2, "0"), now.getFullYear());
+  });
+
+  const handlePeriodChange = (period: PeriodState) => {
+    setCurrentPeriod(period);
+    setSelectedIds([]);
+    if (period.isAllTime) {
+      setMonthFilter("all");
+      setYearFilter("all");
+    } else {
+      if (period.month === "all") {
+        setMonthFilter("all");
+      } else {
+        const mIdx = parseInt(period.month, 10);
+        setMonthFilter(MONTH_NAMES_EN[mIdx] || period.month);
+      }
+      setYearFilter(period.year);
+    }
+  };
 
   const fetchPayrollReport = useCallback(async () => {
     try {
@@ -106,10 +134,11 @@ export default function ReportsPayrollPage() {
         params: { month: monthFilter, year: yearFilter },
         responseType: 'blob',
       });
+      const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
       const url = globalThis.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Laporan_Payroll_${monthFilter}_${yearFilter}.xlsx`);
+      link.setAttribute('download', `Laporan_Payroll_${periodSlug}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -119,6 +148,62 @@ export default function ReportsPayrollPage() {
       toast.error("Gagal mengekspor laporan payroll ke Excel.");
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Apakah Anda yakin ingin menghapus ${selectedIds.length} data payroll terpilih? Tindakan ini permanen.`)) {
+      return;
+    }
+
+    try {
+      setIsDeletingSelected(true);
+      const res = await axiosInstance.post("/manager/purge-current-month", {
+        module: "payroll",
+        ids: selectedIds,
+      });
+      toast.success(res.data?.message || `${selectedIds.length} data payroll berhasil dihapus.`);
+      setSelectedIds([]);
+      await fetchPayrollReport();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Gagal menghapus data payroll.");
+    } finally {
+      setIsDeletingSelected(false);
+    }
+  };
+
+  const handlePurgePeriod = async (period: PeriodState) => {
+    try {
+      setIsPurging(true);
+      const res = await axiosInstance.post("/manager/purge-current-month", {
+        module: "payroll",
+        period: period.periodKey,
+        start_date: period.startDate,
+        end_date: period.endDate,
+      });
+      toast.success(res.data?.message || "Data payroll pada periode berhasil dibersihkan.");
+      setSelectedIds([]);
+      await fetchPayrollReport();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Gagal membersihkan data payroll periode ini.");
+      throw e;
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredSalaries.length && filteredSalaries.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredSalaries.map(item => item.id));
     }
   };
 
@@ -153,17 +238,30 @@ export default function ReportsPayrollPage() {
             Laporan lengkap penghasilan, potongan BPJS, pemotongan disiplin (telat & alfa), PPh 21, dan take-home pay (THP) karyawan.
           </p>
         </div>
-        <div className="flex gap-3">
-          <button 
-            className="dash-btn dash-btn-primary bg-[#107c41] hover:bg-[#0c6130] text-white flex items-center gap-2 px-6 h-12 rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50" 
-            onClick={handleExportExcel}
-            disabled={exporting}
-          >
-            {exporting ? <Loader2 className="animate-spin" size={18} /> : <FileSpreadsheet size={18} />}
-            Export Laporan Excel (.xlsx)
-          </button>
+        <div className="dash-page-actions">
+           <div className="bg-gray-100 px-4 py-2 rounded-xl flex items-center gap-2">
+              <span className="text-[10px] font-black text-gray-400 uppercase">
+                {selectedIds.length > 0 ? `${selectedIds.length} Terpilih` : 'Total Data:'}
+              </span>
+              <span className="text-sm font-bold text-[#8B0000]">
+                {selectedIds.length > 0 ? selectedIds.length : totalEmployees} Baris
+              </span>
+           </div>
         </div>
       </div>
+
+      {/* Period Filter with Export & Purge */}
+      <ReportPeriodFilter
+        reportTitle="Laporan Penggajian (Payroll)"
+        onPeriodChange={handlePeriodChange}
+        onExportExcel={handleExportExcel}
+        selectedCount={selectedIds.length}
+        onDeleteSelected={handleDeleteSelected}
+        isDeletingSelected={isDeletingSelected}
+        canPurge={true}
+        onPurgePeriod={handlePurgePeriod}
+        isPurging={isPurging}
+      />
 
       {/* KPI Cards Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -208,39 +306,17 @@ export default function ReportsPayrollPage() {
         </div>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="relative w-full md:w-80">
+      {/* Search Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+        <div className="relative w-full">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input 
             type="text"
-            placeholder="Cari nama, jabatan, bank..."
+            placeholder="Cari nama karyawan, jabatan, bank, atau rekening..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full h-11 pl-11 pr-4 bg-gray-50 border-none rounded-xl font-medium text-sm text-gray-800 outline-none focus:ring-2 focus:ring-[#8B0000]/20"
           />
-        </div>
-
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="flex items-center gap-2 text-xs font-bold text-gray-400">
-            <Calendar size={14} /> Periode:
-          </div>
-          <select 
-            value={monthFilter}
-            onChange={(e) => setMonthFilter(e.target.value)}
-            className="h-11 bg-gray-50 border-none rounded-xl px-4 font-bold text-xs text-gray-700 outline-none focus:ring-2 focus:ring-[#8B0000]/20"
-          >
-            <option value="all">Semua Bulan</option>
-            {months.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <select 
-            value={yearFilter}
-            onChange={(e) => setYearFilter(e.target.value)}
-            className="h-11 bg-gray-50 border-none rounded-xl px-4 font-bold text-xs text-gray-700 outline-none focus:ring-2 focus:ring-[#8B0000]/20"
-          >
-            <option value="all">Semua Tahun</option>
-            {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
         </div>
       </div>
 
@@ -250,7 +326,16 @@ export default function ReportsPayrollPage() {
           <table className="w-full text-left text-sm">
             <thead className="bg-gray-50/70 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-widest">
               <tr>
-                <th className="py-4 px-6 pl-8">Karyawan</th>
+                <th className="py-4 px-4 w-10">
+                   <button 
+                      title="Select All"
+                      onClick={toggleSelectAll}
+                      className="text-gray-400 hover:text-[#8B0000] transition-colors"
+                   >
+                     {selectedIds.length === filteredSalaries.length && filteredSalaries.length > 0 ? <CheckSquare size={18} /> : <Square size={18} />}
+                   </button>
+                </th>
+                <th className="py-4 px-6">Karyawan</th>
                 <th className="py-4 px-4">Periode</th>
                 <th className="py-4 px-4">Gaji Pokok</th>
                 <th className="py-4 px-4">Tunjangan & Lembur</th>
@@ -263,7 +348,7 @@ export default function ReportsPayrollPage() {
             <tbody className="divide-y divide-gray-50">
               {filteredSalaries.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-16 text-gray-400 italic">
+                  <td colSpan={9} className="text-center py-16 text-gray-400 italic">
                     Belum ada data payroll untuk periode yang dipilih.
                   </td>
                 </tr>
@@ -275,10 +360,20 @@ export default function ReportsPayrollPage() {
                                      parseAmount(s.deduction_bpjs_kes) + 
                                      parseAmount(s.deduction_tax);
                   const allowances = parseAmount(s.total_earnings) - parseAmount(s.basic_salary);
+                  const isSelected = selectedIds.includes(s.id);
 
                   return (
-                    <tr key={s.id} className="hover:bg-gray-50/80 transition-colors">
-                      <td className="py-4 px-6 pl-8">
+                    <tr key={s.id} className={`hover:bg-gray-50/80 transition-colors ${isSelected ? 'bg-red-50/30' : ''}`}>
+                      <td className="py-4 px-4">
+                        <button 
+                          title="Select Row"
+                          onClick={() => toggleSelect(s.id)}
+                          className={`${isSelected ? 'text-[#8B0000]' : 'text-gray-300'} hover:text-[#8B0000] transition-colors`}
+                        >
+                          {isSelected ? <CheckSquare size={18} /> : <Square size={18} />}
+                        </button>
+                      </td>
+                      <td className="py-4 px-6">
                         <span className="font-bold text-gray-900 block">{s.user?.name || "Karyawan"}</span>
                         <span className="text-xs text-gray-400 font-medium block">{s.department || "-"} • {s.bank_name || "-"} ({s.bank_account_no || "-"})</span>
                       </td>

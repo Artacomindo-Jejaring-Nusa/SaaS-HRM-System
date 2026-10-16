@@ -14,6 +14,7 @@ import { format } from "date-fns";
 import { id } from "date-fns/locale";
 import TaskActivitiesModal from "@/components/TaskActivitiesModal";
 import { useAuth } from "@/contexts/AuthContext";
+import ReportPeriodFilter, { PeriodState, computePeriodState } from "@/components/ReportPeriodFilter";
 
 export default function TaskReportsPage() {
   const [data, setData] = useState<any[]>([]);
@@ -26,6 +27,56 @@ export default function TaskReportsPage() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const { user: currentUser } = useAuth();
+
+  // Period filter state
+  const [currentPeriod, setCurrentPeriod] = useState<PeriodState>(() => {
+    const now = new Date();
+    return computePeriodState(String(now.getMonth() + 1).padStart(2, "0"), now.getFullYear());
+  });
+  const [isPurging, setIsPurging] = useState(false);
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Apakah Anda yakin ingin menghapus ${selectedIds.length} tugas terpilih? Tindakan ini permanen.`)) {
+      return;
+    }
+
+    try {
+      setIsDeletingSelected(true);
+      const res = await axiosInstance.post("/manager/purge-current-month", {
+        module: "tasks",
+        ids: selectedIds,
+      });
+      toast.success(res.data?.message || `${selectedIds.length} data tugas berhasil dihapus.`);
+      setSelectedIds([]);
+      await fetchData();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Gagal menghapus data tugas.");
+    } finally {
+      setIsDeletingSelected(false);
+    }
+  };
+
+  const handlePurgePeriod = async (period: PeriodState) => {
+    try {
+      setIsPurging(true);
+      const res = await axiosInstance.post("/manager/purge-current-month", {
+        module: "tasks",
+        period: period.periodKey,
+        start_date: period.startDate,
+        end_date: period.endDate,
+      });
+      toast.success(res.data?.message || "Data tugas pada periode berhasil dibersihkan.");
+      setSelectedIds([]);
+      await fetchData();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Gagal membersihkan data tugas periode ini.");
+      throw e;
+    } finally {
+      setIsPurging(false);
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -77,10 +128,23 @@ export default function TaskReportsPage() {
   const filteredData = data.filter(item => {
     const matchSearch = item.title?.toLowerCase().includes(search.toLowerCase()) || 
                       item.assignee?.name?.toLowerCase().includes(search.toLowerCase()) ||
-                      item.creator?.name?.toLowerCase().includes(search.toLowerCase());
+                      item.creator?.name?.toLowerCase().includes(search.toLowerCase()) ||
+                      item.user?.name?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === 'all' || item.status === statusFilter;
     const matchPriority = priorityFilter === 'all' || String(item.priority) === priorityFilter;
-    return matchSearch && matchStatus && matchPriority;
+
+    // Period filter
+    let matchPeriod = true;
+    if (!currentPeriod.isAllTime) {
+      const itemDate = item.deadline || item.due_date || item.created_at;
+      if (itemDate) {
+        const d = String(itemDate).substring(0, 10);
+        if (currentPeriod.startDate && d < currentPeriod.startDate) matchPeriod = false;
+        if (currentPeriod.endDate && d > currentPeriod.endDate) matchPeriod = false;
+      }
+    }
+
+    return matchSearch && matchStatus && matchPriority && matchPeriod;
   });
 
   const selectedData = filteredData.filter(item => selectedIds.includes(item.id));
@@ -106,17 +170,18 @@ export default function TaskReportsPage() {
     const exportData = dataToExport.map((item, index) => ({
       "No": index + 1,
       "Judul Tugas": item.title || "-",
-      "Penerima Tugas": item.user?.name || "-",
-      "Diberikan Oleh": item.assigner?.name || "System",
+      "Penerima Tugas": item.user?.name || item.assignee?.name || "-",
+      "Diberikan Oleh": item.assigner?.name || item.creator?.name || "System",
       "Deadline": item.deadline ? format(new Date(item.deadline), "dd/MM/yyyy", { locale: id }) : "-",
       "Status": item.status?.toUpperCase(),
       "Prioritas": item.priority === 3 ? "Tinggi" : item.priority === 2 ? "Sedang" : "Rendah"
     }));
 
+    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Tugas");
-    XLSX.writeFile(workbook, `Report_Tasks_${new Date().getTime()}.xlsx`);
+    XLSX.writeFile(workbook, `Report_Tasks_${periodSlug}.xlsx`);
   };
 
   const generatePDF = async () => {
@@ -126,14 +191,14 @@ export default function TaskReportsPage() {
     const doc = new jsPDF();
     doc.setFontSize(16);
     doc.setTextColor(139, 0, 0);
-    doc.text("LAPORAN MONITORING TUGAS & TANGGUNG JAWAB", 15, 20);
+    doc.text(`LAPORAN MONITORING TUGAS - ${currentPeriod.periodLabel.toUpperCase()}`, 15, 20);
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Dicetak pada: ${format(new Date(), "PPpp", { locale: id })}`, 15, 26);
+    doc.text(`Periode: ${currentPeriod.periodLabel} | Dicetak: ${format(new Date(), "PPpp", { locale: id })}`, 15, 26);
 
     const tableData = dataToPrint.map((item, index) => [
       index + 1,
-      item.user?.name || "-",
+      item.user?.name || item.assignee?.name || "-",
       item.title || "-",
       item.deadline ? format(new Date(item.deadline), "dd MMM yyyy", { locale: id }) : "-",
       item.status?.toUpperCase() || "TODO",
@@ -148,7 +213,8 @@ export default function TaskReportsPage() {
       styles: { fontSize: 8 },
     });
 
-    doc.save(`Laporan_Tugas_${new Date().getTime()}.pdf`);
+    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+    doc.save(`Laporan_Tugas_${periodSlug}.pdf`);
   };
 
   return (
@@ -158,15 +224,31 @@ export default function TaskReportsPage() {
           <h1 className="dash-page-title text-2xl font-bold">Laporan Monitoring Tugas</h1>
           <p className="dash-page-desc text-gray-500">Analisis dan rekapitulasi penugasan seluruh tim.</p>
         </div>
-        <div className="dash-page-actions flex gap-3">
-          <button className="dash-btn bg-[#107c41] text-white!" onClick={exportToExcel}>
-            <FileSpreadsheet size={15} className="mr-2" /> Export Excel
-          </button>
-          <button className="dash-btn bg-white border border-gray-200" onClick={generatePDF}>
-            <Download size={15} className="mr-2" /> Simpan PDF
-          </button>
+        <div className="dash-page-actions">
+           <div className="bg-gray-100 px-4 py-2 rounded-xl flex items-center gap-2">
+              <span className="text-[10px] font-black text-gray-400 uppercase">
+                {selectedIds.length > 0 ? `${selectedIds.length} Terpilih` : 'Total Data:'}
+              </span>
+              <span className="text-sm font-bold text-[#8B0000]">
+                {selectedIds.length > 0 ? selectedIds.length : filteredData.length} Baris
+              </span>
+           </div>
         </div>
       </div>
+
+      {/* Period Filter with Export & Purge */}
+      <ReportPeriodFilter
+        reportTitle="Laporan Monitoring Tugas"
+        onPeriodChange={setCurrentPeriod}
+        onExportExcel={exportToExcel}
+        onExportPdf={generatePDF}
+        selectedCount={selectedIds.length}
+        onDeleteSelected={handleDeleteSelected}
+        isDeletingSelected={isDeletingSelected}
+        canPurge={true}
+        onPurgePeriod={handlePurgePeriod}
+        isPurging={isPurging}
+      />
 
       <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="relative md:col-span-2">
