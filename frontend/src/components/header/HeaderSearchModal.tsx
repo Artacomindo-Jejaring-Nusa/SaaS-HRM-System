@@ -181,7 +181,6 @@ export default function HeaderSearchModal({
       />
       <div 
         className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-150 z-10"
-        onKeyDown={handleKeyDown}
       >
         {/* Search Input Bar */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 bg-gray-50/60">
@@ -194,6 +193,7 @@ export default function HeaderSearchModal({
               setQuery(e.target.value);
               setSelectedIndex(0);
             }}
+            onKeyDown={handleKeyDown}
             placeholder="Ketik untuk mencari menu, pegawai, laporan, atau aksi cepat..."
             className="w-full bg-transparent text-sm sm:text-base font-medium text-gray-900 placeholder-gray-400 focus:outline-none"
             aria-label="Cari seluruh sistem"

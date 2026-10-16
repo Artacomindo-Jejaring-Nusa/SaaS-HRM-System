@@ -369,7 +369,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
             // Play sound effect if enabled in AppSettings
             try {
-              const soundAllowed = typeof globalThis.window !== 'undefined' && localStorage.getItem('app_sound_enabled') !== 'false';
+              const soundAllowed = globalThis.window !== undefined && localStorage.getItem('app_sound_enabled') !== 'false';
               if (soundAllowed) {
                 const audio = new globalThis.Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
                 audio.volume = 0.6;
