@@ -28,27 +28,9 @@ class DataPurgeService
 
         $module = strtolower($request->input('module', 'all'));
         $targetIds = $request->input('ids');
-        $isBulkIds = is_array($targetIds) && count($targetIds) > 0;
+        $bulkIds = (is_array($targetIds) && count($targetIds) > 0) ? $targetIds : null;
 
-        // Parse date range
-        $period = $request->input('period', Carbon::now()->format('Y-m'));
-        if ($request->filled('start_date') && $request->filled('end_date')) {
-            $start = Carbon::parse($request->input('start_date'))->startOfDay();
-            $end = Carbon::parse($request->input('end_date'))->endOfDay();
-            $periodLabel = $start->format('d/m/Y') . ' - ' . $end->format('d/m/Y');
-        } elseif ($period === 'all') {
-            $start = Carbon::parse('2000-01-01')->startOfDay();
-            $end = Carbon::now()->addYears(5)->endOfDay();
-            $periodLabel = 'Semua Periode';
-        } elseif (preg_match('/^\d{4}$/', $period)) {
-            $start = Carbon::parse($period . '-01-01')->startOfYear();
-            $end = Carbon::parse($period . '-12-31')->endOfYear();
-            $periodLabel = "Tahun {$period}";
-        } else {
-            $start = Carbon::parse($period . '-01')->startOfMonth();
-            $end = Carbon::parse($period . '-01')->endOfMonth();
-            $periodLabel = Carbon::parse($period . '-01')->translatedFormat('F Y');
-        }
+        [$start, $end, $periodLabel] = self::parseDateRange($request);
 
         $companyScope = function ($q) use ($user) {
             if ($user->company_id && ! $user->canAccessAllCompanies()) {
@@ -56,165 +38,9 @@ class DataPurgeService
             }
         };
 
-        $deletedCounts = [
-            'reimbursements' => 0,
-            'fund_requests' => 0,
-            'leaves' => 0,
-            'permits' => 0,
-            'overtimes' => 0,
-            'attendance_corrections' => 0,
-            'attendances' => 0,
-            'tasks' => 0,
-            'payroll_batches' => 0,
-            'files' => 0,
-        ];
+        $deletedCounts = self::initializeDeletedCounts();
 
-        // 1. Reimbursements
-        if ($module === 'all' || $module === 'reimbursements') {
-            $reimResult = self::purgeReimbursements($companyScope, $start, $end, $isBulkIds ? $targetIds : null);
-            $deletedCounts['reimbursements'] = $reimResult['count'];
-            $deletedCounts['files'] += $reimResult['files'];
-        }
-
-        // 2. Fund Requests
-        if ($module === 'all' || $module === 'fund_requests') {
-            $fundResult = self::purgeFundRequests($companyScope, $start, $end, $isBulkIds ? $targetIds : null);
-            $deletedCounts['fund_requests'] = $fundResult['count'];
-            $deletedCounts['files'] += $fundResult['files'];
-        }
-
-        // 3. Overtimes
-        if ($module === 'all' || $module === 'overtimes') {
-            $deletedCounts['overtimes'] = self::purgeOvertimes($companyScope, $start, $end, $isBulkIds ? $targetIds : null);
-        }
-
-        // 4. Leaves
-        if ($module === 'all' || $module === 'leaves') {
-            $leaveQuery = Leave::query();
-            if ($isBulkIds) {
-                $leaveQuery->whereIn('id', $targetIds);
-            } else {
-                $leaveQuery->where(function ($q) use ($start, $end) {
-                    $q->whereBetween('start_date', [$start->toDateString(), $end->toDateString()])
-                      ->orWhereBetween('created_at', [$start, $end]);
-                });
-            }
-            $companyScope($leaveQuery);
-            $leaves = $leaveQuery->get();
-            foreach ($leaves as $l) {
-                if ($l->attachment) {
-                    $deletedCounts['files'] += self::deleteStorageFiles($l->attachment);
-                }
-                $l->delete();
-            }
-            $deletedCounts['leaves'] = $leaves->count();
-        }
-
-        // 5. Permits
-        if ($module === 'all' || $module === 'permits') {
-            $permitQuery = Permit::query();
-            if ($isBulkIds) {
-                $permitQuery->whereIn('id', $targetIds);
-            } else {
-                $permitQuery->where(function ($q) use ($start, $end) {
-                    $q->whereBetween('start_date', [$start->toDateString(), $end->toDateString()])
-                      ->orWhereBetween('created_at', [$start, $end]);
-                });
-            }
-            $companyScope($permitQuery);
-            $permits = $permitQuery->get();
-            foreach ($permits as $p) {
-                if ($p->attachment) {
-                    $deletedCounts['files'] += self::deleteStorageFiles($p->attachment);
-                }
-                $p->delete();
-            }
-            $deletedCounts['permits'] = $permits->count();
-        }
-
-        // 6. Attendance Corrections
-        if ($module === 'all' || $module === 'attendance_corrections') {
-            $acQuery = AttendanceCorrection::query();
-            if ($isBulkIds) {
-                $acQuery->whereIn('id', $targetIds);
-            } else {
-                $acQuery->whereBetween('created_at', [$start, $end]);
-            }
-            $companyScope($acQuery);
-            $deletedCounts['attendance_corrections'] = $acQuery->delete();
-        }
-
-        // 7. Attendances
-        if ($module === 'all' || $module === 'attendance' || $module === 'attendances') {
-            $attQuery = \App\Models\Attendance::query();
-            if ($isBulkIds) {
-                $attQuery->whereIn('id', $targetIds);
-            } else {
-                $attQuery->where(function ($q) use ($start, $end) {
-                    $q->whereBetween('date', [$start->toDateString(), $end->toDateString()])
-                      ->orWhereBetween('check_in', [$start, $end]);
-                });
-            }
-            $companyScope($attQuery);
-            $attendances = $attQuery->get();
-            foreach ($attendances as $att) {
-                if ($att->image_in) {
-                    $deletedCounts['files'] += self::deleteStorageFiles($att->image_in);
-                }
-                if ($att->image_out) {
-                    $deletedCounts['files'] += self::deleteStorageFiles($att->image_out);
-                }
-                $att->delete();
-            }
-            $deletedCounts['attendances'] = $attendances->count();
-        }
-
-        // 8. Tasks
-        if ($module === 'all' || $module === 'tasks') {
-            $taskQuery = \App\Models\Task::query();
-            if ($isBulkIds) {
-                $taskQuery->whereIn('id', $targetIds);
-            } else {
-                $taskQuery->whereBetween('created_at', [$start, $end]);
-            }
-            $companyScope($taskQuery);
-            $deletedCounts['tasks'] = $taskQuery->delete();
-        }
-
-        // 9. Payroll Batches & Salaries
-        if ($module === 'all' || $module === 'payroll') {
-            if ($isBulkIds) {
-                // Support deleting individual salaries
-                $salaryQuery = \App\Models\Salary::query()->whereIn('id', $targetIds);
-                $companyScope($salaryQuery);
-                $deletedSalaries = $salaryQuery->delete();
-                $deletedCounts['payroll_batches'] = $deletedSalaries;
-
-                // Also support deleting batches if batch IDs were supplied
-                $batchQuery = \App\Models\PayrollBatch::query()->whereIn('id', $targetIds);
-                $companyScope($batchQuery);
-                $batches = $batchQuery->get();
-                foreach ($batches as $b) {
-                    \App\Models\Salary::where('batch_id', $b->id)->delete();
-                    $b->delete();
-                }
-            } else {
-                $batchQuery = \App\Models\PayrollBatch::query();
-                $batchQuery->whereBetween('created_at', [$start, $end]);
-                $companyScope($batchQuery);
-                $batches = $batchQuery->get();
-                foreach ($batches as $batch) {
-                    \App\Models\Salary::where('batch_id', $batch->id)->delete();
-                    $batch->delete();
-                }
-                $deletedCounts['payroll_batches'] = $batches->count();
-
-                // Also purge any orphan salaries in that range
-                $orphanSalaryQuery = \App\Models\Salary::query()->whereBetween('created_at', [$start, $end]);
-                $companyScope($orphanSalaryQuery);
-                $orphanSalaryQuery->delete();
-            }
-        }
+        self::executeModulePurge($module, $companyScope, $start, $end, $bulkIds, $deletedCounts);
 
         $totalRecords = $deletedCounts['reimbursements'] +
             $deletedCounts['fund_requests'] +
@@ -228,7 +54,6 @@ class DataPurgeService
 
         $moduleDesc = $module === 'all' ? 'semua modul' : "modul {$module}";
 
-        // Audit log via callback
         $logActivityCallback(
             'PURGE_MONTHLY_DATA',
             "Pembersihan data {$moduleDesc} periode {$periodLabel}: {$totalRecords} transaksi dan {$deletedCounts['files']} berkas server dihapus",
@@ -243,6 +68,232 @@ class DataPurgeService
             'message' => "Pembersihan {$moduleDesc} ({$periodLabel}) berhasil. {$totalRecords} data dan {$deletedCounts['files']} berkas server berhasil dihapus.",
             'data' => $deletedCounts,
         ]);
+    }
+
+    private static function initializeDeletedCounts(): array
+    {
+        return [
+            'reimbursements' => 0,
+            'fund_requests' => 0,
+            'leaves' => 0,
+            'permits' => 0,
+            'overtimes' => 0,
+            'attendance_corrections' => 0,
+            'attendances' => 0,
+            'tasks' => 0,
+            'payroll_batches' => 0,
+            'files' => 0,
+        ];
+    }
+
+    private static function parseDateRange(Request $request): array
+    {
+        $period = $request->input('period', Carbon::now()->format('Y-m'));
+
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $start = Carbon::parse($request->input('start_date'))->startOfDay();
+            $end = Carbon::parse($request->input('end_date'))->endOfDay();
+            return [$start, $end, $start->format('d/m/Y') . ' - ' . $end->format('d/m/Y')];
+        }
+
+        if ($period === 'all') {
+            $start = Carbon::parse('2000-01-01')->startOfDay();
+            $end = Carbon::now()->addYears(5)->endOfDay();
+            return [$start, $end, 'Semua Periode'];
+        }
+
+        if (preg_match('/^\d{4}$/', $period)) {
+            $start = Carbon::parse($period . '-01-01')->startOfYear();
+            $end = Carbon::parse($period . '-12-31')->endOfYear();
+            return [$start, $end, "Tahun {$period}"];
+        }
+
+        $start = Carbon::parse($period . '-01')->startOfMonth();
+        $end = Carbon::parse($period . '-01')->endOfMonth();
+        return [$start, $end, Carbon::parse($period . '-01')->translatedFormat('F Y')];
+    }
+
+    private static function executeModulePurge(
+        string $module,
+        \Closure $companyScope,
+        $start,
+        $end,
+        ?array $bulkIds,
+        array &$deletedCounts
+    ): void {
+        if ($module === 'all' || $module === 'reimbursements') {
+            $reimResult = self::purgeReimbursements($companyScope, $start, $end, $bulkIds);
+            $deletedCounts['reimbursements'] = $reimResult['count'];
+            $deletedCounts['files'] += $reimResult['files'];
+        }
+
+        if ($module === 'all' || $module === 'fund_requests') {
+            $fundResult = self::purgeFundRequests($companyScope, $start, $end, $bulkIds);
+            $deletedCounts['fund_requests'] = $fundResult['count'];
+            $deletedCounts['files'] += $fundResult['files'];
+        }
+
+        if ($module === 'all' || $module === 'overtimes') {
+            $deletedCounts['overtimes'] = self::purgeOvertimes($companyScope, $start, $end, $bulkIds);
+        }
+
+        if ($module === 'all' || $module === 'leaves') {
+            $leaveResult = self::purgeLeaves($companyScope, $start, $end, $bulkIds);
+            $deletedCounts['leaves'] = $leaveResult['count'];
+            $deletedCounts['files'] += $leaveResult['files'];
+        }
+
+        if ($module === 'all' || $module === 'permits') {
+            $permitResult = self::purgePermits($companyScope, $start, $end, $bulkIds);
+            $deletedCounts['permits'] = $permitResult['count'];
+            $deletedCounts['files'] += $permitResult['files'];
+        }
+
+        if ($module === 'all' || $module === 'attendance_corrections') {
+            $deletedCounts['attendance_corrections'] = self::purgeAttendanceCorrections($companyScope, $start, $end, $bulkIds);
+        }
+
+        if ($module === 'all' || $module === 'attendance' || $module === 'attendances') {
+            $attResult = self::purgeAttendances($companyScope, $start, $end, $bulkIds);
+            $deletedCounts['attendances'] = $attResult['count'];
+            $deletedCounts['files'] += $attResult['files'];
+        }
+
+        if ($module === 'all' || $module === 'tasks') {
+            $deletedCounts['tasks'] = self::purgeTasks($companyScope, $start, $end, $bulkIds);
+        }
+
+        if ($module === 'all' || $module === 'payroll') {
+            $deletedCounts['payroll_batches'] = self::purgePayroll($companyScope, $start, $end, $bulkIds);
+        }
+    }
+
+    private static function purgeLeaves(\Closure $companyScope, $start, $end, ?array $targetIds): array
+    {
+        $query = Leave::query();
+        if ($targetIds) {
+            $query->whereIn('id', $targetIds);
+        } else {
+            $query->where(function ($q) use ($start, $end) {
+                $q->whereBetween('start_date', [$start->toDateString(), $end->toDateString()])
+                  ->orWhereBetween('created_at', [$start, $end]);
+            });
+        }
+        $companyScope($query);
+        $records = $query->get();
+        $files = 0;
+        foreach ($records as $l) {
+            if ($l->attachment) {
+                $files += self::deleteStorageFiles($l->attachment);
+            }
+            $l->delete();
+        }
+        return ['count' => $records->count(), 'files' => $files];
+    }
+
+    private static function purgePermits(\Closure $companyScope, $start, $end, ?array $targetIds): array
+    {
+        $query = Permit::query();
+        if ($targetIds) {
+            $query->whereIn('id', $targetIds);
+        } else {
+            $query->where(function ($q) use ($start, $end) {
+                $q->whereBetween('start_date', [$start->toDateString(), $end->toDateString()])
+                  ->orWhereBetween('created_at', [$start, $end]);
+            });
+        }
+        $companyScope($query);
+        $records = $query->get();
+        $files = 0;
+        foreach ($records as $p) {
+            if ($p->attachment) {
+                $files += self::deleteStorageFiles($p->attachment);
+            }
+            $p->delete();
+        }
+        return ['count' => $records->count(), 'files' => $files];
+    }
+
+    private static function purgeAttendanceCorrections(\Closure $companyScope, $start, $end, ?array $targetIds): int
+    {
+        $query = AttendanceCorrection::query();
+        if ($targetIds) {
+            $query->whereIn('id', $targetIds);
+        } else {
+            $query->whereBetween('created_at', [$start, $end]);
+        }
+        $companyScope($query);
+        return $query->delete();
+    }
+
+    private static function purgeAttendances(\Closure $companyScope, $start, $end, ?array $targetIds): array
+    {
+        $query = \App\Models\Attendance::query();
+        if ($targetIds) {
+            $query->whereIn('id', $targetIds);
+        } else {
+            $query->where(function ($q) use ($start, $end) {
+                $q->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+                  ->orWhereBetween('check_in', [$start, $end]);
+            });
+        }
+        $companyScope($query);
+        $records = $query->get();
+        $files = 0;
+        foreach ($records as $att) {
+            if ($att->image_in) {
+                $files += self::deleteStorageFiles($att->image_in);
+            }
+            if ($att->image_out) {
+                $files += self::deleteStorageFiles($att->image_out);
+            }
+            $att->delete();
+        }
+        return ['count' => $records->count(), 'files' => $files];
+    }
+
+    private static function purgeTasks(\Closure $companyScope, $start, $end, ?array $targetIds): int
+    {
+        $query = \App\Models\Task::query();
+        if ($targetIds) {
+            $query->whereIn('id', $targetIds);
+        } else {
+            $query->whereBetween('created_at', [$start, $end]);
+        }
+        $companyScope($query);
+        return $query->delete();
+    }
+
+    private static function purgePayroll(\Closure $companyScope, $start, $end, ?array $targetIds): int
+    {
+        if ($targetIds) {
+            $salaryQuery = \App\Models\Salary::query()->whereIn('id', $targetIds);
+            $companyScope($salaryQuery);
+            $deletedSalaries = $salaryQuery->delete();
+
+            $batchQuery = \App\Models\PayrollBatch::query()->whereIn('id', $targetIds);
+            $companyScope($batchQuery);
+            $batches = $batchQuery->get();
+            foreach ($batches as $b) {
+                \App\Models\Salary::where('batch_id', $b->id)->delete();
+                $b->delete();
+            }
+            return $deletedSalaries;
+        }
+
+        $batchQuery = \App\Models\PayrollBatch::query()->whereBetween('created_at', [$start, $end]);
+        $companyScope($batchQuery);
+        $batches = $batchQuery->get();
+        foreach ($batches as $batch) {
+            \App\Models\Salary::where('batch_id', $batch->id)->delete();
+            $batch->delete();
+        }
+
+        $orphanSalaryQuery = \App\Models\Salary::query()->whereBetween('created_at', [$start, $end]);
+        $companyScope($orphanSalaryQuery);
+        $orphanSalaryQuery->delete();
+
+        return $batches->count();
     }
 
     private static function deleteStorageFiles(mixed $attachments): int

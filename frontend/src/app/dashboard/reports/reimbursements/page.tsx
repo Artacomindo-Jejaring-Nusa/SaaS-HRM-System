@@ -4,8 +4,8 @@ import { useEffect, useState, useMemo } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
 import { 
-  Download, Search, Calendar, User, ReceiptCent, Filter, Eye, 
-  XCircle, ExternalLink, FileSpreadsheet, CheckSquare, Square
+  Search, Calendar, User, ReceiptCent, Filter, Eye, 
+  XCircle, ExternalLink, CheckSquare, Square
 } from "lucide-react";
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -168,7 +168,7 @@ export default function ReimbursementReportsPage() {
       { wch: 40 }, { wch: 15 }, { wch: 15 }, { wch: 30 }
     ];
 
-    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+    const periodSlug = currentPeriod.periodLabel.replaceAll(/[\s()/]+/g, '_');
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Reimbursement");
     XLSX.writeFile(workbook, `Laporan_Reimbursement_${periodSlug}.xlsx`);
@@ -265,7 +265,7 @@ export default function ReimbursementReportsPage() {
         doc.text(`Halaman ${i} dari ${pageCount} | On Time HRMS System`, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, { align: "center" });
     }
 
-    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+    const periodSlug = currentPeriod.periodLabel.replaceAll(/[\s()/]+/g, '_');
     doc.save(`Laporan_Reimbursement_${periodSlug}.pdf`);
   };
 

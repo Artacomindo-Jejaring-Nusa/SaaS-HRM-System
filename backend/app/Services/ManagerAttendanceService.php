@@ -10,33 +10,54 @@ class ManagerAttendanceService
     public function getTeamAttendance(User $user, bool $isCompanyAdmin, ?string $targetDate = null, ?string $companyId = null): array
     {
         $date = $targetDate ? Carbon::parse($targetDate)->toDateString() : Carbon::today()->toDateString();
-        $isGlobalAdmin = $user->isSuperAdmin() || $user->canAccessAllCompanies();
-        $directSubordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
 
         $query = User::with(['role', 'attendances' => function ($q) use ($date) {
             $q->whereDate('check_in', $date);
         }]);
 
-        if ($isGlobalAdmin) {
-            $query->where('id', '!=', $user->id);
-            if ($companyId && $companyId !== 'all') {
-                $query->where('company_id', $companyId);
-            } elseif ($user->company_id && !$user->canAccessAllCompanies()) {
-                $query->where('company_id', $user->company_id);
-            }
-        } elseif ($isCompanyAdmin) {
-            $comp = ($companyId && $companyId !== 'all') ? $companyId : $user->company_id;
-            if ($comp) {
-                $query->where('company_id', $comp);
-            }
-            $query->where('id', '!=', $user->id);
-        } elseif ($directSubordinateIds->isNotEmpty()) {
-            $query->whereIn('id', $directSubordinateIds);
-        } else {
-            $query->where('supervisor_id', $user->id);
-        }
+        $this->scopeTeamQuery($query, $user, $isCompanyAdmin, $companyId);
 
         return $query->get()->map(fn ($sub) => $this->formatMemberAttendance($sub))->all();
+    }
+
+    private function scopeTeamQuery($query, User $user, bool $isCompanyAdmin, ?string $companyId): void
+    {
+        if ($user->isSuperAdmin() || $user->canAccessAllCompanies()) {
+            $this->scopeGlobalAdminQuery($query, $user, $companyId);
+            return;
+        }
+
+        if ($isCompanyAdmin) {
+            $this->scopeCompanyAdminQuery($query, $user, $companyId);
+            return;
+        }
+
+        $directSubordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
+        if ($directSubordinateIds->isNotEmpty()) {
+            $query->whereIn('id', $directSubordinateIds);
+            return;
+        }
+
+        $query->where('supervisor_id', $user->id);
+    }
+
+    private function scopeGlobalAdminQuery($query, User $user, ?string $companyId): void
+    {
+        $query->where('id', '!=', $user->id);
+        if ($companyId && $companyId !== 'all') {
+            $query->where('company_id', $companyId);
+        } elseif ($user->company_id && !$user->canAccessAllCompanies()) {
+            $query->where('company_id', $user->company_id);
+        }
+    }
+
+    private function scopeCompanyAdminQuery($query, User $user, ?string $companyId): void
+    {
+        $comp = ($companyId && $companyId !== 'all') ? $companyId : $user->company_id;
+        if ($comp) {
+            $query->where('company_id', $comp);
+        }
+        $query->where('id', '!=', $user->id);
     }
 
     private function formatMemberAttendance(User $sub): array

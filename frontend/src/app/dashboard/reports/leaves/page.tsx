@@ -4,8 +4,8 @@ import { useEffect, useState, useMemo } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
 import { 
-  Download, Search, Calendar, User, FileText, Filter, Eye, 
-  XCircle, FileSpreadsheet, CheckSquare, Square 
+  Search, Calendar, User, FileText, Filter, Eye, 
+  XCircle, CheckSquare, Square 
 } from "lucide-react";
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -162,7 +162,7 @@ export default function LeaveReportsPage() {
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Cuti");
-    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+    const periodSlug = currentPeriod.periodLabel.replaceAll(/[\s()/]+/g, '_');
     XLSX.writeFile(workbook, `Laporan_Cuti_${periodSlug}.xlsx`);
   };
 
@@ -249,7 +249,7 @@ export default function LeaveReportsPage() {
         doc.text(`Halaman ${i} dari ${pageCount} | On Time HRMS System`, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, { align: "center" });
     }
 
-    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+    const periodSlug = currentPeriod.periodLabel.replaceAll(/[\s()/]+/g, '_');
     doc.save(`Laporan_Cuti_${periodSlug}.pdf`);
   };
 

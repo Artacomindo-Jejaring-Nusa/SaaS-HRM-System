@@ -157,6 +157,51 @@ class ManagerApprovalService
         ]);
     }
 
+    private function determineDinasLuarTargetStatus(User $user, Attendance $attendance, bool $isGlobalAdmin): string
+    {
+        if ($isGlobalAdmin || $user->hasPermission('manage-attendances') || $attendance->dinas_luar_status === 'approved_spv') {
+            return 'approved_hr';
+        }
+        return 'approved_spv';
+    }
+
+    private function applyDinasLuarApproval(Attendance $attendance, User $user, string $targetStatus, ?string $remark): void
+    {
+        $attendance->update([
+            'dinas_luar_status' => $targetStatus,
+            'approved_by_hr' => ($targetStatus === 'approved_hr') ? $user->id : $attendance->approved_by_hr,
+            'approved_at_hr' => ($targetStatus === 'approved_hr') ? now() : $attendance->approved_at_hr,
+            'approved_by_spv' => ($targetStatus === 'approved_spv') ? $user->id : ($attendance->approved_by_spv ?? $user->id),
+            'approved_at_spv' => ($targetStatus === 'approved_spv') ? now() : ($attendance->approved_at_spv ?? now()),
+            'status' => ($targetStatus === 'approved_hr') ? 'present' : $attendance->status,
+            'remark' => $remark,
+        ]);
+    }
+
+    private function applyDinasLuarRejection(Attendance $attendance, ?string $remark): void
+    {
+        $attendance->update([
+            'dinas_luar_status' => 'rejected',
+            'rejection_reason' => $remark ?? 'Ditolak oleh Admin/Manager',
+            'status' => 'alfa',
+            'remark' => $remark,
+        ]);
+    }
+
+    private function buildDinasLuarNotificationMessage(bool $isApproved, string $destination, ?string $remark): string
+    {
+        if ($isApproved) {
+            $msg = "Permohonan Dinas Luar Anda ke {$destination} telah DISETUJUI.";
+            if ($remark) {
+                $msg .= " Catatan: {$remark}";
+            }
+            return $msg;
+        }
+
+        $reason = $remark ?? '-';
+        return "Permohonan Dinas Luar Anda ke {$destination} DITOLAK. Alasan: {$reason}";
+    }
+
     private function handleDinasLuarApproval(Request $request, User $user, bool $isGlobalAdmin)
     {
         $attendance = Attendance::with('user')
@@ -172,26 +217,10 @@ class ManagerApprovalService
         $isApproved = $request->status === 'approved';
 
         if ($isApproved) {
-            $targetStatus = ($isGlobalAdmin || $user->hasPermission('manage-attendances') || $attendance->dinas_luar_status === 'approved_spv')
-                ? 'approved_hr'
-                : 'approved_spv';
-
-            $attendance->update([
-                'dinas_luar_status' => $targetStatus,
-                'approved_by_hr' => ($targetStatus === 'approved_hr') ? $user->id : $attendance->approved_by_hr,
-                'approved_at_hr' => ($targetStatus === 'approved_hr') ? now() : $attendance->approved_at_hr,
-                'approved_by_spv' => ($targetStatus === 'approved_spv') ? $user->id : ($attendance->approved_by_spv ?? $user->id),
-                'approved_at_spv' => ($targetStatus === 'approved_spv') ? now() : ($attendance->approved_at_spv ?? now()),
-                'status' => ($targetStatus === 'approved_hr') ? 'present' : $attendance->status,
-                'remark' => $request->remark,
-            ]);
+            $targetStatus = $this->determineDinasLuarTargetStatus($user, $attendance, $isGlobalAdmin);
+            $this->applyDinasLuarApproval($attendance, $user, $targetStatus, $request->remark);
         } else {
-            $attendance->update([
-                'dinas_luar_status' => 'rejected',
-                'rejection_reason' => $request->remark ?? 'Ditolak oleh Admin/Manager',
-                'status' => 'alfa',
-                'remark' => $request->remark,
-            ]);
+            $this->applyDinasLuarRejection($attendance, $request->remark);
         }
 
         $dest = $attendance->dinas_luar_destination ?? 'Luar Kantor';
@@ -199,9 +228,7 @@ class ManagerApprovalService
             $this->notify(
                 $attendance->user,
                 $isApproved ? 'ABSEN DINAS LUAR DISETUJUI' : 'ABSEN DINAS LUAR DITOLAK',
-                $isApproved
-                    ? "Permohonan Dinas Luar Anda ke {$dest} telah DISETUJUI." . ($request->remark ? " Catatan: {$request->remark}" : '')
-                    : "Permohonan Dinas Luar Anda ke {$dest} DITOLAK. Alasan: " . ($request->remark ?? '-'),
+                $this->buildDinasLuarNotificationMessage($isApproved, $dest, $request->remark),
                 $isApproved ? 'success' : 'danger',
                 self::ROUTE_ATTENDANCE
             );

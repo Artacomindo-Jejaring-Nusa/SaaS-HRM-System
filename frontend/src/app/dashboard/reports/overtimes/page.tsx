@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
 import { 
-  Download, Search, Calendar, User, Clock, Filter, 
-  XCircle, FileSpreadsheet, AlertCircle, Trash2
+  Search, Calendar, User, Clock, Filter, 
+  XCircle, AlertCircle, Trash2
 } from "lucide-react";
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -238,7 +238,7 @@ export default function OvertimeReportsPage() {
       { wch: 15 }, { wch: 15 }, { wch: 40 }, { wch: 15 }, { wch: 30 }
     ];
 
-    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+    const periodSlug = currentPeriod.periodLabel.replaceAll(/[\s()/]+/g, '_');
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Lembur");
     XLSX.writeFile(workbook, `Laporan_Lembur_${periodSlug}.xlsx`);
@@ -327,7 +327,7 @@ export default function OvertimeReportsPage() {
         doc.text(`Halaman ${i} dari ${pageCount} | On Time HRMS System`, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, { align: "center" });
     }
 
-    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+    const periodSlug = currentPeriod.periodLabel.replaceAll(/[\s()/]+/g, '_');
     doc.save(`Laporan_Lembur_${periodSlug}.pdf`);
   };
 

@@ -994,7 +994,7 @@ export default function ReportsAttendancePage() {
       const response = await axiosInstance.get(`/attendance/export?start_date=${startDate}&end_date=${endDate}${selectedUser ? `&user_id=${selectedUser}` : ""}`, {
         responseType: 'blob',
       });
-      const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+      const periodSlug = currentPeriod.periodLabel.replaceAll(/[\s()/]+/g, '_');
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;

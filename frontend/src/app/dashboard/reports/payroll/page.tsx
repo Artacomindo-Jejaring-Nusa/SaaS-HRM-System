@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
 import { 
-  Search, FileSpreadsheet, Calendar, 
-  Users, TrendingUp, DollarSign, Loader2, Clock, CheckSquare, Square
+  Search, 
+  Users, TrendingUp, DollarSign, Clock, CheckSquare, Square
 } from "lucide-react";
 import { toast } from "sonner";
 import { ReportSkeleton } from "@/components/Skeleton";
@@ -72,7 +72,6 @@ const MONTH_NAMES_EN = [
 
 export default function ReportsPayrollPage() {
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState(false);
   const [salaries, setSalaries] = useState<SalaryRow[]>([]);
   const [monthFilter, setMonthFilter] = useState(() => {
     const m = new Date().getMonth() + 1;
@@ -100,7 +99,7 @@ export default function ReportsPayrollPage() {
       if (period.month === "all") {
         setMonthFilter("all");
       } else {
-        const mIdx = parseInt(period.month, 10);
+        const mIdx = Number.parseInt(period.month, 10);
         setMonthFilter(MONTH_NAMES_EN[mIdx] || period.month);
       }
       setYearFilter(period.year);
@@ -128,13 +127,12 @@ export default function ReportsPayrollPage() {
 
   const handleExportExcel = async () => {
     try {
-      setExporting(true);
       toast.info("Sedang mengunduh laporan Excel komprehensif...");
       const response = await axiosInstance.get('/payroll/export', {
         params: { month: monthFilter, year: yearFilter },
         responseType: 'blob',
       });
-      const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+      const periodSlug = currentPeriod.periodLabel.replaceAll(/[\s()/]+/g, '_');
       const url = globalThis.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -146,8 +144,6 @@ export default function ReportsPayrollPage() {
     } catch (e) {
       console.error("Error exporting excel:", e);
       toast.error("Gagal mengekspor laporan payroll ke Excel.");
-    } finally {
-      setExporting(false);
     }
   };
 

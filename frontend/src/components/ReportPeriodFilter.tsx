@@ -2,14 +2,11 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { 
-  Calendar, 
   FileSpreadsheet, 
-  Download, 
   Trash2, 
   AlertTriangle, 
   RefreshCw, 
   X, 
-  CheckCircle2,
   CalendarDays,
   FileText
 } from "lucide-react";

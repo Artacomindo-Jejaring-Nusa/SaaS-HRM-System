@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
 import { 
-  Download, Search, ClipboardList, User, FileText, Filter, Eye, 
-  XCircle, FileSpreadsheet, CheckSquare, Square, CheckCircle2, Clock, PlayCircle, Calendar
+  Search, ClipboardList, User, FileText, Filter, Eye, 
+  XCircle, CheckSquare, Square, CheckCircle2, Clock, PlayCircle, Calendar
 } from "lucide-react";
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -177,7 +177,7 @@ export default function TaskReportsPage() {
       "Prioritas": item.priority === 3 ? "Tinggi" : item.priority === 2 ? "Sedang" : "Rendah"
     }));
 
-    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+    const periodSlug = currentPeriod.periodLabel.replaceAll(/[\s()/]+/g, '_');
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Tugas");
@@ -213,7 +213,7 @@ export default function TaskReportsPage() {
       styles: { fontSize: 8 },
     });
 
-    const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+    const periodSlug = currentPeriod.periodLabel.replaceAll(/[\s()/]+/g, '_');
     doc.save(`Laporan_Tugas_${periodSlug}.pdf`);
   };
 

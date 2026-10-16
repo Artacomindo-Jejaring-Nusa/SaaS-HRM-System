@@ -32,12 +32,8 @@ import {
   DollarSign,
   CalendarDays,
   Laptop,
-  Globe,
   Repeat,
   Sparkles,
-  MapPinned,
-  UserCheck,
-  UserX,
   Smartphone
 } from "lucide-react";
 import { ListPageSkeleton } from "@/components/Skeleton";
@@ -425,6 +421,36 @@ const normalizeWebAttendances = (rawItems: any[]): ApprovalItem[] =>
     };
   });
 
+const handleWebAttendanceApproval = async (item: ApprovalItem, action: ActionType, remarkInput: string) => {
+  if (action === "approve") {
+    return axiosInstance.post(`/attendance/web-approve/${item.id}`);
+  }
+  return axiosInstance.post(`/attendance/web-reject/${item.id}`, {
+    reason: remarkInput || "Ditolak oleh Admin/Super Admin"
+  });
+};
+
+const handleDinasLuarApproval = async (
+  item: ApprovalItem,
+  action: ActionType,
+  remarkInput: string,
+  isHR: boolean
+) => {
+  try {
+    return await axiosInstance.post("/manager/update-status", {
+      type: "dinas_luar",
+      id: item.id,
+      status: action === "approve" ? "approved" : "rejected",
+      remark: remarkInput
+    });
+  } catch {
+    const actionSuffix = action === "approve"
+      ? (isHR && item.status === "waiting_approval" ? "approve-hr" : "approve-spv")
+      : "reject";
+    return axiosInstance.post(`/attendance/dinas-luar/${item.id}/${actionSuffix}`, { reason: remarkInput });
+  }
+};
+
 const dispatchApprovalRequest = async (
   item: ApprovalItem,
   action: ActionType,
@@ -434,31 +460,13 @@ const dispatchApprovalRequest = async (
   isHR: boolean
 ) => {
   if (item.type === "web_attendance") {
-    if (action === "approve") {
-      return await axiosInstance.post(`/attendance/web-approve/${item.id}`);
-    } else {
-      return await axiosInstance.post(`/attendance/web-reject/${item.id}`, {
-        reason: remarkInput || "Ditolak oleh Admin/Super Admin"
-      });
-    }
+    return handleWebAttendanceApproval(item, action, remarkInput);
   }
 
   if (item.type === "dinas_luar") {
-    try {
-      return await axiosInstance.post("/manager/update-status", {
-        type: "dinas_luar",
-        id: item.id,
-        status: action === "approve" ? "approved" : "rejected",
-        remark: remarkInput
-      });
-    } catch {
-      let actionSuffix = "reject";
-      if (action === "approve") {
-        actionSuffix = (isHR && item.status === "waiting_approval") ? "approve-hr" : "approve-spv";
-      }
-      return axiosInstance.post(`/attendance/dinas-luar/${item.id}/${actionSuffix}`, { reason: remarkInput });
-    }
+    return handleDinasLuarApproval(item, action, remarkInput, isHR);
   }
+
   const payload: Record<string, any> = { 
     remark: remarkInput,
     type: item.type,
@@ -511,6 +519,72 @@ const renderMemberStatusBadge = (member: TeamMemberAttendance) => {
         </span>
       )}
     </div>
+  );
+};
+
+const renderWorkPatternBadge = (workPattern?: string) => {
+  if (workPattern === "shift") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-purple-50 text-purple-700 border border-purple-200">
+        <Repeat size={10} /> Shift Hour
+      </span>
+    );
+  }
+  if (workPattern === "flexible") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-teal-50 text-teal-700 border border-teal-200">
+        <Sparkles size={10} /> Fleksibel
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-blue-50 text-blue-700 border border-blue-200">
+      <Clock size={10} /> Office Hour
+    </span>
+  );
+};
+
+const renderAttendancePatternBadge = (pattern?: string) => {
+  if (pattern === "shift") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+        <Repeat size={10} /> Shift Hour
+      </span>
+    );
+  }
+  if (pattern === "flexible") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+        <Sparkles size={10} /> Fleksibel
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+      <Building2 size={10} /> Office Hour
+    </span>
+  );
+};
+
+const renderAttendanceStatusTag = (status?: string) => {
+  if (status === "late") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+        <Clock size={10} /> Terlambat
+      </span>
+    );
+  }
+  if (status === "present") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <CheckCircle2 size={10} /> Tepat Waktu
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+      {status || "Hadir"}
+    </span>
   );
 };
 
@@ -849,7 +923,10 @@ export default function ApprovalsPage() {
         fetchCategoryData(canApprove("early_out"), `/manager/pending-requests?type=early_out&${periodQuery}`),
         fetchCategoryData(canApprove("payroll"), `/manager/pending-requests?type=payroll&${periodQuery}`),
         fetchCategoryData(canApprove("attendance_correction"), `/manager/pending-requests?type=attendance_correction&${periodQuery}`),
-        fetchCategoryData(canApprove("web_attendance"), `/attendance/web-pending${selectedCompanyId ? `?company_id=${selectedCompanyId}` : ""}`),
+        fetchCategoryData(
+          canApprove("web_attendance"),
+          selectedCompanyId ? `/attendance/web-pending?company_id=${selectedCompanyId}` : "/attendance/web-pending"
+        ),
       ]);
 
       const normalizedWeb = normalizeWebAttendances(webPendingData);
@@ -1191,19 +1268,7 @@ export default function ApprovalsPage() {
               <h3 className="text-sm font-bold text-slate-900 leading-snug">{member.name}</h3>
               <p className="text-xs text-slate-500">{member.role}</p>
               <div className="mt-1">
-                {member.work_pattern === "shift" ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-purple-50 text-purple-700 border border-purple-200">
-                    <Repeat size={10} /> Shift Hour
-                  </span>
-                ) : member.work_pattern === "flexible" ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-teal-50 text-teal-700 border border-teal-200">
-                    <Sparkles size={10} /> Fleksibel
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-blue-50 text-blue-700 border border-blue-200">
-                    <Clock size={10} /> Office Hour
-                  </span>
-                )}
+                {renderWorkPatternBadge(member.work_pattern)}
               </div>
             </div>
           </div>
@@ -2230,9 +2295,10 @@ export default function ApprovalsPage() {
           {/* Pola Kehadiran Card Boxes (Office Hour vs Shift Hour vs Fleksibel) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Office Hour Card */}
-            <div
+            <button
+              type="button"
               onClick={() => setPatternFilter(patternFilter === "office_hour" ? "all" : "office_hour")}
-              className={`p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+              className={`text-left w-full p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
                 patternFilter === "office_hour"
                   ? "bg-indigo-50/60 border-indigo-400 ring-2 ring-indigo-500/20 shadow-sm"
                   : "bg-white border-slate-200 hover:border-indigo-200 hover:shadow-xs"
@@ -2292,12 +2358,13 @@ export default function ApprovalsPage() {
                   }}
                 />
               </div>
-            </div>
+            </button>
 
             {/* Shift Hour Card */}
-            <div
+            <button
+              type="button"
               onClick={() => setPatternFilter(patternFilter === "shift" ? "all" : "shift")}
-              className={`p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+              className={`text-left w-full p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
                 patternFilter === "shift"
                   ? "bg-purple-50/60 border-purple-400 ring-2 ring-purple-500/20 shadow-sm"
                   : "bg-white border-slate-200 hover:border-purple-200 hover:shadow-xs"
@@ -2357,12 +2424,13 @@ export default function ApprovalsPage() {
                   }}
                 />
               </div>
-            </div>
+            </button>
 
             {/* Flexible Pattern Card */}
-            <div
+            <button
+              type="button"
               onClick={() => setPatternFilter(patternFilter === "flexible" ? "all" : "flexible")}
-              className={`p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+              className={`text-left w-full p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
                 patternFilter === "flexible"
                   ? "bg-teal-50/60 border-teal-400 ring-2 ring-teal-500/20 shadow-sm"
                   : "bg-white border-slate-200 hover:border-teal-200 hover:shadow-xs"
@@ -2404,7 +2472,7 @@ export default function ApprovalsPage() {
                 <Sparkles size={13} className="text-teal-600 shrink-0" />
                 <span>Bebas jam kerja, tanpa perhitungan terlambat / alpa.</span>
               </div>
-            </div>
+            </button>
           </div>
 
           {/* Search bar & Pattern Filter Pills */}
@@ -2734,15 +2802,17 @@ export default function ApprovalsPage() {
 
               {/* Attendance Table */}
               <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-                {loadingAttHistory ? (
+                {loadingAttHistory && (
                   <div className="p-8"><ListPageSkeleton /></div>
-                ) : attendanceHistory.length === 0 ? (
+                )}
+                {!loadingAttHistory && attendanceHistory.length === 0 && (
                   <div className="py-16 text-center">
                     <CalendarCheck size={36} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-sm font-bold text-slate-700">Belum ada riwayat absensi pada filter ini</p>
                     <p className="text-xs text-slate-400 mt-1">Gunakan tombol filter waktu atau filter kanal di atas untuk memperluas pencarian</p>
                   </div>
-                ) : (
+                )}
+                {!loadingAttHistory && attendanceHistory.length > 0 && (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
@@ -2793,19 +2863,7 @@ export default function ApprovalsPage() {
 
                               {/* Pola Kehadiran */}
                               <td className="py-3 px-4 whitespace-nowrap">
-                                {pattern === "shift" ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                                    <Repeat size={10} /> Shift Hour
-                                  </span>
-                                ) : pattern === "flexible" ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
-                                    <Sparkles size={10} /> Fleksibel
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                    <Building2 size={10} /> Office Hour
-                                  </span>
-                                )}
+                                {renderAttendancePatternBadge(pattern)}
                               </td>
 
                               {/* Kanal Absen */}
@@ -2823,19 +2881,7 @@ export default function ApprovalsPage() {
 
                               {/* Status */}
                               <td className="py-3 px-4 whitespace-nowrap">
-                                {att.status === "late" ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                    <Clock size={10} /> Terlambat
-                                  </span>
-                                ) : att.status === "present" ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                    <CheckCircle2 size={10} /> Tepat Waktu
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                                    {att.status || "Hadir"}
-                                  </span>
-                                )}
+                                {renderAttendanceStatusTag(att.status)}
                               </td>
 
                               {/* Lokasi & Tipe */}

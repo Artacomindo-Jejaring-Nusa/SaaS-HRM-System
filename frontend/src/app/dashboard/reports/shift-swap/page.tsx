@@ -2,15 +2,13 @@
 
 import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axios";
-import { User, Calendar, Filter, AlertCircle, ArrowRightLeft, CheckCircle2, Clock, FileSpreadsheet } from "lucide-react";
+import { User, Calendar, Filter, AlertCircle, ArrowRightLeft, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import Pagination from "@/components/Pagination";
 import { ReportSkeleton } from "@/components/Skeleton";
-import { useAuth } from "@/contexts/AuthContext";
 import ReportPeriodFilter, { PeriodState, computePeriodState } from "@/components/ReportPeriodFilter";
 
 export default function ReportsShiftSwapPage() {
-  const { hasPermission } = useAuth();
   const [loading, setLoading] = useState(true);
   const [fetchingPreview, setFetchingPreview] = useState(false);
   const [reportData, setReportData] = useState<any[]>([]);
@@ -85,7 +83,7 @@ export default function ReportsShiftSwapPage() {
       const response = await axiosInstance.get(`/shift-swap/export?start_date=${startDate}&end_date=${endDate}${selectedUser ? `&user_id=${selectedUser}` : ""}${selectedStatus ? `&status=${selectedStatus}` : ""}`, {
         responseType: 'blob',
       });
-      const periodSlug = currentPeriod.periodLabel.replace(/[\s\(\)\/]+/g, '_');
+      const periodSlug = currentPeriod.periodLabel.replaceAll(/[\s()/]+/g, '_');
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
