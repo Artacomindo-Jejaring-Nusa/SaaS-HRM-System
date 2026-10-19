@@ -57,6 +57,7 @@ class ManagerController extends Controller
      */
     public function getTeamAttendance(Request $request, ManagerAttendanceService $attendanceService)
     {
+        /** @var \App\Models\User $user */
         $user = Auth::user();
         $isCompanyAdmin = PendingRequestService::isExecutiveOrAdmin($user) || $user->hasPermission('view-attendances');
 
