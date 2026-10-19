@@ -1538,8 +1538,9 @@ function EmployeeAddEditModal({
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-gray-700">PIN Mesin Fingerprint</label>
+                    <label htmlFor="input-emp-fingerprint-pin" className="text-sm font-medium text-gray-700">PIN Mesin Fingerprint</label>
                     <input 
+                      id="input-emp-fingerprint-pin"
                       type="text" 
                       placeholder="Contoh: 1, 2, 101"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"

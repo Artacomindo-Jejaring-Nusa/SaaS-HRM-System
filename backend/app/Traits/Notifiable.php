@@ -29,7 +29,20 @@ trait Notifiable
         $sendEmail = is_array($channels) ? ($channels['email'] ?? true) : (bool) $channels;
         $sendWA = is_array($channels) ? ($channels['wa'] ?? true) : (bool) $channels;
 
-        // 1. Create database notification
+        $this->recordDatabaseNotification($user, $title, $message, $type, $link, $category);
+        $this->sendFcmPushNotification($user, $title, $message, $type, $link, $category);
+
+        if ($user->email && $sendEmail) {
+            $this->sendEmailNotification($user, $title, $message);
+        }
+
+        if ($sendWA && $user->phone) {
+            $this->sendWhatsAppNotification($user, $title, $message, $link);
+        }
+    }
+
+    private function recordDatabaseNotification(User $user, string $title, string $message, string $type, ?string $link, string $category): void
+    {
         try {
             Notification::create([
                 'user_id' => $user->id,
@@ -43,8 +56,10 @@ trait Notifiable
         } catch (\Throwable $e) {
             Log::error("Database/Broadcast notification failed for user {$user->id}: ".$e->getMessage());
         }
+    }
 
-        // 2. Send push notification via FCM
+    private function sendFcmPushNotification(User $user, string $title, string $message, string $type, ?string $link, string $category): void
+    {
         try {
             FCMService::sendNotification($user, $title, $message, [
                 'type' => $type,
@@ -54,35 +69,34 @@ trait Notifiable
         } catch (\Exception $e) {
             Log::error("FCM push failed for user {$user->id}: ".$e->getMessage());
         }
+    }
 
-        // 3. Send email if email is present and not skipped
-        if ($user->email && $sendEmail) {
-            try {
-                Mail::to($user->email)->send(new UserNotification($user, $title, $message));
-            } catch (\Exception $e) {
-                Log::error("Failed to send email to {$user->email}: ".$e->getMessage());
-            }
+    private function sendEmailNotification(User $user, string $title, string $message): void
+    {
+        try {
+            Mail::to($user->email)->send(new UserNotification($user, $title, $message));
+        } catch (\Exception $e) {
+            Log::error("Failed to send email to {$user->email}: ".$e->getMessage());
         }
+    }
 
-        // 3. Send WhatsApp message via WatZap
-        if ($sendWA && $user->phone) {
-            try {
-                // Ensure company relation is loaded
-                if (! $user->relationLoaded('company')) {
-                    $user->load('company');
-                }
-
-                $waService = new WhatsAppService($user->company);
-                $waMessage = "*{$title}*\n\n{$message}";
-
-                if ($link) {
-                    $waMessage .= "\n\nCek di sini: ".$link;
-                }
-
-                $waService->sendMessage($user->phone, $waMessage);
-            } catch (\Exception $e) {
-                Log::error("WhatsApp notification failed for user {$user->id}: ".$e->getMessage());
+    private function sendWhatsAppNotification(User $user, string $title, string $message, ?string $link): void
+    {
+        try {
+            if (! $user->relationLoaded('company')) {
+                $user->load('company');
             }
+
+            $waService = new WhatsAppService($user->company);
+            $waMessage = "*{$title}*\n\n{$message}";
+
+            if ($link) {
+                $waMessage .= "\n\nCek di sini: ".$link;
+            }
+
+            $waService->sendMessage($user->phone, $waMessage);
+        } catch (\Exception $e) {
+            Log::error("WhatsApp notification failed for user {$user->id}: ".$e->getMessage());
         }
     }
 

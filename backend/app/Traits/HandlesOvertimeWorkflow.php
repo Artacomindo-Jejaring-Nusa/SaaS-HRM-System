@@ -16,6 +16,18 @@ trait HandlesOvertimeWorkflow
             'overtime', $overtime->company_id, $user, $overtime->user, $overtime->current_approval_step, $decision
         );
 
+        $errorResponse = $this->checkWorkflowResultError($result);
+        if ($errorResponse !== null) {
+            return $errorResponse;
+        }
+
+        return ($decision === 'reject')
+            ? $this->applyWorkflowRejection($request, $overtime, $user)
+            : $this->applyWorkflowApproval($request, $overtime, $user, $result);
+    }
+
+    private function checkWorkflowResultError(?array $result)
+    {
         if ($result === null) {
             return $this->errorResponse('Workflow tidak ditemukan.', 400);
         }
@@ -23,11 +35,7 @@ trait HandlesOvertimeWorkflow
             return $this->errorResponse($result['error'], 403);
         }
 
-        if ($decision === 'reject') {
-            return $this->applyWorkflowRejection($request, $overtime, $user);
-        }
-
-        return $this->applyWorkflowApproval($request, $overtime, $user, $result);
+        return null;
     }
 
     private function applyWorkflowRejection(Request $request, Overtime $overtime, $user)

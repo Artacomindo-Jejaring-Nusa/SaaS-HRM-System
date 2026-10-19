@@ -301,6 +301,7 @@ class ApprovalService
     }
 
     public const ROLE_SUPER_ADMIN = 'Super Admin';
+    private const LABEL_APPROVED_BY_PREFIX = 'Approved by - Disetujui (';
 
     /**
      * Get the list of users who can approve a specific workflow step.
@@ -322,14 +323,14 @@ class ApprovalService
     public static function getStepLabel(WorkflowStep $step): string
     {
         return match ($step->approver_type) {
-            'super_admin' => 'Approved by - Disetujui ('.self::ROLE_SUPER_ADMIN.')',
+            'super_admin' => self::LABEL_APPROVED_BY_PREFIX . self::ROLE_SUPER_ADMIN . ')',
             'supervisor' => 'Checked by - Diperiksa (Atasan Langsung)',
             'role' => ($step->step_number === 2)
                 ? 'Acknowledge - Diketahui (' . ($step->role?->name ?? 'Management') . ')'
-                : 'Approved by - Disetujui (' . ($step->role?->name ?? 'Management') . ')',
+                : self::LABEL_APPROVED_BY_PREFIX . ($step->role?->name ?? 'Management') . ')',
             'user' => $step->approver_user_id
-                ? 'Approved by - Disetujui (' . (User::find($step->approver_user_id)?->name ?? 'User') . ')'
-                : 'Approved by - Disetujui (User)',
+                ? self::LABEL_APPROVED_BY_PREFIX . (User::find($step->approver_user_id)?->name ?? 'User') . ')'
+                : self::LABEL_APPROVED_BY_PREFIX . 'User)',
             default => "Tahap {$step->step_number}",
         };
     }

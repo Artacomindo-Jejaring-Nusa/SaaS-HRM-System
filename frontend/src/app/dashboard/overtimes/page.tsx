@@ -501,9 +501,9 @@ export default function OvertimesPage() {
 
       {/* Main Table / List View */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm overflow-hidden">
-        {loading ? (
-          <TableSkeleton rows={5} />
-        ) : filteredOvertimes.length === 0 ? (
+        {loading && <TableSkeleton rows={5} />}
+
+        {!loading && filteredOvertimes.length === 0 && (
           <div className="p-12 text-center">
             <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mx-auto text-gray-400 mb-3">
               <Clock className="w-8 h-8" />
@@ -513,7 +513,9 @@ export default function OvertimesPage() {
               {emptyTabMessage}
             </p>
           </div>
-        ) : (
+        )}
+
+        {!loading && filteredOvertimes.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-gray-600 dark:text-gray-300">
               <thead className="bg-gray-50 dark:bg-gray-900/50 text-xs uppercase text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">

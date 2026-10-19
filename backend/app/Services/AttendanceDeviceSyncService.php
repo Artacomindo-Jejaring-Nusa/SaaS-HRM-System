@@ -106,17 +106,25 @@ class AttendanceDeviceSyncService
 
     private function processSingleLog(array $log, AttendanceDevice $device, array &$unmappedPins): bool
     {
+        $user = $this->resolveLogUser($log, $device, $unmappedPins);
+        if (!$user) {
+            return false;
+        }
+
+        $logTime = Carbon::parse($log['timestamp']);
+
+        return $this->recordAttendanceCheck($user, $logTime);
+    }
+
+    private function resolveLogUser(array $log, AttendanceDevice $device, array &$unmappedPins): ?User
+    {
         $pin = (string) ($log['pin'] ?? '');
         $timestampStr = $log['timestamp'] ?? '';
 
         if (empty($pin) || empty($timestampStr)) {
-            return false;
+            return null;
         }
 
-        $logTime = Carbon::parse($timestampStr);
-        $dateKey = $logTime->toDateString();
-
-        // Find user by fingerprint_pin or nik
         $user = User::where('company_id', $device->company_id)
             ->where(function ($q) use ($pin) {
                 $q->where('fingerprint_pin', $pin)
@@ -126,16 +134,19 @@ class AttendanceDeviceSyncService
 
         if (!$user) {
             $unmappedPins[$pin] = true;
-            return false;
+            return null;
         }
 
-        // Check existing attendance on this date
+        return $user;
+    }
+
+    private function recordAttendanceCheck(User $user, Carbon $logTime): bool
+    {
         $attendance = Attendance::where('user_id', $user->id)
-            ->whereDate('check_in', $dateKey)
+            ->whereDate('check_in', $logTime->toDateString())
             ->first();
 
         if (!$attendance) {
-            // Record Check-In
             $status = $this->resolveCheckInStatus($user, $logTime);
             Attendance::create([
                 'user_id' => $user->id,
@@ -148,7 +159,6 @@ class AttendanceDeviceSyncService
             return true;
         }
 
-        // Record Check-Out if tap is at least 15 minutes after check-in and newer than current checkout
         if ($logTime->diffInMinutes($attendance->check_in) >= 15 && (!$attendance->check_out || $logTime->gt($attendance->check_out))) {
             $attendance->update([
                 'check_out' => $logTime,
