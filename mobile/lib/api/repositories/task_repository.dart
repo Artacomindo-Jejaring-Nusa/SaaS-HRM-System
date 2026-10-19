@@ -31,10 +31,17 @@ class TaskRepository {
     try {
       final headers = await ApiClient.getHeaders();
       headers['Content-Type'] = 'application/json';
+      final payload = Map<String, dynamic>.from(data);
+      if (payload.containsKey('assigned_to') && !payload.containsKey('user_id')) {
+        payload['user_id'] = [payload['assigned_to']];
+      }
+      if (payload.containsKey('due_date') && !payload.containsKey('deadline')) {
+        payload['deadline'] = payload['due_date'];
+      }
       final response = await ApiClient.client.post(
         Uri.parse('${ApiClient.baseUrl}/tasks'),
         headers: headers,
-        body: jsonEncode(data),
+        body: jsonEncode(payload),
       );
       return jsonDecode(response.body);
     } catch (e) {

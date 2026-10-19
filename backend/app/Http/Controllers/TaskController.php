@@ -15,20 +15,26 @@ class TaskController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1;
         $type = $request->query('type', 'received'); // received | sent
 
         if ($type === 'sent') {
-            if (! $user->hasPermission('manage-tasks') && ! $user->hasPermission('assign-tasks') && $user->role_id !== 1) {
+            if (! $user->hasPermission('manage-tasks') && ! $user->hasPermission('assign-tasks') && ! $isSuperAdmin) {
                 return $this->errorResponse('Akses ditolak. Anda tidak memiliki izin untuk melihat tugas yang diberikan.', 403);
             }
         } else {
-            if (! $user->hasPermission('manage-tasks') && ! $user->hasPermission('receive-tasks') && ! $user->hasPermission('view-tasks') && $user->role_id !== 1) {
+            if (! $user->hasPermission('manage-tasks') && ! $user->hasPermission('receive-tasks') && ! $user->hasPermission('view-tasks') && ! $isSuperAdmin) {
                 return $this->errorResponse('Akses ditolak. Anda tidak memiliki izin untuk melihat tugas yang diterima.', 403);
             }
         }
 
-        $query = Task::with(['user', 'assigner', 'activities.evidence'])
-            ->where('company_id', $user->company_id);
+        $query = Task::with(['user', 'assigner', 'activities.evidence']);
+
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
+            $query->where('company_id', $user->company_id);
+        } elseif ($request->filled('company_id') && $request->company_id !== 'all') {
+            $query->where('company_id', $request->company_id);
+        }
 
         if ($type === 'sent') {
             $query->where('assigned_by', $user->id);
@@ -48,8 +54,12 @@ class TaskController extends Controller
 
     private function resolveTargetUserIds(Request $request): array
     {
-        if ($request->has('user_id') && is_array($request->user_id)) {
-            return $request->user_id;
+        if ($request->has('user_id')) {
+            return is_array($request->user_id) ? $request->user_id : [(int) $request->user_id];
+        }
+
+        if ($request->has('assigned_to')) {
+            return is_array($request->assigned_to) ? $request->assigned_to : [(int) $request->assigned_to];
         }
 
         if ($request->has('division_id')) {
@@ -122,10 +132,32 @@ class TaskController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1;
 
         // Check permission
-        if (! $user->hasPermission('manage-tasks') && ! $user->hasPermission('assign-tasks') && $user->role_id !== 1) {
+        if (! $user->hasPermission('manage-tasks') && ! $user->hasPermission('assign-tasks') && ! $isSuperAdmin) {
             return $this->errorResponse('Akses ditolak. Anda tidak memiliki izin untuk membuat tugas.', 403);
+        }
+
+        // Normalize mobile payload formats
+        if ($request->filled('assigned_to') && !$request->has('user_id')) {
+            $request->merge(['user_id' => is_array($request->assigned_to) ? $request->assigned_to : [(int) $request->assigned_to]]);
+        } elseif ($request->has('user_id') && !is_array($request->user_id)) {
+            $request->merge(['user_id' => [(int) $request->user_id]]);
+        }
+
+        if ($request->filled('due_date') && !$request->filled('deadline')) {
+            $request->merge(['deadline' => $request->due_date]);
+        }
+
+        if ($request->filled('priority') && !is_numeric($request->priority)) {
+            $mappedPriority = match (strtolower((string) $request->priority)) {
+                'high' => 3,
+                'medium' => 2,
+                'low' => 1,
+                default => 2,
+            };
+            $request->merge(['priority' => $mappedPriority]);
         }
 
         $request->validate([
@@ -208,9 +240,11 @@ class TaskController extends Controller
     public function destroy(Request $request, $id)
     {
         $task = Task::findOrFail($id);
+        $user = $request->user();
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1;
 
-        // Only assigner can delete
-        if ($task->assigned_by != $request->user()->id && $request->user()->role_id !== 1) {
+        // Only assigner or Super Admin can delete
+        if ($task->assigned_by != $user->id && ! $isSuperAdmin) {
             return $this->errorResponse('Hanya pemberi tugas atau Super Admin yang bisa menghapus.', 403);
         }
 

@@ -36,7 +36,7 @@ class ManagerApprovalService
         'fund_request' => 'approve-fund-requests',
         'payroll' => 'approve-payroll',
         'early_out' => 'approve-attendances',
-        'attendance_correction' => 'approve-attendance-corrections',
+        'attendance_correction' => 'manage-attendance-corrections',
         'dinas_luar' => 'approve-attendances',
     ];
 
@@ -98,15 +98,19 @@ class ManagerApprovalService
 
     private function canUserApproveRequest(User $user, string $type, bool $isGlobalAdmin, bool $isCompanyAdmin): bool
     {
-        if ($isGlobalAdmin || $isCompanyAdmin) {
+        if ($isGlobalAdmin) {
             return true;
         }
 
-        if (User::where('supervisor_id', $user->id)->exists()) {
-            return true;
+        // Non-SuperAdmin must have subordinates
+        $hasSubordinates = User::where('supervisor_id', $user->id)->exists();
+        if (!$hasSubordinates) {
+            return false;
         }
 
-        return !isset(self::PERM_MAP[$type]) || $user->hasPermission(self::PERM_MAP[$type]);
+        return !isset(self::PERM_MAP[$type]) ||
+            $user->hasPermission(self::PERM_MAP[$type]) ||
+            ($type === 'attendance_correction' && $user->hasPermission('approve-attendance-corrections'));
     }
 
     private function handleEarlyOutApproval(Request $request, User $user, bool $isGlobalAdmin)
@@ -118,6 +122,16 @@ class ManagerApprovalService
 
         if (!$attendance) {
             return response()->json(['status' => 'error', 'message' => 'Data absensi pulang awal tidak ditemukan.'], 404);
+        }
+
+        if (!$isGlobalAdmin) {
+            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+            if (!in_array($attendance->user_id, $subordinateIds)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Anda tidak memiliki wewenang untuk memproses absensi pulang awal dari karyawan yang bukan bawahan Anda.',
+                ], 403);
+            }
         }
 
         $isApproved = $request->status === 'approved';
@@ -214,6 +228,16 @@ class ManagerApprovalService
             return response()->json(['status' => 'error', 'message' => 'Data absensi dinas luar tidak ditemukan.'], 404);
         }
 
+        if (!$isGlobalAdmin) {
+            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+            if (!in_array($attendance->user_id, $subordinateIds)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Anda tidak memiliki wewenang untuk memproses absensi dinas luar dari karyawan yang bukan bawahan Anda.',
+                ], 403);
+            }
+        }
+
         $isApproved = $request->status === 'approved';
 
         if ($isApproved) {
@@ -266,6 +290,30 @@ class ManagerApprovalService
         $item = $query->first();
         if (!$item) {
             return response()->json(['status' => 'error', 'message' => 'Pengajuan tidak ditemukan atau Anda tidak memiliki hak akses.'], 404);
+        }
+
+        if (!$isGlobalAdmin) {
+            $submitter = $item->user ?: User::find($item->user_id) ?: $user;
+            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+            $submitterId = $item->user_id ?? $item->user?->id;
+            $isSubordinate = $submitterId && in_array($submitterId, $subordinateIds);
+
+            // Check if workflow step specifically targets this user ID
+            $isDirectUserStep = false;
+            if (!empty($item->current_approval_step)) {
+                $workflow = ApprovalService::getWorkflow($request->type, $item->company_id ?? $user->company_id, $submitter);
+                $step = $workflow?->steps()->where('step_number', $item->current_approval_step)->first();
+                if ($step && $step->approver_type === 'user' && $step->approver_user_id === $user->id) {
+                    $isDirectUserStep = true;
+                }
+            }
+
+            if (!$isDirectUserStep && !$isSubordinate) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Anda tidak memiliki wewenang untuk menyetujui pengajuan dari karyawan yang bukan bawahan Anda.',
+                ], 403);
+            }
         }
 
         return !empty($item->current_approval_step)

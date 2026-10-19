@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Models\VehicleLog;
+use App\Services\EmployeeQueryService;
 use App\Traits\Notifiable;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -29,15 +30,28 @@ class VehicleLogController extends Controller
     {
         $query = VehicleLog::with(['user', 'approver']);
         $user = $request->user();
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
-        if ($user->is_manager) {
-            if ($user->company_id && ! $user->canAccessAllCompanies()) {
+        if ($isSuperAdmin) {
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
-            } elseif ($request->has('company_id') && $request->company_id) {
+            } elseif ($request->filled('company_id') && $request->company_id !== 'all') {
                 $query->where('company_id', $request->company_id);
+            }
+        } elseif (!empty($subordinateIds)) {
+            $query->where(function ($q) use ($user, $subordinateIds) {
+                $q->where('user_id', $user->id)
+                  ->orWhereIn('user_id', $subordinateIds);
+            });
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
             }
         } else {
             $query->where('user_id', $user->id);
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
         }
 
         // Filter by status
@@ -431,9 +445,17 @@ class VehicleLogController extends Controller
      */
     public function approve(Request $request, $id)
     {
-        abort_if(! $request->user()->hasPermission('approve-vehicle-logs'), 403, self::MSG_FORBIDDEN);
-
+        $user = $request->user();
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
         $log = VehicleLog::with('user')->findOrFail($id);
+
+        if (!$isSuperAdmin) {
+            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+            if (!in_array($log->user_id, $subordinateIds)) {
+                abort(403, 'Akses ditolak. Anda tidak memiliki wewenang untuk memproses peminjaman armada karyawan ini.');
+            }
+        }
+        abort_if(! $user->hasPermission('approve-vehicle-logs') && !$isSuperAdmin, 403, self::MSG_FORBIDDEN);
 
         if (! in_array($log->status, ['pending', 'completed'])) {
             return $this->errorResponse('Hanya pengajuan dengan status "pending" atau "completed" yang bisa disetujui.', 422);
@@ -481,9 +503,17 @@ class VehicleLogController extends Controller
      */
     public function reject(Request $request, $id)
     {
-        abort_if(! $request->user()->hasPermission('approve-vehicle-logs'), 403, self::MSG_FORBIDDEN);
-
+        $user = $request->user();
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
         $log = VehicleLog::with('user')->findOrFail($id);
+
+        if (!$isSuperAdmin) {
+            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+            if (!in_array($log->user_id, $subordinateIds)) {
+                abort(403, 'Akses ditolak. Anda tidak memiliki wewenang untuk memproses peminjaman armada karyawan ini.');
+            }
+        }
+        abort_if(! $user->hasPermission('approve-vehicle-logs') && !$isSuperAdmin, 403, self::MSG_FORBIDDEN);
 
         if (! in_array($log->status, ['pending', 'completed'])) {
             return $this->errorResponse('Hanya pengajuan dengan status "pending" atau "completed" yang bisa ditolak.', 422);

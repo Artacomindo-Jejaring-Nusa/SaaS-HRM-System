@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Leave;
 use App\Models\User;
 use App\Services\ApprovalService;
+use App\Services\EmployeeQueryService;
 use App\Traits\Notifiable;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -38,14 +39,26 @@ class LeaveController extends Controller
         $query = Leave::with(['user.supervisor', 'user.company', 'user.role', 'supervisorApprover', 'hrApprover']);
 
         $user = $request->user();
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
-        if ($user->role_id === 1) {
-            // Master Admin sees all
-        } elseif ($user->is_manager || $user->hasPermission('approve-leaves')) {
-            $query->where('company_id', $user->company_id);
+        if ($isSuperAdmin) {
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            }
+        } elseif (!empty($subordinateIds)) {
+            $query->where(function ($q) use ($user, $subordinateIds) {
+                $q->where('user_id', $user->id)
+                  ->orWhereIn('user_id', $subordinateIds);
+            });
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
         } else {
-            $query->where('user_id', $user->id)
-                ->where('company_id', $user->company_id);
+            $query->where('user_id', $user->id);
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
         }
 
         $leaves = $query->orderBy('id', 'desc')->paginate(10);
@@ -339,8 +352,10 @@ class LeaveController extends Controller
 
     private function approveFallbackWorkflow(Request $request, Leave $leave, $user): \Illuminate\Http\JsonResponse
     {
-        $isSupervisor = $leave->user->supervisor_id === $user->id;
-        $isHR         = $user->hasPermission('approve-leaves') || $user->role_id === 1;
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        $isSupervisor = ($leave->user->supervisor_id === $user->id) || in_array($leave->user_id, $subordinateIds);
+        $isHR = $isSuperAdmin || ($user->role && in_array($user->role->name, ['HRD', 'Super Admin', 'Admin']));
 
         if ($leave->status === 'pending_supervisor') {
             return $this->handlePendingSupervisorApproval($request, $leave, $user, $isSupervisor, $isHR);
@@ -529,8 +544,10 @@ class LeaveController extends Controller
 
     private function rejectFallbackWorkflow(Request $request, Leave $leave, $user): \Illuminate\Http\JsonResponse
     {
-        $isSupervisor = $leave->user->supervisor_id === $user->id;
-        $isHR = $user->hasPermission('approve-leaves') || $user->role_id === 1;
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        $isSupervisor = ($leave->user->supervisor_id === $user->id) || in_array($leave->user_id, $subordinateIds);
+        $isHR = $isSuperAdmin || ($user->role && in_array($user->role->name, ['HRD', 'Super Admin', 'Admin']));
 
         if (! $isSupervisor && ! $isHR) {
             abort(403, 'Akses ditolak.');

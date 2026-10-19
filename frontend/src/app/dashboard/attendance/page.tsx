@@ -14,16 +14,11 @@ import {
   User as UserIcon, 
   Globe, 
   Smartphone, 
-  ShieldCheck, 
   AlertTriangle, 
-  Check, 
   XCircle, 
-  Laptop,
-  History,
-  RotateCcw,
   Building2
 } from "lucide-react";
-import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { TableSkeleton } from "@/components/Skeleton";
 import Pagination from "@/components/Pagination";
 import { getStorageUrl } from "@/lib/utils";
@@ -104,9 +99,7 @@ const getEarlyOutBadge = (record: any) => {
 };
 
 export default function AttendancePage() {
-  const { hasPermission, user } = useAuth();
-  const isSuperAdmin = isSuperAdminUser(user);
-  const [activeTab, setActiveTab] = useState<'all' | 'web_pending'>('all');
+  const { hasPermission } = useAuth();
 
   // History State
   const [attendance, setAttendance] = useState<any[]>([]);
@@ -118,17 +111,6 @@ export default function AttendancePage() {
     total: 0
   });
   const [searchQuery, setSearchQuery] = useState("");
-
-  // Web Pending State
-  const [webPendingList, setWebPendingList] = useState<any[]>([]);
-  const [loadingWebPending, setLoadingWebPending] = useState(false);
-  const [webPendingCount, setWebPendingCount] = useState<number>(0);
-  const [processingId, setProcessingId] = useState<number | null>(null);
-
-  // Reject Modal State
-  const [rejectModalOpen, setRejectModalOpen] = useState(false);
-  const [rejectTargetId, setRejectTargetId] = useState<number | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
 
   // Detail Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -162,91 +144,9 @@ export default function AttendancePage() {
     }
   }, []);
 
-  const fetchWebPending = useCallback(async () => {
-    try {
-      setLoadingWebPending(true);
-      const response = await axiosInstance.get('/attendance/web-pending');
-      const data = response.data.data?.data || response.data.data || [];
-      setWebPendingList(data);
-      setWebPendingCount(data.length);
-    } catch (e) {
-      console.error("Gagal mengambil data pending absen web", e);
-    } finally {
-      setLoadingWebPending(false);
-    }
-  }, []);
-
-  const fetchSummary = useCallback(async () => {
-    try {
-      const response = await axiosInstance.get('/attendance/pending-summary');
-      if (response.data?.data?.web_pending_count !== undefined) {
-        setWebPendingCount(response.data.data.web_pending_count);
-      }
-    } catch (e) {
-      console.error("Gagal mengambil ringkasan pending", e);
-    }
-  }, []);
-
   useEffect(() => {
-    if (!isSuperAdmin && activeTab === 'web_pending') {
-      setActiveTab('all');
-    }
-  }, [isSuperAdmin, activeTab]);
-
-  useEffect(() => {
-    if (activeTab === 'all') {
-      fetchAttendance(page);
-    } else if (isSuperAdmin) {
-      fetchWebPending();
-    }
-    if (isSuperAdmin) {
-      fetchSummary();
-    }
-  }, [activeTab, page, fetchAttendance, fetchWebPending, fetchSummary, isSuperAdmin]);
-
-  const handleApprove = async (id: number) => {
-    setProcessingId(id);
-    try {
-      await axiosInstance.post(`/attendance/web-approve/${id}`);
-      toast.success("Absensi web berhasil disetujui.");
-      fetchWebPending();
-      fetchSummary();
-      if (isModalOpen && selectedRecord?.id === id) {
-        setIsModalOpen(false);
-      }
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || "Gagal menyetujui absensi web.");
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleOpenRejectModal = (id: number) => {
-    setRejectTargetId(id);
-    setRejectReason("");
-    setRejectModalOpen(true);
-  };
-
-  const handleConfirmReject = async () => {
-    if (!rejectTargetId) return;
-    setProcessingId(rejectTargetId);
-    try {
-      await axiosInstance.post(`/attendance/web-reject/${rejectTargetId}`, {
-        rejection_reason: rejectReason || undefined,
-      });
-      toast.success("Absensi web berhasil ditolak.");
-      setRejectModalOpen(false);
-      fetchWebPending();
-      fetchSummary();
-      if (isModalOpen && selectedRecord?.id === rejectTargetId) {
-        setIsModalOpen(false);
-      }
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || "Gagal menolak absensi web.");
-    } finally {
-      setProcessingId(null);
-    }
-  };
+    fetchAttendance(page);
+  }, [page, fetchAttendance]);
 
   const getStatusBadge = (record: any) => {
     if (record.attendance_type === 'dinas_luar') {
@@ -317,7 +217,10 @@ export default function AttendancePage() {
     const q = searchQuery.toLowerCase();
     const name = item.user?.name?.toLowerCase() || '';
     const date = item.date?.toLowerCase() || '';
-    return name.includes(q) || date.includes(q);
+    const status = item.status?.toLowerCase() || '';
+    const notes = item.notes?.toLowerCase() || '';
+    const destination = item.dinas_luar_destination?.toLowerCase() || '';
+    return name.includes(q) || date.includes(q) || status.includes(q) || notes.includes(q) || destination.includes(q);
   });
 
   const renderAttendanceTable = () => {
@@ -329,7 +232,7 @@ export default function AttendancePage() {
         <div className="p-12 text-center text-slate-400">
           <Clock size={36} className="mx-auto mb-2 opacity-30 text-slate-500" />
           <p className="text-sm font-black text-slate-600">Belum Ada Rekaman Absensi</p>
-          <p className="text-xs text-slate-400 font-medium">Data absensi akan otomatis muncul saat karyawan check-in.</p>
+          <p className="text-xs text-slate-400 font-medium">Data absensi Anda akan otomatis muncul saat Anda melakukan check-in.</p>
         </div>
       );
     }
@@ -404,145 +307,14 @@ export default function AttendancePage() {
     );
   };
 
-  const renderWebPendingContent = () => {
-    if (loadingWebPending) {
-      return (
-        <div className="bg-white rounded-3xl p-8 border border-slate-200/80">
-          <TableSkeleton rows={6} cols={6} />
-        </div>
-      );
-    }
-    if (webPendingList.length === 0) {
-      return (
-        <div className="bg-white rounded-3xl p-16 border border-slate-200/80 text-center text-slate-400">
-          <ShieldCheck size={48} className="mx-auto mb-3 text-emerald-500 opacity-80" />
-          <h3 className="text-base font-black text-slate-800">Semua Absen Web Sudah Terverifikasi!</h3>
-          <p className="text-xs text-slate-500 font-medium mt-1">Tidak ada antrean absensi web yang membutuhkan persetujuan manual saat ini.</p>
-        </div>
-      );
-    }
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {webPendingList.map((item) => (
-          <div 
-            key={item.id} 
-            className="bg-white rounded-3xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col justify-between group"
-          >
-            <div className="p-5 space-y-4">
-              {/* Header */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center">
-                    {item.user?.profile_photo_url || item.user?.profile_photo_path ? (
-                      <img src={getStorageUrl(item.user?.profile_photo_url || item.user?.profile_photo_path)} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <UserIcon size={16} className="text-slate-400" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-black text-slate-900 text-sm">{item.user?.name || "Karyawan"}</p>
-                    <p className="text-[10px] text-slate-400 font-bold">{item.user?.email}</p>
-                  </div>
-                </div>
-                <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[10px] font-black uppercase">
-                  Pending
-                </span>
-              </div>
-
-              {/* Photo Previews */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
-                    <span>Absen Masuk</span>
-                    <span className="text-emerald-600 font-black">{item.check_in_time || "-"}</span>
-                  </div>
-                  <div className="aspect-video bg-slate-100 rounded-xl overflow-hidden border border-slate-200 relative">
-                    {item.image_in_url || item.image_in ? (
-                      <img src={getStorageUrl(item.image_in_url || item.image_in)} alt="Selfie Masuk" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-400 font-bold">Tanpa Foto</div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
-                    <span>Absen Pulang</span>
-                    <span className="text-orange-600 font-black">{item.check_out_time || "-"}</span>
-                  </div>
-                  <div className="aspect-video bg-slate-100 rounded-xl overflow-hidden border border-slate-200 relative">
-                    {item.image_out_url || item.image_out ? (
-                      <img src={getStorageUrl(item.image_out_url || item.image_out)} alt="Selfie Pulang" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-400 font-bold">-</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Metadata */}
-              <div className="p-3 bg-slate-50 rounded-2xl space-y-1.5 text-[11px]">
-                <div className="flex items-center justify-between text-slate-600">
-                  <span className="font-bold">Tanggal:</span>
-                  <span className="font-black text-slate-800">{item.date}</span>
-                </div>
-                <div className="flex items-center justify-between text-slate-600">
-                  <span className="font-bold">IP Address:</span>
-                  <span className="font-mono text-[10px] text-slate-700">{item.ip_address || 'Tidak tercatat'}</span>
-                </div>
-                {item.is_suspicious && (
-                  <div className="pt-1 flex items-center gap-1 text-rose-600 font-black text-[10px]">
-                    <AlertTriangle size={12} />
-                    {item.suspicious_reason || 'Terdeteksi anomali jam kerja / lokasi'}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="p-4 bg-slate-50/70 border-t border-slate-100 flex items-center gap-2">
-              <button
-                onClick={() => handleViewDetails(item)}
-                className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
-                title="Lihat Detail Lengkap"
-              >
-                <Eye size={16} />
-              </button>
-              <button
-                onClick={() => handleOpenRejectModal(item.id)}
-                disabled={processingId !== null}
-                className="flex-1 py-2.5 px-3 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
-              >
-                <X size={14} />
-                Tolak
-              </button>
-              <button
-                onClick={() => handleApprove(item.id)}
-                disabled={processingId !== null}
-                className="flex-1 py-2.5 px-3 bg-[#8B0000] hover:bg-[#700000] text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-[#8B0000]/20 transition-all disabled:opacity-50"
-              >
-                <Check size={14} />
-                {processingId === item.id ? "Memproses..." : "Setujui"}
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="dash-page-header">
         <div>
-          <h1 className="dash-page-title">
-            {isSuperAdmin ? "Riwayat & Persetujuan Absensi" : "Riwayat Absensi"}
-          </h1>
+          <h1 className="dash-page-title">Riwayat Absensi</h1>
           <p className="dash-page-desc">
-            {isSuperAdmin 
-              ? "Pantau catatan kehadiran harian karyawan dan kelola verifikasi absensi web."
-              : "Pantau catatan kehadiran harian karyawan."}
+            Pantau catatan kehadiran harian Anda.
           </p>
         </div>
         <div className="dash-page-actions">
@@ -555,156 +327,36 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      {/* Tabs Switcher - Super Admin Only */}
-      {isSuperAdmin && (
-        <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-3">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('all')}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${
-                activeTab === 'all'
-                  ? 'bg-slate-900 text-white shadow-md shadow-slate-900/10'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
-            >
-              <History size={14} />
-              Semua Absensi
-            </button>
-
-            <button
-              onClick={() => setActiveTab('web_pending')}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${
-                activeTab === 'web_pending'
-                  ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
-            >
-              <Laptop size={14} />
-              Persetujuan Absen Web
-              {webPendingCount > 0 && (
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                  activeTab === 'web_pending' ? 'bg-white text-amber-600' : 'bg-amber-100 text-amber-700'
-                }`}>
-                  {webPendingCount}
-                </span>
-              )}
-            </button>
+      {/* Attendance History Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between bg-white p-3 border border-slate-200/80 rounded-2xl shadow-sm">
+          <div className="relative w-full max-w-sm">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              type="text"
+              placeholder="Cari tanggal, status, atau catatan..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-10 pl-10 pr-4 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-400 transition-colors"
+            />
           </div>
+        </div>
 
-          {activeTab === 'web_pending' && (
-            <button
-              onClick={fetchWebPending}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-            >
-              <RotateCcw size={13} className={loadingWebPending ? "animate-spin" : ""} />
-              Refresh
-            </button>
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+          {renderAttendanceTable()}
+          
+          {pagination.last_page > 1 && (
+            <div className="p-4 border-t border-slate-100">
+              <Pagination 
+                currentPage={pagination.current_page} 
+                lastPage={pagination.last_page} 
+                total={pagination.total} 
+                onPageChange={setPage} 
+              />
+            </div>
           )}
         </div>
-      )}
-
-      {/* TAB 1: ALL ATTENDANCE */}
-      {activeTab === 'all' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between bg-white p-3 border border-slate-200/80 rounded-2xl shadow-sm">
-            <div className="relative w-full max-w-sm">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input
-                type="text"
-                placeholder="Cari nama karyawan atau tanggal..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-10 pl-10 pr-4 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-400 transition-colors"
-              />
-            </div>
-          </div>
-
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
-            {renderAttendanceTable()}
-            
-            {pagination.last_page > 1 && (
-              <div className="p-4 border-t border-slate-100">
-                <Pagination 
-                  currentPage={pagination.current_page} 
-                  lastPage={pagination.last_page} 
-                  total={pagination.total} 
-                  onPageChange={setPage} 
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 2: WEB PENDING APPROVAL - Super Admin Only */}
-      {isSuperAdmin && activeTab === 'web_pending' && (
-        <div className="space-y-4">
-          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
-            <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={18} />
-            <div className="text-xs text-amber-900 leading-relaxed font-medium">
-              <span className="font-black block mb-0.5">Antrean Verifikasi Absen Web:</span>
-              <span>Absensi di bawah ini dikirimkan melalui portal Web Dashboard oleh karyawan yang status validasi otomatisnya NONAKTIF atau terdeteksi potensi anomali jam kerja.</span>
-            </div>
-          </div>
-
-          {renderWebPendingContent()}
-        </div>
-      )}
-
-      {/* Reject Modal */}
-      {isSuperAdmin && rejectModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-rose-50/50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                  <XCircle size={22} />
-                </div>
-                <div>
-                  <h3 className="font-black text-base text-slate-900 leading-tight">Tolak Absensi Web</h3>
-                  <p className="text-xs text-slate-500 font-medium">Berikan alasan penolakan absensi ini</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setRejectModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-3">
-              <label htmlFor="rejectReasonTextarea" className="text-xs font-black text-slate-700 uppercase tracking-wider">Alasan Penolakan</label>
-              <textarea
-                id="rejectReasonTextarea"
-                rows={4}
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="Contoh: Foto selfie buram / tidak terlihat wajah / waktu tidak sesuai..."
-                className="w-full px-3.5 py-2.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-rose-500 font-medium"
-              />
-            </div>
-
-            <div className="p-5 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
-              <button
-                type="button"
-                onClick={() => setRejectModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 transition-colors"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmReject}
-                disabled={processingId !== null}
-                className="px-6 py-2 text-xs font-black text-white bg-rose-600 rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-600/20 disabled:opacity-50 transition-all"
-              >
-                {processingId === null ? "Tolak Absensi" : "Memproses..."}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
 
       {/* Detail Modal */}
       {isModalOpen && selectedRecord && (
@@ -875,34 +527,12 @@ export default function AttendancePage() {
                 </div>
               )}
 
-              {selectedRecord.channel === 'web' && selectedRecord.web_approval_status === 'pending' && (
+              {selectedRecord.web_approval_status === 'pending' && (
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between">
-                  {isSuperAdmin ? (
-                    <>
-                      <div className="text-xs text-amber-900 font-bold">
-                        Absensi ini menunggu persetujuan Anda
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleOpenRejectModal(selectedRecord.id)}
-                          className="px-4 py-2 bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-xl text-xs font-black transition-colors"
-                        >
-                          Tolak
-                        </button>
-                        <button
-                          onClick={() => handleApprove(selectedRecord.id)}
-                          className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/20 transition-all"
-                        >
-                          Setujui
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-xs text-amber-900 font-semibold flex items-center gap-2">
-                      <Clock size={14} className="text-amber-600 shrink-0" />
-                      <span>Absensi web ini masih menunggu verifikasi persetujuan oleh Super Admin.</span>
-                    </div>
-                  )}
+                  <div className="text-xs text-amber-900 font-semibold flex items-center gap-2">
+                    <Clock size={14} className="text-amber-600 shrink-0" />
+                    <span>Absensi ini memerlukan verifikasi dan dapat diproses melalui menu <strong>Persetujuan &amp; Monitoring</strong>.</span>
+                  </div>
                 </div>
               )}
             </div>

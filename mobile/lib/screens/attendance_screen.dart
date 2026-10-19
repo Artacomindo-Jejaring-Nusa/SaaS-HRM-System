@@ -81,8 +81,6 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   bool _showResult = false;
   bool _isSuccess = false;
   String _resultMessage = "";
-  bool _isBypassMode = false;
-  String? _bypassReason;
   String? _earlyOutReason;
 
   @override
@@ -400,8 +398,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           attendanceType: widget.attendanceType,
           dinasLuarDestination: widget.dinasLuarDestination,
           dinasLuarNotes: widget.dinasLuarNotes,
-          bypassFaceRecognition: _isBypassMode,
-          bypassReason: _bypassReason,
+          bypassFaceRecognition: false,
         );
       } else {
         result = await ApiService.checkOut(
@@ -410,8 +407,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           imagePath: image.path,
           deviceId: deviceId,
           isMocked: position.isMocked,
-          bypassFaceRecognition: _isBypassMode,
-          bypassReason: _bypassReason,
+          bypassFaceRecognition: false,
           earlyOutReason: _earlyOutReason,
         );
       }
@@ -657,42 +653,90 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   }
 
   void _bypassAttendance() {
-    TextEditingController reasonController = TextEditingController();
+    TextEditingController commentController = TextEditingController();
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           backgroundColor: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
-            "Alasan Lewati Verifikasi Wajah",
-            style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
             children: [
-              Text(
-                "Melewati verifikasi wajah akan menandai absen ini sebagai 'Mencurigakan' dan butuh persetujuan manual dari Admin.",
-                style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: reasonController,
-                style: GoogleFonts.outfit(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: "Contoh: Kamera rusak, Cahaya gelap...",
-                  hintStyle: GoogleFonts.outfit(color: Colors.white38),
-                  filled: true,
-                  fillColor: Colors.black26,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
                 ),
-                maxLines: 2,
+                child: const Icon(Icons.edit_note_rounded, color: Colors.amber, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  "Presensi Manual",
+                  style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                ),
               ),
             ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Verifikasi wajah otomatis belum berhasil. Anda dapat mengirimkan presensi sekarang dengan memberikan catatan/komentar untuk ditinjau & divalidasi oleh Super Admin.",
+                  style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.access_time_filled_rounded, color: Colors.cyanAccent, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Waktu absen akan tetap tersimpan sesuai jam saat Anda mengirimkan data ini.",
+                          style: GoogleFonts.outfit(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  "Komentar / Catatan untuk Super Admin *",
+                  style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: commentController,
+                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: "Contoh: Wajah gagal terdeteksi otomatis karena pencahayaan ruangan redup / kamera bermasalah...",
+                    hintStyle: GoogleFonts.outfit(color: Colors.white38, fontSize: 12),
+                    filled: true,
+                    fillColor: Colors.black26,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Colors.amber),
+                    ),
+                  ),
+                  maxLines: 3,
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -700,28 +744,134 @@ class _AttendanceScreenState extends State<AttendanceScreen>
               child: Text("Batal", style: GoogleFonts.outfit(color: Colors.white60)),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber[800],
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              ),
               onPressed: () {
-                final reason = reasonController.text.trim();
-                if (reason.isEmpty) {
+                final comment = commentController.text.trim();
+                if (comment.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Alasan wajib diisi")),
+                    const SnackBar(content: Text("Catatan / komentar untuk Super Admin wajib diisi")),
                   );
                   return;
                 }
                 Navigator.pop(dialogContext);
-                setState(() {
-                  _isBypassMode = true;
-                  _bypassReason = reason;
-                });
-                _retryAttendance();
+                _submitManualAttendance(comment);
               },
-              child: Text("Lanjutkan", style: GoogleFonts.outfit(color: Colors.white)),
+              child: Text("Kirim ke Super Admin", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         );
       },
     );
+  }
+
+  /// Mengirimkan presensi manual dengan catatan untuk validasi Super Admin
+  Future<void> _submitManualAttendance(String comment) async {
+    _fallbackTimer?.cancel();
+    setState(() {
+      _showResult = false;
+      _isProcessing = true;
+      _statusMessage = "Mengirim presensi manual ke Super Admin...";
+      _statusColor = Colors.cyanAccent;
+      _statusIcon = Icons.cloud_upload_rounded;
+    });
+
+    try {
+      Position position = await _determinePosition();
+      if (position.isMocked) {
+        _handleFailure("Lokasi Palsu Terdeteksi! Mohon gunakan GPS asli.");
+        return;
+      }
+
+      String deviceId = await ApiService.getDeviceId();
+
+      // Gunakan foto hasil auto-capture sebelumnya jika ada, atau ambil foto baru
+      String? photoPath = _capturedImagePath;
+      if (photoPath == null || !File(photoPath).existsSync()) {
+        if (_controller != null && _controller!.value.isInitialized) {
+          try {
+            await _stopStreamSafe();
+            final XFile snap = await _controller!.takePicture();
+            photoPath = snap.path;
+            _capturedImagePath = snap.path;
+          } catch (_) {}
+        }
+      }
+
+      Map<String, dynamic>? result;
+      if (widget.isCheckIn) {
+        result = await ApiService.checkIn(
+          position.latitude,
+          position.longitude,
+          imagePath: photoPath,
+          deviceId: deviceId,
+          isMocked: position.isMocked,
+          attendanceType: widget.attendanceType,
+          dinasLuarDestination: widget.dinasLuarDestination,
+          dinasLuarNotes: widget.dinasLuarNotes,
+          bypassFaceRecognition: true,
+          bypassReason: comment,
+        );
+      } else {
+        result = await ApiService.checkOut(
+          position.latitude,
+          position.longitude,
+          imagePath: photoPath,
+          deviceId: deviceId,
+          isMocked: position.isMocked,
+          bypassFaceRecognition: true,
+          bypassReason: comment,
+          earlyOutReason: _earlyOutReason,
+        );
+      }
+
+      if (!mounted) return;
+
+      if (result != null && (result['status'] == 'success' || result['status'] == true)) {
+        if (widget.isCheckIn) {
+          try {
+            await TrackingService.startTracking();
+            await ApiService.updateLiveLocation(
+              position.latitude,
+              position.longitude,
+              position.accuracy,
+              recordedAt: DateTime.now(),
+            );
+          } catch (_) {}
+        } else {
+          try {
+            await TrackingService.stopTracking();
+          } catch (_) {}
+        }
+
+        setState(() {
+          _showResult = true;
+          _isSuccess = true;
+          _resultMessage = "Presensi Manual Berhasil Terkirim! ✅\n\nMenunggu validasi Super Admin di sistem. Jam presensi tercatat sesuai waktu saat ini.";
+        });
+
+        await Future.delayed(const Duration(seconds: 3));
+        if (mounted) Navigator.of(context).pop(result['data']);
+      } else {
+        String errMsg = result?['message'] ?? "Gagal memproses absensi manual.";
+        if (result?['errors'] != null) {
+          final errs = result!['errors'];
+          if (errs is Map && errs.isNotEmpty) {
+            errMsg = errs.values
+                .map((v) => v is List ? v.join(', ') : v.toString())
+                .join('\n');
+          }
+        }
+        _handleFailure(errMsg);
+      }
+    } catch (e) {
+      _handleFailure("Error: ${e.toString()}");
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
   }
 
   InputImageRotation _getImageRotation() {
@@ -1119,55 +1269,24 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(color: Colors.white12),
                   ),
-                  child: Column(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Shutter manual button
-                      GestureDetector(
-                        onTap: (_isCapturing || _isProcessing)
-                            ? null
-                            : () {
-                                if (!_hasAutoCaptured) {
-                                  _hasAutoCaptured = true;
-                                  _autoCaptureAndSubmit();
-                                }
-                              },
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.cyanAccent.withValues(alpha: 0.35),
-                                blurRadius: 12,
-                                spreadRadius: 2,
-                              ),
-                            ],
-                          ),
-                          child: Container(
-                            width: 56,
-                            height: 56,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white,
-                            ),
-                            child: const Icon(
-                              Icons.camera_alt_rounded,
-                              color: Color(0xFF0A0E21),
-                              size: 28,
-                            ),
-                          ),
-                        ),
+                      const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Colors.cyanAccent,
+                        size: 20,
                       ),
-                      const SizedBox(height: 10),
-                      Text(
-                        "Auto-capture aktif atau ketuk tombol untuk jepret manual",
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.outfit(
-                          color: Colors.white70,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: Text(
+                          "Posisikan wajah Anda di dalam lingkaran. Kamera akan menangkap wajah secara otomatis.",
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
@@ -1284,19 +1403,20 @@ class _AttendanceScreenState extends State<AttendanceScreen>
               const SizedBox(height: 12),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orangeAccent,
+                  backgroundColor: Colors.amber[800],
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 28, vertical: 14),
+                      horizontal: 24, vertical: 14),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
                 ),
                 onPressed: _bypassAttendance,
-                icon: const Icon(Icons.warning_amber_rounded, color: Colors.white),
-                label: Text("Lewati Verifikasi Wajah",
+                icon: const Icon(Icons.edit_note_rounded, color: Colors.white),
+                label: Text("Kirim Presensi Manual (Catatan untuk Admin)",
+                    textAlign: TextAlign.center,
                     style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 16)),
+                        fontSize: 14)),
               ),
               const SizedBox(height: 12),
               TextButton(

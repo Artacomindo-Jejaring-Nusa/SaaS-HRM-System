@@ -33,9 +33,19 @@ class Task extends Model
         return $this->belongsTo(User::class, 'assigned_by');
     }
 
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'assigned_by');
+    }
+
     public function approver()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function getDueDateAttribute()
+    {
+        return $this->deadline;
     }
 
     public function activities()

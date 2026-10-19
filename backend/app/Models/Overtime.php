@@ -13,6 +13,8 @@ class Overtime extends Model
     protected $fillable = [
         'user_id',
         'company_id',
+        'assigned_by',
+        'division_id',
         'title',
         'date',
         'start_time',
@@ -23,11 +25,28 @@ class Overtime extends Model
         'approved_by',
         'remark',
         'signature',
+        'rejection_reason',
+        'responded_at',
+    ];
+
+    protected $casts = [
+        'responded_at' => 'datetime',
+        'date' => 'date',
     ];
 
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function assigner()
+    {
+        return $this->belongsTo(User::class, 'assigned_by');
+    }
+
+    public function division()
+    {
+        return $this->belongsTo(Role::class, 'division_id');
     }
 
     public function approver()

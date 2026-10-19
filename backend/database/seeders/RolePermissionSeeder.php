@@ -39,8 +39,10 @@ class RolePermissionSeeder extends Seeder
 
             // Lembur
             ['name' => 'Lihat Lembur', 'slug' => 'view-overtimes', 'group' => 'Lembur'],
+            ['name' => 'Tugaskan Lembur', 'slug' => 'assign-overtimes', 'group' => 'Lembur'],
             ['name' => 'Ajukan Lembur', 'slug' => 'apply-overtimes', 'group' => 'Lembur'],
             ['name' => 'Setujui Lembur', 'slug' => 'approve-overtimes', 'group' => 'Lembur'],
+            ['name' => 'Kelola Lembur', 'slug' => 'manage-overtimes', 'group' => 'Lembur'],
             ['name' => 'Hapus Lembur', 'slug' => 'delete-overtimes', 'group' => 'Lembur'],
 
             // Operational

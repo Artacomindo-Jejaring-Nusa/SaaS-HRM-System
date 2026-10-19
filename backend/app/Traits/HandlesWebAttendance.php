@@ -322,7 +322,6 @@ trait HandlesWebAttendance
         }
 
         $query = Attendance::with(['user:id,name,email,role_id,office_id,nik,profile_photo_path,auto_validate_web_attendance,attendance_type', 'user.role', 'user.office'])
-            ->where('channel', 'web')
             ->where('web_approval_status', 'pending');
 
         if ($request->company_id && $request->company_id !== 'all') {

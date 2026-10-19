@@ -63,7 +63,8 @@ export default function AttendanceCorrectionsPage() {
   const fetchMyAttendance = async () => {
     try {
       setLoadingAttendance(true);
-      const response = await axiosInstance.get(`/attendance/history`);
+      const userIdParam = user?.id ? `?user_id=${user.id}&per_page=50` : '?per_page=50';
+      const response = await axiosInstance.get(`/attendance/history${userIdParam}`);
       const data = response.data.data?.data || response.data.data || [];
       // Only show attendance records that are late or missing check_out
       const eligible = Array.isArray(data)
@@ -242,7 +243,7 @@ export default function AttendanceCorrectionsPage() {
             <p className="dash-page-desc">Ajukan koreksi mandiri jika lupa absen pulang atau ada kesalahan waktu absen.</p>
           </div>
           <div className="dash-page-actions flex gap-2">
-            <PermissionGuard slug="approve-leaves">
+            {(hasPermission('manage-attendance-corrections') || hasPermission('approve-leaves')) && (
               <button
                 onClick={() => window.open(`${axiosInstance.defaults.baseURL}/attendance-corrections/export`, '_blank')}
                 className="dash-btn dash-btn-outline"
@@ -250,7 +251,7 @@ export default function AttendanceCorrectionsPage() {
                 <FileDown size={15} />
                 Export Laporan
               </button>
-            </PermissionGuard>
+            )}
             <button
               onClick={openCreateModal}
               className="dash-btn dash-btn-primary"
@@ -355,7 +356,7 @@ export default function AttendanceCorrectionsPage() {
                               </button>
                             </>
                           )}
-                          {item.status === 'pending' && hasPermission('approve-leaves') && (
+                          {item.status === 'pending' && (hasPermission('manage-attendance-corrections') || hasPermission('approve-leaves')) && (
                             <>
                               <button
                                 className="dash-action-btn edit"
@@ -431,7 +432,8 @@ export default function AttendanceCorrectionsPage() {
                       onChange={(e) => {
                         const selectedId = e.target.value;
                         const selectedAtt = attendanceList.find((a) => String(a.id) === selectedId);
-                        const isLate = (selectedAtt?.status || "").toLowerCase() === "late";
+                        const statusStr = (selectedAtt?.status || "").toLowerCase();
+                        const isLate = statusStr === "late" || statusStr.includes("terlambat");
                         const isMissingCheckout = !selectedAtt?.check_out || !selectedAtt?.check_out_time;
 
                         let defaultCorrType = formData.correction_type;
@@ -450,7 +452,8 @@ export default function AttendanceCorrectionsPage() {
                     >
                       <option value="">-- Pilih tanggal absen --</option>
                       {attendanceList.map((att) => {
-                        const isLate = (att.status || "").toLowerCase() === "late";
+                        const statusStr = (att.status || "").toLowerCase();
+                        const isLate = statusStr === "late" || statusStr.includes("terlambat");
                         const isMissingCheckout = !att.check_out || !att.check_out_time;
                         let badge = "";
                         if (isLate && isMissingCheckout) badge = " (⚠️ Terlambat & ❌ Belum Pulang)";
@@ -504,7 +507,7 @@ export default function AttendanceCorrectionsPage() {
                     className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500"
                     value={formData.corrected_check_out}
                     onChange={(e) => setFormData({...formData, corrected_check_out: e.target.value})}
-                    required
+                    required={formData.correction_type === 'missing_checkout'}
                   />
                 </div>
               </div>

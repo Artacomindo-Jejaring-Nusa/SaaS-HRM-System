@@ -116,7 +116,12 @@ class User extends Authenticatable
         }
 
         // 2. Default: evaluate approval permissions given by Super Admin
-        return $this->hasApprovalPermissions();
+        if ($this->hasApprovalPermissions()) {
+            return true;
+        }
+
+        // 3. Or if user is a supervisor with assigned subordinates
+        return $this->subordinates()->exists();
     }
 
     private function hasApprovalPermissions(): bool
@@ -125,7 +130,7 @@ class User extends Authenticatable
             'view-manager-portal', 'manage-approvals', 'view-approvals', 'approve-leaves', 'approve-permits',
             'approve-overtimes', 'approve-reimbursements', 'approve-fund-requests',
             'approve-vehicle-logs', 'approve-shift-swaps', 'approve-project-costs', 'approve-payroll',
-            'approve-attendance-corrections',
+            'approve-attendance-corrections', 'manage-attendance-corrections', 'view-attendances', 'manage-attendance', 'approve-attendances',
         ];
 
         foreach ($permissions as $perm) {

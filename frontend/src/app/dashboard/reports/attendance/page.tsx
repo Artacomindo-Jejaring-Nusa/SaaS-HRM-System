@@ -95,7 +95,7 @@ const LogView = ({ employees, startDate, endDate, selectedUser, onStartDateChang
     setLoading(true);
     try {
       // Fetch with high per_page to load all logs for the pivot table
-      const res = await axiosInstance.get(`/attendance/history?per_page=1000&start_date=${startDate}&end_date=${endDate}${selectedUser ? `&user_id=${selectedUser}` : ""}`);
+      const res = await axiosInstance.get(`/attendance/history?per_page=1000&start_date=${startDate}&end_date=${endDate}${selectedUser ? `&user_id=${selectedUser}` : ""}&scope=company`);
       const rawData = res.data.data;
       setHistory(Array.isArray(rawData) ? rawData : (rawData?.data || rawData || []));
     } catch (e) {
@@ -850,7 +850,7 @@ const LocationView = ({ startDate, endDate, selectedUser }: any) => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const res = await axiosInstance.get(`/attendance/history?start_date=${startDate}&end_date=${endDate}${selectedUser ? `&user_id=${selectedUser}` : ""}&per_page=100`);
+        const res = await axiosInstance.get(`/attendance/history?start_date=${startDate}&end_date=${endDate}${selectedUser ? `&user_id=${selectedUser}` : ""}&per_page=100&scope=company`);
         setData(res.data.data.data || []);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }

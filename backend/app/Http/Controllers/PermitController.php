@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Permit;
 use App\Models\User;
 use App\Services\ApprovalService;
+use App\Services\EmployeeQueryService;
 use App\Services\FCMService;
 use App\Traits\Notifiable;
 use Carbon\Carbon;
@@ -18,25 +19,26 @@ class PermitController extends Controller
     {
         $query = Permit::with('user');
         $user = $request->user();
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
-        // Load role relation to ensure is_manager works
-        if (! $user->relationLoaded('role')) {
-            $user->load('role');
-        }
-
-        if ($user->role_id === 1) {
-            // Master Admin sees all
-        } elseif ($user->is_manager || $user->hasPermission('approve-leaves')) {
-            $query->where('company_id', $user->company_id);
-
-            // If strictly a manager/supervisor (not HRD/Admin), see only subordinates
-            if (! $user->hasPermission('approve-leaves') && in_array($user->role->name, ['Manager', 'Supervisor'])) {
-                $subordinateIds = User::where('supervisor_id', $user->id)->pluck('id');
-                $query->whereIn('user_id', $subordinateIds);
+        if ($isSuperAdmin) {
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            }
+        } elseif (!empty($subordinateIds)) {
+            $query->where(function ($q) use ($user, $subordinateIds) {
+                $q->where('user_id', $user->id)
+                  ->orWhereIn('user_id', $subordinateIds);
+            });
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
             }
         } else {
-            $query->where('user_id', $user->id)
-                ->where('company_id', $user->company_id);
+            $query->where('user_id', $user->id);
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
         }
 
         if ($request->has('status')) {
@@ -319,12 +321,13 @@ class PermitController extends Controller
         }
 
         // ── Fallback: Default logic (Supervisor → HRD flow) ──
-        $isSupervisor = $permit->user->supervisor_id === $user->id;
-        $isHR = $user->hasPermission('approve-permits') || $user->hasPermission('approve-leaves') || $user->role_id === 1;
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        $isSupervisor = ($permit->user->supervisor_id === $user->id) || in_array($permit->user_id, $subordinateIds);
+        $isHR = $isSuperAdmin || ($user->role && in_array($user->role->name, ['HRD', 'Admin', 'Super Admin']));
 
-        // Check if user has HRD/Admin role
-        if (! $isHR && $user->role) {
-            $isHR = in_array($user->role->name, ['HRD', 'Admin', 'Super Admin']);
+        if (! $isSupervisor && ! $isHR) {
+            abort(403, 'Akses ditolak.');
         }
 
         if ($permit->status === 'pending' && $isSupervisor && ! $isHR) {
@@ -443,6 +446,15 @@ class PermitController extends Controller
         }
 
         // ── Fallback: Default logic ──
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        $isSupervisor = ($permit->user->supervisor_id === $user->id) || in_array($permit->user_id, $subordinateIds);
+        $isHR = $isSuperAdmin || ($user->role && in_array($user->role->name, ['HRD', 'Admin', 'Super Admin']));
+
+        if (! $isSupervisor && ! $isHR) {
+            abort(403, 'Akses ditolak.');
+        }
+
         $permit->update([
             'status' => 'rejected',
             'approved_by' => $request->user()->id,

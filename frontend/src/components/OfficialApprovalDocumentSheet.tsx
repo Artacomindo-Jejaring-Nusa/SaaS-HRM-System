@@ -167,6 +167,8 @@ export const getDocumentCode = (item: ApprovalItem) => {
       return `OPS/F-SPPD/${dateStr}/${idStr}`;
     case "payroll":
       return `PAY/F-BATCH/${dateStr}/${idStr}`;
+    case "attendance_correction":
+      return `HRD/F-CORR/${dateStr}/${idStr}`;
     case "web_attendance":
       return `HRD/F-WEB/${dateStr}/${idStr}`;
     default:
@@ -192,6 +194,8 @@ export const getFormTitle = (type?: string) => {
       return "SURAT TUGAS & LAPORAN DINAS LUAR KANTOR";
     case "payroll":
       return "BERITA ACARA & PERSETUJUAN BATCH PAYROLL";
+    case "attendance_correction":
+      return "FORMULIR PENGAJUAN KOREKSI ABSENSI";
     case "web_attendance":
       return "VERIFIKASI & PERSETUJUAN ABSENSI WEB BROWSER";
     default:
@@ -646,6 +650,47 @@ function OfficialApprovalFormDetails({ item, numericAmount }: OfficialApprovalFo
               />
             </div>
           )}
+        </div>
+      )}
+
+      {/* J. KOREKSI ABSENSI */}
+      {item.type === "attendance_correction" && (
+        <div className="space-y-3">
+          <div className="border border-slate-300 rounded overflow-hidden">
+            <table className="w-full text-xs border-collapse">
+              <tbody>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Jenis Pengajuan</th>
+                  <td className="p-2.5 font-black text-slate-900">
+                    <span className="px-2 py-0.5 bg-cyan-100 text-cyan-900 font-bold rounded mr-2 border border-cyan-300">
+                      {item.category || "Koreksi Absensi"}
+                    </span>
+                    <span>{item.description || "-"}</span>
+                  </td>
+                </tr>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Pelaksanaan</th>
+                  <td className="p-2.5 font-bold text-slate-900">
+                    {item.start_date || "-"}
+                  </td>
+                </tr>
+                <tr className="border-b border-slate-200">
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Diajukan Pada</th>
+                  <td className="p-2.5 font-medium text-slate-800">
+                    {item.created_at ? new Date(item.created_at).toLocaleString("id-ID", { dateStyle: "full", timeStyle: "medium" }) : "-"}
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Status Saat Ini</th>
+                  <td className="p-2.5 font-bold">
+                    <span className={item.status === 'approved' ? 'text-emerald-700' : (item.status === 'rejected' ? 'text-rose-700' : 'text-amber-700')}>
+                      {item.status === 'approved' ? 'Disetujui' : (item.status === 'rejected' ? 'Ditolak' : 'Menunggu Persetujuan')}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </>

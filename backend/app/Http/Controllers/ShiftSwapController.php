@@ -6,6 +6,7 @@ use App\Exports\ShiftSwapExport;
 use App\Models\Schedule;
 use App\Models\ShiftSwap;
 use App\Models\User;
+use App\Services\EmployeeQueryService;
 use App\Traits\Notifiable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,18 +22,33 @@ class ShiftSwapController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = ShiftSwap::with(['requester', 'receiver', 'requesterSchedule.shift', 'receiverSchedule.shift'])
-            ->where('company_id', $user->company_id);
+        $query = ShiftSwap::with(['requester', 'receiver', 'requesterSchedule.shift', 'receiverSchedule.shift']);
 
-        $canViewAll = $user->hasRole(self::ROLE_SUPER_ADMIN)
-            || $user->canAccessAllCompanies()
-            || $user->hasPermission('approve-shift-swaps');
+        $isSuperAdmin = $user->hasRole(self::ROLE_SUPER_ADMIN) || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
-        if (! $canViewAll) {
+        if ($isSuperAdmin) {
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            }
+        } elseif (!empty($subordinateIds)) {
+            $query->where(function ($q) use ($user, $subordinateIds) {
+                $q->where('requester_id', $user->id)
+                  ->orWhere('receiver_id', $user->id)
+                  ->orWhereIn('requester_id', $subordinateIds)
+                  ->orWhereIn('receiver_id', $subordinateIds);
+            });
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
+        } else {
             $query->where(function ($q) use ($user) {
                 $q->where('requester_id', $user->id)
-                    ->orWhere('receiver_id', $user->id);
+                  ->orWhere('receiver_id', $user->id);
             });
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
         }
 
         return response()->json([
@@ -157,16 +173,18 @@ class ShiftSwapController extends Controller
     public function approve(Request $request, $id)
     {
         $user = $request->user();
-        $canApprove = $user->hasRole(self::ROLE_SUPER_ADMIN)
-            || $user->canAccessAllCompanies()
-            || $user->hasPermission('approve-shift-swaps');
-
-        if (! $canApprove) {
-            return response()->json(['status' => 'error', 'message' => 'Akses ditolak. Anda tidak memiliki izin untuk menyetujui tukar shift.'], 403);
-        }
-        $request->validate(['status' => 'required|in:approved,rejected']);
-
+        $isSuperAdmin = $user->hasRole(self::ROLE_SUPER_ADMIN) || $user->role_id === 1 || $user->canAccessAllCompanies();
         $swap = ShiftSwap::findOrFail($id);
+
+        if (!$isSuperAdmin) {
+            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+            $hasSubordinateParty = in_array($swap->requester_id, $subordinateIds) || in_array($swap->receiver_id, $subordinateIds);
+            if (! $hasSubordinateParty || ! $user->hasPermission('approve-shift-swaps')) {
+                return response()->json(['status' => 'error', 'message' => 'Akses ditolak. Anda tidak memiliki izin untuk memproses tukar shift karyawan ini.'], 403);
+            }
+        }
+
+        $request->validate(['status' => 'required|in:approved,rejected']);
 
         DB::beginTransaction();
         try {

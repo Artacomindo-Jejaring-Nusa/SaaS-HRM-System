@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\FundRequest;
 use App\Models\User;
 use App\Services\ApprovalService;
+use App\Services\EmployeeQueryService;
 use App\Traits\Notifiable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -23,25 +24,27 @@ class FundRequestController extends Controller
     {
         $query = FundRequest::with(['user', 'supervisor', 'hrd']);
         $user = $request->user();
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
-        if ($user->role_id === 1) {
-            // Master Admin sees all
-        } elseif ($user->is_manager || $user->hasPermission('approve-fund-requests')) {
-            $query->where('company_id', $user->company_id);
-
-            // If strictly a manager/supervisor (not HRD/Admin/Finance Approver), see only subordinates OR assigned approvals
-            $roleName = $user->role ? $user->role->name : '';
-            if (! in_array($roleName, ['HRD', self::ROLE_HRD_MANAGER, 'Admin', 'Super Admin']) && ! $user->hasPermission('approve-fund-requests')) {
-                $query->where(function ($q) use ($user) {
-                    $q->where('supervisor_id', $user->id)
-                        ->orWhere('user_id', $user->id)
-                        ->orWhereHas('user', function ($qu) use ($user) {
-                            $qu->where('supervisor_id', $user->id);
-                        });
-                });
+        if ($isSuperAdmin) {
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            }
+        } elseif (!empty($subordinateIds)) {
+            $query->where(function ($q) use ($user, $subordinateIds) {
+                $q->where('user_id', $user->id)
+                  ->orWhere('supervisor_id', $user->id)
+                  ->orWhereIn('user_id', $subordinateIds);
+            });
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
             }
         } else {
             $query->where('user_id', $user->id);
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
         }
 
         if ($request->status) {
@@ -194,8 +197,10 @@ class FundRequestController extends Controller
         }
 
         // ── Fallback: Default 2-step logic ──
-        $isSupervisor = ($fundRequest->user?->supervisor_id === $user->id) || ($fundRequest->supervisor_id === $user->id);
-        $isHR = $user->hasPermission('approve-fund-requests') || in_array($user->role?->name, ['HRD', self::ROLE_HRD_MANAGER, 'Admin', 'Super Admin']);
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        $isSupervisor = ($fundRequest->user?->supervisor_id === $user->id) || ($fundRequest->supervisor_id === $user->id) || in_array($fundRequest->user_id, $subordinateIds);
+        $isHR = $isSuperAdmin || in_array($user->role?->name, ['HRD', self::ROLE_HRD_MANAGER, 'Admin', 'Super Admin', 'Finance']);
 
         if ($fundRequest->status === 'pending') {
             if (! $isSupervisor && ! $isHR) {
@@ -317,6 +322,15 @@ class FundRequestController extends Controller
         }
 
         // ── Fallback: Default logic ──
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        $isSupervisor = ($fundRequest->user?->supervisor_id === $user->id) || ($fundRequest->supervisor_id === $user->id) || in_array($fundRequest->user_id, $subordinateIds);
+        $isHR = $isSuperAdmin || in_array($user->role?->name, ['HRD', self::ROLE_HRD_MANAGER, 'Admin', 'Super Admin', 'Finance']);
+
+        if (! $isSupervisor && ! $isHR) {
+            return response()->json(['status' => 'error', 'message' => 'Anda tidak memiliki hak akses untuk menolak pengajuan ini.'], 403);
+        }
+
         $fundRequest->update([
             'status' => 'rejected',
             'rejected_at' => now(),

@@ -8,6 +8,7 @@ use App\Models\Overtime;
 use App\Models\OvertimeItem;
 use App\Models\User;
 use App\Services\ApprovalService;
+use App\Services\EmployeeQueryService;
 use App\Traits\Notifiable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,19 +26,66 @@ class OvertimeController extends Controller
 
     public function index(Request $request)
     {
-        $query = Overtime::with(['user', 'approver', 'items']);
+        $query = Overtime::with(['user.role', 'assigner.role', 'division', 'approver', 'items']);
 
         $user = $request->user();
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
-        if ($user->is_manager) {
-            if ($user->company_id && ! $user->canAccessAllCompanies()) {
-                $query->where('company_id', $user->company_id);
+        $type = $request->get('type');
+
+        if ($type === 'assigned' || $type === 'sent') {
+            $query->where('assigned_by', $user->id);
+        } elseif ($type === 'received') {
+            $query->where('user_id', $user->id);
+        } elseif ($type === 'all') {
+            if ($isSuperAdmin) {
+                if ($user->company_id && ! $user->canAccessAllCompanies()) {
+                    $query->where('company_id', $user->company_id);
+                }
+            } elseif (!empty($subordinateIds)) {
+                $query->where(function ($q) use ($user, $subordinateIds) {
+                    $q->where('user_id', $user->id)
+                      ->orWhere('assigned_by', $user->id)
+                      ->orWhereIn('user_id', $subordinateIds);
+                });
+                if ($user->company_id) {
+                    $query->where('company_id', $user->company_id);
+                }
+            } else {
+                $query->where(function ($q) use ($user) {
+                    $q->where('user_id', $user->id)->orWhere('assigned_by', $user->id);
+                });
+                if ($user->company_id) {
+                    $query->where('company_id', $user->company_id);
+                }
             }
         } else {
-            $query->where('user_id', $user->id);
+            // Default
+            if ($isSuperAdmin) {
+                if ($user->company_id && ! $user->canAccessAllCompanies()) {
+                    $query->where('company_id', $user->company_id);
+                }
+            } elseif (!empty($subordinateIds)) {
+                $query->where(function ($q) use ($user, $subordinateIds) {
+                    $q->where('user_id', $user->id)
+                      ->orWhere('assigned_by', $user->id)
+                      ->orWhereIn('user_id', $subordinateIds);
+                });
+                if ($user->company_id) {
+                    $query->where('company_id', $user->company_id);
+                }
+            } else {
+                $query->where(function ($q) use ($user) {
+                    $q->where('user_id', $user->id)->orWhere('assigned_by', $user->id);
+                });
+                if ($user->company_id) {
+                    $query->where('company_id', $user->company_id);
+                }
+            }
         }
 
-        // Optionally filter by status
+        // Filter by status
         if ($request->filled('status') && $request->status !== 'all') {
             $query->where('status', $request->status);
         }
@@ -57,7 +105,7 @@ class OvertimeController extends Controller
         }
 
         $perPage = $request->get('per_page', 10);
-        $overtimes = $query->orderBy('date', 'desc')->paginate($perPage);
+        $overtimes = $query->orderBy('date', 'desc')->orderBy('created_at', 'desc')->paginate($perPage);
 
         return $this->successResponse($overtimes, 'Data lembur berhasil diambil.');
     }
@@ -68,10 +116,11 @@ class OvertimeController extends Controller
     public function show(Request $request, $id)
     {
         $user = $request->user();
-        $overtime = Overtime::with(['user', 'user.role', 'user.office', 'user.company', 'approver', 'items'])->findOrFail($id);
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1;
+        $overtime = Overtime::with(['user.role', 'user.office', 'user.company', 'assigner.role', 'division', 'approver', 'items'])->findOrFail($id);
 
-        // Security: only owner or manager can view
-        if (! $user->is_manager && $overtime->user_id !== $user->id) {
+        // Security: only owner, assigner, or manager/superadmin can view
+        if (! $user->is_manager && ! $isSuperAdmin && $overtime->user_id !== $user->id && $overtime->assigned_by !== $user->id) {
             return $this->errorResponse(self::MSG_FORBIDDEN, 403);
         }
 
@@ -79,26 +128,174 @@ class OvertimeController extends Controller
     }
 
     /**
-     * Store overtime — supports both draft and direct submit.
-     * If 'status' is 'draft', save without triggering approval.
-     * If 'status' is 'pending' (or absent), trigger approval workflow.
+     * Store overtime as SPKL (Surat Perintah Kerja Lembur) from assigner to employees.
      */
     public function store(Request $request)
     {
+        $user = $request->user();
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1;
+
+        if (! $isSuperAdmin && ! $user->hasPermission('assign-overtimes') && ! $user->hasPermission('manage-overtimes') && ! $user->hasPermission('apply-overtimes')) {
+            return $this->errorResponse('Akses ditolak. Anda tidak memiliki izin untuk memberikan perintah lembur.', 403);
+        }
+
         $this->normalizeOvertimeItems($request);
 
-        $isDraft = $request->input('status') === 'draft';
+        $request->validate([
+            'title' => 'required|string|max:255',
+            'user_id' => 'nullable',
+            'division_id' => 'nullable|exists:roles,id',
+            'date' => 'required|date',
+            'start_time' => 'required|string',
+            'end_time' => 'required|string',
+            'reason' => 'required|string',
+            'items' => 'nullable|array',
+        ]);
 
-        $this->validateOvertimeStore($request, $isDraft);
+        // Resolve target user IDs
+        $targetUserIds = [];
+        if ($request->filled('division_id')) {
+            $divQuery = User::where('role_id', $request->division_id);
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
+                $divQuery->where('company_id', $user->company_id);
+            }
+            $targetUserIds = $divQuery->pluck('id')->toArray();
+        } elseif ($request->filled('user_id')) {
+            $targetUserIds = is_array($request->user_id) ? $request->user_id : [$request->user_id];
+        }
 
-        $user = $request->user();
+        if (empty($targetUserIds)) {
+            return $this->errorResponse('Pilih minimal satu karyawan atau divisi penerima perintah lembur.', 422);
+        }
+
         $companyId = $user->company_id;
+        $createdOvertimes = [];
 
-        $overtime = DB::transaction(function () use ($request, $user, $companyId, $isDraft) {
-            return $this->createOvertime($request, $user, $companyId, $isDraft);
+        DB::transaction(function () use ($request, $user, $companyId, $targetUserIds, &$createdOvertimes) {
+            foreach ($targetUserIds as $targetId) {
+                $targetUser = User::find($targetId);
+                $targetCompanyId = $targetUser ? $targetUser->company_id : $companyId;
+
+                $ot = Overtime::create([
+                    'user_id' => $targetId,
+                    'company_id' => $targetCompanyId,
+                    'assigned_by' => $user->id,
+                    'division_id' => $request->division_id ?? null,
+                    'title' => $request->title,
+                    'date' => $request->date,
+                    'start_time' => $request->start_time,
+                    'end_time' => $request->end_time,
+                    'reason' => $request->reason,
+                    'status' => 'pending', // Menunggu respon karyawan
+                ]);
+
+                if ($request->has('items') && is_array($request->items)) {
+                    foreach ($request->items as $item) {
+                        OvertimeItem::create([
+                            'overtime_id' => $ot->id,
+                            'date' => $item['date'] ?? $request->date,
+                            'start_time' => $item['start_time'] ?? $request->start_time,
+                            'end_time' => $item['end_time'] ?? $request->end_time,
+                            'reason' => $item['reason'] ?? $request->reason,
+                        ]);
+                    }
+                } else {
+                    OvertimeItem::create([
+                        'overtime_id' => $ot->id,
+                        'date' => $request->date,
+                        'start_time' => $request->start_time,
+                        'end_time' => $request->end_time,
+                        'reason' => $request->reason,
+                    ]);
+                }
+
+                $createdOvertimes[] = $ot->load(['items', 'user.role', 'assigner.role']);
+
+                // Notify employee
+                if ($targetUser) {
+                    $this->notify(
+                        $targetUser,
+                        'PERINTAH KERJA LEMBUR 📋',
+                        "Anda ditugaskan lembur '{$request->title}' pada tanggal {$request->date} ({$request->start_time} - {$request->end_time}) oleh {$user->name}. Mohon konfirmasi kesediaan Anda.",
+                        'warning',
+                        '/dashboard/overtimes'
+                    );
+                }
+            }
         });
 
-        return $this->handlePostOvertimeStore($overtime, $user, $companyId, $isDraft);
+        $this->logActivity('ASSIGN_OVERTIME', "Memberikan perintah lembur '{$request->title}' kepada " . count($createdOvertimes) . ' karyawan', $createdOvertimes[0] ?? null);
+
+        return $this->successResponse([
+            'overtimes' => $createdOvertimes,
+            'total_assigned' => count($createdOvertimes),
+        ], 'Perintah lembur berhasil diberikan kepada ' . count($createdOvertimes) . ' karyawan.', 201);
+    }
+
+    /**
+     * Employee response to overtime assignment (Accept / Reject with comment).
+     */
+    public function respond(Request $request, $id)
+    {
+        $user = $request->user();
+        $overtime = Overtime::with(['user', 'assigner'])->findOrFail($id);
+
+        if ($overtime->user_id !== $user->id) {
+            return $this->errorResponse('Akses ditolak. Anda bukan penerima perintah lembur ini.', 403);
+        }
+
+        if ($overtime->status !== 'pending') {
+            return $this->errorResponse('Perintah lembur ini sudah direspon sebelumnya (Status: ' . strtoupper($overtime->status) . ').', 422);
+        }
+
+        $request->validate([
+            'action' => 'required|in:accept,reject',
+            'reason' => 'required_if:action,reject|nullable|string|max:500',
+        ], [
+            'reason.required_if' => 'Mohon sertakan alasan/komentar penolakan perintah lembur.',
+        ]);
+
+        if ($request->action === 'accept') {
+            $overtime->update([
+                'status' => 'approved',
+                'responded_at' => now(),
+                'rejection_reason' => null,
+            ]);
+
+            if ($overtime->assigner) {
+                $this->notify(
+                    $overtime->assigner,
+                    'PERINTAH LEMBUR DISETUJUI ✅',
+                    "Karyawan {$user->name} telah menyetujui perintah lembur: '{$overtime->title}'.",
+                    'success',
+                    '/dashboard/overtimes'
+                );
+            }
+
+            $this->logActivity('ACCEPT_OVERTIME', "Menerima perintah lembur #{$overtime->id} ('{$overtime->title}')", $overtime);
+
+            return $this->successResponse($overtime->fresh(['user.role', 'assigner.role', 'items']), 'Perintah lembur berhasil Anda setujui.');
+        } else {
+            $overtime->update([
+                'status' => 'rejected',
+                'responded_at' => now(),
+                'rejection_reason' => $request->reason,
+            ]);
+
+            if ($overtime->assigner) {
+                $this->notify(
+                    $overtime->assigner,
+                    'PERINTAH LEMBUR DITOLAK ⚠️',
+                    "Karyawan {$user->name} menolak perintah lembur: '{$overtime->title}'. Alasan: {$request->reason}",
+                    'danger',
+                    '/dashboard/overtimes'
+                );
+            }
+
+            $this->logActivity('REJECT_OVERTIME', "Menolak perintah lembur #{$overtime->id} ('{$overtime->title}'). Alasan: {$request->reason}", $overtime);
+
+            return $this->successResponse($overtime->fresh(['user.role', 'assigner.role', 'items']), 'Perintah lembur telah ditolak dengan komentar.');
+        }
     }
 
     private function normalizeOvertimeItems(Request $request): void
@@ -545,9 +742,10 @@ class OvertimeController extends Controller
         $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
 
         $isOwner = $overtime->user_id === $user->id;
+        $isAssigner = $overtime->assigned_by === $user->id;
         $isManager = $user->hasPermission('delete-overtimes');
 
-        if (! $isSuperAdmin && ! $isOwner && ! $isManager) {
+        if (! $isSuperAdmin && ! $isOwner && ! $isManager && ! $isAssigner) {
             return $this->errorResponse(self::MSG_FORBIDDEN, 403);
         }
 
@@ -570,12 +768,29 @@ class OvertimeController extends Controller
         $user = $request->user();
 
         // Isolation logic (same as index)
-        if ($user->is_manager) {
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+
+        if ($isSuperAdmin) {
             if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
+        } elseif (!empty($subordinateIds)) {
+            $query->where(function ($q) use ($user, $subordinateIds) {
+                $q->where('user_id', $user->id)
+                  ->orWhere('assigned_by', $user->id)
+                  ->orWhereIn('user_id', $subordinateIds);
+            });
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
         } else {
-            $query->where('user_id', $user->id);
+            $query->where(function ($q) use ($user) {
+                $q->where('user_id', $user->id)->orWhere('assigned_by', $user->id);
+            });
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
         }
 
         // Filtering
@@ -620,7 +835,15 @@ class OvertimeController extends Controller
      */
     private function handleFallbackDecision(Request $request, Overtime $overtime, string $decision): \Illuminate\Http\JsonResponse
     {
-        abort_if(! $request->user()->hasPermission('approve-overtimes'), 403, self::MSG_FORBIDDEN);
+        $user = $request->user();
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        if (!$isSuperAdmin) {
+            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+            if (!in_array($overtime->user_id, $subordinateIds) && $overtime->assigned_by !== $user->id) {
+                abort(403, 'Akses ditolak. Anda tidak memiliki izin untuk memproses lembur karyawan ini.');
+            }
+        }
+        abort_if(! $user->hasPermission('approve-overtimes') && !$isSuperAdmin, 403, self::MSG_FORBIDDEN);
 
         $isApproval = $decision === 'approve';
         $status = $isApproval ? 'approved' : 'rejected';

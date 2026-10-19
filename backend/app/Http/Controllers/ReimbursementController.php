@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Reimbursement;
 use App\Models\User;
 use App\Services\ApprovalService;
+use App\Services\EmployeeQueryService;
 use App\Traits\Notifiable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -25,17 +26,26 @@ class ReimbursementController extends Controller
         $query = Reimbursement::with('user');
 
         $user = $request->user();
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
-        // Logic for Data Isolation:
-        // 1. Managers/Admin see all company data by default.
-        // 2. Staff (non-manager) only sees their own data.
-
-        if ($user->is_manager) {
-            if ($user->company_id && ! $user->canAccessAllCompanies()) {
+        if ($isSuperAdmin) {
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            }
+        } elseif (!empty($subordinateIds)) {
+            $query->where(function ($q) use ($user, $subordinateIds) {
+                $q->where('user_id', $user->id)
+                  ->orWhereIn('user_id', $subordinateIds);
+            });
+            if ($user->company_id) {
                 $query->where('company_id', $user->company_id);
             }
         } else {
             $query->where('user_id', $user->id);
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
         }
 
         $reimbursements = $query->orderBy('id', 'desc')->paginate(10);
@@ -294,7 +304,14 @@ class ReimbursementController extends Controller
         }
 
         // ── Fallback: Default logic ──
-        abort_if(! $request->user()->hasPermission('approve-reimbursements'), 403, self::MSG_FORBIDDEN);
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        if (!$isSuperAdmin) {
+            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+            if (!in_array($reimbursement->user_id, $subordinateIds)) {
+                abort(403, 'Akses ditolak. Anda tidak memiliki wewenang untuk memproses klaim karyawan ini.');
+            }
+        }
+        abort_if(! $user->hasPermission('approve-reimbursements') && !$isSuperAdmin, 403, self::MSG_FORBIDDEN);
 
         $reimbursement->update([
             'status' => 'approved',
@@ -373,7 +390,14 @@ class ReimbursementController extends Controller
         }
 
         // ── Fallback: Default logic ──
-        abort_if(! $request->user()->hasPermission('approve-reimbursements'), 403, self::MSG_FORBIDDEN);
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        if (!$isSuperAdmin) {
+            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+            if (!in_array($reimbursement->user_id, $subordinateIds)) {
+                abort(403, 'Akses ditolak. Anda tidak memiliki wewenang untuk memproses klaim karyawan ini.');
+            }
+        }
+        abort_if(! $user->hasPermission('approve-reimbursements') && !$isSuperAdmin, 403, self::MSG_FORBIDDEN);
 
         $reimbursement->update([
             'status' => 'rejected',

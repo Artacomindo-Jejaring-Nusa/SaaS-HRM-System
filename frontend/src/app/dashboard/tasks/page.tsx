@@ -66,7 +66,20 @@ type PaginationData = {
 export default function TasksPage() {
   const { t, language } = useLanguage();
   const { user, hasPermission } = useAuth();
-  const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
+  
+  const isSuperAdmin = Boolean(
+    user?.role_id === 1 ||
+    user?.role?.id === 1 ||
+    user?.role?.name?.toLowerCase().includes("super admin") ||
+    user?.can_access_all_companies
+  );
+
+  const canAssign = isSuperAdmin || hasPermission('manage-tasks') || hasPermission('assign-tasks');
+  const canReceive = isSuperAdmin || hasPermission('manage-tasks') || hasPermission('receive-tasks') || hasPermission('view-tasks');
+
+  const [activeTab, setActiveTab] = useState<'received' | 'sent'>(() => {
+    return (!canReceive && canAssign) ? 'sent' : 'received';
+  });
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState<PaginationData | null>(null);
@@ -91,22 +104,28 @@ export default function TasksPage() {
   const [assignType, setAssignType] = useState<'users' | 'division'>('users');
 
   useEffect(() => {
+    if (!canReceive && canAssign && activeTab !== 'sent') {
+      setActiveTab('sent');
+      return;
+    }
+    if (canReceive && !canAssign && activeTab !== 'received') {
+      setActiveTab('received');
+      return;
+    }
     fetchTasks();
-  }, [activeTab, page]);
+  }, [activeTab, page, canReceive, canAssign]);
 
   useEffect(() => {
-    if (isModalOpen && hasPermission('manage-tasks')) {
+    if (isModalOpen && canAssign) {
       fetchEmployees();
     }
-  }, [isModalOpen]);
+  }, [isModalOpen, canAssign]);
 
   // Real-time update listener
   useEffect(() => {
     if (user && echo) {
       const channelName = `notifications.${user.id}`;
       echo.private(channelName).listen('NotificationCreated', (e: any) => {
-        // If the notification is related to tasks, refresh list
-        // Or just refresh every time a notif arrives to be safe
         console.log("Real-time task refresh triggered");
         fetchTasks();
       });
@@ -118,6 +137,11 @@ export default function TasksPage() {
   }, [user]);
 
   const fetchTasks = async () => {
+    if ((activeTab === 'received' && !canReceive) || (activeTab === 'sent' && !canAssign)) {
+      setTasks([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await axiosInstance.get(`/tasks?type=${activeTab}&page=${page}`);
@@ -256,7 +280,7 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {hasPermission('manage-tasks') && (
+        {canAssign && (
           <button 
             onClick={() => setIsModalOpen(true)}
             className="flex items-center justify-center gap-2 h-11 px-6 bg-[#8B0000] text-white rounded-xl font-semibold hover:bg-[#660000] transition-all active:scale-95"
@@ -289,22 +313,28 @@ export default function TasksPage() {
       {/* Tabs & Content */}
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
         {/* Navigation Tabs */}
-        <div className="flex border-b border-gray-100 px-6 pt-6 bg-gray-50/30">
-          <button 
-            onClick={() => { setActiveTab('received'); setPage(1); }}
-            className={`pb-4 px-4 text-xs font-bold uppercase tracking-wider transition-all relative ${activeTab === 'received' ? "text-[#8B0000]" : "text-gray-400 hover:text-gray-600"}`}
-          >
-            Diterima
-            {activeTab === 'received' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#8B0000]"></div>}
-          </button>
-          <button 
-            onClick={() => { setActiveTab('sent'); setPage(1); }}
-            className={`pb-4 px-4 text-xs font-bold uppercase tracking-wider transition-all relative ${activeTab === 'sent' ? "text-[#8B0000]" : "text-gray-400 hover:text-gray-600"}`}
-          >
-            Dikirim
-            {activeTab === 'sent' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#8B0000]"></div>}
-          </button>
-        </div>
+        {(canReceive || canAssign) && (
+          <div className="flex border-b border-gray-100 px-6 pt-6 bg-gray-50/30">
+            {canReceive && (
+              <button 
+                onClick={() => { setActiveTab('received'); setPage(1); }}
+                className={`pb-4 px-4 text-xs font-bold uppercase tracking-wider transition-all relative ${activeTab === 'received' ? "text-[#8B0000]" : "text-gray-400 hover:text-gray-600"}`}
+              >
+                Diterima
+                {activeTab === 'received' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#8B0000]"></div>}
+              </button>
+            )}
+            {canAssign && (
+              <button 
+                onClick={() => { setActiveTab('sent'); setPage(1); }}
+                className={`pb-4 px-4 text-xs font-bold uppercase tracking-wider transition-all relative ${activeTab === 'sent' ? "text-[#8B0000]" : "text-gray-400 hover:text-gray-600"}`}
+              >
+                Dikirim
+                {activeTab === 'sent' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#8B0000]"></div>}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Task List */}
         <div className="p-6">

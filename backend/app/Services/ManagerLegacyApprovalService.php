@@ -186,12 +186,12 @@ class ManagerLegacyApprovalService
         );
 
         $this->notifySuperAdmins(
-            $item->company_id ?? $request->user()->company_id,
+            $item->company_id ?? $request->user()?->company_id,
             "PENGAJUAN {$typeText} {$statusText}",
-            "Pengajuan {$typeText} {$item->user?->name} telah {$statusText} oleh {$request->user()->name}.{$remarkText}",
+            "Pengajuan {$typeText} {$item->user?->name} telah {$statusText} oleh " . ($request->user()?->name ?? 'Approver') . ".{$remarkText}",
             $badge,
             $routePath,
-            $request->user()->id
+            $request->user()?->id ?? 0
         );
     }
 }

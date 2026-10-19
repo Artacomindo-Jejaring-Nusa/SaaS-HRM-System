@@ -23,36 +23,7 @@ class PendingRequestService
             return false;
         }
 
-        if ($user->isSuperAdmin() || $user->role_id === 1 || $user->hasPermission('manage-approvals')) {
-            return true;
-        }
-
-        $roleName = strtolower($user->role?->name ?? '');
-        return $user->is_manager
-            || $user->hasPermission('approve-leaves')
-            || $user->hasPermission('approve-permits')
-            || $user->hasPermission('approve-overtimes')
-            || $user->hasPermission('approve-reimbursements')
-            || $user->hasPermission('approve-fund-requests')
-            || $user->hasPermission('approve-vehicle-logs')
-            || $user->hasPermission('approve-payroll')
-            || $user->hasPermission('approve-shift-swaps')
-            || $user->hasPermission('approve-project-costs')
-            || $user->hasPermission('approve-attendance-corrections')
-            || $user->hasPermission('view-manager-portal')
-            || str_contains($roleName, 'admin')
-            || str_contains($roleName, 'hrd')
-            || str_contains($roleName, 'hr')
-            || str_contains($roleName, 'direktur')
-            || str_contains($roleName, 'director')
-            || str_contains($roleName, 'coo')
-            || str_contains($roleName, 'ceo')
-            || str_contains($roleName, 'boc')
-            || str_contains($roleName, 'management')
-            || str_contains($roleName, 'supervisor')
-            || str_contains($roleName, 'manager')
-            || str_contains($roleName, 'kadiv')
-            || str_contains($roleName, 'lead');
+        return $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
     }
 
     public static function applyDateFilter($query, ?Request $request = null, string $dateColumn = 'created_at')
@@ -93,12 +64,12 @@ class PendingRequestService
 
     public static function getPendingCount(User $user, array $permMap, ?Request $request = null): array
     {
-        $isGlobalAdmin = $user->isSuperAdmin();
+        $isGlobalAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
         $isCompanyAdmin = self::isExecutiveOrAdmin($user);
         $hasSubordinates = User::where('supervisor_id', $user->id)->exists();
-        $hasPrivilegedAccess = $isGlobalAdmin || $isCompanyAdmin || $user->hasPermission('manage-approvals') || $hasSubordinates;
+        $hasPrivilegedAccess = $isGlobalAdmin;
 
-        $canApprove = fn (string $type): bool => self::canUserApprovePendingType($user, $type, $permMap, $hasPrivilegedAccess);
+        $canApprove = fn (string $type): bool => self::canUserApprovePendingType($user, $type, $permMap, $hasPrivilegedAccess, $hasSubordinates);
         $fundRequestStatus = ($isGlobalAdmin || $isCompanyAdmin) ? ['pending', 'approved_by_supervisor'] : 'pending';
 
         $leaveCount = $canApprove('leave') ? self::countScopedPending(Leave::class, 'leave', ['pending', 'pending_supervisor', 'pending_hr'], $user, $isGlobalAdmin, $request) : 0;
@@ -136,10 +107,14 @@ class PendingRequestService
         ];
     }
 
-    private static function canUserApprovePendingType(User $user, string $type, array $permMap, bool $hasPrivilegedAccess): bool
+    private static function canUserApprovePendingType(User $user, string $type, array $permMap, bool $hasPrivilegedAccess, bool $hasSubordinates = false): bool
     {
         if ($hasPrivilegedAccess) {
             return true;
+        }
+
+        if (!$hasSubordinates) {
+            return false;
         }
 
         return isset($permMap[$type]) && $user->hasPermission($permMap[$type]);
@@ -151,9 +126,16 @@ class PendingRequestService
         foreach ($whereInConditions as $col => $vals) {
             $query->whereIn($col, $vals);
         }
-        if (!$isGlobalAdmin && $user->company_id) {
-            $query->where('company_id', $user->company_id);
-        } elseif ($request && $request->filled('company_id')) {
+        if (!$isGlobalAdmin) {
+            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+            if (empty($subordinateIds)) {
+                return 0;
+            }
+            $query->whereIn('user_id', $subordinateIds);
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
+        } elseif ($request && $request->filled('company_id') && $request->company_id !== 'all') {
             $query->where('company_id', $request->company_id);
         }
         self::applyDateFilter($query, $request);
@@ -168,7 +150,7 @@ class PendingRequestService
             return [];
         }
 
-        $isGlobalAdmin = $user->isSuperAdmin();
+        $isGlobalAdmin = $user->isSuperAdmin() || $user->canAccessAllCompanies();
         $isCompanyAdmin = self::isExecutiveOrAdmin($user);
 
         $query = self::resolvePendingBaseQuery($type, $isGlobalAdmin, $isCompanyAdmin);
@@ -178,7 +160,7 @@ class PendingRequestService
 
         if (! $isGlobalAdmin && $user->company_id) {
             $query->where('company_id', $user->company_id);
-        } elseif ($request->filled('company_id')) {
+        } elseif ($request->filled('company_id') && $request->company_id !== 'all') {
             $query->where('company_id', $request->company_id);
         }
 
@@ -187,7 +169,7 @@ class PendingRequestService
 
         $items = $query->orderBy('created_at', 'desc')->get();
 
-        if (! $isGlobalAdmin && ! in_array($type, ['vehicle_log', 'early_out', 'attendance_correction', 'dinas_luar'])) {
+        if (! $isGlobalAdmin) {
             $items = self::filterPendingItems($items, $type, $user);
         }
 
@@ -198,14 +180,18 @@ class PendingRequestService
 
     private static function canUserViewPendingType(User $user, ?string $type, array $permMap): bool
     {
-        $hasPrivilegedAccess = $user->isSuperAdmin()
+        $isGlobalAdmin = $user->isSuperAdmin()
             || $user->role_id === 1
-            || $user->hasPermission('manage-approvals')
-            || self::isExecutiveOrAdmin($user)
-            || User::where('supervisor_id', $user->id)->exists();
+            || $user->canAccessAllCompanies();
 
-        if ($hasPrivilegedAccess) {
+        if ($isGlobalAdmin) {
             return true;
+        }
+
+        // Non-SuperAdmin must have subordinates to access manager approvals
+        $hasSubordinates = User::where('supervisor_id', $user->id)->exists();
+        if (!$hasSubordinates) {
+            return false;
         }
 
         return !isset($permMap[$type]) || $user->hasPermission($permMap[$type]);
@@ -243,14 +229,17 @@ class PendingRequestService
 
         if (!$isGlobalAdmin && $user->company_id) {
             $query->where('company_id', $user->company_id);
-        } elseif ($request && $request->filled('company_id')) {
+        } elseif ($request && $request->filled('company_id') && $request->company_id !== 'all') {
             $query->where('company_id', $request->company_id);
         }
 
         self::applyDateFilter($query, $request);
 
-        if (!$isGlobalAdmin && !in_array($type, ['vehicle_log', 'early_out', 'attendance_correction', 'dinas_luar'])) {
-            $items = $query->with(['user.supervisor', 'user.role', 'creator.supervisor', 'creator.role'])->get();
+        if (!$isGlobalAdmin) {
+            $withRelations = ($type === 'payroll')
+                ? ['creator.supervisor', 'creator.role']
+                : ['user.supervisor', 'user.role'];
+            $items = $query->with($withRelations)->get();
             return self::filterPendingItems($items, $type, $user)->count();
         }
 
@@ -287,8 +276,8 @@ class PendingRequestService
 
     private static function canUserAccessPendingItem($item, string $type, User $user): bool
     {
-        // Super Admin or users with manage-approvals have emergency oversight on all pending submissions
-        if ($user->isSuperAdmin() || $user->hasPermission('manage-approvals')) {
+        $isGlobalAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        if ($isGlobalAdmin) {
             return true;
         }
 
@@ -297,32 +286,63 @@ class PendingRequestService
             $submitter = $item->creator ?: $user;
         }
 
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        $submitterId = $item->user_id ?? $item->user?->id ?? ($type === 'payroll' ? $item->created_by : null);
+        $isSubordinate = $submitterId && in_array($submitterId, $subordinateIds);
+
         if (!empty($item->current_approval_step) && $submitter) {
-            return ApprovalService::canApprove(
+            $canApproveWorkflow = ApprovalService::canApprove(
                 $type,
                 $item->company_id ?? $user->company_id,
                 $user,
                 $submitter,
                 $item->current_approval_step
             );
+
+            if (!$canApproveWorkflow) {
+                return false;
+            }
+
+            // If workflow step specifically designates this user by ID, grant access
+            $workflow = ApprovalService::getWorkflow($type, $item->company_id ?? $user->company_id, $submitter);
+            $step = $workflow?->steps()->where('step_number', $item->current_approval_step)->first();
+            if ($step && $step->approver_type === 'user' && $step->approver_user_id === $user->id) {
+                return true;
+            }
+
+            // Otherwise, non-superadmin must be the atasan (subordinate tree)
+            return $isSubordinate;
         }
 
         return ($type === 'payroll')
-            ? ($user->role_id === 1 || $user->hasPermission('approve-payroll') || $user->hasPermission('manage-payroll'))
+            ? ($user->hasPermission('approve-payroll') && $isSubordinate)
             : self::canHandlePendingItem($item, $user, $type);
     }
 
     private static function canHandlePendingItem($item, User $user, string $type = ''): bool
     {
-        $isAdmin = $user->isSuperAdmin() || $user->role_id === 1 || self::isExecutiveOrAdmin($user);
-        $isSupervisor = ($item->user?->supervisor_id === $user->id) || (isset($item->supervisor_id) && $item->supervisor_id === $user->id);
+        $isGlobalAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        if ($isGlobalAdmin) {
+            return true;
+        }
+
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        $submitterId = $item->user_id ?? $item->user?->id ?? ($type === 'payroll' ? $item->created_by : null);
+
+        // Jika bukan Super Admin, pengajuan WAJIB diajukan oleh bawahan (langsung maupun berjenjang)
+        if (!$submitterId || !in_array($submitterId, $subordinateIds)) {
+            return false;
+        }
 
         return match ($type) {
-            'fund_request' => self::canHandleFundRequest($item, $user, $isAdmin, $isSupervisor),
-            'reimbursement' => $isAdmin || $user->hasPermission('approve-reimbursements') || $isSupervisor,
-            'overtime' => $isAdmin || $user->hasPermission('approve-overtimes') || $isSupervisor,
-            'attendance_correction' => $isAdmin || $user->hasPermission('approve-attendance-corrections') || $isSupervisor,
-            default => self::canHandleDefaultPending($item, $isAdmin, $isSupervisor, $user),
+            'fund_request' => self::canHandleFundRequest($item, $user, false, true),
+            'reimbursement' => true,
+            'overtime' => true,
+            'attendance_correction' => true,
+            'vehicle_log' => true,
+            'early_out' => true,
+            'dinas_luar' => true,
+            default => self::canHandleDefaultPending($item, false, true, $user),
         };
     }
 

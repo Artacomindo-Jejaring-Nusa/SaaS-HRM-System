@@ -7,12 +7,17 @@ use Carbon\Carbon;
 
 class ManagerAttendanceService
 {
+    public static function isCompanyWideViewer(User $user): bool
+    {
+        return $user->isSuperAdmin() || $user->canAccessAllCompanies();
+    }
+
     public function getTeamAttendance(User $user, bool $isCompanyAdmin, ?string $targetDate = null, ?string $companyId = null): array
     {
         $date = $targetDate ? Carbon::parse($targetDate)->toDateString() : Carbon::today()->toDateString();
 
         $query = User::with(['role', 'attendances' => function ($q) use ($date) {
-            $q->whereDate('check_in', $date);
+            $q->whereDate('check_in', $date)->orderBy('id', 'desc');
         }]);
 
         $this->scopeTeamQuery($query, $user, $isCompanyAdmin, $companyId);
@@ -27,18 +32,14 @@ class ManagerAttendanceService
             return;
         }
 
-        if ($isCompanyAdmin || $user->hasPermission('view-attendances')) {
-            $this->scopeCompanyAdminQuery($query, $user, $companyId);
-            return;
-        }
-
         $allSubordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
         if (!empty($allSubordinateIds)) {
             $query->whereIn('id', $allSubordinateIds);
             return;
         }
 
-        $query->where('supervisor_id', $user->id);
+        // Jika bukan Super Admin dan tidak memiliki bawahan, jangan tampilkan karyawan lain
+        $query->whereRaw('1 = 0');
     }
 
     private function scopeGlobalAdminQuery($query, User $user, ?string $companyId): void

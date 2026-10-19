@@ -17,6 +17,7 @@ interface User {
   profile_photo_url?: string;
   is_manager?: boolean;
   can_access_manager_portal?: boolean;
+  can_access_all_companies?: boolean;
   auto_validate_web_attendance?: boolean;
   auto_validate_until?: string;
   is_web_auto_validated?: boolean;
@@ -114,6 +115,10 @@ export const isManagerUser = (u: any, permissions: string[] = []): boolean => {
     'approve-vehicle-logs',
     'approve-shift-swaps',
     'approve-attendance-corrections',
+    'manage-attendance-corrections',
+    'approve-attendances',
+    'view-attendances',
+    'manage-attendance',
     'approve-project-costs',
     'approve-payroll',
   ]);

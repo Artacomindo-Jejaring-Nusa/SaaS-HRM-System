@@ -84,7 +84,7 @@ abstract class Controller
         // Real-time broadcast for UI update
         try {
             event(new NotificationCreated($notification));
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Broadcast failed in Controller: '.$e->getMessage());
         }
 

@@ -17,14 +17,22 @@ class RequestHistoryService
 {
     public static function getHistoryRequests(Request $request, User $user)
     {
-        $isGlobalAdmin = $user->isSuperAdmin();
+        $isGlobalAdmin = $user->isSuperAdmin() || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
         $type = $request->input('type', 'all');
         $status = $request->input('status', 'all');
 
-        $companyScope = function ($query) use ($user, $isGlobalAdmin) {
-            if (!$isGlobalAdmin && $user->company_id) {
-                $query->where('company_id', $user->company_id);
+        $companyScope = function ($query) use ($user, $isGlobalAdmin, $subordinateIds) {
+            if (!$isGlobalAdmin) {
+                if ($user->company_id) {
+                    $query->where('company_id', $user->company_id);
+                }
+                if (!empty($subordinateIds)) {
+                    $query->whereIn('user_id', $subordinateIds);
+                } else {
+                    $query->whereRaw('1 = 0');
+                }
             }
         };
 

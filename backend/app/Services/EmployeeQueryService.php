@@ -63,13 +63,18 @@ class EmployeeQueryService
 
     public static function resolveSubordinateIds(int $userId): array
     {
-        $directIds = User::where('supervisor_id', $userId)->pluck('id')->toArray();
-        if (empty($directIds)) {
-            return [];
+        $allIds = [];
+        $currentLevelIds = User::where('supervisor_id', $userId)->pluck('id')->toArray();
+
+        while (!empty($currentLevelIds)) {
+            $allIds = array_merge($allIds, $currentLevelIds);
+            $currentLevelIds = User::whereIn('supervisor_id', $currentLevelIds)
+                ->whereNotIn('id', $allIds)
+                ->pluck('id')
+                ->toArray();
         }
 
-        $indirectIds = User::whereIn('supervisor_id', $directIds)->pluck('id')->toArray();
-        return array_unique(array_merge($directIds, $indirectIds));
+        return array_values(array_unique($allIds));
     }
 
     public static function applySearchFilter($query, string $search): void

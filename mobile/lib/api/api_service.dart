@@ -193,8 +193,15 @@ class ApiService {
 
   // ============ OVERTIME (LEMBUR) ============
 
-  static Future<List<dynamic>?> getOvertimes() =>
-      OvertimeRepository.getOvertimes();
+  static Future<List<dynamic>?> getOvertimes({String type = 'received'}) =>
+      OvertimeRepository.getOvertimes(type: type);
+
+  static Future<Map<String, dynamic>> respondOvertime(
+    int id,
+    String action, {
+    String? reason,
+  }) =>
+      OvertimeRepository.respondOvertime(id, action, reason: reason);
 
   static Future<Map<String, dynamic>> submitOvertime(
           Map<String, dynamic> data) =>
@@ -206,6 +213,9 @@ class ApiService {
 
   static Future<Map<String, dynamic>> deleteOvertime(int id) =>
       OvertimeRepository.deleteOvertime(id);
+
+  static Future<List<dynamic>?> getEmployees() =>
+      OvertimeRepository.getEmployees();
 
   // ============ SALARY (GAJI) ============
 

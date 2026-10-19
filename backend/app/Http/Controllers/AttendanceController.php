@@ -100,9 +100,10 @@ class AttendanceController extends Controller
         ];
 
         if ($isBypass) {
-            $bypassReason = $request->input('bypass_reason', 'Lingkungan tidak mendukung');
+            $bypassReason = $request->input('bypass_reason', 'Verifikasi wajah gagal');
             $attendanceData['is_suspicious'] = true;
             $attendanceData['suspicious_reason'] = "Tanpa verifikasi wajah: {$bypassReason}";
+            $attendanceData['web_approval_status'] = 'pending';
         }
 
         // Add dinas luar specific fields
@@ -113,6 +114,17 @@ class AttendanceController extends Controller
         }
 
         $attendance = Attendance::create($attendanceData);
+
+        if ($isBypass) {
+            $this->notifySuperAdmins(
+                $user->company_id,
+                'ABSENSI MANUAL BUTUH VALIDASI SUPER ADMIN',
+                "Karyawan {$user->name} melakukan absen masuk manual (wajah gagal) pada pukul {$now->format('H:i')} WIB. Catatan: \"{$bypassReason}\". Menunggu validasi Super Admin.",
+                'warning',
+                '/dashboard/approvals',
+                $user->id
+            );
+        }
 
         // Auto-record initial position into employee_tracks & broadcast live location to Superadmin
         try {
@@ -215,9 +227,19 @@ class AttendanceController extends Controller
         ];
 
         if ($isFaceBypass) {
-            $bypassFaceReason = $request->input('bypass_reason', 'Lingkungan tidak mendukung');
+            $bypassFaceReason = $request->input('bypass_reason', 'Verifikasi wajah gagal');
             $updateData['is_suspicious'] = true;
-            $updateData['suspicious_reason'] = trim($attendance->suspicious_reason . " | Tanpa verifikasi wajah saat pulang: {$bypassFaceReason}", ' |');
+            $updateData['suspicious_reason'] = trim(($attendance->suspicious_reason ?? '') . " | Tanpa verifikasi wajah saat pulang: {$bypassFaceReason}", ' |');
+            $updateData['web_approval_status'] = 'pending';
+
+            $this->notifySuperAdmins(
+                $user->company_id,
+                'ABSEN KELUAR MANUAL BUTUH VALIDASI SUPER ADMIN',
+                "Karyawan {$user->name} melakukan absen keluar manual (wajah gagal) pada pukul " . now()->format('H:i') . " WIB. Catatan: \"{$bypassFaceReason}\". Menunggu validasi Super Admin.",
+                'warning',
+                '/dashboard/approvals',
+                $user->id
+            );
         }
 
         if ($isEarly && !empty($earlyOutReason)) {
@@ -354,7 +376,7 @@ class AttendanceController extends Controller
         $this->scopeHistoryAccess($query, $user, $request);
         $this->applyHistoryFilters($query, $request);
 
-        $perPage = min((int) ($request->per_page ?? 15), 100);
+        $perPage = min((int) ($request->per_page ?? 15), 1000);
         $history = $query->orderBy('check_in', 'desc')->paginate($perPage);
 
         return $this->successResponse($history, 'Riwayat absensi berhasil diambil.');
@@ -362,24 +384,45 @@ class AttendanceController extends Controller
 
     private function scopeHistoryAccess($query, User $user, Request $request): void
     {
-        if ($request->company_id && $request->company_id !== 'all') {
-            $query->where('company_id', $request->company_id);
+        $isSuperAdmin = $user->canAccessAllCompanies() || $user->isSuperAdmin() || $user->role_id === 1;
+        $canViewReports = $isSuperAdmin || $user->hasPermission('view-reports');
+        $scope = $request->input('scope');
+
+        // 1. Explicit Company/All Scope (used for Company Attendance Reports)
+        if (($scope === 'company' || $scope === 'all') && $canViewReports) {
+            if ($request->company_id && $request->company_id !== 'all' && $isSuperAdmin) {
+                $query->where('company_id', $request->company_id);
+            } elseif ($user->company_id && !$user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            }
+            if ($request->filled('user_id')) {
+                $query->where('user_id', $request->user_id);
+            }
             return;
         }
 
-        if ($user->canAccessAllCompanies()) {
+        // 2. Explicit Team Scope (used for Supervisor Monitoring / Approvals)
+        if ($scope === 'team') {
+            $subordinateIds = \App\Services\EmployeeQueryService::resolveSubordinateIds($user->id);
+            $query->whereIn('user_id', $subordinateIds);
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            }
             return;
         }
 
-        $canViewAllInCompany = $user->is_manager ||
-            \App\Services\PendingRequestService::isExecutiveOrAdmin($user) ||
-            $user->hasPermission('view-attendances');
-
-        if (!$canViewAllInCompany) {
-            $query->where('user_id', $user->id);
+        // 3. Explicit User Filter if authorized to view reports / super admin
+        if ($request->filled('user_id') && $canViewReports) {
+            $query->where('user_id', $request->user_id);
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            }
+            return;
         }
 
-        if ($user->company_id) {
+        // 4. DEFAULT: Strictly isolate to the logged-in user's OWN attendance records
+        $query->where('user_id', $user->id);
+        if ($user->company_id && !$user->canAccessAllCompanies()) {
             $query->where('company_id', $user->company_id);
         }
     }

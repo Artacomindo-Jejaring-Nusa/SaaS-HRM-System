@@ -983,10 +983,17 @@ class PayrollController extends Controller
 
     public function myPayroll(Request $request)
     {
-        // Only show payslips that have been published / paid by HR
-        $salaries = Salary::where('user_id', $request->user()->id)
-            ->where('status', 'paid')
-            ->orderBy('year', 'desc')
+        $user = $request->user();
+        $isPayrollAdmin = $user->role_id === 1 || $user->isSuperAdmin() || $user->hasPermission('manage-payroll');
+
+        $query = Salary::with(['batch.creator', 'user.company', 'detailsRecords'])
+            ->where('user_id', $user->id);
+
+        if (! $isPayrollAdmin) {
+            $query->where('status', 'paid');
+        }
+
+        $salaries = $query->orderBy('year', 'desc')
             ->orderBy('month', 'desc')
             ->get();
 

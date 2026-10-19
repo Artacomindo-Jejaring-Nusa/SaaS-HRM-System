@@ -253,18 +253,18 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     });
 
     // Overtimes
-    Route::middleware('permission:view-overtimes')->group(function () {
+    Route::middleware('permission:view-overtimes,assign-overtimes,manage-overtimes,apply-overtimes')->group(function () {
         Route::get('/overtimes/export', [OvertimeController::class, 'export']);
         Route::get('/overtimes', [OvertimeController::class, 'index']);
         Route::get('/overtimes/{id}', [OvertimeController::class, 'show']);
+        Route::post('/overtimes/{id}/respond', [OvertimeController::class, 'respond']);
         Route::delete('/overtimes/{id}', [OvertimeController::class, 'destroy']);
     });
-    Route::middleware('permission:apply-overtimes')->group(function () {
+    Route::middleware('permission:assign-overtimes,manage-overtimes,apply-overtimes')->group(function () {
         Route::post('/overtimes', [OvertimeController::class, 'store']);
         Route::put('/overtimes/{id}', [OvertimeController::class, 'update']);
-        Route::delete('/overtimes/{id}', [OvertimeController::class, 'destroy']);
     });
-    Route::middleware('permission:approve-overtimes')->group(function () {
+    Route::middleware('permission:approve-overtimes,manage-overtimes')->group(function () {
         Route::post('/overtimes/{id}/approve', [OvertimeController::class, 'approve']);
         Route::post('/overtimes/{id}/reject', [OvertimeController::class, 'reject']);
     });

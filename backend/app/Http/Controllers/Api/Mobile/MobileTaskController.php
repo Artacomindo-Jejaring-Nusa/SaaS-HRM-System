@@ -22,7 +22,7 @@ class MobileTaskController extends Controller
         if ($type === 'received') {
             $query->where('user_id', $user->id);
         } else {
-            $query->where('creator_id', $user->id);
+            $query->where('assigned_by', $user->id);
         }
 
         if ($request->status) {

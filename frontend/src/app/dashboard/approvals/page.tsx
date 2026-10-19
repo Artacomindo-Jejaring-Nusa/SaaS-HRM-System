@@ -378,27 +378,34 @@ const normalizePayroll = (rawPayrolls: any[]): ApprovalItem[] =>
   }));
 
 const normalizeCorrections = (rawCorrections: any[]): ApprovalItem[] =>
-  rawCorrections.map((c: any) => ({
-    id: c.id,
-    type: "attendance_correction",
-    user_name: c.user?.name || "Karyawan",
-    user_email: c.user?.email,
-    user_role: c.user?.role?.name || c.user?.role,
-    description: `Koreksi Absen Tanggal ${c.date || '-'}: Masuk [${c.corrected_check_in || '-'}] Pulang [${c.corrected_check_out || '-'}]. Alasan: ${c.reason || '-'}`,
-    category: "Koreksi Absensi",
-    start_date: c.date ? `${c.date} (${c.corrected_check_in || '--:--'} - ${c.corrected_check_out || '--:--'})` : undefined,
-    status: c.status || "pending",
-    current_approval_step: c.current_approval_step || null,
-    attachment: extractStoragePath(c.attachment),
-    created_at: c.created_at,
-    target_supervisor_id: c.user?.supervisor_id
-  }));
+  rawCorrections.map((c: any) => {
+    const corrDate = c.attendance_date || c.attendance?.date || (c.created_at ? new Date(c.created_at).toLocaleDateString('id-ID') : '-');
+    const checkInTime = c.corrected_check_in_time || (c.corrected_check_in ? c.corrected_check_in.substring(11, 16) : '--:--');
+    const checkOutTime = c.corrected_check_out_time || (c.corrected_check_out ? c.corrected_check_out.substring(11, 16) : '--:--');
+
+    return {
+      id: c.id,
+      type: "attendance_correction",
+      user_name: c.user?.name || "Karyawan",
+      user_email: c.user?.email,
+      user_role: c.user?.role?.name || c.user?.role,
+      description: `Koreksi Absen Tanggal ${corrDate}: Masuk [${checkInTime}] Pulang [${checkOutTime}]. Alasan: ${c.reason || '-'}`,
+      category: c.correction_type === 'missing_checkout' ? 'Lupa Absen Pulang' : 'Koreksi Waktu',
+      start_date: `${corrDate} (${checkInTime} - ${checkOutTime})`,
+      status: c.status || "pending",
+      current_approval_step: c.current_approval_step || null,
+      attachment: extractStoragePath(c.attachment),
+      created_at: c.created_at,
+      target_supervisor_id: c.user?.supervisor_id
+    };
+  });
 
 const normalizeWebAttendances = (rawItems: any[]): ApprovalItem[] =>
   rawItems.map((w: any) => {
     const checkInDate = w.check_in ? new Date(w.check_in) : new Date();
     const timeFormatted = checkInDate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
     const dateFormatted = checkInDate.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+    const isMobileManual = w.channel === 'mobile' || (w.suspicious_reason && (w.suspicious_reason.includes('Tanpa verifikasi') || w.suspicious_reason.includes('wajah gagal')));
     
     return {
       id: w.id,
@@ -406,8 +413,10 @@ const normalizeWebAttendances = (rawItems: any[]): ApprovalItem[] =>
       user_name: w.user?.name || "Karyawan",
       user_email: w.user?.email,
       user_role: w.user?.role?.name || w.user?.role || "Karyawan",
-      category: "Presensi Web (Browser)",
-      description: `Absen Masuk Browser via Web pada ${dateFormatted} pukul ${timeFormatted} WIB (IP: ${w.ip_address || "127.0.0.1"})` + (w.is_suspicious ? " — Anomali Terdeteksi" : ""),
+      category: isMobileManual ? "Presensi Manual (Wajah Gagal)" : "Presensi Web (Browser)",
+      description: isMobileManual 
+        ? `Absen Manual Mobile pada ${dateFormatted} pukul ${timeFormatted} WIB. Catatan: "${w.suspicious_reason || 'Verifikasi wajah gagal'}"`
+        : `Absen Masuk Browser via Web pada ${dateFormatted} pukul ${timeFormatted} WIB (IP: ${w.ip_address || "127.0.0.1"})` + (w.is_suspicious ? " — Anomali Terdeteksi" : ""),
       status: w.web_approval_status || w.status || "pending",
       created_at: w.check_in || w.created_at,
       web_approval_status: w.web_approval_status,
@@ -416,7 +425,7 @@ const normalizeWebAttendances = (rawItems: any[]): ApprovalItem[] =>
       latitude_in: w.latitude_in,
       longitude_in: w.longitude_in,
       image_in: w.image_in,
-      attachment: extractStoragePath(w.image_in),
+      attachment: extractStoragePath(w.image_in || w.image_out),
       target_supervisor_id: null,
     };
   });
@@ -652,6 +661,10 @@ const isItemWithinPeriod = (
   return true;
 };
 
+const getLocalDateString = (d: Date = new Date()): string => {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 const isItemMatchingSearch = (item: ApprovalItem, searchQuery: string): boolean => {
   if (!searchQuery.trim()) return true;
   const q = searchQuery.toLowerCase();
@@ -693,31 +706,31 @@ export default function ApprovalsPage() {
     if (isSuperAdmin || hasManageApprovals) return true;
     switch (type) {
       case "leave":
-        return hasPermission("approve-leaves");
+        return hasPermission("approve-leaves") || isManager;
       case "permit":
-        return hasPermission("approve-permits");
+        return hasPermission("approve-permits") || isManager;
       case "reimbursement":
-        return hasPermission("approve-reimbursements");
+        return hasPermission("approve-reimbursements") || isManager;
       case "overtime":
-        return hasPermission("approve-overtimes");
+        return hasPermission("approve-overtimes") || isManager;
       case "fund_request":
-        return hasPermission("approve-fund-requests");
+        return hasPermission("approve-fund-requests") || isManager;
       case "vehicle_log":
-        return hasPermission("approve-vehicle-logs");
+        return hasPermission("approve-vehicle-logs") || isManager;
       case "payroll":
-        return hasPermission("approve-payroll") || hasPermission("manage-payroll") || isSuperAdmin;
+        return isSuperAdmin;
       case "dinas_luar":
-        return hasPermission("approve-leaves") || hasPermission("view-attendances");
+        return hasPermission("approve-attendances") || hasPermission("approve-leaves") || isManager;
       case "early_out":
-        return hasPermission("approve-attendances") || hasPermission("view-attendances") || isSuperAdmin;
+        return hasPermission("approve-attendances") || isManager;
       case "attendance_correction":
-        return hasPermission("approve-attendances") || hasPermission("edit-attendances") || isSuperAdmin;
+        return hasPermission("manage-attendance-corrections") || hasPermission("approve-attendance-corrections") || isManager;
       case "web_attendance":
-        return isSuperAdmin || hasPermission("view-attendances");
+        return isSuperAdmin;
       default:
         return false;
     }
-  }, [isSuperAdmin, hasManageApprovals, hasPermission]);
+  }, [isSuperAdmin, hasManageApprovals, hasPermission, isManager]);
 
   const hasAnyApprovalPermission =
     isSuperAdmin ||
@@ -739,10 +752,7 @@ export default function ApprovalsPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
   const [customStartDate, setCustomStartDate] = useState<string>("");
   const [customEndDate, setCustomEndDate] = useState<string>("");
-  const [teamDate, setTeamDate] = useState<string>(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  });
+  const [teamDate, setTeamDate] = useState<string>(() => getLocalDateString());
 
   // Company filtering state for Super Admin
   const [companies, setCompanies] = useState<Array<{ id: number; name: string }>>([]);
@@ -970,6 +980,12 @@ export default function ApprovalsPage() {
   useEffect(() => {
     fetchTeamAttendance();
   }, [fetchTeamAttendance]);
+
+  useEffect(() => {
+    if (activeTab === "team") {
+      fetchTeamAttendance(teamDate);
+    }
+  }, [activeTab, fetchTeamAttendance, teamDate]);
 
   // Fetch Attendance History for Tab 3
   const fetchAttendanceHistory = useCallback(async (pageNumber = 1) => {
@@ -1334,7 +1350,7 @@ export default function ApprovalsPage() {
     ));
   };
 
-  if (!isManager || !hasAnyApprovalPermission) {
+  if (!isManager) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
         <div className="w-16 h-16 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mb-4 border border-rose-100 shadow-sm">
@@ -1808,8 +1824,8 @@ export default function ApprovalsPage() {
                     {pendingCounts.web_attendance || items.filter(i => i.type === "web_attendance").length}
                   </span>
                 </div>
-                <div className="text-xs font-bold text-slate-800">Absen Web</div>
-                <div className="text-[10px] text-slate-400">Persetujuan Presensi Browser</div>
+                <div className="text-xs font-bold text-slate-800">Absen Web & Manual</div>
+                <div className="text-[10px] text-slate-400">Browser & Verifikasi Gagal</div>
               </button>
             )}
           </div>
@@ -2202,12 +2218,12 @@ export default function ApprovalsPage() {
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => {
-                    const today = new Date().toISOString().split("T")[0];
+                    const today = getLocalDateString();
                     setTeamDate(today);
                     fetchTeamAttendance(today);
                   }}
                   className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition ${
-                    teamDate === new Date().toISOString().split("T")[0]
+                    teamDate === getLocalDateString()
                       ? "bg-slate-900 text-white border-slate-900 shadow-xs"
                       : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
                   }`}
@@ -2216,12 +2232,12 @@ export default function ApprovalsPage() {
                 </button>
                 <button
                   onClick={() => {
-                    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+                    const yesterday = getLocalDateString(new Date(Date.now() - 86400000));
                     setTeamDate(yesterday);
                     fetchTeamAttendance(yesterday);
                   }}
                   className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition ${
-                    teamDate === new Date(Date.now() - 86400000).toISOString().split("T")[0]
+                    teamDate === getLocalDateString(new Date(Date.now() - 86400000))
                       ? "bg-slate-900 text-white border-slate-900 shadow-xs"
                       : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
                   }`}

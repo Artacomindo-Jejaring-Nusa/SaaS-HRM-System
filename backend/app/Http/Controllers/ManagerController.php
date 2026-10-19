@@ -59,7 +59,7 @@ class ManagerController extends Controller
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
-        $isCompanyAdmin = PendingRequestService::isExecutiveOrAdmin($user) || $user->hasPermission('view-attendances');
+        $isCompanyAdmin = ManagerAttendanceService::isCompanyWideViewer($user);
 
         return response()->json([
             'status' => 'success',

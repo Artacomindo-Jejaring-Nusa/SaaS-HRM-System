@@ -7,6 +7,7 @@ use App\Models\Attendance;
 use App\Models\AttendanceCorrection;
 use App\Models\User;
 use App\Services\ApprovalService;
+use App\Services\EmployeeQueryService;
 use App\Traits\Notifiable;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -27,13 +28,26 @@ class AttendanceCorrectionController extends Controller
     {
         $user = $request->user();
         $query = AttendanceCorrection::with(['user', 'approver', 'attendance']);
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
-        if ($user->is_manager) {
-            if ($user->company_id && ! $user->canAccessAllCompanies()) {
+        if ($isSuperAdmin) {
+            if ($user->company_id && !$user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            }
+        } elseif (!empty($subordinateIds)) {
+            $query->where(function ($q) use ($user, $subordinateIds) {
+                $q->where('user_id', $user->id)
+                  ->orWhereIn('user_id', $subordinateIds);
+            });
+            if ($user->company_id) {
                 $query->where('company_id', $user->company_id);
             }
         } else {
             $query->where('user_id', $user->id);
+            if ($user->company_id) {
+                $query->where('company_id', $user->company_id);
+            }
         }
 
         if ($request->status) {
@@ -312,7 +326,21 @@ class AttendanceCorrectionController extends Controller
         }
 
         // ── Fallback: Default logic ──
-        abort_if(! $request->user()->hasPermission('approve-leaves'), 403, 'Akses ditolak.');
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        if (!$isSuperAdmin) {
+            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+            if (!in_array($correction->user_id, $subordinateIds)) {
+                abort(403, 'Akses ditolak. Anda tidak memiliki wewenang untuk menyetujui koreksi absen karyawan ini.');
+            }
+        }
+        abort_if(
+            ! $user->hasPermission('manage-attendance-corrections') &&
+            ! $user->hasPermission('approve-attendance-corrections') &&
+            ! $user->hasPermission('approve-leaves') &&
+            ! $isSuperAdmin,
+            403,
+            'Akses ditolak.'
+        );
 
         if ($correction->status !== 'pending') {
             return $this->errorResponse('Koreksi ini sudah diproses sebelumnya.', 400);
@@ -411,7 +439,21 @@ class AttendanceCorrectionController extends Controller
         }
 
         // ── Fallback: Default logic ──
-        abort_if(! $request->user()->hasPermission('approve-leaves'), 403, 'Akses ditolak.');
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        if (!$isSuperAdmin) {
+            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+            if (!in_array($correction->user_id, $subordinateIds)) {
+                abort(403, 'Akses ditolak. Anda tidak memiliki wewenang untuk menolak koreksi absen karyawan ini.');
+            }
+        }
+        abort_if(
+            ! $user->hasPermission('manage-attendance-corrections') &&
+            ! $user->hasPermission('approve-attendance-corrections') &&
+            ! $user->hasPermission('approve-leaves') &&
+            ! $isSuperAdmin,
+            403,
+            'Akses ditolak.'
+        );
 
         if ($correction->status !== 'pending') {
             return $this->errorResponse('Koreksi ini sudah diproses sebelumnya.', 400);

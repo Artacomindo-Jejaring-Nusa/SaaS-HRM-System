@@ -50,7 +50,7 @@ import AppSettingsModal from "@/components/header/AppSettingsModal";
 type SubmenuItem = {
   name: string;
   href: string;
-  permission?: string;
+  permission?: string | string[];
   feature?: string;
 };
 
@@ -74,8 +74,16 @@ type SidebarLink = {
   href?: string;
   icon?: any;
   submenus?: SubmenuItem[];
-  permission?: string;
+  permission?: string | string[];
   feature?: string;
+};
+
+const matchPermission = (checkPerm: (perm?: string) => boolean, permission?: string | string[]): boolean => {
+  if (!permission) return true;
+  if (Array.isArray(permission)) {
+    return permission.some(p => checkPerm(p));
+  }
+  return checkPerm(permission);
 };
 
 const sidebarLinks: SidebarLink[] = [
@@ -104,10 +112,10 @@ const sidebarLinks: SidebarLink[] = [
     submenus: [
       { name: "live_tracking", href: "/dashboard/live-tracking", permission: 'view-live-tracking' },
       { name: "attendance_map", href: "/dashboard/attendance/map", permission: 'view-attendance-map' },
-      { name: "attendance_history", href: "/dashboard/attendance", permission: 'view-attendances' },
+      { name: "attendance_history", href: "/dashboard/attendance", permission: ['view-attendances', 'apply-attendances', 'manage-attendance'] },
       { name: "schedules", href: "/dashboard/schedules", permission: 'manage-schedules' },
-      { name: "shift_swap", href: "/dashboard/shift-swap", permission: 'view-shift-swaps' },
-      { name: "attendance_correction", href: "/dashboard/attendance-corrections", permission: 'manage-attendance-corrections' },
+      { name: "shift_swap", href: "/dashboard/shift-swap", permission: ['view-shift-swaps', 'apply-shift-swaps', 'approve-shift-swaps'] },
+      { name: "attendance_correction", href: "/dashboard/attendance-corrections", permission: ['view-attendances', 'manage-attendance-corrections', 'approve-attendances'] },
       { name: "wfh_delegation", href: "/dashboard/attendance/wfh", permission: 'manage-wfh' },
       { name: "holidays", href: "/dashboard/holidays", permission: 'manage-holidays' },
     ]
@@ -119,7 +127,7 @@ const sidebarLinks: SidebarLink[] = [
     icon: CalendarIcon,
     permission: 'view-leaves',
     submenus: [
-      { name: "leave_requests", href: "/dashboard/leaves", permission: 'view-leaves' },
+      { name: "leave_requests", href: "/dashboard/leaves", permission: ['view-leaves', 'apply-leaves', 'approve-leaves'] },
       { name: "leave_balances", href: "/dashboard/leave-balances", permission: 'edit-employees' }, 
       { name: "leave_calendar", href: "/dashboard/leave-calendar", permission: 'view-leaves' },
       { name: "mass_leaves", href: "/dashboard/mass-leaves", permission: 'approve-leaves' },
@@ -130,7 +138,7 @@ const sidebarLinks: SidebarLink[] = [
     icon: ClipboardList,
     permission: 'view-permits',
     submenus: [
-      { name: "permit_requests", href: "/dashboard/permits", permission: 'view-permits' },
+      { name: "permit_requests", href: "/dashboard/permits", permission: ['view-permits', 'apply-permits', 'approve-permits'] },
     ]
   },
   {
@@ -138,7 +146,7 @@ const sidebarLinks: SidebarLink[] = [
     icon: CreditCard,
     permission: 'view-reimbursements',
     submenus: [
-      { name: "reimbursements", href: "/dashboard/reimbursements", permission: 'view-reimbursements' },
+      { name: "reimbursements", href: "/dashboard/reimbursements", permission: ['view-reimbursements', 'apply-reimbursements', 'approve-reimbursements'] },
     ]
   },
   {
@@ -146,7 +154,7 @@ const sidebarLinks: SidebarLink[] = [
     icon: Wallet,
     permission: 'view-fund-requests',
     submenus: [
-      { name: "fund_requests", href: "/dashboard/fund-requests", permission: 'view-fund-requests' },
+      { name: "fund_requests", href: "/dashboard/fund-requests", permission: ['view-fund-requests', 'apply-fund-requests', 'approve-fund-requests'] },
     ]
   },
   {
@@ -154,7 +162,7 @@ const sidebarLinks: SidebarLink[] = [
     icon: Clock,
     permission: 'view-overtimes',
     submenus: [
-      { name: "overtime_requests", href: "/dashboard/overtimes", permission: 'view-overtimes' },
+      { name: "overtime_requests", href: "/dashboard/overtimes", permission: ['view-overtimes', 'apply-overtimes', 'approve-overtimes'] },
     ]
   },
   {
@@ -162,7 +170,7 @@ const sidebarLinks: SidebarLink[] = [
     icon: ClipboardList,
     permission: 'view-directory',
     submenus: [
-      { name: "tasks", href: "/dashboard/tasks", permission: 'view-tasks' },
+      { name: "tasks", href: "/dashboard/tasks", permission: ['view-tasks', 'manage-tasks', 'assign-tasks', 'receive-tasks'] },
       { name: "announcements", href: "/dashboard/announcements", permission: 'view-announcements' },
       { name: "birthday_schedule", href: "/dashboard/birthdays", permission: 'view-directory' },
       { name: "whatsapp_settings", href: "/dashboard/whatsapp", permission: 'manage-company' },
@@ -189,6 +197,7 @@ const sidebarLinks: SidebarLink[] = [
     icon: CreditCard,
     permission: 'view-salaries',
     submenus: [
+      { name: "my_payroll_slip", href: "/dashboard/payroll/my-slip", permission: 'view-salaries' },
       { name: "payroll_batches", href: "/dashboard/payroll", permission: 'manage-payroll' },
       { name: "payroll_approval", href: "/dashboard/payroll/approval", permission: 'approve-payroll' },
       { name: "payroll_components", href: "/dashboard/payroll/components", permission: 'manage-payroll' },
@@ -211,7 +220,7 @@ const sidebarLinks: SidebarLink[] = [
     icon: Car,
     permission: 'view-vehicle-logs',
     submenus: [
-      { name: "fleet_logs", href: "/dashboard/fleet-logs", permission: 'view-vehicle-logs' },
+      { name: "fleet_logs", href: "/dashboard/fleet-logs", permission: ['view-vehicle-logs', 'apply-vehicle-logs', 'approve-vehicle-logs'] },
       { name: "mileage_report", href: "/dashboard/fleet-logs?tab=report", permission: 'view-vehicle-reports' },
     ]
   },
@@ -457,8 +466,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     for (const l of remaining) {
       if (l.isHeading) return false;
       if (l.href === "/dashboard/approvals" && isMgr) return true;
-      if (l.submenus?.some(s => checkPerm(s.permission))) return true;
-      if (l.href && checkPerm(l.permission)) return true;
+      if (l.submenus?.some(s => matchPermission(checkPerm, s.permission))) return true;
+      if (l.href && matchPermission(checkPerm, l.permission)) return true;
     }
     return false;
   };
@@ -497,14 +506,14 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
       // 3. Filter submenus based on permissions without mutating original array
       if (link.submenus) {
-        const allowedSubmenus = link.submenus.filter(sub => hasPermission(sub.permission));
+        const allowedSubmenus = link.submenus.filter(sub => matchPermission(hasPermission, sub.permission));
         // If no submenus left after filtering, don't show the group
         return allowedSubmenus.length > 0;
       }
 
       // 4. Standalone link or heading validation
       if (link.href) {
-        return hasPermission(link.permission);
+        return matchPermission(hasPermission, link.permission);
       }
 
       return true;
@@ -520,7 +529,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     };
 
     const renderSubmenuItem = (link: SidebarLink) => {
-      const filteredSubmenus = link.submenus?.filter(sub => hasPermission(sub.permission)) ?? [];
+      const filteredSubmenus = link.submenus?.filter(sub => matchPermission(hasPermission, sub.permission)) ?? [];
       if (filteredSubmenus.length === 0) return null;
 
       const hasActiveChild = filteredSubmenus.some(sub => pathname === sub.href || pathname.startsWith(`${sub.href}/`));

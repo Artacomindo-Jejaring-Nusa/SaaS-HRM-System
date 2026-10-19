@@ -31,14 +31,18 @@ class _TaskScreenState extends State<TaskScreen> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _checkPermissions();
-    _fetchTasks();
+    _initScreen();
 
     // Listen for FCM messages to refresh UI in real-time
     _fcmSubscription = FcmService.onMessageReceived.listen((message) {
       debugPrint("Real-time task refresh triggered via FCM");
       _fetchTasks();
     });
+  }
+
+  Future<void> _initScreen() async {
+    await _checkPermissions();
+    await _fetchTasks();
   }
 
   @override
@@ -86,8 +90,15 @@ class _TaskScreenState extends State<TaskScreen> with SingleTickerProviderStateM
 
   Future<void> _fetchTasks() async {
     setState(() => _isLoading = true);
-    final received = await ApiService.getTasks(type: 'received');
-    final sent = await ApiService.getTasks(type: 'sent');
+    List<dynamic>? received;
+    List<dynamic>? sent;
+
+    if (_canReceive) {
+      received = await ApiService.getTasks(type: 'received');
+    }
+    if (_canAssign) {
+      sent = await ApiService.getTasks(type: 'sent');
+    }
     
     if (mounted) {
       setState(() {
@@ -446,11 +457,11 @@ class _TaskScreenState extends State<TaskScreen> with SingleTickerProviderStateM
                   if (isReceived) ...[
                     Icon(Icons.person, size: 14, color: Colors.grey[500]),
                     const SizedBox(width: 4),
-                    Text("Dari: ${task['creator']?['name'] ?? 'System'}", style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+                    Text("Dari: ${task['creator']?['name'] ?? task['assigner']?['name'] ?? 'System'}", style: TextStyle(color: Colors.grey[600], fontSize: 11)),
                   ] else ...[
                     Icon(Icons.person_pin, size: 14, color: Colors.grey[500]),
                     const SizedBox(width: 4),
-                    Text("Kpd: ${task['assignee']?['name'] ?? '-'}", style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+                    Text("Kpd: ${task['assignee']?['name'] ?? task['user']?['name'] ?? '-'}", style: TextStyle(color: Colors.grey[600], fontSize: 11)),
                   ],
                 ],
               ),
@@ -550,7 +561,7 @@ class _TaskScreenState extends State<TaskScreen> with SingleTickerProviderStateM
                 _buildDetailInfo("Prioritas", task['priority']?.toString().toUpperCase() ?? '-'),
                 _buildDetailInfo("Deadline", (task['due_date'] ?? task['deadline'])?.toString() ?? '-'),
                 _buildDetailInfo(isReceived ? "Pemberi Tugas" : "Penerima Tugas", 
-                  isReceived ? (task['creator']?['name'] ?? 'System') : (task['assignee']?['name'] ?? '-')),
+                  isReceived ? (task['creator']?['name'] ?? task['assigner']?['name'] ?? 'System') : (task['assignee']?['name'] ?? task['user']?['name'] ?? '-')),
                 
                 const SizedBox(height: 30),
                 // Only show main action button if no activities, or task is not completed
