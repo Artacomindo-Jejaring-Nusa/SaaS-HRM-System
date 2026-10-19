@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureManagerAccess;
 use App\Http\Middleware\PermissionMiddleware;
 use App\Http\Middleware\SanitizeInput;
 use App\Http\Middleware\SecurityHeaders;
@@ -29,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(SecurityHeaders::class);
         $middleware->alias([
             'permission' => PermissionMiddleware::class,
+            'manager.access' => EnsureManagerAccess::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

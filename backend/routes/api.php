@@ -475,16 +475,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     // Managerial Routes
     Route::group([
         'prefix' => 'manager',
-        'middleware' => function ($request, $next) {
-            $user = $request->user();
-            if (!$user || !$user->canAccessManagerPortal()) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Anda tidak memiliki hak akses untuk portal manager.',
-                ], 403);
-            }
-            return $next($request);
-        },
+        'middleware' => ['manager.access'],
     ], function () {
         Route::get('/pending-count', [ManagerController::class, 'getPendingCount']);
         Route::get('/pending-requests', [ManagerController::class, 'getPendingRequests']);
