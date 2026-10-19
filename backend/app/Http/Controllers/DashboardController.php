@@ -29,7 +29,7 @@ class DashboardController extends Controller
         return $this->successResponse([
             'summary' => $this->getSummaryStats($user, $companyId, $today, $isStaff),
             'pending_approvals' => $this->getPendingApprovals($user, $companyId, $isStaff),
-            'attendance_trends' => $this->getAttendanceTrends($user, $companyId, $today, $isStaff),
+            'attendance_trends' => $this->getAttendanceTrends($user, $companyId, $isStaff),
             'attendance_stats' => $this->getMonthlyAttendanceStats($user, $companyId, $isStaff),
             'calendar_events' => $this->getCalendarEvents($companyId),
             'upcoming_holidays' => $this->getUpcomingHolidays($companyId, $today),
@@ -111,7 +111,7 @@ class DashboardController extends Controller
         }
     }
 
-    private function getAttendanceTrends($user, $companyId, $today, $isStaff)
+    private function getAttendanceTrends($user, $companyId, $isStaff)
     {
         $last7Days = [];
         for ($i = 6; $i >= 0; $i--) {

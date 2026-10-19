@@ -283,7 +283,10 @@ class PendingRequestService
             return true;
         }
 
-        $submitter = ($type === 'payroll') ? ($item->creator ?: $user) : $item->user;
+        $submitter = $item->user;
+        if ($type === 'payroll') {
+            $submitter = $item->creator ?: $user;
+        }
         $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
         $submitterId = $item->user_id ?? $item->user?->id ?? ($type === 'payroll' ? $item->created_by : null);
         $isSubordinate = $submitterId && in_array($submitterId, $subordinateIds);

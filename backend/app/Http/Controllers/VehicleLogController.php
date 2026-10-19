@@ -92,7 +92,7 @@ class VehicleLogController extends Controller
     /**
      * Show detail of a specific vehicle log
      */
-    public function show(Request $request, $id)
+    public function show($id)
     {
         $log = VehicleLog::with(['user', 'approver'])->findOrFail($id);
 
@@ -357,7 +357,7 @@ class VehicleLogController extends Controller
             'toll_cost' => $request->toll_cost ?? 0,
             'parking_cost' => $request->parking_cost ?? 0,
             'other_cost' => $request->other_cost ?? 0,
-            'expense_attachments' => count($attachments) > 0 ? $attachments : $log->expense_attachments,
+            'expense_attachments' => !empty($attachments) ? $attachments : $log->expense_attachments,
             'notes' => $request->notes ?? $log->notes,
             'status' => 'completed',
         ]);

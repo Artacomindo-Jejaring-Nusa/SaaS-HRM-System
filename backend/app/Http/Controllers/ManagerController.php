@@ -60,13 +60,11 @@ class ManagerController extends Controller
     {
         /** @var User $user */
         $user = Auth::user();
-        $isCompanyAdmin = ManagerAttendanceService::isCompanyWideViewer($user);
 
         return response()->json([
             'status' => 'success',
             'data' => $attendanceService->getTeamAttendance(
                 $user,
-                $isCompanyAdmin,
                 $request->query('date'),
                 $request->query('company_id')
             ),

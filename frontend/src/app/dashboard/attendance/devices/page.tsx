@@ -15,7 +15,6 @@ import {
   Info,
   Server,
   Hash,
-  Activity,
   Loader2,
   X
 } from "lucide-react";
@@ -52,7 +51,7 @@ export default function AttendanceDevicesPage() {
 
   // Form State
   const [formName, setFormName] = useState("");
-  const [formIp, setFormIp] = useState("192.168.1.201");
+  const [formIp, setFormIp] = useState("");
   const [formPort, setFormPort] = useState(4370);
   const [formCommKey, setFormCommKey] = useState("0");
   const [formModel, setFormModel] = useState("Solution X100-C");
@@ -89,7 +88,7 @@ export default function AttendanceDevicesPage() {
   const openCreateModal = () => {
     setEditingDevice(null);
     setFormName("");
-    setFormIp("192.168.1.201");
+    setFormIp("");
     setFormPort(4370);
     setFormCommKey("0");
     setFormModel("Solution X100-C");
@@ -200,47 +199,18 @@ export default function AttendanceDevicesPage() {
     });
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Cpu className="w-6 h-6 text-[#800000]" />
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-              Mesin Presensi (Fingerprint Gateway)
-            </h1>
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Integrasi langsung mesin Solution X100-C / ZKTeco via koneksi LAN on-premise ke sistem HRMS.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#800000] hover:bg-[#990000] text-white text-sm font-semibold rounded-xl shadow-sm transition self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          Tambah Mesin
-        </button>
-      </div>
-
-      {/* Info Card: Cara Kerja */}
-      <div className="p-4 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-2xl flex items-start gap-3">
-        <Info className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-        <div className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
-          <span className="font-bold">Tips Konfigurasi Mesin:</span> Pastikan mesin fingerprint Anda (X100-C) terhubung kabel LAN ke switch/router kantor yang sama dengan server HRMS. Karyawan yang ingin otomatis terabsen cukup didaftarkan <strong>Nomor PIN Mesin</strong> pada menu <em>Data Karyawan &rarr; Profil</em>.
-        </div>
-      </div>
-
-      {/* Device List */}
-      {loading ? (
+  const renderDeviceList = () => {
+    if (loading) {
+      return (
         <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700">
           <Loader2 className="w-8 h-8 text-[#800000] animate-spin mb-2" />
           <p className="text-sm text-gray-500">Memuat konfigurasi perangkat...</p>
         </div>
-      ) : devices.length === 0 ? (
+      );
+    }
+
+    if (devices.length === 0) {
+      return (
         <div className="text-center p-12 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700">
           <Server className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200">
@@ -258,7 +228,11 @@ export default function AttendanceDevicesPage() {
             Daftarkan Mesin Sekarang
           </button>
         </div>
-      ) : (
+      );
+    }
+
+    return (
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {devices.map((device) => {
             const isTesting = testingDeviceId === device.id;
@@ -389,7 +363,46 @@ export default function AttendanceDevicesPage() {
             );
           })}
         </div>
-      )}
+
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <Cpu className="w-6 h-6 text-[#800000]" />
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+              Mesin Presensi (Fingerprint Gateway)
+            </h1>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Integrasi langsung mesin Solution X100-C / ZKTeco via koneksi LAN on-premise ke sistem HRMS.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={openCreateModal}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[#800000] hover:bg-[#990000] text-white text-sm font-semibold rounded-xl shadow-sm transition self-start sm:self-auto"
+        >
+          <Plus className="w-4 h-4" />
+          Tambah Mesin
+        </button>
+      </div>
+
+      {/* Info Card: Cara Kerja */}
+      <div className="p-4 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-2xl flex items-start gap-3">
+        <Info className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+        <div className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+          <span className="font-bold">Tips Konfigurasi Mesin:</span> Pastikan mesin fingerprint Anda (X100-C) terhubung kabel LAN ke switch/router kantor yang sama dengan server HRMS. Karyawan yang ingin otomatis terabsen cukup didaftarkan <strong>Nomor PIN Mesin</strong> pada menu <em>Data Karyawan &rarr; Profil</em>.
+        </div>
+      </div>
+
+      {/* Device List */}
+      {renderDeviceList()}
 
       {/* Modal: Tambah / Ubah Mesin */}
       {isModalOpen && (
@@ -436,7 +449,7 @@ export default function AttendanceDevicesPage() {
                     id={ipInputId}
                     type="text"
                     required
-                    placeholder="192.168.1.201"
+                    placeholder="Contoh: IP Mesin Presensi"
                     value={formIp}
                     onChange={(e) => setFormIp(e.target.value)}
                     className="w-full px-3 py-2 text-sm font-mono bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-[#800000]/20 text-gray-900 dark:text-white"

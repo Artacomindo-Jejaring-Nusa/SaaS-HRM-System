@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Traits\Auditable;
 use App\Traits\EncryptsSensitiveFields;
 use App\Traits\HasUserRelations;

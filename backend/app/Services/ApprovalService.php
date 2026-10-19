@@ -5,10 +5,12 @@ namespace App\Services;
 use App\Models\ApprovalWorkflow;
 use App\Models\User;
 use App\Models\WorkflowStep;
+use App\Traits\ResolvesWorkflowApprovers;
 use Illuminate\Support\Collection;
 
 class ApprovalService
 {
+    use ResolvesWorkflowApprovers;
     /**
      * List of supported module keys for the dashboard.
      */
@@ -265,65 +267,16 @@ class ApprovalService
         ?int $currentStep,
         string $action
     ): ?array {
-        // If current_approval_step is null, there's no dynamic workflow active
         if ($currentStep === null) {
             return null; // Fallback to default logic
         }
 
         $workflow = self::getWorkflow($moduleKey, $companyId, $submitter);
-
         if (! $workflow) {
             return null; // Fallback
         }
 
-        // Find the current step definition
-        $step = $workflow->steps()->where('step_number', $currentStep)->first();
-
-        if (! $step) {
-            return ['error' => 'Tahap persetujuan tidak ditemukan dalam workflow.'];
-        }
-
-        // Validate that this user is authorized to act on this step
-        if (! self::canUserApproveStep($step, $approver, $submitter)) {
-            return ['error' => 'Anda tidak memiliki wewenang untuk menyetujui/menolak pada tahap ini.'];
-        }
-
-        // Handle rejection → immediately reject, no further steps
-        if ($action === 'reject') {
-            return [
-                'status' => 'rejected',
-                'current_approval_step' => null,
-                'is_final' => true,
-                'approved_by' => $approver->id,
-            ];
-        }
-
-        // Handle approval → check if there's a next step
-        $nextStep = $workflow->steps()
-            ->where('step_number', '>', $currentStep)
-            ->orderBy('step_number')
-            ->first();
-
-        if (! $nextStep) {
-            // This was the final step → fully approved
-            return [
-                'status' => 'approved',
-                'current_approval_step' => null,
-                'is_final' => true,
-                'approved_by' => $approver->id,
-            ];
-        }
-
-        // Move to the next step
-        $nextApprovers = self::getApproversForStep($nextStep, $submitter, $companyId);
-
-        return [
-            'status' => 'pending',
-            'current_approval_step' => $nextStep->step_number,
-            'is_final' => false,
-            'approvers' => $nextApprovers,
-            'step_label' => self::getStepLabel($nextStep),
-        ];
+        return self::executeApprovalStep($workflow, $currentStep, $approver, $submitter, $action, $companyId);
     }
 
     /**
@@ -338,20 +291,13 @@ class ApprovalService
         ?int $currentStep
     ): bool {
         if ($currentStep === null) {
-            return false; // Not using dynamic workflow
+            return false;
         }
 
         $workflow = self::getWorkflow($moduleKey, $companyId, $submitter);
-        if (! $workflow) {
-            return false;
-        }
+        $step = $workflow?->steps()->where('step_number', $currentStep)->first();
 
-        $step = $workflow->steps()->where('step_number', $currentStep)->first();
-        if (! $step) {
-            return false;
-        }
-
-        return self::canUserApproveStep($step, $approver, $submitter, $moduleKey);
+        return $step ? self::canUserApproveStep($step, $approver, $submitter, $moduleKey) : false;
     }
 
     public const ROLE_SUPER_ADMIN = 'Super Admin';
@@ -370,101 +316,22 @@ class ApprovalService
         };
     }
 
-    private static function getSuperAdminApprovers(int $companyId, int $excludeUserId): Collection
-    {
-        return User::where(function ($q) {
-            $q->where('role_id', 1)
-                ->orWhereHas('role', function ($r) {
-                    $r->where('name', self::ROLE_SUPER_ADMIN);
-                });
-        })
-            ->where(function ($q) use ($companyId) {
-                $q->where('company_id', $companyId)
-                    ->orWhereNull('company_id');
-            })
-            ->where('id', '!=', $excludeUserId)
-            ->get();
-    }
-
-    private static function getSupervisorApprovers(User $submitter, int $companyId): Collection
-    {
-        if ($submitter->supervisor_id) {
-            $supervisor = User::find($submitter->supervisor_id);
-
-            return $supervisor ? collect([$supervisor]) : collect();
-        }
-
-        return self::getSuperAdminApprovers($companyId, $submitter->id);
-    }
-
-    private static function getRoleApprovers(WorkflowStep $step, User $submitter, int $companyId): Collection
-    {
-        if (! $step->approver_role_id) {
-            return collect();
-        }
-
-        $roleUsers = User::with('role')->where(function ($q) use ($companyId) {
-            $q->where('company_id', $companyId)
-                ->orWhereNull('company_id');
-        })
-            ->where('role_id', $step->approver_role_id)
-            ->where('id', '!=', $submitter->id)
-            ->get();
-
-        $roleName = strtolower($step->role?->name ?? '');
-        if (in_array($roleName, ['supervisor', 'spv', 'manager'])) {
-            $roleUsers = $roleUsers->filter(function ($u) use ($submitter) {
-                if ($submitter->supervisor_id === $u->id) {
-                    return true;
-                }
-                $subs = EmployeeQueryService::resolveSubordinateIds($u->id);
-
-                return in_array($submitter->id, $subs);
-            })->values();
-        }
-
-        return $roleUsers;
-    }
-
-    private static function getUserApprovers(WorkflowStep $step): Collection
-    {
-        if (! $step->approver_user_id) {
-            return collect();
-        }
-
-        $user = User::find($step->approver_user_id);
-
-        return $user ? collect([$user]) : collect();
-    }
-
     /**
      * Get a human-readable label for a step (for notifications).
      */
     public static function getStepLabel(WorkflowStep $step): string
     {
-        switch ($step->approver_type) {
-            case 'super_admin':
-                return 'Approved by - Disetujui ('.self::ROLE_SUPER_ADMIN.')';
-            case 'supervisor':
-                return 'Checked by - Diperiksa (Atasan Langsung)';
-            case 'role':
-                $roleName = $step->role ? $step->role->name : 'Management';
-                if ($step->step_number === 2) {
-                    return "Acknowledge - Diketahui ({$roleName})";
-                }
-
-                return "Approved by - Disetujui ({$roleName})";
-            case 'user':
-                if ($step->approver_user_id) {
-                    $user = User::find($step->approver_user_id);
-
-                    return $user ? "Approved by - Disetujui ({$user->name})" : 'Approved by - Disetujui (User)';
-                }
-
-                return 'Approved by - Disetujui (User)';
-            default:
-                return "Tahap {$step->step_number}";
-        }
+        return match ($step->approver_type) {
+            'super_admin' => 'Approved by - Disetujui ('.self::ROLE_SUPER_ADMIN.')',
+            'supervisor' => 'Checked by - Diperiksa (Atasan Langsung)',
+            'role' => ($step->step_number === 2)
+                ? 'Acknowledge - Diketahui (' . ($step->role?->name ?? 'Management') . ')'
+                : 'Approved by - Disetujui (' . ($step->role?->name ?? 'Management') . ')',
+            'user' => $step->approver_user_id
+                ? 'Approved by - Disetujui (' . (User::find($step->approver_user_id)?->name ?? 'User') . ')'
+                : 'Approved by - Disetujui (User)',
+            default => "Tahap {$step->step_number}",
+        };
     }
 
     /**

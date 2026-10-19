@@ -41,7 +41,11 @@ class LeaveNotification extends Mailable
      */
     public function content(): Content
     {
-        $statusWord = $this->leave->status === 'approved' ? 'disetujui' : ($this->leave->status === 'rejected' ? 'ditolak' : 'sedang diproses');
+        $statusWord = match ($this->leave->status) {
+            'approved' => 'disetujui',
+            'rejected' => 'ditolak',
+            default => 'sedang diproses',
+        };
 
         $html = "
         <div style='font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; color: #333;'>

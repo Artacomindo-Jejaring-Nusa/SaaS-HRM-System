@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\ZKTecoException;
 use Exception;
 use Illuminate\Support\Facades\Log;
 
@@ -16,18 +17,13 @@ class ZKTecoService
     // Commands
     private const CMD_CONNECT = 1000;
     private const CMD_DISCONNECT = 1001;
-    private const CMD_ENABLEDEVICE = 1008;
-    private const CMD_DISABLEDEVICE = 1007;
     private const CMD_DEVICE_INFO = 11;
     private const CMD_VERSION = 1100;
     private const CMD_ATTLOG_RRQ = 13;
-    private const CMD_CLEAR_ATTLOG = 14;
     private const CMD_FREE_DATA = 1060;
 
     // Replies
     private const CMD_ACK_OK = 2000;
-    private const CMD_ACK_ERROR = 2001;
-    private const CMD_ACK_DATA = 2002;
     private const CMD_PREPARE_DATA = 1500;
     private const CMD_DATA = 1501;
 
@@ -87,7 +83,7 @@ class ZKTecoService
 
         $socket = @fsockopen("udp://$ip", $port, $errno, $errstr, $timeout);
         if (!$socket) {
-            throw new Exception("Gagal membuka koneksi socket ke {$ip}:{$port} ({$errstr})");
+            throw new ZKTecoException("Gagal membuka koneksi socket ke {$ip}:{$port} ({$errstr})");
         }
 
         stream_set_timeout($socket, $timeout);
@@ -96,9 +92,9 @@ class ZKTecoService
         $packet = $this->createHeader(self::CMD_CONNECT, 0, 0);
         $reply = $this->sendAndReceive($packet);
 
-        if (!$reply || count($reply) < 8) {
+        if (!$reply || strlen($reply) < 8) {
             $this->disconnect();
-            throw new Exception("Mesin di {$ip}:{$port} tidak merespons (Timeout)");
+            throw new ZKTecoException("Mesin di {$ip}:{$port} tidak merespons (Timeout)");
         }
 
         $code = unpack('vcode', substr($reply, 0, 2))['code'];
@@ -107,7 +103,7 @@ class ZKTecoService
 
         if ($code !== self::CMD_ACK_OK) {
             $this->disconnect();
-            throw new Exception("Handshake koneksi ditolak mesin dengan kode: {$code}");
+            throw new ZKTecoException("Handshake koneksi ditolak mesin dengan kode: {$code}");
         }
 
         return true;

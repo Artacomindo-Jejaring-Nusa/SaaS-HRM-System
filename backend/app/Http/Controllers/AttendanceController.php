@@ -470,7 +470,7 @@ class AttendanceController extends Controller
         }
     }
 
-    public function heatmap(Request $request)
+    public function heatmap()
     {
         /** @var User $user */
         $user = Auth::user();

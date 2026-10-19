@@ -12,7 +12,7 @@ class ManagerAttendanceService
         return $user->isSuperAdmin() || $user->canAccessAllCompanies();
     }
 
-    public function getTeamAttendance(User $user, bool $isCompanyAdmin, ?string $targetDate = null, ?string $companyId = null): array
+    public function getTeamAttendance(User $user, ?string $targetDate = null, ?string $companyId = null): array
     {
         $date = $targetDate ? Carbon::parse($targetDate)->toDateString() : Carbon::today()->toDateString();
 

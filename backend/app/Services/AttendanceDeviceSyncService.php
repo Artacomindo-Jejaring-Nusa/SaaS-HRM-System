@@ -78,56 +78,8 @@ class AttendanceDeviceSyncService
             usort($logs, fn($a, $b) => strcmp($a['timestamp'], $b['timestamp']));
 
             foreach ($logs as $log) {
-                $pin = (string) ($log['pin'] ?? '');
-                $timestampStr = $log['timestamp'] ?? '';
-
-                if (empty($pin) || empty($timestampStr)) {
-                    continue;
-                }
-
-                $logTime = Carbon::parse($timestampStr);
-                $dateKey = $logTime->toDateString();
-
-                // Find user by fingerprint_pin or nik
-                $user = User::where('company_id', $device->company_id)
-                    ->where(function ($q) use ($pin) {
-                        $q->where('fingerprint_pin', $pin)
-                          ->orWhere('nik', $pin);
-                    })
-                    ->first();
-
-                if (!$user) {
-                    $unmappedPins[$pin] = true;
-                    continue;
-                }
-
-                // Check existing attendance on this date
-                $attendance = Attendance::where('user_id', $user->id)
-                    ->whereDate('check_in', $dateKey)
-                    ->first();
-
-                if (!$attendance) {
-                    // Record Check-In
-                    $status = $this->resolveCheckInStatus($user, $logTime);
-                    Attendance::create([
-                        'user_id' => $user->id,
-                        'company_id' => $user->company_id,
-                        'office_id' => $user->office_id,
-                        'check_in' => $logTime,
-                        'status' => $status,
-                        'attendance_type' => 'fingerprint',
-                    ]);
+                if ($this->processSingleLog($log, $device, $unmappedPins)) {
                     $processedCount++;
-                } else {
-                    // Record Check-Out if tap is at least 15 minutes after check-in
-                    if ($logTime->diffInMinutes($attendance->check_in) >= 15) {
-                        if (!$attendance->check_out || $logTime->gt($attendance->check_out)) {
-                            $attendance->update([
-                                'check_out' => $logTime,
-                            ]);
-                            $processedCount++;
-                        }
-                    }
                 }
             }
 
@@ -150,6 +102,61 @@ class AttendanceDeviceSyncService
                 'unmapped' => [],
             ];
         }
+    }
+
+    private function processSingleLog(array $log, AttendanceDevice $device, array &$unmappedPins): bool
+    {
+        $pin = (string) ($log['pin'] ?? '');
+        $timestampStr = $log['timestamp'] ?? '';
+
+        if (empty($pin) || empty($timestampStr)) {
+            return false;
+        }
+
+        $logTime = Carbon::parse($timestampStr);
+        $dateKey = $logTime->toDateString();
+
+        // Find user by fingerprint_pin or nik
+        $user = User::where('company_id', $device->company_id)
+            ->where(function ($q) use ($pin) {
+                $q->where('fingerprint_pin', $pin)
+                  ->orWhere('nik', $pin);
+            })
+            ->first();
+
+        if (!$user) {
+            $unmappedPins[$pin] = true;
+            return false;
+        }
+
+        // Check existing attendance on this date
+        $attendance = Attendance::where('user_id', $user->id)
+            ->whereDate('check_in', $dateKey)
+            ->first();
+
+        if (!$attendance) {
+            // Record Check-In
+            $status = $this->resolveCheckInStatus($user, $logTime);
+            Attendance::create([
+                'user_id' => $user->id,
+                'company_id' => $user->company_id,
+                'office_id' => $user->office_id,
+                'check_in' => $logTime,
+                'status' => $status,
+                'attendance_type' => 'fingerprint',
+            ]);
+            return true;
+        }
+
+        // Record Check-Out if tap is at least 15 minutes after check-in and newer than current checkout
+        if ($logTime->diffInMinutes($attendance->check_in) >= 15 && (!$attendance->check_out || $logTime->gt($attendance->check_out))) {
+            $attendance->update([
+                'check_out' => $logTime,
+            ]);
+            return true;
+        }
+
+        return false;
     }
 
     private function resolveCheckInStatus(User $user, Carbon $now): string

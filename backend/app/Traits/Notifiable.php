@@ -17,8 +17,18 @@ trait Notifiable
     /**
      * Send database, push (FCM), email, and WhatsApp notifications to a user
      */
-    public function notify(User $user, string $title, string $message, string $type = 'info', ?string $link = null, string $category = 'notif', bool $sendEmail = true, bool $sendWA = true)
-    {
+    public function notify(
+        User $user,
+        string $title,
+        string $message,
+        string $type = 'info',
+        ?string $link = null,
+        string $category = 'notif',
+        array|bool $channels = true
+    ) {
+        $sendEmail = is_array($channels) ? ($channels['email'] ?? true) : (bool) $channels;
+        $sendWA = is_array($channels) ? ($channels['wa'] ?? true) : (bool) $channels;
+
         // 1. Create database notification
         try {
             Notification::create([
@@ -114,7 +124,7 @@ trait Notifiable
         $superAdmins = $query->get()->unique('id');
 
         foreach ($superAdmins as $admin) {
-            $this->notify($admin, $title, $message, $type, $link, 'notif', false, false);
+            $this->notify($admin, $title, $message, $type, $link, 'notif', false);
         }
     }
 
@@ -167,7 +177,7 @@ trait Notifiable
         }
 
         foreach ($recipients as $recipient) {
-            $this->notify($recipient, $title, $message, $type, $link, 'notif', false, false);
+            $this->notify($recipient, $title, $message, $type, $link, 'notif', false);
         }
     }
 }
