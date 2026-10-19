@@ -32,7 +32,7 @@ class User extends Authenticatable
         'profile_photo_path', 'face_embedding',
         'face_status', 'face_registered_photo_path', 'face_rejection_reason',
         'face_registered_at', 'face_approved_at', 'face_approved_by',
-        'nik', 'ktp_no', 'phone', 'emergency_contact_name', 'emergency_contact_phone', 'address',
+        'nik', 'fingerprint_pin', 'ktp_no', 'phone', 'emergency_contact_name', 'emergency_contact_phone', 'address',
         'place_of_birth', 'date_of_birth', 'gender', 'marital_status', 'religion', 'blood_type',
         'join_date', 'fcm_token', 'leave_balance', 'is_wfh',
         'wfh_start_date', 'wfh_end_date', 'employment_status', 'work_location', 'email_verified_at',

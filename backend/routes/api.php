@@ -14,6 +14,7 @@ use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\ApprovalWorkflowController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AttendanceCorrectionController;
+use App\Http\Controllers\AttendanceDeviceController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AutoValidationController;
 use App\Http\Controllers\CompanyController;
@@ -195,6 +196,14 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::post('/attendance-corrections/{id}/approve', [AttendanceCorrectionController::class, 'approve']);
         Route::post('/attendance-corrections/{id}/reject', [AttendanceCorrectionController::class, 'reject']);
     });
+
+    // Attendance Devices (Fingerprint Gateway)
+    Route::get('/attendance-devices', [AttendanceDeviceController::class, 'index']);
+    Route::post('/attendance-devices', [AttendanceDeviceController::class, 'store']);
+    Route::put('/attendance-devices/{id}', [AttendanceDeviceController::class, 'update']);
+    Route::delete('/attendance-devices/{id}', [AttendanceDeviceController::class, 'destroy']);
+    Route::post('/attendance-devices/{id}/test', [AttendanceDeviceController::class, 'testConnection']);
+    Route::post('/attendance-devices/{id}/sync', [AttendanceDeviceController::class, 'sync']);
 
     // Dinas Luar Approval
     Route::get('/attendance/dinas-luar/pending', [AttendanceController::class, 'pendingDinasLuar']);

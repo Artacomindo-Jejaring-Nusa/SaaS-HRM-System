@@ -71,6 +71,7 @@ class EmployeeController extends Controller
             'password' => 'required|min:12',
             'role_id' => 'required|exists:roles,id',
             'nik' => self::RULE_NULLABLE_STRING,
+            'fingerprint_pin' => self::RULE_NULLABLE_STRING,
             'phone' => self::RULE_NULLABLE_STRING,
             'address' => self::RULE_NULLABLE_STRING,
             'join_date' => self::RULE_NULLABLE_DATE,
@@ -118,6 +119,7 @@ class EmployeeController extends Controller
         $employee->role_id = $request->role_id;
         $employee->can_access_manager_portal = $portalAccess;
         $employee->nik = $request->nik;
+        $employee->fingerprint_pin = $request->fingerprint_pin;
         $employee->phone = $request->phone;
         $employee->address = $request->address;
         $employee->join_date = $request->join_date;

@@ -31,6 +31,7 @@ interface Employee {
   name: string;
   email: string;
   nik?: string;
+  fingerprint_pin?: string;
   phone?: string;
   address?: string;
   join_date?: string;
@@ -74,6 +75,7 @@ interface EmployeeFormData {
   name?: string;
   email?: string;
   nik?: string;
+  fingerprint_pin?: string;
   phone?: string;
   address?: string;
   join_date?: string;
@@ -339,6 +341,7 @@ function getEditEmployeeFormData(emp: Employee): EmployeeFormData {
     email: emp.email,
     role_id: emp.role_id,
     nik: emp.nik || "",
+    fingerprint_pin: emp.fingerprint_pin || "",
     phone: emp.phone || "",
     address: emp.address || "",
     join_date: emp.join_date ? emp.join_date.substring(0, 10) : "",
@@ -1535,6 +1538,16 @@ function EmployeeAddEditModal({
                     />
                   </div>
                   <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">PIN Mesin Fingerprint</label>
+                    <input 
+                      type="text" 
+                      placeholder="Contoh: 1, 2, 101"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a1a2e]"
+                      value={formData.fingerprint_pin || ""}
+                      onChange={(e) => setFormData({...formData, fingerprint_pin: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
                     <label className="text-sm font-medium text-gray-700">No. KTP</label>
                     <input 
                       type="text" 
@@ -1960,6 +1973,7 @@ function EmployeeViewModal({
             <h4 className="font-bold border-b pb-2 mb-4 text-blue-500 text-sm uppercase tracking-wider">Data Demografis</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div><p className="text-xs text-gray-400">NIK (Karyawan)</p><p className="text-sm font-semibold">{employee.nik || '-'}</p></div>
+              <div><p className="text-xs text-gray-400">PIN Fingerprint</p><p className="text-sm font-semibold">{employee.fingerprint_pin || '-'}</p></div>
               <div><p className="text-xs text-gray-400">No. KTP</p><p className="text-sm font-semibold">{employee.ktp_no || '-'}</p></div>
               <div><p className="text-xs text-gray-400">Tempat Lahir</p><p className="text-sm font-semibold">{employee.place_of_birth || '-'}</p></div>
               <div><p className="text-xs text-gray-400">Tanggal Lahir</p><p className="text-sm font-semibold">{formatDate(employee.date_of_birth)}</p></div>

@@ -117,6 +117,7 @@ const sidebarLinks: SidebarLink[] = [
       { name: "shift_swap", href: "/dashboard/shift-swap", permission: ['view-shift-swaps', 'apply-shift-swaps', 'approve-shift-swaps'] },
       { name: "attendance_correction", href: "/dashboard/attendance-corrections", permission: ['view-attendances', 'manage-attendance-corrections', 'approve-attendances'] },
       { name: "wfh_delegation", href: "/dashboard/attendance/wfh", permission: 'manage-wfh' },
+      { name: "fingerprint_devices", href: "/dashboard/attendance/devices", permission: ['manage-company', 'manage-attendance', 'manage-roles'] },
       { name: "holidays", href: "/dashboard/holidays", permission: 'manage-holidays' },
     ]
   },
