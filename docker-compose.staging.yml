@@ -52,8 +52,17 @@ services:
       DB_READ_HOST: mysql-staging
       DB_DATABASE: ${DB_DATABASE:-hrm_saas_staging}
       DB_USERNAME: ${DB_USERNAME:-hrms_staging}
-      DB_PASSWORD: ${DB_PASSWORD:-StagingPass2026!}
       AI_SERVICE_URL: http://ai-service-staging:8001
+      MAIL_MAILER: ${MAIL_MAILER:-smtp}
+      MAIL_SCHEME: ${MAIL_SCHEME:-null}
+      MAIL_HOST: ${MAIL_HOST:-mail.jelantik.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-noreplay@jelantik.com}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-Satlink2020}
+      MAIL_ENCRYPTION: ${MAIL_ENCRYPTION:-tls}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreplay@jelantik.com}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-"HRMS Narwastu Arthatama"}
+      MAIL_VERIFY_PEER: "false"
     deploy:
       resources:
         limits:

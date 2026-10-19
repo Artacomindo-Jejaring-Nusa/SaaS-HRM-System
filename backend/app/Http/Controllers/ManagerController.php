@@ -15,20 +15,6 @@ class ManagerController extends Controller
 {
     use Notifiable;
 
-    public function __construct()
-    {
-        $this->middleware(function ($request, $next) {
-            $user = $request->user();
-            if (!$user || !$user->canAccessManagerPortal()) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Anda tidak memiliki hak akses untuk portal manager.',
-                ], 403);
-            }
-            return $next($request);
-        });
-    }
-
     private const PERM_MAP = ManagerApprovalService::PERM_MAP;
 
     /**
