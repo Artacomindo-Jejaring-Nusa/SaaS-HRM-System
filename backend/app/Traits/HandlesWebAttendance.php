@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use App\Models\Schedule;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 trait HandlesWebAttendance
@@ -24,7 +25,7 @@ trait HandlesWebAttendance
             return $existingError;
         }
 
-        if (!$request->hasFile('image') && !$request->image && !$request->image_base64) {
+        if (! $request->hasFile('image') && ! $request->image && ! $request->image_base64) {
             return $this->errorResponse('Foto selfie wajib diunggah sebagai bukti kehadiran.', 422);
         }
 
@@ -40,7 +41,7 @@ trait HandlesWebAttendance
         $hasAnomaly = $anomalyReason !== null;
         $isWhitelisted = $user->isWebAttendanceAutoValidated();
 
-        $isAutoValid = $isWhitelisted && !$hasAnomaly;
+        $isAutoValid = $isWhitelisted && ! $hasAnomaly;
         $webApprovalStatus = $isAutoValid ? 'valid' : 'pending';
         $finalStatus = $isAutoValid ? $normalStatus : 'pending';
 
@@ -67,13 +68,13 @@ trait HandlesWebAttendance
         return $this->successResponse($attendance->fresh(), $message);
     }
 
-    private function validateExistingWebCheckIn(User $user, string $today): ?\Illuminate\Http\JsonResponse
+    private function validateExistingWebCheckIn(User $user, string $today): ?JsonResponse
     {
         $existing = Attendance::where('user_id', $user->id)
             ->whereDate('check_in', $today)
             ->first();
 
-        if (!$existing) {
+        if (! $existing) {
             return null;
         }
 
@@ -102,7 +103,7 @@ trait HandlesWebAttendance
         $isOddHour = ($currentHour >= 23 || $currentHour < 5);
         $isNightShift = $schedule && $schedule->shift && str_contains(strtolower($schedule->shift->name ?? ''), 'malam');
 
-        if ($isOddHour && !$isNightShift) {
+        if ($isOddHour && ! $isNightShift) {
             return "Anomali Jam Kerja: Absen web pada pukul {$now->format('H:i')} di luar jam operasional wajar.";
         }
 
@@ -111,13 +112,13 @@ trait HandlesWebAttendance
 
     private function checkLocationAnomaly(User $user, Request $request): ?string
     {
-        if (!$request->latitude || !$request->longitude || $user->is_wfh || str_contains(strtolower($user->role?->name ?? ''), 'teknisi')) {
+        if (! $request->latitude || ! $request->longitude || $user->is_wfh || str_contains(strtolower($user->role?->name ?? ''), 'teknisi')) {
             return null;
         }
 
         $geoCheck = $this->validateGeofencing($user, $request);
-        if (!$geoCheck['success']) {
-            return "Anomali Lokasi: Koordinat browser berada di luar radius kantor.";
+        if (! $geoCheck['success']) {
+            return 'Anomali Lokasi: Koordinat browser berada di luar radius kantor.';
         }
 
         return null;
@@ -127,7 +128,8 @@ trait HandlesWebAttendance
     {
         if ($webApprovalStatus === 'valid') {
             $this->sendCheckInNotifications($user, $finalStatus, $now);
-            return 'Absen Masuk via Web berhasil disahkan secara otomatis (Validasi Otomatis Aktif). Status: ' . strtoupper($finalStatus);
+
+            return 'Absen Masuk via Web berhasil disahkan secara otomatis (Validasi Otomatis Aktif). Status: '.strtoupper($finalStatus);
         }
 
         $this->notifyAdminsAboutPendingWebAttendance($user, $now, $anomalyReason);
@@ -158,7 +160,7 @@ trait HandlesWebAttendance
             ->whereNull('check_out')
             ->first();
 
-        if (!$attendance) {
+        if (! $attendance) {
             return $this->errorResponse('Anda belum melakukan Check-in hari ini atau sudah Check-out.', 400);
         }
 
@@ -181,11 +183,12 @@ trait HandlesWebAttendance
             ->first();
 
         if ($schedule?->shift?->end_time) {
-            return Carbon::parse($today . ' ' . $schedule->shift->end_time);
+            return Carbon::parse($today.' '.$schedule->shift->end_time);
         }
 
         $workEndTime = $user->office?->work_end_time ?? $user->company?->work_end_time ?? '17:00:00';
-        return Carbon::parse($today . ' ' . $workEndTime);
+
+        return Carbon::parse($today.' '.$workEndTime);
     }
 
     private function buildEarlyOutPromptResponse(Carbon $minCheckOutTime, Carbon $now)
@@ -193,7 +196,7 @@ trait HandlesWebAttendance
         $diffMinutes = $now->diffInMinutes($minCheckOutTime);
         $hours = floor($diffMinutes / 60);
         $mins = $diffMinutes % 60;
-        $timeRemaining = ($hours > 0 ? $hours . ' jam ' : '') . $mins . ' menit';
+        $timeRemaining = ($hours > 0 ? $hours.' jam ' : '').$mins.' menit';
 
         return response()->json([
             'status' => 'error',
@@ -217,13 +220,13 @@ trait HandlesWebAttendance
             'image_out' => $imageName ?? $attendance->image_out,
         ];
 
-        if ($isEarly && !empty($earlyOutReason)) {
+        if ($isEarly && ! empty($earlyOutReason)) {
             $this->applyWebEarlyOutData($updateData, $attendance, $earlyOutReason, $isAutoValidated, $minCheckOutTime);
         }
 
         $attendance->update($updateData);
 
-        if ($isEarly && !empty($earlyOutReason)) {
+        if ($isEarly && ! empty($earlyOutReason)) {
             return $this->handleWebEarlyOutNotifications($attendance, $user, $now, $earlyOutReason, $isAutoValidated);
         }
 
@@ -252,7 +255,7 @@ trait HandlesWebAttendance
             $updateData['early_out_status'] = 'pending';
             $updateData['is_suspicious'] = true;
             $schedEndTimeStr = " ({$minCheckOutTime->format('H:i')} WIB)";
-            $updateData['suspicious_reason'] = trim(($attendance->suspicious_reason ?? '') . " | Pulang Awal Web{$schedEndTimeStr}: {$earlyOutReason}", ' |');
+            $updateData['suspicious_reason'] = trim(($attendance->suspicious_reason ?? '')." | Pulang Awal Web{$schedEndTimeStr}: {$earlyOutReason}", ' |');
         }
     }
 
@@ -268,6 +271,7 @@ trait HandlesWebAttendance
                 'notif',
                 false
             );
+
             return $this->successResponse($attendance->fresh(), 'Absen keluar via Web (Pulang Awal) berhasil divalidasi otomatis.');
         }
 
@@ -283,7 +287,7 @@ trait HandlesWebAttendance
 
         $hrds = User::where('company_id', $user->company_id)
             ->where('id', '!=', $user->id)
-            ->whereHas('role', fn($r) => $r->where('name', 'like', '%hrd%'))
+            ->whereHas('role', fn ($r) => $r->where('name', 'like', '%hrd%'))
             ->get();
 
         foreach ($hrds as $hrd) {
@@ -326,7 +330,7 @@ trait HandlesWebAttendance
 
         if ($request->company_id && $request->company_id !== 'all') {
             $query->where('company_id', $request->company_id);
-        } elseif ($user->company_id && !$user->canAccessAllCompanies()) {
+        } elseif ($user->company_id && ! $user->canAccessAllCompanies()) {
             $query->where('company_id', $user->company_id);
         }
 
@@ -334,14 +338,14 @@ trait HandlesWebAttendance
             $search = $request->search;
             $query->whereHas('user', function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('nik', 'like', "%{$search}%");
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('nik', 'like', "%{$search}%");
             });
         }
 
         if ($request->start_date && $request->end_date) {
             $query->whereDate('check_in', '>=', $request->start_date)
-                  ->whereDate('check_in', '<=', $request->end_date);
+                ->whereDate('check_in', '<=', $request->end_date);
         }
 
         $pendings = $query->orderBy('check_in', 'desc')->paginate($request->per_page ?? 15);
@@ -362,7 +366,7 @@ trait HandlesWebAttendance
         $query = Attendance::with('user');
         if ($request->company_id && $request->company_id !== 'all') {
             $query->where('company_id', $request->company_id);
-        } elseif ($admin->company_id && !$admin->canAccessAllCompanies()) {
+        } elseif ($admin->company_id && ! $admin->canAccessAllCompanies()) {
             $query->where('company_id', $admin->company_id);
         }
         $attendance = $query->findOrFail($id);
@@ -389,7 +393,7 @@ trait HandlesWebAttendance
         $this->notify(
             $attendance->user,
             'ABSEN WEB DISETUJUI',
-            "Absensi Web Anda pada tanggal " . Carbon::parse($attendance->check_in)->format('d M Y (H:i)') . " telah DISETUJUI oleh Super Admin. Status: " . strtoupper($status),
+            'Absensi Web Anda pada tanggal '.Carbon::parse($attendance->check_in)->format('d M Y (H:i)').' telah DISETUJUI oleh Super Admin. Status: '.strtoupper($status),
             'success',
             '/dashboard/attendance'
         );
@@ -410,7 +414,7 @@ trait HandlesWebAttendance
         $query = Attendance::with('user');
         if ($request->company_id && $request->company_id !== 'all') {
             $query->where('company_id', $request->company_id);
-        } elseif ($admin->company_id && !$admin->canAccessAllCompanies()) {
+        } elseif ($admin->company_id && ! $admin->canAccessAllCompanies()) {
             $query->where('company_id', $admin->company_id);
         }
         $attendance = $query->findOrFail($id);
@@ -432,7 +436,7 @@ trait HandlesWebAttendance
         $this->notify(
             $attendance->user,
             'ABSEN WEB DITOLAK',
-            "Absensi Web Anda pada tanggal " . Carbon::parse($attendance->check_in)->format('d M Y') . " DITOLAK oleh Super Admin. Alasan: " . $reason,
+            'Absensi Web Anda pada tanggal '.Carbon::parse($attendance->check_in)->format('d M Y').' DITOLAK oleh Super Admin. Alasan: '.$reason,
             'danger',
             '/dashboard/attendance'
         );
@@ -463,7 +467,7 @@ trait HandlesWebAttendance
         if ($request->company_id && $request->company_id !== 'all') {
             $webQuery->where('company_id', $request->company_id);
             $dinasQuery->where('company_id', $request->company_id);
-        } elseif ($user->company_id && !$user->canAccessAllCompanies()) {
+        } elseif ($user->company_id && ! $user->canAccessAllCompanies()) {
             $webQuery->where('company_id', $user->company_id);
             $dinasQuery->where('company_id', $user->company_id);
         }
@@ -491,9 +495,9 @@ trait HandlesWebAttendance
         $admins = User::where('company_id', $user->company_id)
             ->where(function ($q) {
                 $q->where('role_id', 1)
-                  ->orWhereHas('role', function ($r) {
-                      $r->where('name', 'like', '%Super Admin%');
-                  });
+                    ->orWhereHas('role', function ($r) {
+                        $r->where('name', 'like', '%Super Admin%');
+                    });
             })
             ->get();
 

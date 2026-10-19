@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class OrganizationController extends Controller
 {
@@ -40,7 +41,7 @@ class OrganizationController extends Controller
         });
 
         $rolesQuery = Role::query();
-        if (\Illuminate\Support\Facades\Schema::hasColumn('roles', 'company_id') && $companyId && ! $user->canAccessAllCompanies()) {
+        if (Schema::hasColumn('roles', 'company_id') && $companyId && ! $user->canAccessAllCompanies()) {
             $rolesQuery->where(function ($q) use ($companyId) {
                 $q->where('company_id', $companyId)->orWhereNull('company_id');
             });
@@ -50,10 +51,10 @@ class OrganizationController extends Controller
         return $this->successResponse([
             'chart' => $mapped,
             'roles' => $roles,
-            'employees' => $users->map(fn($u) => [
+            'employees' => $users->map(fn ($u) => [
                 'id' => $u->id,
                 'name' => $u->name,
-                'role' => $u->role?->name ?? 'Staff / Member'
+                'role' => $u->role?->name ?? 'Staff / Member',
             ]),
         ], 'Organization chart data retrieved successfully.');
     }

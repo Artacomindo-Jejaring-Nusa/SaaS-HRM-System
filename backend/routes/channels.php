@@ -17,4 +17,3 @@ Broadcast::channel('live-tracking', function ($user) {
 Broadcast::channel('live-tracking.{companyId}', function ($user, $companyId) {
     return $user->canAccessAllCompanies() || ((int) $user->company_id === (int) $companyId && $user->hasPermission('view-live-tracking'));
 });
-

@@ -20,7 +20,7 @@ return new class extends Migration
             $table->integer('battery_level')->nullable();
             $table->timestamp('recorded_at')->useCurrent();
             $table->timestamps();
-            
+
             $table->index(['user_id', 'recorded_at']);
         });
     }

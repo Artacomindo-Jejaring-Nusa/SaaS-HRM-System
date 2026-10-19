@@ -79,12 +79,12 @@ trait Notifiable
     /**
      * Send notifications to Super Admins (both global super admins and company-specific super admins).
      *
-     * @param int|null $companyId The company ID associated with the request/event
-     * @param string $title Notification title
-     * @param string $message Notification body message
-     * @param string $type Notification badge/type (info, warning, success, danger)
-     * @param string|null $link Link to redirect in dashboard
-     * @param int|null $exceptUserId User ID to exclude (e.g. the actor performing the action)
+     * @param  int|null  $companyId  The company ID associated with the request/event
+     * @param  string  $title  Notification title
+     * @param  string  $message  Notification body message
+     * @param  string  $type  Notification badge/type (info, warning, success, danger)
+     * @param  string|null  $link  Link to redirect in dashboard
+     * @param  int|null  $exceptUserId  User ID to exclude (e.g. the actor performing the action)
      */
     public function notifySuperAdmins(?int $companyId, string $title, string $message, string $type = 'info', ?string $link = null, ?int $exceptUserId = null): void
     {
@@ -93,17 +93,17 @@ trait Notifiable
         // Must be super admin (role_id 1 or role name contains 'super admin')
         $query->where(function ($q) {
             $q->where('role_id', 1)
-              ->orWhereHas('role', function ($r) {
-                  $r->whereRaw(self::SQL_LOWER_NAME_LIKE, ['%super admin%']);
-              });
+                ->orWhereHas('role', function ($r) {
+                    $r->whereRaw(self::SQL_LOWER_NAME_LIKE, ['%super admin%']);
+                });
         });
 
         // Tenant filtering: Global super admins (role_id 1 or null company_id) or tenant super admin of this company
         if ($companyId) {
             $query->where(function ($q) use ($companyId) {
                 $q->whereNull('company_id')
-                  ->orWhere('role_id', 1)
-                  ->orWhere('company_id', $companyId);
+                    ->orWhere('role_id', 1)
+                    ->orWhere('company_id', $companyId);
             });
         }
 
@@ -134,12 +134,12 @@ trait Notifiable
 
         $query->where(function ($q) use ($permission) {
             $q->where('role_id', 1)
-              ->orWhereHas('role', function ($r) {
-                  $r->whereRaw(self::SQL_LOWER_NAME_LIKE, ['%super admin%'])
-                    ->orWhereRaw(self::SQL_LOWER_NAME_LIKE, ['%admin%'])
-                    ->orWhereRaw(self::SQL_LOWER_NAME_LIKE, ['%hrd%'])
-                    ->orWhereRaw(self::SQL_LOWER_NAME_LIKE, ['%finance%']);
-              });
+                ->orWhereHas('role', function ($r) {
+                    $r->whereRaw(self::SQL_LOWER_NAME_LIKE, ['%super admin%'])
+                        ->orWhereRaw(self::SQL_LOWER_NAME_LIKE, ['%admin%'])
+                        ->orWhereRaw(self::SQL_LOWER_NAME_LIKE, ['%hrd%'])
+                        ->orWhereRaw(self::SQL_LOWER_NAME_LIKE, ['%finance%']);
+                });
 
             if ($permission) {
                 $q->orWhereHas('role.permissions', function ($p) use ($permission) {
@@ -151,8 +151,8 @@ trait Notifiable
         if ($companyId) {
             $query->where(function ($q) use ($companyId) {
                 $q->whereNull('company_id')
-                  ->orWhere('role_id', 1)
-                  ->orWhere('company_id', $companyId);
+                    ->orWhere('role_id', 1)
+                    ->orWhere('company_id', $companyId);
             });
         }
 

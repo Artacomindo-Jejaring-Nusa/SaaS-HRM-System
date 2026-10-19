@@ -13,6 +13,7 @@ use App\Models\Role;
 use App\Models\Salary;
 use App\Models\Schedule;
 use App\Models\User;
+use App\Models\WebAttendanceAuditLog;
 
 trait HasUserRelations
 {
@@ -88,6 +89,6 @@ trait HasUserRelations
 
     public function webAttendanceAuditLogs()
     {
-        return $this->hasMany(\App\Models\WebAttendanceAuditLog::class);
+        return $this->hasMany(WebAttendanceAuditLog::class);
     }
 }

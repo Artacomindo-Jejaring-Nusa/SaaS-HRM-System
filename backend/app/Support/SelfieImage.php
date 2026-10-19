@@ -82,7 +82,7 @@ class SelfieImage
             if ($data[$offset] !== "\xFF" || ord($data[$offset + 1]) === 0xDA) {
                 break;
             }
-            
+
             $marker = ord($data[$offset + 1]);
             $segLen = unpack('n', substr($data, $offset + 2, 2))[1];
 
@@ -105,7 +105,7 @@ class SelfieImage
         $le = substr($tiff, 0, 2) === 'II';
         $fmt16 = $le ? 'v' : 'n';
         $fmt32 = $le ? 'V' : 'N';
-        
+
         $ifd = unpack($fmt32, substr($tiff, 4, 4))[1];
 
         $count = 0;
@@ -120,6 +120,7 @@ class SelfieImage
             }
             if (unpack($fmt16, substr($tiff, $entry, 2))[1] === 0x0112) {
                 $val = unpack($fmt16, substr($tiff, $entry + 8, 2))[1];
+
                 return ($val >= 1 && $val <= 8) ? $val : 1;
             }
         }

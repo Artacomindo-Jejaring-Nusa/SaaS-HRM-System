@@ -2,8 +2,8 @@
 
 namespace Tests\Unit;
 
-use App\Models\Task;
 use App\Models\Company;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -92,7 +92,7 @@ class TaskTest extends TestCase
     /** @test */
     public function test_task_fillable_fields_are_correct()
     {
-        $task = new Task();
+        $task = new Task;
         $fillable = $task->getFillable();
 
         $this->assertContains('title', $fillable);

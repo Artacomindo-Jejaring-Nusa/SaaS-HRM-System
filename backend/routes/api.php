@@ -10,9 +10,12 @@ use App\Http\Controllers\Api\PayrollComponentController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\ProfileRequestController;
 use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\ApiTokenController;
+use App\Http\Controllers\ApprovalWorkflowController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AttendanceCorrectionController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AutoValidationController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\CompanyDocumentController;
 use App\Http\Controllers\DashboardController;
@@ -40,9 +43,6 @@ use App\Http\Controllers\TaskActivityController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\VehicleLogController;
-use App\Http\Controllers\ApprovalWorkflowController;
-use App\Http\Controllers\AutoValidationController;
-use App\Http\Controllers\ApiTokenController;
 use App\Http\Middleware\TenantMiddleware;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\DB;
@@ -151,7 +151,6 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
         Route::put('/holidays/{id}', [HolidayController::class, 'update']);
         Route::delete('/holidays/{id}', [HolidayController::class, 'destroy']);
     });
-
 
     // Attendance
     Route::middleware('permission:apply-attendances')->group(function () {
@@ -595,4 +594,3 @@ Route::get('/export/overtime/{id}', [ExportController::class, 'overtimePdf']);
 Route::get('/export/overtime/{id}/excel', [ExportController::class, 'overtimeExcel']);
 Route::get('/export/permit/{id}', [ExportController::class, 'permitPdf']);
 Route::get('/export/permit/{id}/excel', [ExportController::class, 'permitExcel']);
-

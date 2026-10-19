@@ -8,10 +8,15 @@ use Illuminate\Http\Request;
 class ProjectController extends Controller
 {
     private const RULE_NULL_STRING = 'nullable|string';
+
     private const RULE_NULL_DATE = 'nullable|date';
+
     private const RULE_REQ_STRING = 'required|string';
+
     private const RULE_REQ_NUM_MIN0 = 'required|numeric|min:0';
+
     private const RULE_REQ_DATE = 'required|date';
+
     private const REL_PROJECT_MANAGER = 'projectManager:id,name';
 
     // ============================

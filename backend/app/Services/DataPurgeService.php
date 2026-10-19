@@ -2,12 +2,16 @@
 
 namespace App\Services;
 
+use App\Models\Attendance;
 use App\Models\AttendanceCorrection;
 use App\Models\FundRequest;
 use App\Models\Leave;
 use App\Models\Overtime;
+use App\Models\PayrollBatch;
 use App\Models\Permit;
 use App\Models\Reimbursement;
+use App\Models\Salary;
+use App\Models\Task;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -19,7 +23,7 @@ class DataPurgeService
     {
         $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
 
-        if (!$isSuperAdmin) {
+        if (! $isSuperAdmin) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Hanya Super Admin yang berhak melakukan pembersihan data periode.',
@@ -93,19 +97,19 @@ class DataPurgeService
         if ($request->filled('start_date') && $request->filled('end_date')) {
             $start = Carbon::parse($request->input('start_date'))->startOfDay();
             $end = Carbon::parse($request->input('end_date'))->endOfDay();
-            $label = $start->format('d/m/Y') . ' - ' . $end->format('d/m/Y');
+            $label = $start->format('d/m/Y').' - '.$end->format('d/m/Y');
         } elseif ($period === 'all') {
             $start = Carbon::parse('2000-01-01')->startOfDay();
             $end = Carbon::now()->addYears(5)->endOfDay();
             $label = 'Semua Periode';
         } elseif (preg_match('/^\d{4}$/', $period)) {
-            $start = Carbon::parse($period . '-01-01')->startOfYear();
-            $end = Carbon::parse($period . '-12-31')->endOfYear();
+            $start = Carbon::parse($period.'-01-01')->startOfYear();
+            $end = Carbon::parse($period.'-12-31')->endOfYear();
             $label = "Tahun {$period}";
         } else {
-            $start = Carbon::parse($period . '-01')->startOfMonth();
-            $end = Carbon::parse($period . '-01')->endOfMonth();
-            $label = Carbon::parse($period . '-01')->translatedFormat('F Y');
+            $start = Carbon::parse($period.'-01')->startOfMonth();
+            $end = Carbon::parse($period.'-01')->endOfMonth();
+            $label = Carbon::parse($period.'-01')->translatedFormat('F Y');
         }
 
         return [$start, $end, $label];
@@ -195,7 +199,7 @@ class DataPurgeService
         } else {
             $query->where(function ($q) use ($start, $end) {
                 $q->whereBetween('start_date', [$start->toDateString(), $end->toDateString()])
-                  ->orWhereBetween('created_at', [$start, $end]);
+                    ->orWhereBetween('created_at', [$start, $end]);
             });
         }
         $companyScope($query);
@@ -207,6 +211,7 @@ class DataPurgeService
             }
             $l->delete();
         }
+
         return ['count' => $records->count(), 'files' => $files];
     }
 
@@ -218,7 +223,7 @@ class DataPurgeService
         } else {
             $query->where(function ($q) use ($start, $end) {
                 $q->whereBetween('start_date', [$start->toDateString(), $end->toDateString()])
-                  ->orWhereBetween('created_at', [$start, $end]);
+                    ->orWhereBetween('created_at', [$start, $end]);
             });
         }
         $companyScope($query);
@@ -230,6 +235,7 @@ class DataPurgeService
             }
             $p->delete();
         }
+
         return ['count' => $records->count(), 'files' => $files];
     }
 
@@ -242,18 +248,19 @@ class DataPurgeService
             $query->whereBetween('created_at', [$start, $end]);
         }
         $companyScope($query);
+
         return $query->delete();
     }
 
     private static function purgeAttendances(\Closure $companyScope, $start, $end, ?array $targetIds): array
     {
-        $query = \App\Models\Attendance::query();
+        $query = Attendance::query();
         if ($targetIds) {
             $query->whereIn('id', $targetIds);
         } else {
             $query->where(function ($q) use ($start, $end) {
                 $q->whereBetween('date', [$start->toDateString(), $end->toDateString()])
-                  ->orWhereBetween('check_in', [$start, $end]);
+                    ->orWhereBetween('check_in', [$start, $end]);
             });
         }
         $companyScope($query);
@@ -268,47 +275,50 @@ class DataPurgeService
             }
             $att->delete();
         }
+
         return ['count' => $records->count(), 'files' => $files];
     }
 
     private static function purgeTasks(\Closure $companyScope, $start, $end, ?array $targetIds): int
     {
-        $query = \App\Models\Task::query();
+        $query = Task::query();
         if ($targetIds) {
             $query->whereIn('id', $targetIds);
         } else {
             $query->whereBetween('created_at', [$start, $end]);
         }
         $companyScope($query);
+
         return $query->delete();
     }
 
     private static function purgePayroll(\Closure $companyScope, $start, $end, ?array $targetIds): int
     {
         if ($targetIds) {
-            $salaryQuery = \App\Models\Salary::query()->whereIn('id', $targetIds);
+            $salaryQuery = Salary::query()->whereIn('id', $targetIds);
             $companyScope($salaryQuery);
             $deletedSalaries = $salaryQuery->delete();
 
-            $batchQuery = \App\Models\PayrollBatch::query()->whereIn('id', $targetIds);
+            $batchQuery = PayrollBatch::query()->whereIn('id', $targetIds);
             $companyScope($batchQuery);
             $batches = $batchQuery->get();
             foreach ($batches as $b) {
-                \App\Models\Salary::where('batch_id', $b->id)->delete();
+                Salary::where('batch_id', $b->id)->delete();
                 $b->delete();
             }
+
             return $deletedSalaries;
         }
 
-        $batchQuery = \App\Models\PayrollBatch::query()->whereBetween('created_at', [$start, $end]);
+        $batchQuery = PayrollBatch::query()->whereBetween('created_at', [$start, $end]);
         $companyScope($batchQuery);
         $batches = $batchQuery->get();
         foreach ($batches as $batch) {
-            \App\Models\Salary::where('batch_id', $batch->id)->delete();
+            Salary::where('batch_id', $batch->id)->delete();
             $batch->delete();
         }
 
-        $orphanSalaryQuery = \App\Models\Salary::query()->whereBetween('created_at', [$start, $end]);
+        $orphanSalaryQuery = Salary::query()->whereBetween('created_at', [$start, $end]);
         $companyScope($orphanSalaryQuery);
         $orphanSalaryQuery->delete();
 
@@ -328,6 +338,7 @@ class DataPurgeService
                 $count++;
             }
         }
+
         return $count;
     }
 
@@ -379,7 +390,7 @@ class DataPurgeService
         } else {
             $otQuery->where(function ($q) use ($start, $end) {
                 $q->whereBetween('date', [$start->toDateString(), $end->toDateString()])
-                  ->orWhereBetween('created_at', [$start, $end]);
+                    ->orWhereBetween('created_at', [$start, $end]);
             });
         }
         $companyScope($otQuery);

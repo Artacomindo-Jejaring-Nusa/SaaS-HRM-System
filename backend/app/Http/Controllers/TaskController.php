@@ -54,12 +54,9 @@ class TaskController extends Controller
 
     private function resolveTargetUserIds(Request $request): array
     {
-        if ($request->has('user_id')) {
-            return is_array($request->user_id) ? $request->user_id : [(int) $request->user_id];
-        }
-
-        if ($request->has('assigned_to')) {
-            return is_array($request->assigned_to) ? $request->assigned_to : [(int) $request->assigned_to];
+        $input = $request->input('user_id', $request->input('assigned_to'));
+        if ($input !== null) {
+            return is_array($input) ? $input : [(int) $input];
         }
 
         if ($request->has('division_id')) {
@@ -115,7 +112,7 @@ class TaskController extends Controller
             );
         }
 
-        if ($approvalInfo && !empty($approvalInfo['approvers'])) {
+        if ($approvalInfo && ! empty($approvalInfo['approvers'])) {
             foreach ($approvalInfo['approvers'] as $approver) {
                 $this->sendNotification(
                     $approver->id,
@@ -129,6 +126,28 @@ class TaskController extends Controller
         }
     }
 
+    private function normalizeTaskPayload(Request $request): void
+    {
+        if ($request->filled('assigned_to') && ! $request->has('user_id')) {
+            $request->merge(['user_id' => is_array($request->assigned_to) ? $request->assigned_to : [(int) $request->assigned_to]]);
+        } elseif ($request->has('user_id') && ! is_array($request->user_id)) {
+            $request->merge(['user_id' => [(int) $request->user_id]]);
+        }
+
+        if ($request->filled('due_date') && ! $request->filled('deadline')) {
+            $request->merge(['deadline' => $request->due_date]);
+        }
+
+        if ($request->filled('priority') && ! is_numeric($request->priority)) {
+            $mappedPriority = match (strtolower((string) $request->priority)) {
+                'high' => 3,
+                'low' => 1,
+                default => 2,
+            };
+            $request->merge(['priority' => $mappedPriority]);
+        }
+    }
+
     public function store(Request $request)
     {
         $user = $request->user();
@@ -139,26 +158,7 @@ class TaskController extends Controller
             return $this->errorResponse('Akses ditolak. Anda tidak memiliki izin untuk membuat tugas.', 403);
         }
 
-        // Normalize mobile payload formats
-        if ($request->filled('assigned_to') && !$request->has('user_id')) {
-            $request->merge(['user_id' => is_array($request->assigned_to) ? $request->assigned_to : [(int) $request->assigned_to]]);
-        } elseif ($request->has('user_id') && !is_array($request->user_id)) {
-            $request->merge(['user_id' => [(int) $request->user_id]]);
-        }
-
-        if ($request->filled('due_date') && !$request->filled('deadline')) {
-            $request->merge(['deadline' => $request->due_date]);
-        }
-
-        if ($request->filled('priority') && !is_numeric($request->priority)) {
-            $mappedPriority = match (strtolower((string) $request->priority)) {
-                'high' => 3,
-                'medium' => 2,
-                'low' => 1,
-                default => 2,
-            };
-            $request->merge(['priority' => $mappedPriority]);
-        }
+        $this->normalizeTaskPayload($request);
 
         $request->validate([
             'user_id' => 'nullable|array|min:1',

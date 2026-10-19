@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\AuditLogger;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -39,7 +40,8 @@ class PermissionMiddleware
         }
 
         if (! $user->role || ! $hasAny) {
-            \App\Services\AuditLogger::log('unauthorized_access', "User tried to access unauthorized permission: {$permission}", ['permission' => $permission], 'warning');
+            AuditLogger::log('unauthorized_access', "User tried to access unauthorized permission: {$permission}", ['permission' => $permission], 'warning');
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'You do not have permission to access this resource or perform this action ('.$permission.').',

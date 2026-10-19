@@ -74,7 +74,7 @@ class DemoDataSeeder extends Seeder
             'Adi Kurniawan',
             'Taufik Hidayat',
             'Rina Wijaya',
-            'Hendra Saputra'
+            'Hendra Saputra',
         ];
 
         // 3. Create 9 additional users
@@ -91,11 +91,11 @@ class DemoDataSeeder extends Seeder
                 'company_id' => $companyId,
                 'role_id' => $staffRole->id,
                 'supervisor_id' => $empSupervisorId,
-                'nik' => '2026' . str_pad($i, 4, '0', STR_PAD_LEFT),
+                'nik' => '2026'.str_pad($i, 4, '0', STR_PAD_LEFT),
                 'basic_salary' => rand(4500000, 8000000),
                 'ptkp_status' => $ptkpList[($i - 1) % 3],
                 'bank_name' => 'BCA',
-                'bank_account_no' => '1090128' . rand(100, 999),
+                'bank_account_no' => '1090128'.rand(100, 999),
                 'cost_center' => $costCenters[($i - 1) % 3],
             ]);
         }

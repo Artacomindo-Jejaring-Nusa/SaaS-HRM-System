@@ -14,7 +14,6 @@ import {
   User as UserIcon, 
   Globe, 
   Smartphone, 
-  AlertTriangle, 
   XCircle, 
   Building2
 } from "lucide-react";

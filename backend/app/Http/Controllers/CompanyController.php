@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Models\Office;
 use Illuminate\Http\Request;
 
 class CompanyController extends Controller
 {
     private const RULE_SOME_STRING = 'sometimes|nullable|string';
+
     private const RULE_SOME_NUM = 'sometimes|nullable|numeric';
 
     public function show(Request $request)
@@ -66,7 +68,7 @@ class CompanyController extends Controller
             if (isset($data['work_end_time'])) {
                 $officeUpdate['work_end_time'] = $data['work_end_time'];
             }
-            \App\Models\Office::where('company_id', $company->id)->update($officeUpdate);
+            Office::where('company_id', $company->id)->update($officeUpdate);
         }
 
         return $this->successResponse($company, 'Data perusahaan berhasil diperbarui.');

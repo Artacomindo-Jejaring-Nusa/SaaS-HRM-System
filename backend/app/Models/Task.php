@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class Task extends Model
 {
     use BelongsToCompany;
+
     protected $fillable = [
         'user_id',
         'company_id',

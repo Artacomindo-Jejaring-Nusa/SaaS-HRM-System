@@ -3,7 +3,10 @@
 namespace App\Traits;
 
 use App\Models\ActivityLog;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Request;
 
 /**
@@ -13,7 +16,7 @@ use Illuminate\Support\Facades\Request;
  * Sensitive fields can be masked by defining $auditMasked on the model.
  * Fields to exclude from auditing can be defined via $auditExclude.
  *
- * @mixin \Illuminate\Database\Eloquent\Model
+ * @mixin Model
  */
 trait Auditable
 {
@@ -24,21 +27,21 @@ trait Auditable
     {
         if (method_exists(static::class, 'created')) {
             call_user_func([static::class, 'created'], function ($model) {
-                /** @var \Illuminate\Database\Eloquent\Model|\App\Traits\Auditable $model */
+                /** @var Model|Auditable $model */
                 $model->handleAuditCreated();
             });
         }
 
         if (method_exists(static::class, 'updated')) {
             call_user_func([static::class, 'updated'], function ($model) {
-                /** @var \Illuminate\Database\Eloquent\Model|\App\Traits\Auditable $model */
+                /** @var Model|Auditable $model */
                 $model->handleAuditUpdated();
             });
         }
 
         if (method_exists(static::class, 'deleted')) {
             call_user_func([static::class, 'deleted'], function ($model) {
-                /** @var \Illuminate\Database\Eloquent\Model|\App\Traits\Auditable $model */
+                /** @var Model|Auditable $model */
                 $model->handleAuditDeleted();
             });
         }
@@ -98,18 +101,17 @@ trait Auditable
             $newValues[$key] = $newVal;
         }
 
-        if (!empty($newValues)) {
+        if (! empty($newValues)) {
             $this->logAuditEvent('updated', $oldValues, $newValues);
         }
     }
-
 
     /**
      * Log the audit event to activity_logs table.
      */
     protected function logAuditEvent(string $action, array $oldValues, array $newValues): void
     {
-        /** @var \App\Models\User|null $user */
+        /** @var User|null $user */
         $user = Auth::user();
 
         // Determine module name from model class
@@ -128,13 +130,13 @@ trait Auditable
                 'model_id' => $this->getKey(),
                 'ip_address' => Request::ip(),
                 'user_agent' => substr(Request::userAgent() ?? '', 0, 255),
-                'old_values' => !empty($oldValues) ? $oldValues : null,
-                'new_values' => !empty($newValues) ? $newValues : null,
+                'old_values' => ! empty($oldValues) ? $oldValues : null,
+                'new_values' => ! empty($newValues) ? $newValues : null,
                 'module' => $module,
             ]);
         } catch (\Exception $e) {
             // Silently fail — audit logging should never break the main operation
-            \Illuminate\Support\Facades\Log::warning('Audit log failed: ' . $e->getMessage());
+            Log::warning('Audit log failed: '.$e->getMessage());
         }
     }
 
@@ -177,7 +179,7 @@ trait Auditable
     /**
      * Build a human-readable description for the audit log.
      */
-    protected function buildAuditDescription(string $action, ?\App\Models\User $user): string
+    protected function buildAuditDescription(string $action, ?User $user): string
     {
         $modelName = class_basename($this);
         $userName = $user?->name ?? 'System';
@@ -247,6 +249,6 @@ trait Auditable
             return str_repeat('*', $length);
         }
 
-        return str_repeat('*', $length - 4) . substr($value, -4);
+        return str_repeat('*', $length - 4).substr($value, -4);
     }
 }

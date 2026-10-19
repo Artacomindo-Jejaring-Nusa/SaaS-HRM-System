@@ -39,6 +39,7 @@ class SendApprovalReminder extends Command
 
         if ($supervisorIds->isEmpty()) {
             $this->info('No pending approvals found.');
+
             return;
         }
 
@@ -74,6 +75,7 @@ class SendApprovalReminder extends Command
                 $count++;
             }
         }
+
         return $count;
     }
 
@@ -96,7 +98,7 @@ class SendApprovalReminder extends Command
 
         $waService = new WhatsAppService($supervisor->company);
         $isSent = $waService->sendMessage($supervisor->phone, $message);
-        
+
         if ($isSent) {
             $this->info("Reminder sent to Supervisor: {$supervisor->name}");
         }
@@ -107,14 +109,14 @@ class SendApprovalReminder extends Command
     private function buildMessage(string $name, int $total, int $leafCount, int $permitCount): string
     {
         $message = "Halo *{$name}*,\n\nAda *{$total} permohonan baru* yang membutuhkan persetujuan Anda:\n";
-        
+
         if ($leafCount > 0) {
             $message .= "- Cuti: {$leafCount} pengajuan\n";
         }
         if ($permitCount > 0) {
             $message .= "- Izin/Sakit: {$permitCount} pengajuan\n";
         }
-        
+
         $message .= "\nMohon segera tinjau melalui Dashboard HRMS. Terima kasih!";
 
         return $message;

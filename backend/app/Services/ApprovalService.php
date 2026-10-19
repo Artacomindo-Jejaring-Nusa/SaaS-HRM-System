@@ -196,10 +196,10 @@ class ApprovalService
      * Initialize the approval process when a request is first submitted.
      *
      * @return array|null Returns approval info or null to use default/fallback logic.
-     *   - 'status': The initial status string to set
-     *   - 'current_approval_step': The step number to start on
-     *   - 'approvers': Collection of User models who should be notified
-     *   - 'auto_approved': Boolean indicating if the request was auto-approved
+     *                    - 'status': The initial status string to set
+     *                    - 'current_approval_step': The step number to start on
+     *                    - 'approvers': Collection of User models who should be notified
+     *                    - 'auto_approved': Boolean indicating if the request was auto-approved
      */
     public static function initApproval(string $moduleKey, int $companyId, User $submitter): ?array
     {
@@ -250,12 +250,12 @@ class ApprovalService
      *
      * @param  string  $action  'approve' or 'reject'
      * @return array|null Returns result info or null for fallback.
-     *   - 'status': New status ('pending', 'approved', or 'rejected')
-     *   - 'current_approval_step': Next step number (null if final)
-     *   - 'is_final': Whether this was the last step
-     *   - 'approved_by': The approver's user ID (on final approval)
-     *   - 'approvers': Next step approvers (if not final)
-     *   - 'error': Error message if authorization fails
+     *                    - 'status': New status ('pending', 'approved', or 'rejected')
+     *                    - 'current_approval_step': Next step number (null if final)
+     *                    - 'is_final': Whether this was the last step
+     *                    - 'approved_by': The approver's user ID (on final approval)
+     *                    - 'approvers': Next step approvers (if not final)
+     *                    - 'error': Error message if authorization fails
      */
     public static function processApproval(
         string $moduleKey,
@@ -284,7 +284,7 @@ class ApprovalService
         }
 
         // Validate that this user is authorized to act on this step
-        if (! self::canUserApproveStep($step, $approver, $submitter, $moduleKey)) {
+        if (! self::canUserApproveStep($step, $approver, $submitter)) {
             return ['error' => 'Anda tidak memiliki wewenang untuk menyetujui/menolak pada tahap ini.'];
         }
 
@@ -361,79 +361,80 @@ class ApprovalService
      */
     public static function getApproversForStep(WorkflowStep $step, User $submitter, int $companyId): Collection
     {
-        switch ($step->approver_type) {
-            case 'super_admin':
-                // All Super Admins
-                return User::where(function ($q) {
-                        $q->where('role_id', 1)
-                            ->orWhereHas('role', function ($r) {
-                                $r->where('name', self::ROLE_SUPER_ADMIN);
-                            });
-                    })
-                    ->where(function ($q) use ($companyId) {
-                        $q->where('company_id', $companyId)
-                            ->orWhereNull('company_id');
-                    })
-                    ->where('id', '!=', $submitter->id)
-                    ->get();
+        return match ($step->approver_type) {
+            'super_admin' => self::getSuperAdminApprovers($companyId, $submitter->id),
+            'supervisor' => self::getSupervisorApprovers($submitter, $companyId),
+            'role' => self::getRoleApprovers($step, $submitter, $companyId),
+            'user' => self::getUserApprovers($step),
+            default => collect(),
+        };
+    }
 
-            case 'supervisor':
-                // The direct supervisor of the submitter
-                if ($submitter->supervisor_id) {
-                    $supervisor = User::find($submitter->supervisor_id);
-                    return $supervisor ? collect([$supervisor]) : collect();
-                }
-                // Fallback when submitter has no supervisor: only Super Admin can act
-                return User::where(function ($q) {
-                        $q->where('role_id', 1)
-                            ->orWhereHas('role', function ($r) {
-                                $r->where('name', self::ROLE_SUPER_ADMIN);
-                            });
-                    })
-                    ->where(function ($q) use ($companyId) {
-                        $q->where('company_id', $companyId)
-                            ->orWhereNull('company_id');
-                    })
-                    ->where('id', '!=', $submitter->id)
-                    ->get();
+    private static function getSuperAdminApprovers(int $companyId, int $excludeUserId): Collection
+    {
+        return User::where(function ($q) {
+            $q->where('role_id', 1)
+                ->orWhereHas('role', function ($r) {
+                    $r->where('name', self::ROLE_SUPER_ADMIN);
+                });
+        })
+            ->where(function ($q) use ($companyId) {
+                $q->where('company_id', $companyId)
+                    ->orWhereNull('company_id');
+            })
+            ->where('id', '!=', $excludeUserId)
+            ->get();
+    }
 
-            case 'role':
-                // Users with the specified role (if role is supervisor/manager, must be in submitter chain)
-                if (! $step->approver_role_id) {
-                    return collect();
-                }
-                $roleUsers = User::with('role')->where(function ($q) use ($companyId) {
-                        $q->where('company_id', $companyId)
-                            ->orWhereNull('company_id');
-                    })
-                    ->where('role_id', $step->approver_role_id)
-                    ->where('id', '!=', $submitter->id)
-                    ->get();
+    private static function getSupervisorApprovers(User $submitter, int $companyId): Collection
+    {
+        if ($submitter->supervisor_id) {
+            $supervisor = User::find($submitter->supervisor_id);
 
-                $roleName = strtolower($step->role?->name ?? '');
-                if (in_array($roleName, ['supervisor', 'spv', 'manager'])) {
-                    $roleUsers = $roleUsers->filter(function ($u) use ($submitter) {
-                        if ($submitter->supervisor_id === $u->id) {
-                            return true;
-                        }
-                        $subs = EmployeeQueryService::resolveSubordinateIds($u->id);
-                        return in_array($submitter->id, $subs);
-                    })->values();
-                }
-
-                return $roleUsers;
-
-            case 'user':
-                // A specific user
-                if (! $step->approver_user_id) {
-                    return collect();
-                }
-                $user = User::find($step->approver_user_id);
-                return $user ? collect([$user]) : collect();
-
-            default:
-                return collect();
+            return $supervisor ? collect([$supervisor]) : collect();
         }
+
+        return self::getSuperAdminApprovers($companyId, $submitter->id);
+    }
+
+    private static function getRoleApprovers(WorkflowStep $step, User $submitter, int $companyId): Collection
+    {
+        if (! $step->approver_role_id) {
+            return collect();
+        }
+
+        $roleUsers = User::with('role')->where(function ($q) use ($companyId) {
+            $q->where('company_id', $companyId)
+                ->orWhereNull('company_id');
+        })
+            ->where('role_id', $step->approver_role_id)
+            ->where('id', '!=', $submitter->id)
+            ->get();
+
+        $roleName = strtolower($step->role?->name ?? '');
+        if (in_array($roleName, ['supervisor', 'spv', 'manager'])) {
+            $roleUsers = $roleUsers->filter(function ($u) use ($submitter) {
+                if ($submitter->supervisor_id === $u->id) {
+                    return true;
+                }
+                $subs = EmployeeQueryService::resolveSubordinateIds($u->id);
+
+                return in_array($submitter->id, $subs);
+            })->values();
+        }
+
+        return $roleUsers;
+    }
+
+    private static function getUserApprovers(WorkflowStep $step): Collection
+    {
+        if (! $step->approver_user_id) {
+            return collect();
+        }
+
+        $user = User::find($step->approver_user_id);
+
+        return $user ? collect([$user]) : collect();
     }
 
     /**
@@ -443,7 +444,7 @@ class ApprovalService
     {
         switch ($step->approver_type) {
             case 'super_admin':
-                return 'Approved by - Disetujui (' . self::ROLE_SUPER_ADMIN . ')';
+                return 'Approved by - Disetujui ('.self::ROLE_SUPER_ADMIN.')';
             case 'supervisor':
                 return 'Checked by - Diperiksa (Atasan Langsung)';
             case 'role':
@@ -451,12 +452,15 @@ class ApprovalService
                 if ($step->step_number === 2) {
                     return "Acknowledge - Diketahui ({$roleName})";
                 }
+
                 return "Approved by - Disetujui ({$roleName})";
             case 'user':
                 if ($step->approver_user_id) {
                     $user = User::find($step->approver_user_id);
+
                     return $user ? "Approved by - Disetujui ({$user->name})" : 'Approved by - Disetujui (User)';
                 }
+
                 return 'Approved by - Disetujui (User)';
             default:
                 return "Tahap {$step->step_number}";
@@ -519,21 +523,18 @@ class ApprovalService
         };
     }
 
-
-
     private static function canApproveRoleStep(WorkflowStep $step, User $approver, User $submitter): bool
     {
         if ($approver->role_id !== $step->approver_role_id) {
             return false;
         }
 
-        $roleName = $step->role ? strtolower($step->role->name) : ($approver->role ? strtolower($approver->role->name) : '');
+        $role = $step->role ?? $approver->role;
+        $roleName = $role ? strtolower($role->name) : '';
         if (in_array($roleName, ['supervisor', 'spv', 'manager'])) {
-            if ($submitter->supervisor_id === $approver->id) {
-                return true;
-            }
             $subordinates = EmployeeQueryService::resolveSubordinateIds($approver->id);
-            return in_array($submitter->id, $subordinates);
+
+            return $submitter->supervisor_id === $approver->id || in_array($submitter->id, $subordinates);
         }
 
         return true;
@@ -551,20 +552,21 @@ class ApprovalService
         }
 
         $subordinates = EmployeeQueryService::resolveSubordinateIds($approver->id);
+
         return in_array($submitter->id, $subordinates);
     }
 
     /**
      * Check if a specific user can act on a specific workflow step.
      */
-    private static function canUserApproveStep(WorkflowStep $step, User $approver, User $submitter, ?string $moduleKey = null): bool
+    private static function canUserApproveStep(WorkflowStep $step, User $approver, User $submitter): bool
     {
         $isSuperAdmin = $approver->role_id === 1
             || (method_exists($approver, 'isSuperAdmin') && $approver->isSuperAdmin())
             || (method_exists($approver, 'canAccessAllCompanies') && $approver->canAccessAllCompanies());
 
         // Approver cannot approve their own submission unless Super Admin
-        if ($approver->id === $submitter->id && !$isSuperAdmin) {
+        if ($approver->id === $submitter->id && ! $isSuperAdmin) {
             return false;
         }
 

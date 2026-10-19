@@ -3,8 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Company;
-use App\Models\User;
 use App\Models\Role;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -17,7 +17,7 @@ class ApiTokenControllerTest extends TestCase
         $company = Company::create(['name' => 'Test Company']);
         $role = Role::create([
             'name' => 'Super Admin',
-            'guard_name' => 'web'
+            'guard_name' => 'web',
         ]);
         $user = User::factory()->create([
             'company_id' => $company->id,
@@ -57,7 +57,7 @@ class ApiTokenControllerTest extends TestCase
             ->postJson('/api/api-tokens', [
                 'name' => 'Finance App',
                 'abilities' => ['view-employees', 'view-payroll'],
-                'expires_at' => now()->addDays(7)->toDateString()
+                'expires_at' => now()->addDays(7)->toDateString(),
             ]);
 
         $response->assertStatus(201)
@@ -69,21 +69,21 @@ class ApiTokenControllerTest extends TestCase
                     'name',
                     'plain_text_token',
                     'abilities',
-                    'expires_at'
-                ]
+                    'expires_at',
+                ],
             ])
             ->assertJson([
                 'status' => 'success',
                 'data' => [
                     'name' => 'Finance App',
-                    'abilities' => ['view-employees', 'view-payroll']
-                ]
+                    'abilities' => ['view-employees', 'view-payroll'],
+                ],
             ]);
 
         // Assert database has the token with prefix
         $this->assertDatabaseHas('personal_access_tokens', [
             'tokenable_id' => $user->id,
-            'name' => 'integration:Finance App'
+            'name' => 'integration:Finance App',
         ]);
     }
 
@@ -113,12 +113,12 @@ class ApiTokenControllerTest extends TestCase
         $token = $user->createToken('integration:To Delete', ['view-employees']);
 
         $response = $this->actingAs($user, 'sanctum')
-            ->deleteJson('/api/api-tokens/' . $token->accessToken->id);
+            ->deleteJson('/api/api-tokens/'.$token->accessToken->id);
 
         $response->assertStatus(200);
 
         $this->assertDatabaseMissing('personal_access_tokens', [
-            'id' => $token->accessToken->id
+            'id' => $token->accessToken->id,
         ]);
     }
 
@@ -130,12 +130,12 @@ class ApiTokenControllerTest extends TestCase
         $token = $user->createToken('auth_token', ['*']);
 
         $response = $this->actingAs($user, 'sanctum')
-            ->deleteJson('/api/api-tokens/' . $token->accessToken->id);
+            ->deleteJson('/api/api-tokens/'.$token->accessToken->id);
 
         $response->assertStatus(404);
 
         $this->assertDatabaseHas('personal_access_tokens', [
-            'id' => $token->accessToken->id
+            'id' => $token->accessToken->id,
         ]);
     }
 
@@ -151,12 +151,12 @@ class ApiTokenControllerTest extends TestCase
         $token = $user2->createToken('integration:User 2 Token', ['view-employees']);
 
         $response = $this->actingAs($user1, 'sanctum')
-            ->deleteJson('/api/api-tokens/' . $token->accessToken->id);
+            ->deleteJson('/api/api-tokens/'.$token->accessToken->id);
 
         $response->assertStatus(404);
 
         $this->assertDatabaseHas('personal_access_tokens', [
-            'id' => $token->accessToken->id
+            'id' => $token->accessToken->id,
         ]);
     }
 }

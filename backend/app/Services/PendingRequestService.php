@@ -19,7 +19,7 @@ class PendingRequestService
 {
     public static function isExecutiveOrAdmin($user): bool
     {
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
@@ -28,7 +28,7 @@ class PendingRequestService
 
     public static function applyDateFilter($query, ?Request $request = null, string $dateColumn = 'created_at')
     {
-        if (!$request) {
+        if (! $request) {
             return;
         }
 
@@ -41,6 +41,7 @@ class PendingRequestService
                 Carbon::parse($startDate)->startOfDay(),
                 Carbon::parse($endDate)->endOfDay(),
             ]);
+
             return;
         }
 
@@ -113,7 +114,7 @@ class PendingRequestService
             return true;
         }
 
-        if (!$hasSubordinates) {
+        if (! $hasSubordinates) {
             return false;
         }
 
@@ -126,7 +127,7 @@ class PendingRequestService
         foreach ($whereInConditions as $col => $vals) {
             $query->whereIn($col, $vals);
         }
-        if (!$isGlobalAdmin) {
+        if (! $isGlobalAdmin) {
             $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
             if (empty($subordinateIds)) {
                 return 0;
@@ -139,6 +140,7 @@ class PendingRequestService
             $query->where('company_id', $request->company_id);
         }
         self::applyDateFilter($query, $request);
+
         return $query->count();
     }
 
@@ -190,11 +192,11 @@ class PendingRequestService
 
         // Non-SuperAdmin must have subordinates to access manager approvals
         $hasSubordinates = User::where('supervisor_id', $user->id)->exists();
-        if (!$hasSubordinates) {
+        if (! $hasSubordinates) {
             return false;
         }
 
-        return !isset($permMap[$type]) || $user->hasPermission($permMap[$type]);
+        return ! isset($permMap[$type]) || $user->hasPermission($permMap[$type]);
     }
 
     private static function attachStepInfo($items, string $type, User $user): void
@@ -210,7 +212,7 @@ class PendingRequestService
             }
 
             $companyId = $item->company_id ?? $user->company_id;
-            if (!empty($companyId)) {
+            if (! empty($companyId)) {
                 $item->current_step_info = ApprovalService::getCurrentStepInfo(
                     $type,
                     (int) $companyId,
@@ -227,7 +229,7 @@ class PendingRequestService
             ? $modelClass::whereIn('status', $pendingStatus)
             : $modelClass::where('status', $pendingStatus);
 
-        if (!$isGlobalAdmin && $user->company_id) {
+        if (! $isGlobalAdmin && $user->company_id) {
             $query->where('company_id', $user->company_id);
         } elseif ($request && $request->filled('company_id') && $request->company_id !== 'all') {
             $query->where('company_id', $request->company_id);
@@ -235,11 +237,12 @@ class PendingRequestService
 
         self::applyDateFilter($query, $request);
 
-        if (!$isGlobalAdmin) {
+        if (! $isGlobalAdmin) {
             $withRelations = ($type === 'payroll')
                 ? ['creator.supervisor', 'creator.role']
                 : ['user.supervisor', 'user.role'];
             $items = $query->with($withRelations)->get();
+
             return self::filterPendingItems($items, $type, $user)->count();
         }
 
@@ -276,47 +279,47 @@ class PendingRequestService
 
     private static function canUserAccessPendingItem($item, string $type, User $user): bool
     {
-        $isGlobalAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
-        if ($isGlobalAdmin) {
+        if ($user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies()) {
             return true;
         }
 
-        $submitter = $item->user;
-        if ($type === 'payroll') {
-            $submitter = $item->creator ?: $user;
-        }
-
+        $submitter = ($type === 'payroll') ? ($item->creator ?: $user) : $item->user;
         $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
         $submitterId = $item->user_id ?? $item->user?->id ?? ($type === 'payroll' ? $item->created_by : null);
         $isSubordinate = $submitterId && in_array($submitterId, $subordinateIds);
 
-        if (!empty($item->current_approval_step) && $submitter) {
-            $canApproveWorkflow = ApprovalService::canApprove(
-                $type,
-                $item->company_id ?? $user->company_id,
-                $user,
-                $submitter,
-                $item->current_approval_step
-            );
-
-            if (!$canApproveWorkflow) {
-                return false;
-            }
-
-            // If workflow step specifically designates this user by ID, grant access
-            $workflow = ApprovalService::getWorkflow($type, $item->company_id ?? $user->company_id, $submitter);
-            $step = $workflow?->steps()->where('step_number', $item->current_approval_step)->first();
-            if ($step && $step->approver_type === 'user' && $step->approver_user_id === $user->id) {
-                return true;
-            }
-
-            // Otherwise, non-superadmin must be the atasan (subordinate tree)
-            return $isSubordinate;
+        if (! empty($item->current_approval_step) && $submitter) {
+            return self::canAccessWorkflowPendingItem($item, $type, $user, $submitter, $isSubordinate);
         }
 
         return ($type === 'payroll')
             ? ($user->hasPermission('approve-payroll') && $isSubordinate)
             : self::canHandlePendingItem($item, $user, $type);
+    }
+
+    private static function canAccessWorkflowPendingItem($item, string $type, User $user, $submitter, bool $isSubordinate): bool
+    {
+        $canApproveWorkflow = ApprovalService::canApprove(
+            $type,
+            $item->company_id ?? $user->company_id,
+            $user,
+            $submitter,
+            $item->current_approval_step
+        );
+
+        if (! $canApproveWorkflow) {
+            return false;
+        }
+
+        // If workflow step specifically designates this user by ID, grant access
+        $workflow = ApprovalService::getWorkflow($type, $item->company_id ?? $user->company_id, $submitter);
+        $step = $workflow?->steps()->where('step_number', $item->current_approval_step)->first();
+        if ($step && $step->approver_type === 'user' && $step->approver_user_id === $user->id) {
+            return true;
+        }
+
+        // Otherwise, non-superadmin must be the atasan (subordinate tree)
+        return $isSubordinate;
     }
 
     private static function canHandlePendingItem($item, User $user, string $type = ''): bool
@@ -330,7 +333,7 @@ class PendingRequestService
         $submitterId = $item->user_id ?? $item->user?->id ?? ($type === 'payroll' ? $item->created_by : null);
 
         // Jika bukan Super Admin, pengajuan WAJIB diajukan oleh bawahan (langsung maupun berjenjang)
-        if (!$submitterId || !in_array($submitterId, $subordinateIds)) {
+        if (! $submitterId || ! in_array($submitterId, $subordinateIds)) {
             return false;
         }
 

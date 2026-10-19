@@ -2,12 +2,13 @@
 
 namespace Tests\Feature;
 
-use App\Models\Attendance;
 use App\Models\ApprovalWorkflow;
+use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -17,13 +18,21 @@ class DynamicApprovalFlowTest extends TestCase
     use RefreshDatabase;
 
     private $company;
+
     private $employee;
+
     private $supervisor;
+
     private $hrManager;
+
     private $ceo;
+
     private $masterAdminRole;
+
     private $hrdRole;
+
     private $ceoRole;
+
     private $karyawanRole;
 
     protected function setUp(): void
@@ -58,7 +67,7 @@ class DynamicApprovalFlowTest extends TestCase
             $perm = Permission::create([
                 'name' => $permName,
                 'slug' => $permName,
-                'group' => 'Test'
+                'group' => 'Test',
             ]);
             $this->karyawanRole->permissions()->attach($perm->id);
             $this->hrdRole->permissions()->attach($perm->id);
@@ -592,6 +601,6 @@ class DynamicApprovalFlowTest extends TestCase
 
         // Actual attendance check_out should be updated
         $this->assertNotNull($attendance->fresh()->check_out);
-        $this->assertEquals('17:00:00', \Carbon\Carbon::parse($attendance->fresh()->check_out)->format('H:i:s'));
+        $this->assertEquals('17:00:00', Carbon::parse($attendance->fresh()->check_out)->format('H:i:s'));
     }
 }

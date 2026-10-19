@@ -4,6 +4,7 @@ namespace App\Traits;
 
 use App\Models\Attendance;
 use App\Models\User;
+use App\Services\PendingRequestService;
 use Illuminate\Http\Request;
 
 trait HandlesAttendanceDinasLuar
@@ -39,17 +40,17 @@ trait HandlesAttendanceDinasLuar
             ->where('attendance_type', 'dinas_luar')
             ->whereIn('dinas_luar_status', ['pending', 'waiting_approval', 'approved_spv']);
 
-        if (!$isGlobalAdmin && $user->company_id) {
+        if (! $isGlobalAdmin && $user->company_id) {
             $query->where('company_id', $user->company_id);
         } elseif ($request->filled('company_id')) {
             $query->where('company_id', $request->company_id);
         }
 
-        if (!$isGlobalAdmin && !$user->hasPermission('manage-attendance-corrections') && !$user->hasPermission('view-attendances')) {
+        if (! $isGlobalAdmin && ! $user->hasPermission('manage-attendance-corrections') && ! $user->hasPermission('view-attendances')) {
             $query->whereHas('user', fn ($q) => $q->where('supervisor_id', $user->id));
         }
 
-        \App\Services\PendingRequestService::applyDateFilter($query, $request, 'check_in');
+        PendingRequestService::applyDateFilter($query, $request, 'check_in');
 
         $records = $query->orderBy('check_in', 'desc')->get();
 
@@ -61,13 +62,13 @@ trait HandlesAttendanceDinasLuar
         $user = $request->user();
         $isGlobalAdmin = $user->isSuperAdmin() || $user->role_id === 1;
 
-        $attendance = Attendance::when(!$isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))
+        $attendance = Attendance::when(! $isGlobalAdmin, fn ($q) => $q->where('company_id', $user->company_id))
             ->where('attendance_type', 'dinas_luar')
             ->whereIn('dinas_luar_status', ['pending', 'waiting_approval'])
             ->findOrFail($id);
 
         $employee = $attendance->user;
-        if (!$isGlobalAdmin && $employee && $employee->supervisor_id !== $user->id && ! $user->hasPermission('manage-attendance-corrections')) {
+        if (! $isGlobalAdmin && $employee && $employee->supervisor_id !== $user->id && ! $user->hasPermission('manage-attendance-corrections')) {
             return $this->errorResponse('Anda bukan supervisor karyawan ini.', 403);
         }
 
@@ -108,7 +109,7 @@ trait HandlesAttendanceDinasLuar
         $user = $request->user();
         $isGlobalAdmin = $user->isSuperAdmin() || $user->role_id === 1;
 
-        $attendance = Attendance::when(!$isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))
+        $attendance = Attendance::when(! $isGlobalAdmin, fn ($q) => $q->where('company_id', $user->company_id))
             ->where('attendance_type', 'dinas_luar')
             ->whereIn('dinas_luar_status', ['approved_spv', 'pending', 'waiting_approval'])
             ->findOrFail($id);
@@ -140,7 +141,7 @@ trait HandlesAttendanceDinasLuar
         $user = $request->user();
         $isGlobalAdmin = $user->isSuperAdmin() || $user->role_id === 1;
 
-        $attendance = Attendance::when(!$isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))
+        $attendance = Attendance::when(! $isGlobalAdmin, fn ($q) => $q->where('company_id', $user->company_id))
             ->where('attendance_type', 'dinas_luar')
             ->whereIn('dinas_luar_status', ['pending', 'waiting_approval', 'approved_spv'])
             ->findOrFail($id);

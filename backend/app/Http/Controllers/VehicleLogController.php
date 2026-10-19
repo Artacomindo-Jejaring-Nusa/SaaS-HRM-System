@@ -2,8 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
+use App\Models\Company;
 use App\Models\VehicleLog;
+use App\Services\ApprovalService;
 use App\Services\EmployeeQueryService;
 use App\Traits\Notifiable;
 use Carbon\Carbon;
@@ -18,9 +19,13 @@ class VehicleLogController extends Controller
     use Notifiable;
 
     private const MSG_FORBIDDEN = 'Akses ditolak.';
+
     private const URL_FLEET_LOGS = '/dashboard/fleet-logs';
+
     private const RULE_NULL_NUM = 'nullable|numeric|min:0';
+
     private const DIR_ODOMETER = 'vehicle-logs/odometer/';
+
     private const NOTIF_VEHICLE_APPROVED = 'PEMINJAMAN KENDARAAN DISETUJUI';
 
     /**
@@ -29,52 +34,59 @@ class VehicleLogController extends Controller
     public function index(Request $request)
     {
         $query = VehicleLog::with(['user', 'approver']);
-        $user = $request->user();
-        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
-        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
-
-        if ($isSuperAdmin) {
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
-                $query->where('company_id', $user->company_id);
-            } elseif ($request->filled('company_id') && $request->company_id !== 'all') {
-                $query->where('company_id', $request->company_id);
-            }
-        } elseif (!empty($subordinateIds)) {
-            $query->where(function ($q) use ($user, $subordinateIds) {
-                $q->where('user_id', $user->id)
-                  ->orWhereIn('user_id', $subordinateIds);
-            });
-            if ($user->company_id) {
-                $query->where('company_id', $user->company_id);
-            }
-        } else {
-            $query->where('user_id', $user->id);
-            if ($user->company_id) {
-                $query->where('company_id', $user->company_id);
-            }
-        }
-
-        // Filter by status
-        if ($request->has('status') && $request->status !== 'all') {
-            $query->where('status', $request->status);
-        }
-
-        // Filter by plate number
-        if ($request->has('plate_number') && $request->plate_number) {
-            $query->where('plate_number', 'like', '%'.$request->plate_number.'%');
-        }
-
-        // Filter by date range
-        if ($request->has('from') && $request->from) {
-            $query->whereDate('departure_date', '>=', $request->from);
-        }
-        if ($request->has('to') && $request->to) {
-            $query->whereDate('departure_date', '<=', $request->to);
-        }
+        $this->applyVehicleLogScope($query, $request->user(), $request);
+        $this->applyVehicleLogFilters($query, $request);
 
         $logs = $query->orderBy('id', 'desc')->paginate(10);
 
         return $this->successResponse($logs, 'Daftar log kendaraan berhasil diambil.');
+    }
+
+    private function applyVehicleLogScope($query, User $user, Request $request): void
+    {
+        $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
+        if ($isSuperAdmin) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
+                $query->where('company_id', $user->company_id);
+            } elseif ($request->filled('company_id') && $request->company_id !== 'all') {
+                $query->where('company_id', $request->company_id);
+            }
+
+            return;
+        }
+
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        if (! empty($subordinateIds)) {
+            $query->where(function ($q) use ($user, $subordinateIds) {
+                $q->where('user_id', $user->id)
+                    ->orWhereIn('user_id', $subordinateIds);
+            });
+        } else {
+            $query->where('user_id', $user->id);
+        }
+
+        if ($user->company_id) {
+            $query->where('company_id', $user->company_id);
+        }
+    }
+
+    private function applyVehicleLogFilters($query, Request $request): void
+    {
+        if ($request->has('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('plate_number')) {
+            $query->where('plate_number', 'like', '%'.$request->plate_number.'%');
+        }
+
+        if ($request->filled('from')) {
+            $query->whereDate('departure_date', '>=', $request->from);
+        }
+
+        if ($request->filled('to')) {
+            $query->whereDate('departure_date', '<=', $request->to);
+        }
     }
 
     /**
@@ -110,11 +122,11 @@ class VehicleLogController extends Controller
         $user = $request->user();
         $companyId = $request->input('company_id') ?: $user->company_id;
         if (! $companyId && $user->canAccessAllCompanies()) {
-            $companyId = \App\Models\Company::first()?->id;
+            $companyId = Company::first()?->id;
         }
 
         // Check dynamic approval workflow
-        $workflowResult = \App\Services\ApprovalService::initApproval('vehicle_log', $companyId, $user);
+        $workflowResult = ApprovalService::initApproval('vehicle_log', $companyId, $user);
 
         $driverType = $request->driver_type ?? 'self';
         $defaultDriverName = $request->driver_name ?: 'Supir Kantor';
@@ -263,7 +275,7 @@ class VehicleLogController extends Controller
 
         $companyId = $request->input('company_id') ?: $request->user()->company_id;
         if (! $companyId && $request->user()->canAccessAllCompanies()) {
-            $companyId = \App\Models\Company::first()?->id;
+            $companyId = Company::first()?->id;
         }
 
         $log = VehicleLog::create([
@@ -369,7 +381,7 @@ class VehicleLogController extends Controller
 
     private function processDynamicApproval(VehicleLog $log, Request $request)
     {
-        $result = \App\Services\ApprovalService::processApproval(
+        $result = ApprovalService::processApproval(
             'vehicle_log',
             $log->company_id,
             $request->user(),
@@ -449,13 +461,13 @@ class VehicleLogController extends Controller
         $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
         $log = VehicleLog::with('user')->findOrFail($id);
 
-        if (!$isSuperAdmin) {
+        if (! $isSuperAdmin) {
             $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
-            if (!in_array($log->user_id, $subordinateIds)) {
+            if (! in_array($log->user_id, $subordinateIds)) {
                 abort(403, 'Akses ditolak. Anda tidak memiliki wewenang untuk memproses peminjaman armada karyawan ini.');
             }
         }
-        abort_if(! $user->hasPermission('approve-vehicle-logs') && !$isSuperAdmin, 403, self::MSG_FORBIDDEN);
+        abort_if(! $user->hasPermission('approve-vehicle-logs') && ! $isSuperAdmin, 403, self::MSG_FORBIDDEN);
 
         if (! in_array($log->status, ['pending', 'completed'])) {
             return $this->errorResponse('Hanya pengajuan dengan status "pending" atau "completed" yang bisa disetujui.', 422);
@@ -507,20 +519,20 @@ class VehicleLogController extends Controller
         $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
         $log = VehicleLog::with('user')->findOrFail($id);
 
-        if (!$isSuperAdmin) {
+        if (! $isSuperAdmin) {
             $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
-            if (!in_array($log->user_id, $subordinateIds)) {
+            if (! in_array($log->user_id, $subordinateIds)) {
                 abort(403, 'Akses ditolak. Anda tidak memiliki wewenang untuk memproses peminjaman armada karyawan ini.');
             }
         }
-        abort_if(! $user->hasPermission('approve-vehicle-logs') && !$isSuperAdmin, 403, self::MSG_FORBIDDEN);
+        abort_if(! $user->hasPermission('approve-vehicle-logs') && ! $isSuperAdmin, 403, self::MSG_FORBIDDEN);
 
         if (! in_array($log->status, ['pending', 'completed'])) {
             return $this->errorResponse('Hanya pengajuan dengan status "pending" atau "completed" yang bisa ditolak.', 422);
         }
 
         if ($log->current_approval_step) {
-            $result = \App\Services\ApprovalService::processApproval(
+            $result = ApprovalService::processApproval(
                 'vehicle_log',
                 $log->company_id,
                 $request->user(),
@@ -559,7 +571,7 @@ class VehicleLogController extends Controller
         $this->notifySuperAdmins(
             $log->company_id,
             'LOG KENDARAAN DITOLAK',
-            "Pengajuan / log kendaraan {$log->vehicle_name} ({$log->plate_number}) dari {$log->user->name} telah DITOLAK oleh {$request->user()->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            "Pengajuan / log kendaraan {$log->vehicle_name} ({$log->plate_number}) dari {$log->user->name} telah DITOLAK oleh {$request->user()->name}.".($request->remark ? " Catatan: {$request->remark}" : ''),
             'danger',
             self::URL_FLEET_LOGS,
             $request->user()->id
@@ -671,7 +683,7 @@ class VehicleLogController extends Controller
         $this->scopeCompanyFleet($tripsQuery, $user, $companyId);
         $activeTrips = $tripsQuery->get()->keyBy('plate_number');
 
-        $result = $rawVehicles->map(fn($v) => $this->formatVehicleItem($v, $activeTrips->get($v->plate_number)));
+        $result = $rawVehicles->map(fn ($v) => $this->formatVehicleItem($v, $activeTrips->get($v->plate_number)));
 
         return $this->successResponse($result, 'Daftar armada kendaraan berhasil diambil.');
     }
@@ -680,8 +692,9 @@ class VehicleLogController extends Controller
     {
         $companyId = $queryCompanyId ?: $user->company_id;
         if (! $companyId && $user->canAccessAllCompanies()) {
-            return \App\Models\Company::first()?->id;
+            return Company::first()?->id;
         }
+
         return $companyId ? (int) $companyId : null;
     }
 
@@ -744,7 +757,7 @@ class VehicleLogController extends Controller
         $user = $request->user();
         $companyId = $request->input('company_id') ?: $user->company_id;
         if (! $companyId && $user->canAccessAllCompanies()) {
-            $companyId = \App\Models\Company::first()?->id;
+            $companyId = Company::first()?->id;
         }
 
         if (! $companyId) {
@@ -769,7 +782,7 @@ class VehicleLogController extends Controller
 
         $notesWithMeta = $request->notes;
         if ($request->vehicle_type) {
-            $notesWithMeta = "[Tipe: {$request->vehicle_type}] " . ($request->notes ?? '');
+            $notesWithMeta = "[Tipe: {$request->vehicle_type}] ".($request->notes ?? '');
         }
 
         $log = VehicleLog::create([

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class PerformanceReview extends Model
 {
     use BelongsToCompany;
+
     protected $fillable = [
         'company_id',
         'user_id',

@@ -2,9 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ProfileRequest;
-use App\Models\Role;
-use App\Models\User;
+use App\Models\Schedule;
 use App\Traits\Notifiable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -79,7 +77,7 @@ class ProfileController extends Controller
         $user = $request->user()->load(['role.permissions', 'office', 'company']);
 
         $today = Carbon::today()->toDateString();
-        $todaySchedule = \App\Models\Schedule::with('shift')
+        $todaySchedule = Schedule::with('shift')
             ->where('user_id', $user->id)
             ->whereDate('date', $today)
             ->first();
@@ -109,8 +107,8 @@ class ProfileController extends Controller
             $scheduleLabel = 'Jam Fleksibel (Atasan)';
             $hasShiftToday = true;
         } else {
-            $rawStart = !empty($user->office?->work_start_time) ? $user->office->work_start_time : ($user->company?->work_start_time ?? '08:30:00');
-            $rawEnd = !empty($user->office?->work_end_time) ? $user->office->work_end_time : ($user->company?->work_end_time ?? '17:30:00');
+            $rawStart = ! empty($user->office?->work_start_time) ? $user->office->work_start_time : ($user->company?->work_start_time ?? '08:30:00');
+            $rawEnd = ! empty($user->office?->work_end_time) ? $user->office->work_end_time : ($user->company?->work_end_time ?? '17:30:00');
             $workStartTime = substr($rawStart, 0, 5);
             $workEndTime = substr($rawEnd, 0, 5);
             $shiftName = 'Jam Kantor';

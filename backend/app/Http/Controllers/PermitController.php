@@ -9,6 +9,7 @@ use App\Services\EmployeeQueryService;
 use App\Services\FCMService;
 use App\Traits\Notifiable;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class PermitController extends Controller
@@ -23,13 +24,13 @@ class PermitController extends Controller
         $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
         if ($isSuperAdmin) {
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
-        } elseif (!empty($subordinateIds)) {
+        } elseif (! empty($subordinateIds)) {
             $query->where(function ($q) use ($user, $subordinateIds) {
                 $q->where('user_id', $user->id)
-                  ->orWhereIn('user_id', $subordinateIds);
+                    ->orWhereIn('user_id', $subordinateIds);
             });
             if ($user->company_id) {
                 $query->where('company_id', $user->company_id);
@@ -58,21 +59,21 @@ class PermitController extends Controller
     {
         $request->validate([
             'start_date' => 'required|date',
-            'end_date'   => 'nullable|date|after_or_equal:start_date',
-            'type'       => 'required|string',
-            'category'   => 'required|string|in:I,S,L', // Karyawan tidak bisa pilih A
-            'reason'     => 'nullable|string',
-            'signature'  => 'required|string',           // Base64 signature
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'type' => 'required|string',
+            'category' => 'required|string|in:I,S,L', // Karyawan tidak bisa pilih A
+            'reason' => 'nullable|string',
+            'signature' => 'required|string',           // Base64 signature
         ]);
 
-        $user      = $request->user();
+        $user = $request->user();
         $companyId = $user->company_id;
 
         [$category, $isDeducted] = $this->resolveCategoryAndDeduction($request);
 
         $categoryLabels = ['I' => 'Izin', 'A' => 'Alpha/Mangkir', 'S' => 'Sakit', 'L' => 'Lainnya'];
-        $categoryLabel  = $categoryLabels[$category] ?? $category;
-        $alphaNote      = $category === 'A' ? ' ⚠️ Otomatis dikategorikan Alpha (pengajuan setelah jam 13:00).' : '';
+        $categoryLabel = $categoryLabels[$category] ?? $category;
+        $alphaNote = $category === 'A' ? ' ⚠️ Otomatis dikategorikan Alpha (pengajuan setelah jam 13:00).' : '';
 
         $workflowResult = ApprovalService::initApproval('permit', $companyId, $user);
 
@@ -87,7 +88,7 @@ class PermitController extends Controller
         $this->notifySuperAdmins(
             $companyId,
             'PERMOHONAN IZIN/SAKIT BARU',
-            "Karyawan {$user->name} mengajukan permohonan [{$categoryLabel}] ({$request->type}) untuk tanggal {$request->start_date}." . ($request->reason ? " Alasan: {$request->reason}" : ''),
+            "Karyawan {$user->name} mengajukan permohonan [{$categoryLabel}] ({$request->type}) untuk tanggal {$request->start_date}.".($request->reason ? " Alasan: {$request->reason}" : ''),
             'warning',
             self::ROUTE_APPROVALS,
             $user->id
@@ -101,11 +102,11 @@ class PermitController extends Controller
      */
     private function resolveCategoryAndDeduction(Request $request): array
     {
-        $category   = $request->category;
+        $category = $request->category;
         $isDeducted = false;
 
         // Auto-Alpha: izin diajukan setelah jam 13:00 untuk hari ini
-        $now       = Carbon::now();
+        $now = Carbon::now();
         $startDate = Carbon::parse($request->start_date);
         if ($startDate->isToday() && $now->hour >= 13) {
             return ['A', true];
@@ -131,19 +132,19 @@ class PermitController extends Controller
         ?array $workflowResult
     ): Permit {
         $data = [
-            'user_id'              => $user->id,
-            'company_id'           => $companyId,
-            'start_date'           => $request->start_date,
-            'end_date'             => $request->end_date,
-            'type'                 => $request->type,
-            'category'             => $category,
-            'has_doctor_note'      => false,
-            'is_deducted'          => $isDeducted,
-            'reason'               => $request->reason,
-            'signature'            => $request->signature,
-            'status'               => $workflowResult ? $workflowResult['status'] : 'pending',
-            'current_approval_step'=> $workflowResult ? $workflowResult['current_approval_step'] : null,
-            'approved_by'          => (!empty($workflowResult['auto_approved'])) ? $user->id : null,
+            'user_id' => $user->id,
+            'company_id' => $companyId,
+            'start_date' => $request->start_date,
+            'end_date' => $request->end_date,
+            'type' => $request->type,
+            'category' => $category,
+            'has_doctor_note' => false,
+            'is_deducted' => $isDeducted,
+            'reason' => $request->reason,
+            'signature' => $request->signature,
+            'status' => $workflowResult ? $workflowResult['status'] : 'pending',
+            'current_approval_step' => $workflowResult ? $workflowResult['current_approval_step'] : null,
+            'approved_by' => (! empty($workflowResult['auto_approved'])) ? $user->id : null,
         ];
 
         return Permit::create($data);
@@ -154,13 +155,14 @@ class PermitController extends Controller
      */
     private function notifyDynamicWorkflow($user, Request $request, string $categoryLabel, string $alphaNote, array $workflowResult): void
     {
-        if (!empty($workflowResult['auto_approved'])) {
+        if (! empty($workflowResult['auto_approved'])) {
             $this->notify(
                 $user,
                 'Pengajuan Izin Disetujui Otomatis',
                 "Halo, permohonan izin [{$categoryLabel}] ({$request->type}) Anda telah DISETUJUI OTOMATIS karena alur persetujuan dinonaktifkan.{$alphaNote}",
                 'success'
             );
+
             return;
         }
 
@@ -202,6 +204,7 @@ class PermitController extends Controller
                 'warning',
                 self::ROUTE_APPROVALS
             );
+
             return;
         }
 
@@ -247,7 +250,7 @@ class PermitController extends Controller
         if ($finalCategory === 'A') {
             $overrideData['is_deducted'] = true;  // Alpha selalu potong
         } elseif ($finalCategory === 'S') {
-            $overrideData['is_deducted'] = !$finalDoctorNote;  // Sakit + surat = tidak potong
+            $overrideData['is_deducted'] = ! $finalDoctorNote;  // Sakit + surat = tidak potong
         } elseif ($finalCategory === 'I') {
             $overrideData['is_deducted'] = false;  // Izin biasa tidak potong
         } else {
@@ -436,7 +439,7 @@ class PermitController extends Controller
             $this->notifySuperAdmins(
                 $permit->company_id,
                 'PERMOHONAN IZIN DITOLAK',
-                "Permohonan izin {$permit->user->name} ({$permit->type}) telah DITOLAK oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+                "Permohonan izin {$permit->user->name} ({$permit->type}) telah DITOLAK oleh {$user->name}.".($request->remark ? " Catatan: {$request->remark}" : ''),
                 'danger',
                 self::ROUTE_APPROVALS,
                 $user->id
@@ -477,7 +480,7 @@ class PermitController extends Controller
         $this->notifySuperAdmins(
             $permit->company_id,
             'PERMOHONAN IZIN DITOLAK',
-            "Permohonan izin {$permit->user->name} ({$permit->type}) telah DITOLAK oleh {$request->user()->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            "Permohonan izin {$permit->user->name} ({$permit->type}) telah DITOLAK oleh {$request->user()->name}.".($request->remark ? " Catatan: {$request->remark}" : ''),
             'danger',
             self::ROUTE_APPROVALS,
             $request->user()->id
@@ -486,32 +489,32 @@ class PermitController extends Controller
         return $this->successResponse(null, 'Permohonan izin ditolak.');
     }
 
-    public function update(Request $request, $id): \Illuminate\Http\JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
         $user = $request->user();
         $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
 
         $permit = Permit::where(function ($q) use ($user, $isSuperAdmin) {
-            if (!$isSuperAdmin && !$user->canAccessAllCompanies()) {
+            if (! $isSuperAdmin && ! $user->canAccessAllCompanies()) {
                 $q->where('company_id', $user->company_id);
             }
         })->findOrFail($id);
 
-        if (!$isSuperAdmin && $permit->user_id !== $user->id) {
+        if (! $isSuperAdmin && $permit->user_id !== $user->id) {
             return $this->errorResponse('Anda tidak memiliki akses untuk mengubah pengajuan izin ini.', 403);
         }
 
-        if (!$isSuperAdmin && !in_array($permit->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
+        if (! $isSuperAdmin && ! in_array($permit->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
             return $this->errorResponse('Hanya permohonan izin yang masih menunggu persetujuan yang bisa diubah.', 403);
         }
 
         $request->validate([
             'start_date' => 'required|date',
-            'end_date'   => 'nullable|date|after_or_equal:start_date',
-            'type'       => 'required|string',
-            'category'   => 'required|string|in:I,S,L',
-            'reason'     => 'nullable|string',
-            'signature'  => 'nullable|string',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'type' => 'required|string',
+            'category' => 'required|string|in:I,S,L',
+            'reason' => 'nullable|string',
+            'signature' => 'nullable|string',
         ]);
 
         [$category, $isDeducted] = $this->resolveCategoryAndDeduction($request);
@@ -541,16 +544,16 @@ class PermitController extends Controller
         $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
 
         $permit = Permit::with('user')->where(function ($q) use ($user, $isSuperAdmin) {
-            if (!$isSuperAdmin && !$user->canAccessAllCompanies()) {
+            if (! $isSuperAdmin && ! $user->canAccessAllCompanies()) {
                 $q->where('company_id', $user->company_id);
             }
         })->findOrFail($id);
 
-        if (!$isSuperAdmin && $permit->user_id !== $user->id) {
+        if (! $isSuperAdmin && $permit->user_id !== $user->id) {
             return $this->errorResponse('Anda tidak berhak menghapus pengajuan ini.', 403);
         }
 
-        if (!$isSuperAdmin && !in_array($permit->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
+        if (! $isSuperAdmin && ! in_array($permit->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
             return $this->errorResponse('Izin yang sudah diproses tidak bisa dihapus.', 403);
         }
 

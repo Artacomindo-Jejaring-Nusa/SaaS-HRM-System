@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PerformanceReview;
 use App\Traits\Notifiable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class PerformanceReviewController extends Controller
@@ -12,14 +13,18 @@ class PerformanceReviewController extends Controller
     use Notifiable;
 
     private const MSG_FORBIDDEN = 'Akses ditolak.';
+
     private const RULE_REQ_SCORE = 'required|integer|min:0|max:100';
+
     private const RULE_SOME_SCORE = 'sometimes|integer|min:0|max:100';
+
     private const ROUTE_PERFORMANCE = '/dashboard/performance';
+
     private const NOTIF_REVIEW_PUBLISHED = 'REVIEW PERFORMA DIPUBLISH';
 
     public function index(Request $request)
     {
-        $user = $request->user() ?: \Illuminate\Support\Facades\Auth::user();
+        $user = $request->user() ?: Auth::user();
         if (! $user) {
             return $this->errorResponse(self::MSG_FORBIDDEN, 401);
         }
@@ -62,7 +67,7 @@ class PerformanceReviewController extends Controller
             $search = $request->search;
             $query->whereHas('user', function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('nik', 'like', "%{$search}%");
+                    ->orWhere('nik', 'like', "%{$search}%");
             });
         }
 
@@ -130,7 +135,7 @@ class PerformanceReviewController extends Controller
      */
     public function batchStore(Request $request)
     {
-        $user = $request->user() ?: \Illuminate\Support\Facades\Auth::user();
+        $user = $request->user() ?: Auth::user();
         abort_if(! $user || (! $user->hasPermission('manage-kpis') && $user->role_id !== 1), 403, self::MSG_FORBIDDEN);
 
         $request->validate([
@@ -227,7 +232,7 @@ class PerformanceReviewController extends Controller
 
     public function update(Request $request, $id)
     {
-        $user = $request->user() ?: \Illuminate\Support\Facades\Auth::user();
+        $user = $request->user() ?: Auth::user();
         abort_if(! $user || (! $user->hasPermission('manage-kpis') && $user->role_id !== 1), 403, self::MSG_FORBIDDEN);
 
         $review = PerformanceReview::where('company_id', $user->company_id)->findOrFail($id);
@@ -273,7 +278,7 @@ class PerformanceReviewController extends Controller
      */
     public function publish(Request $request, $id)
     {
-        $user = $request->user() ?: \Illuminate\Support\Facades\Auth::user();
+        $user = $request->user() ?: Auth::user();
         abort_if(! $user || (! $user->hasPermission('manage-kpis') && $user->role_id !== 1), 403, self::MSG_FORBIDDEN);
 
         $review = PerformanceReview::where('company_id', $user->company_id)->findOrFail($id);
@@ -304,6 +309,7 @@ class PerformanceReviewController extends Controller
             if ($request->period) {
                 $query->where('period', $request->period);
             }
+
             return $query->get();
         }
 
@@ -316,6 +322,7 @@ class PerformanceReviewController extends Controller
         if ($user->company_id && ! $user->canAccessAllCompanies()) {
             $query->where('company_id', $user->company_id);
         }
+
         return $query->get();
     }
 
@@ -324,7 +331,7 @@ class PerformanceReviewController extends Controller
      */
     public function batchPublish(Request $request)
     {
-        $user = $request->user() ?: \Illuminate\Support\Facades\Auth::user();
+        $user = $request->user() ?: Auth::user();
         abort_if(! $user || (! $user->hasPermission('manage-kpis') && $user->role_id !== 1), 403, self::MSG_FORBIDDEN);
 
         $reviews = $this->resolveBatchPublishReviews($request, $user);
@@ -352,7 +359,7 @@ class PerformanceReviewController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $user = $request->user() ?: \Illuminate\Support\Facades\Auth::user();
+        $user = $request->user() ?: Auth::user();
         abort_if(! $user || (! $user->hasPermission('manage-kpis') && $user->role_id !== 1), 403, self::MSG_FORBIDDEN);
 
         $review = PerformanceReview::where('company_id', $user->company_id)->findOrFail($id);

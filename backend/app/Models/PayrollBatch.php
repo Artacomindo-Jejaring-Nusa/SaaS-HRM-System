@@ -8,9 +8,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class PayrollBatch extends Model
 {
-    use BelongsToCompany, Auditable;
+    use Auditable, BelongsToCompany;
 
     protected string $auditModule = 'payroll';
+
     protected $fillable = [
         'company_id',
         'period_month',

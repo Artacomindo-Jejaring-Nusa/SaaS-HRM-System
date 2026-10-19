@@ -11,12 +11,12 @@ class EnsureManagerAccess
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  Closure(Request): (Response)  $next
      */
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
-        if (!$user || !$user->canAccessManagerPortal()) {
+        if (! $user || ! $user->canAccessManagerPortal()) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Anda tidak memiliki hak akses untuk portal manager.',

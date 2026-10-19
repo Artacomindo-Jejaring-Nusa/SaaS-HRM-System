@@ -47,12 +47,13 @@ class EmployeeQueryService
 
         if ($isGlobalAdmin || $isCompanyAdmin) {
             $query->where('id', '!=', $user->id);
+
             return;
         }
 
         $allSubordinateIds = self::resolveSubordinateIds($user->id);
 
-        if (!empty($allSubordinateIds)) {
+        if (! empty($allSubordinateIds)) {
             $query->whereIn('id', $allSubordinateIds);
         } elseif ($user->hasPermission('manage-tasks') || $user->hasPermission('assign-tasks')) {
             $query->where('id', '!=', $user->id);
@@ -66,7 +67,7 @@ class EmployeeQueryService
         $allIds = [];
         $currentLevelIds = User::where('supervisor_id', $userId)->pluck('id')->toArray();
 
-        while (!empty($currentLevelIds)) {
+        while (! empty($currentLevelIds)) {
             $allIds = array_merge($allIds, $currentLevelIds);
             $currentLevelIds = User::whereIn('supervisor_id', $currentLevelIds)
                 ->whereNotIn('id', $allIds)
@@ -97,6 +98,7 @@ class EmployeeQueryService
 
         $employees->getCollection()->transform(function ($emp) {
             $emp->makeHidden(['basic_salary', 'bank_account_no', 'bank_name', 'ktp_no', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no']);
+
             return $emp;
         });
     }

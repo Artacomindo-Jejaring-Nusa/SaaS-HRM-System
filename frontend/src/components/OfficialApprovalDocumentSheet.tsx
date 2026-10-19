@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import axiosInstance from "@/lib/axios";
 import { 
   Printer, 
@@ -230,471 +230,507 @@ interface OfficialApprovalFormDetailsProps {
   readonly numericAmount: number;
 }
 
-function OfficialApprovalFormDetails({ item, numericAmount }: OfficialApprovalFormDetailsProps) {
+function LeaveFormDetails({ item }: { readonly item: ApprovalItem }) {
   return (
-    <>
-      {/* A. FORMULIR CUTI */}
-      {item.type === "leave" && (
-        <div className="space-y-3">
-          <div className="border border-slate-300 rounded overflow-hidden">
-            <table className="w-full text-xs border-collapse">
-              <tbody>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-40 border-r border-slate-200 text-left">Jenis Cuti</th>
-                  <td className="p-2.5 font-black text-slate-900">{item.category || "Cuti Tahunan"}</td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Periode / Tanggal Cuti</th>
-                  <td className="p-2.5 font-semibold text-slate-900">
-                    {item.start_date || "-"} <span className="text-slate-400 font-normal">s/d</span> {item.end_date || "-"}
-                  </td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Alamat Selama Cuti</th>
-                  <td className="p-2.5 text-slate-800">{item.leave_address || "Tidak ada alamat khusus"}</td>
-                </tr>
-                <tr>
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Kontak Darurat</th>
-                  <td className="p-2.5 font-semibold text-slate-800">{item.emergency_phone || "-"}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+    <div className="space-y-3">
+      <div className="border border-slate-300 rounded overflow-hidden">
+        <table className="w-full text-xs border-collapse">
+          <tbody>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-40 border-r border-slate-200 text-left">Jenis Cuti</th>
+              <td className="p-2.5 font-black text-slate-900">{item.category || "Cuti Tahunan"}</td>
+            </tr>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Periode / Tanggal Cuti</th>
+              <td className="p-2.5 font-semibold text-slate-900">
+                {item.start_date || "-"} <span className="text-slate-400 font-normal">s/d</span> {item.end_date || "-"}
+              </td>
+            </tr>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Alamat Selama Cuti</th>
+              <td className="p-2.5 text-slate-800">{item.leave_address || "Tidak ada alamat khusus"}</td>
+            </tr>
+            <tr>
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Kontak Darurat</th>
+              <td className="p-2.5 font-semibold text-slate-800">{item.emergency_phone || "-"}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Alasan Permohonan Cuti:</p>
-            <p className="text-xs text-slate-800 italic leading-relaxed">
-              &ldquo;{item.description || "Tidak ada rincian keterangan cuti tambahan"}&rdquo;
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* B. FORMULIR IZIN */}
-      {item.type === "permit" && (
-        <div className="space-y-3">
-          <div className="border border-slate-300 rounded overflow-hidden">
-            <table className="w-full text-xs border-collapse">
-              <tbody>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Kategori Izin</th>
-                  <td className="p-2.5 font-black text-slate-900">
-                    <span className="px-2 py-0.5 bg-purple-100 text-purple-900 font-bold rounded mr-2 border border-purple-300">
-                      [{item.permit_category || "I"}]
-                    </span>
-                    {item.category || "Izin Kerja"}
-                  </td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu / Periode Izin</th>
-                  <td className="p-2.5 font-semibold text-slate-900">
-                    {item.start_date || "-"} {item.end_date ? `s/d ${item.end_date}` : ""}
-                  </td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Surat Keterangan Dokter</th>
-                  <td className="p-2.5">
-                    {item.permit_has_doctor_note ? (
-                      <span className="font-bold text-emerald-700">✓ Ada Surat Keterangan Dokter Terlampir</span>
-                    ) : (
-                      <span className="text-slate-600">✗ Tidak Ada Surat Dokter</span>
-                    )}
-                  </td>
-                </tr>
-                <tr>
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Status Pemotongan Gaji</th>
-                  <td className="p-2.5 font-bold">
-                    {item.permit_is_deducted ? (
-                      <span className="text-red-600">Dipotong Gaji Sesuai Regulasi Absensi</span>
-                    ) : (
-                      <span className="text-emerald-700">Tidak Dipotong Gaji (Disetujui Resmi)</span>
-                    )}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Keterangan / Alasan Izin:</p>
-            <p className="text-xs text-slate-800 italic leading-relaxed">
-              &ldquo;{item.description || "Tidak ada keterangan tambahan"}&rdquo;
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* C. FORMULIR LEMBUR (SPKL) */}
-      {item.type === "overtime" && (
-        <div className="space-y-3">
-          <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-xs">
-            <span className="font-bold text-amber-900 uppercase">Tugas Pokok Lembur: </span>
-            <span className="font-semibold text-slate-800">{item.category}</span>
-          </div>
-
-          {/* Tabel Jadwal Lembur */}
-          <div className="border-2 border-black rounded-sm overflow-hidden">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-200 font-bold text-black border-b-2 border-black text-center">
-                  <th className="p-2 border-r border-black w-10">No</th>
-                  <th className="p-2 border-r border-black w-32">Hari / Tanggal</th>
-                  <th className="p-2 border-r border-black w-28">Jam Mulai - Selesai</th>
-                  <th className="p-2 text-left px-3">Uraian Tugas / Output yang Dikerjakan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {item.overtime_items && item.overtime_items.length > 0 ? (
-                  item.overtime_items.map((ot, idx) => (
-                    <tr key={ot.id ? `ot-${ot.id}` : `ot-${ot.date ?? ''}-${ot.start_time ?? ''}-${idx}`} className="border-b border-slate-300">
-                      <td className="p-2 border-r border-black text-center font-bold">{idx + 1}</td>
-                      <td className="p-2 border-r border-black font-semibold text-slate-900 text-center">
-                        {ot.date || item.start_date || "-"}
-                      </td>
-                      <td className="p-2 border-r border-black text-center font-mono font-bold text-slate-800">
-                        {ot.start_time || "-"} s/d {ot.end_time || "-"}
-                      </td>
-                      <td className="p-2 px-3 text-slate-800 font-medium">
-                        {ot.reason || item.description || "-"}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr className="border-b border-slate-300">
-                    <td className="p-2 border-r border-black text-center font-bold">1</td>
-                    <td className="p-2 border-r border-black font-semibold text-center">{item.start_date || "-"}</td>
-                    <td className="p-2 border-r border-black text-center font-mono font-bold">-</td>
-                    <td className="p-2 px-3 text-slate-800 font-medium">{item.description}</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Catatan Urgensi Lembur:</p>
-            <p className="text-xs text-slate-800 italic leading-relaxed">
-              &ldquo;{item.description || "Dikerjakan untuk menyelesaikan target operasional perusahaan."}&rdquo;
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* D. FORMULIR REIMBURSEMENT */}
-      {item.type === "reimbursement" && (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded text-xs">
-            <div>
-              <span className="font-bold text-slate-500 block uppercase text-[10px]">Divisi Pembebanan:</span>
-              <span className="font-bold text-slate-900">{item.reimbursement_divisi || "Operasional"}</span>
-            </div>
-            <div>
-              <span className="font-bold text-slate-500 block uppercase text-[10px]">Tujuan / Keperluan:</span>
-              <span className="font-bold text-slate-900">{item.reimbursement_tujuan || item.description || "Klaim Biaya"}</span>
-            </div>
-          </div>
-
-          {/* Tabel Item Klaim */}
-          <div className="border-2 border-black rounded-sm overflow-hidden">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-200 font-bold text-black border-b-2 border-black">
-                  <th className="p-2 border-r border-black w-10 text-center">No</th>
-                  <th className="p-2 border-r border-black text-left px-3">Item Pengeluaran / Biaya</th>
-                  <th className="p-2 border-r border-black text-left px-3">Keterangan / Kuitansi</th>
-                  <th className="p-2 text-right px-3 w-36">Nominal (IDR)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {item.reimbursement_items && item.reimbursement_items.length > 0 ? (
-                  item.reimbursement_items.map((r, idx) => (
-                    <tr key={r.id ? `reim-${r.id}` : `reim-${r.item_name ?? ''}-${r.amount ?? ''}-${idx}`} className="border-b border-slate-300">
-                      <td className="p-2 border-r border-black text-center font-bold">{idx + 1}</td>
-                      <td className="p-2 border-r border-black px-3 font-semibold text-slate-900">{r.item_name || "Item Biaya"}</td>
-                      <td className="p-2 border-r border-black px-3 text-slate-600">{r.description || "-"}</td>
-                      <td className="p-2 px-3 text-right font-mono font-bold text-slate-900">
-                        {formatCurrency(r.amount || 0)}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr className="border-b border-slate-300">
-                    <td className="p-2 border-r border-black text-center font-bold">1</td>
-                    <td className="p-2 border-r border-black px-3 font-semibold">{item.category}</td>
-                    <td className="p-2 border-r border-black px-3 text-slate-600">{item.description}</td>
-                    <td className="p-2 px-3 text-right font-mono font-bold text-slate-900">
-                      {formatCurrency(numericAmount)}
-                    </td>
-                  </tr>
-                )}
-                <tr className="bg-emerald-50 font-black text-black border-t-2 border-black">
-                  <td colSpan={3} className="p-2 border-r border-black text-right pr-4 uppercase tracking-wider text-[11px]">
-                    TOTAL KLAIM KESELURUHAN
-                  </td>
-                  <td className="p-2 px-3 text-right font-mono text-sm text-emerald-800">
-                    {formatCurrency(numericAmount)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Terbilang */}
-          {numericAmount > 0 && (
-            <div className="p-2.5 bg-slate-50 border border-slate-300 rounded text-xs flex items-center gap-2">
-              <span className="font-bold text-slate-600 uppercase text-[10px]">Terbilang:</span>
-              <span className="font-bold italic text-slate-900">{terbilang(numericAmount)}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* E. FORMULIR FUND REQUEST (KASBON / DANA) */}
-      {item.type === "fund_request" && (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded text-xs">
-            <div>
-              <span className="font-bold text-slate-500 block uppercase text-[10px]">Keperluan Dana:</span>
-              <span className="font-bold text-slate-900">{item.category || item.description}</span>
-            </div>
-            <div>
-              <span className="font-bold text-slate-500 block uppercase text-[10px]">Estimasi Total Dana:</span>
-              <span className="font-black text-slate-900 text-sm font-mono">{formatCurrency(numericAmount)}</span>
-            </div>
-          </div>
-
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Rincian & Justifikasi Pengajuan:</p>
-            <p className="text-xs text-slate-800 leading-relaxed italic">
-              &ldquo;{item.description || "Pengajuan dana operasional perusahaan"}&rdquo;
-            </p>
-          </div>
-
-          {numericAmount > 0 && (
-            <div className="p-2.5 bg-slate-50 border border-slate-300 rounded text-xs flex items-center gap-2">
-              <span className="font-bold text-slate-600 uppercase text-[10px]">Terbilang:</span>
-              <span className="font-bold italic text-slate-900">{terbilang(numericAmount)}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* F. FORMULIR VEHICLE LOG (LOG ARMADA) */}
-      {item.type === "vehicle_log" && (
-        <div className="space-y-3">
-          <div className="border border-slate-300 rounded overflow-hidden">
-            <table className="w-full text-xs border-collapse">
-              <tbody>
-                <tr className="border-b border-slate-200">
-                  <td className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200">Armada / Kendaraan</td>
-                  <td className="p-2.5 font-black text-slate-900">
-                    {item.vehicle_name || "Mobil Operasional"} 
-                    {item.plate_number && <span className="ml-2 font-mono px-2 py-0.5 bg-slate-200 text-slate-800 rounded font-bold">({item.plate_number})</span>}
-                  </td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <td className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200">Lokasi Tujuan</td>
-                  <td className="p-2.5 font-semibold text-slate-900">{item.destination || item.category || "-"}</td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <td className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200">Odometer Berangkat</td>
-                  <td className="p-2.5 font-mono font-bold text-slate-800">
-                    {item.odometer_start ? `${item.odometer_start.toLocaleString()} KM` : "-"}
-                  </td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <td className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200">Odometer Kembali</td>
-                  <td className="p-2.5 font-mono font-bold text-slate-800">
-                    {item.odometer_end ? `${item.odometer_end.toLocaleString()} KM` : "-"}
-                  </td>
-                </tr>
-                {item.distance && (
-                  <tr className="border-b border-slate-200 bg-indigo-50/50">
-                    <td className="p-2.5 font-bold text-indigo-950 border-r border-slate-200">Total Jarak Tempuh</td>
-                    <td className="p-2.5 font-mono font-black text-indigo-900">{item.distance} KM</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Keperluan Pemakaian Armada:</p>
-            <p className="text-xs text-slate-800 italic leading-relaxed">
-              &ldquo;{item.purpose || item.description || "Operasional dinas kantor"}&rdquo;
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* G. FORMULIR DINAS LUAR */}
-      {item.type === "dinas_luar" && (
-        <div className="space-y-3">
-          <div className="border border-slate-300 rounded overflow-hidden">
-            <table className="w-full text-xs border-collapse">
-              <tbody>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Instansi / Lokasi Tujuan</th>
-                  <td className="p-2.5 font-black text-slate-900">{item.dinas_luar_destination || item.category || "-"}</td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Check-In Tugas</th>
-                  <td className="p-2.5 font-semibold text-slate-900">{item.start_date || "-"}</td>
-                </tr>
-                <tr>
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Check-Out Tugas</th>
-                  <td className="p-2.5 font-semibold text-slate-900">{item.end_date || "-"}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Laporan / Catatan Pelaksanaan Tugas:</p>
-            <p className="text-xs text-slate-800 italic leading-relaxed">
-              &ldquo;{item.dinas_luar_notes || item.description || "Melaksanakan kunjungan dan instalasi teknis di lokasi klien."}&rdquo;
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* H. FORMULIR PULANG AWAL (EARLY OUT BYPASS) */}
-      {item.type === "early_out" && (
-        <div className="space-y-3">
-          <div className="border border-slate-300 rounded overflow-hidden">
-            <table className="w-full text-xs border-collapse">
-              <tbody>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Jenis Permohonan</th>
-                  <td className="p-2.5 font-black text-slate-900">
-                    <span className="px-2 py-0.5 bg-orange-100 text-orange-900 font-bold rounded mr-2 border border-orange-300">
-                      Izin Pulang Lebih Awal
-                    </span>
-                    <span>Pulang Sebelum Waktu Shift Berakhir</span>
-                  </td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Masuk & Pulang</th>
-                  <td className="p-2.5 font-semibold text-slate-900">
-                    {item.start_date || "-"} <span className="text-slate-400 font-normal">s/d</span> {item.end_date || "-"}
-                  </td>
-                </tr>
-                <tr>
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Status Verifikasi</th>
-                  <td className="p-2.5 font-bold">
-                    <span className="text-orange-700">Menunggu Persetujuan Super Admin / HRD</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-            <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Alasan Pulang Lebih Awal:</p>
-            <p className="text-xs text-slate-800 italic leading-relaxed">
-              &ldquo;{item.description || "Meeting diluar sampai jam pulang sebenarnya"}&rdquo;
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* I. VERIFIKASI ABSENSI WEB */}
-      {item.type === "web_attendance" && (
-        <div className="space-y-3">
-          <div className="border border-slate-300 rounded overflow-hidden">
-            <table className="w-full text-xs border-collapse">
-              <tbody>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Metode Kehadiran</th>
-                  <td className="p-2.5 font-black text-slate-900">
-                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-900 font-bold rounded mr-2 border border-indigo-300">
-                      Web Browser Check-In
-                    </span>
-                    <span>Validasi Berbasis Foto Selfie & Lokasi IP</span>
-                  </td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Masuk</th>
-                  <td className="p-2.5 font-bold text-slate-900">
-                    {item.created_at ? new Date(item.created_at).toLocaleString("id-ID", { dateStyle: "full", timeStyle: "medium" }) : "-"}
-                  </td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Alamat IP / Jaringan</th>
-                  <td className="p-2.5 font-mono text-slate-800">
-                    {item.ip_address || "127.0.0.1"}
-                  </td>
-                </tr>
-                <tr>
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Status Verifikasi</th>
-                  <td className="p-2.5 font-bold">
-                    <span className="text-amber-700">Menunggu Persetujuan Super Admin</span>
-                    {item.is_suspicious && (
-                      <span className="ml-2 px-1.5 py-0.5 bg-rose-100 text-rose-800 rounded text-[10px] font-bold">
-                        Anomali Terdeteksi
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {item.attachment && (
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded text-center">
-              <p className="font-bold text-[11px] text-slate-700 uppercase mb-2">Foto Selfie Presensi Web:</p>
-              <img 
-                src={item.attachment.startsWith("http") ? item.attachment : `/storage/${item.attachment.replace(/^\/?storage\//, "")}`}
-                alt="Selfie Presensi Web"
-                className="max-h-64 rounded-lg border border-slate-300 mx-auto object-cover shadow-sm"
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* J. KOREKSI ABSENSI */}
-      {item.type === "attendance_correction" && (
-        <div className="space-y-3">
-          <div className="border border-slate-300 rounded overflow-hidden">
-            <table className="w-full text-xs border-collapse">
-              <tbody>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Jenis Pengajuan</th>
-                  <td className="p-2.5 font-black text-slate-900">
-                    <span className="px-2 py-0.5 bg-cyan-100 text-cyan-900 font-bold rounded mr-2 border border-cyan-300">
-                      {item.category || "Koreksi Absensi"}
-                    </span>
-                    <span>{item.description || "-"}</span>
-                  </td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Pelaksanaan</th>
-                  <td className="p-2.5 font-bold text-slate-900">
-                    {item.start_date || "-"}
-                  </td>
-                </tr>
-                <tr className="border-b border-slate-200">
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Diajukan Pada</th>
-                  <td className="p-2.5 font-medium text-slate-800">
-                    {item.created_at ? new Date(item.created_at).toLocaleString("id-ID", { dateStyle: "full", timeStyle: "medium" }) : "-"}
-                  </td>
-                </tr>
-                <tr>
-                  <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Status Saat Ini</th>
-                  <td className="p-2.5 font-bold">
-                    <span className={item.status === 'approved' ? 'text-emerald-700' : (item.status === 'rejected' ? 'text-rose-700' : 'text-amber-700')}>
-                      {item.status === 'approved' ? 'Disetujui' : (item.status === 'rejected' ? 'Ditolak' : 'Menunggu Persetujuan')}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </>
+      <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+        <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Alasan Permohonan Cuti:</p>
+        <p className="text-xs text-slate-800 italic leading-relaxed">
+          &ldquo;{item.description || "Tidak ada rincian keterangan cuti tambahan"}&rdquo;
+        </p>
+      </div>
+    </div>
   );
+}
+
+function PermitFormDetails({ item }: { readonly item: ApprovalItem }) {
+  return (
+    <div className="space-y-3">
+      <div className="border border-slate-300 rounded overflow-hidden">
+        <table className="w-full text-xs border-collapse">
+          <tbody>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Kategori Izin</th>
+              <td className="p-2.5 font-black text-slate-900">
+                <span className="px-2 py-0.5 bg-purple-100 text-purple-900 font-bold rounded mr-2 border border-purple-300">
+                  [{item.permit_category || "I"}]
+                </span>
+                {item.category || "Izin Kerja"}
+              </td>
+            </tr>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu / Periode Izin</th>
+              <td className="p-2.5 font-semibold text-slate-900">
+                {item.start_date || "-"} {item.end_date ? `s/d ${item.end_date}` : ""}
+              </td>
+            </tr>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Surat Keterangan Dokter</th>
+              <td className="p-2.5">
+                {item.permit_has_doctor_note ? (
+                  <span className="font-bold text-emerald-700">✓ Ada Surat Keterangan Dokter Terlampir</span>
+                ) : (
+                  <span className="text-slate-600">✗ Tidak Ada Surat Dokter</span>
+                )}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Status Pemotongan Gaji</th>
+              <td className="p-2.5 font-bold">
+                {item.permit_is_deducted ? (
+                  <span className="text-red-600">Dipotong Gaji Sesuai Regulasi Absensi</span>
+                ) : (
+                  <span className="text-emerald-700">Tidak Dipotong Gaji (Disetujui Resmi)</span>
+                )}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+        <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Keterangan / Alasan Izin:</p>
+        <p className="text-xs text-slate-800 italic leading-relaxed">
+          &ldquo;{item.description || "Tidak ada keterangan tambahan"}&rdquo;
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function OvertimeFormDetails({ item }: { readonly item: ApprovalItem }) {
+  return (
+    <div className="space-y-3">
+      <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-xs">
+        <span className="font-bold text-amber-900 uppercase">Tugas Pokok Lembur: </span>
+        <span className="font-semibold text-slate-800">{item.category}</span>
+      </div>
+
+      <div className="border-2 border-black rounded-sm overflow-hidden">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-slate-200 font-bold text-black border-b-2 border-black text-center">
+              <th className="p-2 border-r border-black w-10">No</th>
+              <th className="p-2 border-r border-black w-32">Hari / Tanggal</th>
+              <th className="p-2 border-r border-black w-28">Jam Mulai - Selesai</th>
+              <th className="p-2 text-left px-3">Uraian Tugas / Output yang Dikerjakan</th>
+            </tr>
+          </thead>
+          <tbody>
+            {item.overtime_items && item.overtime_items.length > 0 ? (
+              item.overtime_items.map((ot, idx) => (
+                <tr key={ot.id ? `ot-${ot.id}` : `ot-${ot.date ?? ''}-${ot.start_time ?? ''}-${idx}`} className="border-b border-slate-300">
+                  <td className="p-2 border-r border-black text-center font-bold">{idx + 1}</td>
+                  <td className="p-2 border-r border-black font-semibold text-slate-900 text-center">
+                    {ot.date || item.start_date || "-"}
+                  </td>
+                  <td className="p-2 border-r border-black text-center font-mono font-bold text-slate-800">
+                    {ot.start_time || "-"} s/d {ot.end_time || "-"}
+                  </td>
+                  <td className="p-2 px-3 text-slate-800 font-medium">
+                    {ot.reason || item.description || "-"}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr className="border-b border-slate-300">
+                <td className="p-2 border-r border-black text-center font-bold">1</td>
+                <td className="p-2 border-r border-black font-semibold text-center">{item.start_date || "-"}</td>
+                <td className="p-2 border-r border-black text-center font-mono font-bold">-</td>
+                <td className="p-2 px-3 text-slate-800 font-medium">{item.description}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+        <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Catatan Urgensi Lembur:</p>
+        <p className="text-xs text-slate-800 italic leading-relaxed">
+          &ldquo;{item.description || "Dikerjakan untuk menyelesaikan target operasional perusahaan."}&rdquo;
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ReimbursementFormDetails({ item, numericAmount }: { readonly item: ApprovalItem; readonly numericAmount: number }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded text-xs">
+        <div>
+          <span className="font-bold text-slate-500 block uppercase text-[10px]">Divisi Pembebanan:</span>
+          <span className="font-bold text-slate-900">{item.reimbursement_divisi || "Operasional"}</span>
+        </div>
+        <div>
+          <span className="font-bold text-slate-500 block uppercase text-[10px]">Tujuan / Keperluan:</span>
+          <span className="font-bold text-slate-900">{item.reimbursement_tujuan || item.description || "Klaim Biaya"}</span>
+        </div>
+      </div>
+
+      <div className="border-2 border-black rounded-sm overflow-hidden">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-slate-200 font-bold text-black border-b-2 border-black">
+              <th className="p-2 border-r border-black w-10 text-center">No</th>
+              <th className="p-2 border-r border-black text-left px-3">Item Pengeluaran / Biaya</th>
+              <th className="p-2 border-r border-black text-left px-3">Keterangan / Kuitansi</th>
+              <th className="p-2 text-right px-3 w-36">Nominal (IDR)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {item.reimbursement_items && item.reimbursement_items.length > 0 ? (
+              item.reimbursement_items.map((r, idx) => (
+                <tr key={r.id ? `reim-${r.id}` : `reim-${r.item_name ?? ''}-${r.amount ?? ''}-${idx}`} className="border-b border-slate-300">
+                  <td className="p-2 border-r border-black text-center font-bold">{idx + 1}</td>
+                  <td className="p-2 border-r border-black px-3 font-semibold text-slate-900">{r.item_name || "Item Biaya"}</td>
+                  <td className="p-2 border-r border-black px-3 text-slate-600">{r.description || "-"}</td>
+                  <td className="p-2 px-3 text-right font-mono font-bold text-slate-900">
+                    {formatCurrency(r.amount || 0)}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr className="border-b border-slate-300">
+                <td className="p-2 border-r border-black text-center font-bold">1</td>
+                <td className="p-2 border-r border-black px-3 font-semibold">{item.category}</td>
+                <td className="p-2 border-r border-black px-3 text-slate-600">{item.description}</td>
+                <td className="p-2 px-3 text-right font-mono font-bold text-slate-900">
+                  {formatCurrency(numericAmount)}
+                </td>
+              </tr>
+            )}
+            <tr className="bg-emerald-50 font-black text-black border-t-2 border-black">
+              <td colSpan={3} className="p-2 border-r border-black text-right pr-4 uppercase tracking-wider text-[11px]">
+                TOTAL KLAIM KESELURUHAN
+              </td>
+              <td className="p-2 px-3 text-right font-mono text-sm text-emerald-800">
+                {formatCurrency(numericAmount)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {numericAmount > 0 && (
+        <div className="p-2.5 bg-slate-50 border border-slate-300 rounded text-xs flex items-center gap-2">
+          <span className="font-bold text-slate-600 uppercase text-[10px]">Terbilang:</span>
+          <span className="font-bold italic text-slate-900">{terbilang(numericAmount)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FundRequestFormDetails({ item, numericAmount }: { readonly item: ApprovalItem; readonly numericAmount: number }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded text-xs">
+        <div>
+          <span className="font-bold text-slate-500 block uppercase text-[10px]">Keperluan Dana:</span>
+          <span className="font-bold text-slate-900">{item.category || item.description}</span>
+        </div>
+        <div>
+          <span className="font-bold text-slate-500 block uppercase text-[10px]">Estimasi Total Dana:</span>
+          <span className="font-black text-slate-900 text-sm font-mono">{formatCurrency(numericAmount)}</span>
+        </div>
+      </div>
+
+      <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+        <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Rincian & Justifikasi Pengajuan:</p>
+        <p className="text-xs text-slate-800 leading-relaxed italic">
+          &ldquo;{item.description || "Pengajuan dana operasional perusahaan"}&rdquo;
+        </p>
+      </div>
+
+      {numericAmount > 0 && (
+        <div className="p-2.5 bg-slate-50 border border-slate-300 rounded text-xs flex items-center gap-2">
+          <span className="font-bold text-slate-600 uppercase text-[10px]">Terbilang:</span>
+          <span className="font-bold italic text-slate-900">{terbilang(numericAmount)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VehicleLogFormDetails({ item }: { readonly item: ApprovalItem }) {
+  return (
+    <div className="space-y-3">
+      <div className="border border-slate-300 rounded overflow-hidden">
+        <table className="w-full text-xs border-collapse">
+          <tbody>
+            <tr className="border-b border-slate-200">
+              <td className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200">Armada / Kendaraan</td>
+              <td className="p-2.5 font-black text-slate-900">
+                {item.vehicle_name || "Mobil Operasional"} 
+                {item.plate_number && <span className="ml-2 font-mono px-2 py-0.5 bg-slate-200 text-slate-800 rounded font-bold">({item.plate_number})</span>}
+              </td>
+            </tr>
+            <tr className="border-b border-slate-200">
+              <td className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200">Lokasi Tujuan</td>
+              <td className="p-2.5 font-semibold text-slate-900">{item.destination || item.category || "-"}</td>
+            </tr>
+            <tr className="border-b border-slate-200">
+              <td className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200">Odometer Berangkat</td>
+              <td className="p-2.5 font-mono font-bold text-slate-800">
+                {item.odometer_start ? `${item.odometer_start.toLocaleString()} KM` : "-"}
+              </td>
+            </tr>
+            <tr className="border-b border-slate-200">
+              <td className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200">Odometer Kembali</td>
+              <td className="p-2.5 font-mono font-bold text-slate-800">
+                {item.odometer_end ? `${item.odometer_end.toLocaleString()} KM` : "-"}
+              </td>
+            </tr>
+            {item.distance && (
+              <tr className="border-b border-slate-200 bg-indigo-50/50">
+                <td className="p-2.5 font-bold text-indigo-950 border-r border-slate-200">Total Jarak Tempuh</td>
+                <td className="p-2.5 font-mono font-black text-indigo-900">{item.distance} KM</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+        <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Keperluan Pemakaian Armada:</p>
+        <p className="text-xs text-slate-800 italic leading-relaxed">
+          &ldquo;{item.purpose || item.description || "Operasional dinas kantor"}&rdquo;
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function DinasLuarFormDetails({ item }: { readonly item: ApprovalItem }) {
+  return (
+    <div className="space-y-3">
+      <div className="border border-slate-300 rounded overflow-hidden">
+        <table className="w-full text-xs border-collapse">
+          <tbody>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Instansi / Lokasi Tujuan</th>
+              <td className="p-2.5 font-black text-slate-900">{item.dinas_luar_destination || item.category || "-"}</td>
+            </tr>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Check-In Tugas</th>
+              <td className="p-2.5 font-semibold text-slate-900">{item.start_date || "-"}</td>
+            </tr>
+            <tr>
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Check-Out Tugas</th>
+              <td className="p-2.5 font-semibold text-slate-900">{item.end_date || "-"}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+        <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Laporan / Catatan Pelaksanaan Tugas:</p>
+        <p className="text-xs text-slate-800 italic leading-relaxed">
+          &ldquo;{item.dinas_luar_notes || item.description || "Melaksanakan kunjungan dan instalasi teknis di lokasi klien."}&rdquo;
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function EarlyOutFormDetails({ item }: { readonly item: ApprovalItem }) {
+  return (
+    <div className="space-y-3">
+      <div className="border border-slate-300 rounded overflow-hidden">
+        <table className="w-full text-xs border-collapse">
+          <tbody>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Jenis Permohonan</th>
+              <td className="p-2.5 font-black text-slate-900">
+                <span className="px-2 py-0.5 bg-orange-100 text-orange-900 font-bold rounded mr-2 border border-orange-300">
+                  Izin Pulang Lebih Awal
+                </span>
+                <span>Pulang Sebelum Waktu Shift Berakhir</span>
+              </td>
+            </tr>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Masuk & Pulang</th>
+              <td className="p-2.5 font-semibold text-slate-900">
+                {item.start_date || "-"} <span className="text-slate-400 font-normal">s/d</span> {item.end_date || "-"}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Status Verifikasi</th>
+              <td className="p-2.5 font-bold">
+                <span className="text-orange-700">Menunggu Persetujuan Super Admin / HRD</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+        <p className="font-bold text-[11px] text-slate-700 uppercase mb-1">Alasan Pulang Lebih Awal:</p>
+        <p className="text-xs text-slate-800 italic leading-relaxed">
+          &ldquo;{item.description || "Meeting diluar sampai jam pulang sebenarnya"}&rdquo;
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function WebAttendanceFormDetails({ item }: { readonly item: ApprovalItem }) {
+  return (
+    <div className="space-y-3">
+      <div className="border border-slate-300 rounded overflow-hidden">
+        <table className="w-full text-xs border-collapse">
+          <tbody>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Metode Kehadiran</th>
+              <td className="p-2.5 font-black text-slate-900">
+                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-900 font-bold rounded mr-2 border border-indigo-300">
+                  Web Browser Check-In
+                </span>
+                <span>Validasi Berbasis Foto Selfie & Lokasi IP</span>
+              </td>
+            </tr>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Masuk</th>
+              <td className="p-2.5 font-bold text-slate-900">
+                {item.created_at ? new Date(item.created_at).toLocaleString("id-ID", { dateStyle: "full", timeStyle: "medium" }) : "-"}
+              </td>
+            </tr>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Alamat IP / Jaringan</th>
+              <td className="p-2.5 font-mono text-slate-800">
+                {item.ip_address || "127.0.0.1"}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Status Verifikasi</th>
+              <td className="p-2.5 font-bold">
+                <span className="text-amber-700">Menunggu Persetujuan Super Admin</span>
+                {item.is_suspicious && (
+                  <span className="ml-2 px-1.5 py-0.5 bg-rose-100 text-rose-800 rounded text-[10px] font-bold">
+                    Anomali Terdeteksi
+                  </span>
+                )}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {item.attachment && (
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded text-center">
+          <p className="font-bold text-[11px] text-slate-700 uppercase mb-2">Foto Selfie Presensi Web:</p>
+          <img 
+            src={item.attachment.startsWith("http") ? item.attachment : `/storage/${item.attachment.replace(/^\/?storage\//, "")}`}
+            alt="Selfie Presensi Web"
+            className="max-h-64 rounded-lg border border-slate-300 mx-auto object-cover shadow-sm"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getAttendanceCorrectionStatusBadge(status?: string) {
+  if (status === 'approved') {
+    return <span className="text-emerald-700">Disetujui</span>;
+  }
+  if (status === 'rejected') {
+    return <span className="text-rose-700">Ditolak</span>;
+  }
+  return <span className="text-amber-700">Menunggu Persetujuan</span>;
+}
+
+function AttendanceCorrectionFormDetails({ item }: { readonly item: ApprovalItem }) {
+  return (
+    <div className="space-y-3">
+      <div className="border border-slate-300 rounded overflow-hidden">
+        <table className="w-full text-xs border-collapse">
+          <tbody>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 w-44 border-r border-slate-200 text-left">Jenis Pengajuan</th>
+              <td className="p-2.5 font-black text-slate-900">
+                <span className="px-2 py-0.5 bg-cyan-100 text-cyan-900 font-bold rounded mr-2 border border-cyan-300">
+                  {item.category || "Koreksi Absensi"}
+                </span>
+                <span>{item.description || "-"}</span>
+              </td>
+            </tr>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Waktu Pelaksanaan</th>
+              <td className="p-2.5 font-bold text-slate-900">
+                {item.start_date || "-"}
+              </td>
+            </tr>
+            <tr className="border-b border-slate-200">
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Diajukan Pada</th>
+              <td className="p-2.5 font-medium text-slate-800">
+                {item.created_at ? new Date(item.created_at).toLocaleString("id-ID", { dateStyle: "full", timeStyle: "medium" }) : "-"}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" className="bg-slate-50 p-2.5 font-bold text-slate-700 border-r border-slate-200 text-left">Status Saat Ini</th>
+              <td className="p-2.5 font-bold">
+                {getAttendanceCorrectionStatusBadge(item.status)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function OfficialApprovalFormDetails({ item, numericAmount }: OfficialApprovalFormDetailsProps) {
+  switch (item.type) {
+    case "leave":
+      return <LeaveFormDetails item={item} />;
+    case "permit":
+      return <PermitFormDetails item={item} />;
+    case "overtime":
+      return <OvertimeFormDetails item={item} />;
+    case "reimbursement":
+      return <ReimbursementFormDetails item={item} numericAmount={numericAmount} />;
+    case "fund_request":
+      return <FundRequestFormDetails item={item} numericAmount={numericAmount} />;
+    case "vehicle_log":
+      return <VehicleLogFormDetails item={item} />;
+    case "dinas_luar":
+      return <DinasLuarFormDetails item={item} />;
+    case "early_out":
+      return <EarlyOutFormDetails item={item} />;
+    case "web_attendance":
+      return <WebAttendanceFormDetails item={item} />;
+    case "attendance_correction":
+      return <AttendanceCorrectionFormDetails item={item} />;
+    default:
+      return null;
+  }
 }
 
 interface WorkflowProgressBannerProps {
@@ -1102,11 +1138,14 @@ export default function OfficialApprovalDocumentSheet({
     globalThis.print();
   };
 
-  const formattedDate = new Date(item.created_at || Date.now()).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  const formattedDate = useMemo(() => {
+    if (!item.created_at) return "-";
+    return new Date(item.created_at).toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  }, [item.created_at]);
 
   const numericAmount = item.amount ? Number.parseFloat(item.amount) : 0;
 

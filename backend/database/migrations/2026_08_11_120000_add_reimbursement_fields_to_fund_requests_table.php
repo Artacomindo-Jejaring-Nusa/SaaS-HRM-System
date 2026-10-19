@@ -12,25 +12,25 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('fund_requests', function (Blueprint $table) {
-            if (!Schema::hasColumn('fund_requests', 'employee_name')) {
+            if (! Schema::hasColumn('fund_requests', 'employee_name')) {
                 $table->string('employee_name')->nullable()->after('user_id');
             }
-            if (!Schema::hasColumn('fund_requests', 'title')) {
+            if (! Schema::hasColumn('fund_requests', 'title')) {
                 $table->string('title')->nullable()->after('employee_name');
             }
-            if (!Schema::hasColumn('fund_requests', 'divisi')) {
+            if (! Schema::hasColumn('fund_requests', 'divisi')) {
                 $table->string('divisi')->nullable()->after('title');
             }
-            if (!Schema::hasColumn('fund_requests', 'tujuan')) {
+            if (! Schema::hasColumn('fund_requests', 'tujuan')) {
                 $table->string('tujuan')->nullable()->after('divisi');
             }
-            if (!Schema::hasColumn('fund_requests', 'priority')) {
+            if (! Schema::hasColumn('fund_requests', 'priority')) {
                 $table->string('priority')->default('Normal')->after('tujuan');
             }
-            if (!Schema::hasColumn('fund_requests', 'signature')) {
+            if (! Schema::hasColumn('fund_requests', 'signature')) {
                 $table->longText('signature')->nullable()->after('priority');
             }
-            if (!Schema::hasColumn('fund_requests', 'items')) {
+            if (! Schema::hasColumn('fund_requests', 'items')) {
                 $table->json('items')->nullable()->after('signature');
             }
         });

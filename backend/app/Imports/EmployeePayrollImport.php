@@ -4,6 +4,7 @@ namespace App\Imports;
 
 use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Hash;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 
@@ -43,6 +44,7 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
 
         if ($email === '' && $nik === '') {
             $this->skippedCount++;
+
             return null;
         }
 
@@ -77,7 +79,7 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
             'name' => $name,
             'email' => $email,
             'nik' => $nik !== '' ? $nik : null,
-            'password' => \Illuminate\Support\Facades\Hash::make('password123'),
+            'password' => Hash::make('password123'),
             'company_id' => $this->companyId,
             'role_id' => 3,
             'attendance_type' => 'office_hour',
@@ -102,18 +104,18 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
 
         foreach ($fields as $prefix => $config) {
             $val = $this->getValue($row, $prefix);
-            if ($val !== null && trim((string)$val) !== '') {
+            if ($val !== null && trim((string) $val) !== '') {
                 if ($config['type'] === 'float') {
                     // Clean currency format like 'Rp 5.000.000' or '5,000,000' or '5000000'
                     $cleanVal = preg_replace('/\D/', '', (string) $val);
                     $updateData[$config['key']] = (float) $cleanVal;
                 } else {
-                    $updateData[$config['key']] = trim((string)$val);
+                    $updateData[$config['key']] = trim((string) $val);
                 }
             }
         }
 
-        if (!empty($updateData)) {
+        if (! empty($updateData)) {
             $user->update($updateData);
             $this->updatedCount++;
         }
@@ -123,7 +125,7 @@ class EmployeePayrollImport implements ToCollection, WithHeadingRow
     {
         $keyPrefix = strtolower(trim($keyPrefix));
         foreach ($row as $key => $value) {
-            $normalizedKey = strtolower(trim((string)$key));
+            $normalizedKey = strtolower(trim((string) $key));
             if (str_starts_with($normalizedKey, $keyPrefix) || str_contains($normalizedKey, $keyPrefix)) {
                 return $value;
             }

@@ -20,21 +20,23 @@ class ManagerAttendanceService
             $q->whereDate('check_in', $date)->orderBy('id', 'desc');
         }]);
 
-        $this->scopeTeamQuery($query, $user, $isCompanyAdmin, $companyId);
+        $this->scopeTeamQuery($query, $user, $companyId);
 
         return $query->get()->map(fn ($sub) => $this->formatMemberAttendance($sub))->all();
     }
 
-    private function scopeTeamQuery($query, User $user, bool $isCompanyAdmin, ?string $companyId): void
+    private function scopeTeamQuery($query, User $user, ?string $companyId): void
     {
         if ($user->isSuperAdmin() || $user->canAccessAllCompanies()) {
             $this->scopeGlobalAdminQuery($query, $user, $companyId);
+
             return;
         }
 
         $allSubordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
-        if (!empty($allSubordinateIds)) {
+        if (! empty($allSubordinateIds)) {
             $query->whereIn('id', $allSubordinateIds);
+
             return;
         }
 
@@ -48,26 +50,14 @@ class ManagerAttendanceService
         if ($companyId && $companyId !== 'all') {
             $query->where(function ($q) use ($companyId) {
                 $q->where('company_id', $companyId)
-                  ->orWhereNull('company_id');
+                    ->orWhereNull('company_id');
             });
-        } elseif ($user->company_id && !$user->canAccessAllCompanies()) {
+        } elseif ($user->company_id && ! $user->canAccessAllCompanies()) {
             $query->where(function ($q) use ($user) {
                 $q->where('company_id', $user->company_id)
-                  ->orWhereNull('company_id');
+                    ->orWhereNull('company_id');
             });
         }
-    }
-
-    private function scopeCompanyAdminQuery($query, User $user, ?string $companyId): void
-    {
-        $comp = ($companyId && $companyId !== 'all') ? $companyId : $user->company_id;
-        if ($comp) {
-            $query->where(function ($q) use ($comp) {
-                $q->where('company_id', $comp)
-                  ->orWhereNull('company_id');
-            });
-        }
-        $query->where('id', '!=', $user->id);
     }
 
     private function formatMemberAttendance(User $sub): array

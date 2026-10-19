@@ -17,6 +17,7 @@ class ShiftSwapController extends Controller
     use Notifiable;
 
     private const ROLE_SUPER_ADMIN = 'Super Admin';
+
     private const ROUTE_SHIFT_SWAP = '/dashboard/shift-swap';
 
     public function index(Request $request)
@@ -28,15 +29,15 @@ class ShiftSwapController extends Controller
         $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
         if ($isSuperAdmin) {
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
-        } elseif (!empty($subordinateIds)) {
+        } elseif (! empty($subordinateIds)) {
             $query->where(function ($q) use ($user, $subordinateIds) {
                 $q->where('requester_id', $user->id)
-                  ->orWhere('receiver_id', $user->id)
-                  ->orWhereIn('requester_id', $subordinateIds)
-                  ->orWhereIn('receiver_id', $subordinateIds);
+                    ->orWhere('receiver_id', $user->id)
+                    ->orWhereIn('requester_id', $subordinateIds)
+                    ->orWhereIn('receiver_id', $subordinateIds);
             });
             if ($user->company_id) {
                 $query->where('company_id', $user->company_id);
@@ -44,7 +45,7 @@ class ShiftSwapController extends Controller
         } else {
             $query->where(function ($q) use ($user) {
                 $q->where('requester_id', $user->id)
-                  ->orWhere('receiver_id', $user->id);
+                    ->orWhere('receiver_id', $user->id);
             });
             if ($user->company_id) {
                 $query->where('company_id', $user->company_id);
@@ -173,15 +174,10 @@ class ShiftSwapController extends Controller
     public function approve(Request $request, $id)
     {
         $user = $request->user();
-        $isSuperAdmin = $user->hasRole(self::ROLE_SUPER_ADMIN) || $user->role_id === 1 || $user->canAccessAllCompanies();
         $swap = ShiftSwap::findOrFail($id);
 
-        if (!$isSuperAdmin) {
-            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
-            $hasSubordinateParty = in_array($swap->requester_id, $subordinateIds) || in_array($swap->receiver_id, $subordinateIds);
-            if (! $hasSubordinateParty || ! $user->hasPermission('approve-shift-swaps')) {
-                return response()->json(['status' => 'error', 'message' => 'Akses ditolak. Anda tidak memiliki izin untuk memproses tukar shift karyawan ini.'], 403);
-            }
+        if (! $this->authorizeApprove($user, $swap)) {
+            return response()->json(['status' => 'error', 'message' => 'Akses ditolak. Anda tidak memiliki izin untuk memproses tukar shift karyawan ini.'], 403);
         }
 
         $request->validate(['status' => 'required|in:approved,rejected']);
@@ -189,21 +185,8 @@ class ShiftSwapController extends Controller
         DB::beginTransaction();
         try {
             if ($request->status === 'approved') {
-                $swap->update([
-                    'status' => 'approved',
-                    'approved_by' => $user->id,
-                ]);
-
-                // PROSES SWAP: Tukar shift_id di tabel schedules
-                $reqSched = Schedule::find($swap->requester_schedule_id);
-                $resSched = Schedule::find($swap->receiver_schedule_id);
-
-                if ($reqSched && $resSched) {
-                    $tempShiftId = $reqSched->shift_id;
-                    $reqSched->update(['shift_id' => $resSched->shift_id]);
-                    $resSched->update(['shift_id' => $tempShiftId]);
-                }
-
+                $swap->update(['status' => 'approved', 'approved_by' => $user->id]);
+                $this->swapSchedules($swap);
                 $msg = 'Permintaan tukar shift telah disetujui. Jadwal sudah diperbarui.';
             } else {
                 $swap->update(['status' => 'rejected']);
@@ -212,18 +195,7 @@ class ShiftSwapController extends Controller
 
             DB::commit();
 
-            // Notify both parties
-            $this->notify($swap->requester, 'FINAL TUKAR SHIFT', $msg, $request->status === 'approved' ? 'success' : 'danger');
-            $this->notify($swap->receiver, 'FINAL TUKAR SHIFT', $msg, $request->status === 'approved' ? 'success' : 'danger');
-
-            $this->notifySuperAdmins(
-                $swap->company_id,
-                $request->status === 'approved' ? 'TUKAR SHIFT DISETUJUI' : 'TUKAR SHIFT DITOLAK',
-                "Permintaan tukar shift antara {$swap->requester->name} dan {$swap->receiver->name} telah ".($request->status === 'approved' ? 'DISETUJUI' : 'DITOLAK')." oleh {$user->name}.",
-                $request->status === 'approved' ? 'success' : 'danger',
-                self::ROUTE_SHIFT_SWAP,
-                $user->id
-            );
+            $this->sendSwapApprovalNotifications($swap, $user, $request->status, $msg);
 
             return response()->json(['status' => 'success', 'message' => $msg]);
 
@@ -232,6 +204,49 @@ class ShiftSwapController extends Controller
 
             return response()->json(['status' => 'error', 'message' => 'Gagal memproses swap: '.$e->getMessage()], 500);
         }
+    }
+
+    private function authorizeApprove(User $user, ShiftSwap $swap): bool
+    {
+        $isSuperAdmin = $user->hasRole(self::ROLE_SUPER_ADMIN) || $user->role_id === 1 || $user->canAccessAllCompanies();
+        if ($isSuperAdmin) {
+            return true;
+        }
+
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        $hasSubordinateParty = in_array($swap->requester_id, $subordinateIds) || in_array($swap->receiver_id, $subordinateIds);
+
+        return $hasSubordinateParty && $user->hasPermission('approve-shift-swaps');
+    }
+
+    private function swapSchedules(ShiftSwap $swap): void
+    {
+        $reqSched = Schedule::find($swap->requester_schedule_id);
+        $resSched = Schedule::find($swap->receiver_schedule_id);
+
+        if ($reqSched && $resSched) {
+            $tempShiftId = $reqSched->shift_id;
+            $reqSched->update(['shift_id' => $resSched->shift_id]);
+            $resSched->update(['shift_id' => $tempShiftId]);
+        }
+    }
+
+    private function sendSwapApprovalNotifications(ShiftSwap $swap, User $user, string $status, string $msg): void
+    {
+        $isApproved = $status === 'approved';
+        $notifType = $isApproved ? 'success' : 'danger';
+
+        $this->notify($swap->requester, 'FINAL TUKAR SHIFT', $msg, $notifType);
+        $this->notify($swap->receiver, 'FINAL TUKAR SHIFT', $msg, $notifType);
+
+        $this->notifySuperAdmins(
+            $swap->company_id,
+            $isApproved ? 'TUKAR SHIFT DISETUJUI' : 'TUKAR SHIFT DITOLAK',
+            "Permintaan tukar shift antara {$swap->requester->name} dan {$swap->receiver->name} telah ".($isApproved ? 'DISETUJUI' : 'DITOLAK')." oleh {$user->name}.",
+            $notifType,
+            self::ROUTE_SHIFT_SWAP,
+            $user->id
+        );
     }
 
     public function report(Request $request)

@@ -2,11 +2,10 @@
 
 import { useEffect, useState, useMemo } from "react";
 import axiosInstance from "@/lib/axios";
-import { downloadFile, sanitizeFileName } from "@/lib/downloadHelper";
 import { 
-  Plus, Search, Eye, Clock, FileDown, Trash2, Printer, 
-  ArrowLeft, CheckCircle2, XCircle, AlertCircle, Users, 
-  Calendar, Building2, UserCheck, UserX, MessageSquare, Briefcase
+  Plus, Search, Eye, Clock, Trash2, Printer, 
+  CheckCircle2, XCircle, AlertCircle, Users, 
+  Calendar, Building2, UserCheck, Briefcase
 } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,7 +23,7 @@ interface OvertimeItem {
 interface OvertimeRecord {
   id: number;
   title: string | null;
-  status: 'pending' | 'approved' | 'rejected' | 'draft' | string;
+  status: 'pending' | 'approved' | 'rejected' | 'draft';
   date?: string;
   start_time?: string;
   end_time?: string;
@@ -359,6 +358,10 @@ export default function OvertimesPage() {
     }
   };
 
+  const emptyTabMessage = activeTab === 'received'
+    ? 'Belum ada surat perintah lembur yang ditugaskan ke Anda saat ini.'
+    : 'Belum ada perintah lembur yang Anda tugaskan ke karyawan.';
+
   return (
     <div className="space-y-6">
       {/* Header section */}
@@ -507,9 +510,7 @@ export default function OvertimesPage() {
             </div>
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">Tidak ada perintah lembur</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {activeTab === 'received' 
-                ? 'Belum ada surat perintah lembur yang ditugaskan ke Anda saat ini.' 
-                : 'Belum ada perintah lembur yang Anda tugaskan ke karyawan.'}
+              {emptyTabMessage}
             </p>
           </div>
         ) : (
@@ -726,9 +727,9 @@ export default function OvertimesPage() {
             <form onSubmit={handleAssignOvertime} className="mt-5 space-y-4">
               {/* Target Selector Mode */}
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
                   Target Penerima Lembur
-                </label>
+                </span>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -791,10 +792,11 @@ export default function OvertimesPage() {
                     {filteredEmployeesForSelect.map(emp => {
                       const isSelected = selectedUserIds.includes(emp.id);
                       return (
-                        <div
+                        <button
+                          type="button"
                           key={emp.id}
                           onClick={() => toggleSelectUser(emp.id)}
-                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition ${
+                          className={`w-full text-left flex items-center justify-between p-2 rounded-lg cursor-pointer transition ${
                             isSelected ? 'bg-red-50/70 dark:bg-red-950/30' : 'hover:bg-gray-100/60 dark:hover:bg-gray-800'
                           }`}
                         >
@@ -810,17 +812,18 @@ export default function OvertimesPage() {
                               <div className="text-[10px] text-gray-400">{emp.role?.name || "Staff"}</div>
                             </div>
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
                 </div>
               ) : (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="assign-division-select" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                     Divisi / Role Penerima
                   </label>
                   <select
+                    id="assign-division-select"
                     value={selectedDivisionId}
                     onChange={(e) => setSelectedDivisionId(e.target.value)}
                     required
@@ -836,10 +839,11 @@ export default function OvertimesPage() {
 
               {/* Judul Perintah Lembur */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="assign-title-input" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   Judul Perintah Lembur <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="assign-title-input"
                   type="text"
                   required
                   placeholder="Contoh: Perbaikan Bug Server & Maintenance Database"
@@ -852,10 +856,11 @@ export default function OvertimesPage() {
               {/* Tanggal & Waktu */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="assign-date-input" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                     Tanggal Lembur <span className="text-red-500">*</span>
                   </label>
                   <input
+                    id="assign-date-input"
                     type="date"
                     required
                     value={formDate}
@@ -865,10 +870,11 @@ export default function OvertimesPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="assign-start-time-input" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                     Jam Mulai <span className="text-red-500">*</span>
                   </label>
                   <input
+                    id="assign-start-time-input"
                     type="time"
                     required
                     value={formStartTime}
@@ -878,10 +884,11 @@ export default function OvertimesPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="assign-end-time-input" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                     Jam Selesai <span className="text-red-500">*</span>
                   </label>
                   <input
+                    id="assign-end-time-input"
                     type="time"
                     required
                     value={formEndTime}
@@ -893,10 +900,11 @@ export default function OvertimesPage() {
 
               {/* Deskripsi Tugas Lembur */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="assign-reason-textarea" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   Rincian Tugas & Deskripsi Pekerjaan <span className="text-red-500">*</span>
                 </label>
                 <textarea
+                  id="assign-reason-textarea"
                   required
                   rows={3}
                   placeholder="Jelaskan secara spesifik instruksi pekerjaan lembur yang harus diselesaikan..."
@@ -940,15 +948,16 @@ export default function OvertimesPage() {
             </div>
 
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-              Anda akan menolak perintah lembur <strong>"{selectedOvertime.title}"</strong>. Mohon berikan alasan penolakan agar dapat ditinjau oleh atasan Anda.
+              Anda akan menolak perintah lembur <strong>&quot;{selectedOvertime.title}&quot;</strong>. Mohon berikan alasan penolakan agar dapat ditinjau oleh atasan Anda.
             </p>
 
             <form onSubmit={handleConfirmReject} className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="reject-reason-textarea" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   Alasan / Komentar Penolakan <span className="text-red-500">*</span>
                 </label>
                 <textarea
+                  id="reject-reason-textarea"
                   required
                   rows={3}
                   placeholder="Contoh: Mohon maaf ada keperluan keluarga mendesak / kondisi badan kurang fit..."
@@ -1077,7 +1086,7 @@ export default function OvertimesPage() {
               <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-700">
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={() => globalThis.print()}
                   className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-700"
                 >
                   <Printer className="w-3.5 h-3.5" />

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Company;
 use App\Models\Shift;
 use Illuminate\Http\Request;
 
@@ -35,7 +36,7 @@ class ShiftController extends Controller
             'end_time' => 'required',
         ]);
 
-        $companyId = $authUser->company_id ?? $request->company_id ?? \App\Models\Company::first()?->id;
+        $companyId = $authUser->company_id ?? $request->company_id ?? Company::first()?->id;
 
         $shift = Shift::create([
             'company_id' => $companyId,

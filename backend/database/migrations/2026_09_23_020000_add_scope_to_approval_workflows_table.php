@@ -24,15 +24,15 @@ return new class extends Migration
                 // If index already dropped, continue
             }
 
-            if (!Schema::hasColumn('approval_workflows', 'scope_type')) {
+            if (! Schema::hasColumn('approval_workflows', 'scope_type')) {
                 $table->string('scope_type', 30)->default('company')->after('category');
             }
 
-            if (!Schema::hasColumn('approval_workflows', 'scope_id')) {
+            if (! Schema::hasColumn('approval_workflows', 'scope_id')) {
                 $table->unsignedBigInteger('scope_id')->nullable()->after('scope_type');
             }
 
-            if (!Schema::hasColumn('approval_workflows', 'priority')) {
+            if (! Schema::hasColumn('approval_workflows', 'priority')) {
                 $table->integer('priority')->default(0)->after('scope_id');
             }
 
@@ -48,7 +48,8 @@ return new class extends Migration
         Schema::table('approval_workflows', function (Blueprint $table) {
             try {
                 $table->dropIndex('wf_company_module_scope_idx');
-            } catch (Throwable $e) {}
+            } catch (Throwable $e) {
+            }
 
             if (Schema::hasColumn('approval_workflows', 'priority')) {
                 $table->dropColumn('priority');
@@ -62,11 +63,13 @@ return new class extends Migration
 
             try {
                 $table->unique(['company_id', 'module_key'], 'approval_workflows_company_id_module_key_unique');
-            } catch (Throwable $e) {}
+            } catch (Throwable $e) {
+            }
 
             try {
                 $table->dropIndex('approval_workflows_company_id_fk_idx');
-            } catch (Throwable $e) {}
+            } catch (Throwable $e) {
+            }
         });
     }
 };

@@ -6,10 +6,10 @@ use App\Models\Attendance;
 use App\Models\Office;
 use App\Models\Schedule;
 use App\Models\User;
+use App\Support\SelfieImage;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Intervention\Image\Laravel\Facades\Image;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 trait HandlesAttendanceProcessing
 {
@@ -95,8 +95,10 @@ trait HandlesAttendanceProcessing
             if ($distance > ($assignedOffice->radius ?? 100)) {
                 return ['success' => false, 'message' => "Maaf, Anda berada di luar area kantor assigned Anda: {$assignedOffice->name} ({$distance} meter). Silakan mendekat ke lokasi kerja Anda!", 'status' => 400];
             }
+
             return ['success' => true, 'office' => $assignedOffice];
         }
+
         return null;
     }
 
@@ -112,8 +114,10 @@ trait HandlesAttendanceProcessing
             if ($distance > $radius) {
                 return ['success' => false, 'message' => "Maaf, Anda berada di luar area kantor manapun ({$distance} meter dari titik terdekat). Silakan mendekat ke kantor Anda!", 'status' => 400];
             }
+
             return ['success' => true, 'office' => null];
         }
+
         return ['success' => false, 'message' => 'Koordinat lokasi kantor belum diatur oleh Admin.', 'status' => 400];
     }
 
@@ -127,6 +131,7 @@ trait HandlesAttendanceProcessing
                 break;
             }
         }
+
         return $matchedOffice;
     }
 
@@ -183,7 +188,7 @@ trait HandlesAttendanceProcessing
         $file = null;
         if ($request->hasFile('image')) {
             $file = $request->file('image');
-        } elseif ($request->image instanceof \Symfony\Component\HttpFoundation\File\UploadedFile) {
+        } elseif ($request->image instanceof UploadedFile) {
             $file = $request->image;
         }
 
@@ -192,6 +197,7 @@ trait HandlesAttendanceProcessing
         }
 
         $imageName = "attendance/{$prefix}_".Str::random(40).'.jpg';
-        return \App\Support\SelfieImage::storeNormalized($file, $imageName);
+
+        return SelfieImage::storeNormalized($file, $imageName);
     }
 }

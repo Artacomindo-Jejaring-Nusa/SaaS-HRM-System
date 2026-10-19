@@ -16,12 +16,12 @@ return new class extends Migration
         });
 
         // Migrate old data to JSON array format
-        $reimbursements = \DB::table('reimbursements')->whereNotNull('attachment')->get();
+        $reimbursements = DB::table('reimbursements')->whereNotNull('attachment')->get();
         foreach ($reimbursements as $reimbursement) {
             $val = $reimbursement->attachment;
             // If not already a json array
             if (! str_starts_with($val, '[')) {
-                \DB::table('reimbursements')
+                DB::table('reimbursements')
                     ->where('id', $reimbursement->id)
                     ->update(['attachment' => json_encode([$val])]);
             }

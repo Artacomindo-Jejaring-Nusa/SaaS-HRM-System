@@ -8,6 +8,7 @@ use App\Services\ApprovalService;
 use App\Services\EmployeeQueryService;
 use App\Traits\Notifiable;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class LeaveController extends Controller
@@ -15,6 +16,7 @@ class LeaveController extends Controller
     use Notifiable;
 
     private const ARTICLE_PASAL_93 = 'Pasal 93 UU No. 13/2003';
+
     private const ARTICLE_KEBIJAKAN_PERUSAHAAN = 'Kebijakan Perusahaan';
 
     private const KEMNAKER_LEAVE_TYPES = [
@@ -34,7 +36,7 @@ class LeaveController extends Controller
         'Lainnya' => ['days' => 0, 'paid' => true, 'article' => self::ARTICLE_KEBIJAKAN_PERUSAHAAN, 'uses_quota' => true],
     ];
 
-    public function index(Request $request): \Illuminate\Http\JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $query = Leave::with(['user.supervisor', 'user.company', 'user.role', 'supervisorApprover', 'hrApprover']);
 
@@ -43,13 +45,13 @@ class LeaveController extends Controller
         $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
         if ($isSuperAdmin) {
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
-        } elseif (!empty($subordinateIds)) {
+        } elseif (! empty($subordinateIds)) {
             $query->where(function ($q) use ($user, $subordinateIds) {
                 $q->where('user_id', $user->id)
-                  ->orWhereIn('user_id', $subordinateIds);
+                    ->orWhereIn('user_id', $subordinateIds);
             });
             if ($user->company_id) {
                 $query->where('company_id', $user->company_id);
@@ -72,7 +74,7 @@ class LeaveController extends Controller
         ]);
     }
 
-    public function calendar(Request $request): \Illuminate\Http\JsonResponse
+    public function calendar(Request $request): JsonResponse
     {
         $query = Leave::with('user')->where('status', 'approved');
 
@@ -95,7 +97,7 @@ class LeaveController extends Controller
         return $this->successResponse($leaves, 'Data kalender cuti berhasil diambil.');
     }
 
-    public function store(Request $request): \Illuminate\Http\JsonResponse
+    public function store(Request $request): JsonResponse
     {
         $request->validate([
             'start_date' => 'required|date',
@@ -151,14 +153,14 @@ class LeaveController extends Controller
             // Dynamic workflow is active or auto-approved
             $leaveAttributes['status'] = $workflowResult['status'];
             $leaveAttributes['current_approval_step'] = $workflowResult['current_approval_step'];
-            
-            if (!empty($workflowResult['auto_approved'])) {
+
+            if (! empty($workflowResult['auto_approved'])) {
                 $leaveAttributes['remark'] = 'Disetujui otomatis (Alur persetujuan dinonaktifkan)';
             }
 
             $leave = Leave::create($leaveAttributes);
 
-            if (!empty($workflowResult['auto_approved'])) {
+            if (! empty($workflowResult['auto_approved'])) {
                 self::processLeaveApprovalDeduction();
                 $this->notify(
                     $user,
@@ -236,7 +238,7 @@ class LeaveController extends Controller
         $this->notifySuperAdmins(
             $companyId,
             'PERMOHONAN CUTI BARU',
-            "Karyawan {$user->name} mengajukan cuti ({$request->type}) untuk tanggal {$request->start_date} s/d {$request->end_date}." . ($request->reason ? " Alasan: {$request->reason}" : ''),
+            "Karyawan {$user->name} mengajukan cuti ({$request->type}) untuk tanggal {$request->start_date} s/d {$request->end_date}.".($request->reason ? " Alasan: {$request->reason}" : ''),
             'warning',
             self::ROUTE_APPROVALS,
             $user->id
@@ -246,14 +248,14 @@ class LeaveController extends Controller
         if ($isExpandUsed) {
             $user->update([
                 'leave_expand_last_month' => now()->toDateString(),
-                'leave_expand_used' => $user->leave_expand_used + 1
+                'leave_expand_used' => $user->leave_expand_used + 1,
             ]);
         }
 
         return $this->successResponse($leave, 'Permohonan cuti berhasil diajukan.', 201);
     }
 
-    public function approve(Request $request, $id): \Illuminate\Http\JsonResponse
+    public function approve(Request $request, $id): JsonResponse
     {
         $user = $request->user();
         $leave = Leave::where(function ($q) use ($user) {
@@ -269,7 +271,7 @@ class LeaveController extends Controller
         return $this->approveFallbackWorkflow($request, $leave, $user);
     }
 
-    private function approveDynamicWorkflow(Request $request, Leave $leave, $user): \Illuminate\Http\JsonResponse
+    private function approveDynamicWorkflow(Request $request, Leave $leave, $user): JsonResponse
     {
         $result = ApprovalService::processApproval(
             'leave', $leave->company_id, $user, $leave->user, $leave->current_approval_step, 'approve'
@@ -350,7 +352,7 @@ class LeaveController extends Controller
         return $this->successResponse(null, $msg);
     }
 
-    private function approveFallbackWorkflow(Request $request, Leave $leave, $user): \Illuminate\Http\JsonResponse
+    private function approveFallbackWorkflow(Request $request, Leave $leave, $user): JsonResponse
     {
         $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
         $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
@@ -371,7 +373,7 @@ class LeaveController extends Controller
     /**
      * Handle approval when leave is in pending_supervisor state.
      */
-    private function handlePendingSupervisorApproval(Request $request, Leave $leave, $user, bool $isSupervisor, bool $isHR): \Illuminate\Http\JsonResponse
+    private function handlePendingSupervisorApproval(Request $request, Leave $leave, $user, bool $isSupervisor, bool $isHR): JsonResponse
     {
         if (! $isSupervisor && ! $isHR) {
             return response()->json(['status' => 'error', 'message' => 'Anda tidak berhak.'], 403);
@@ -379,10 +381,10 @@ class LeaveController extends Controller
 
         if ($isSupervisor) {
             $leave->update([
-                'status'                => 'pending_hr',
-                'supervisor_approved_by'=> $user->id,
-                'supervisor_approved_at'=> now(),
-                'supervisor_remark'     => $request->remark,
+                'status' => 'pending_hr',
+                'supervisor_approved_by' => $user->id,
+                'supervisor_approved_at' => now(),
+                'supervisor_remark' => $request->remark,
             ]);
 
             $this->notify($leave->user, 'Cuti Disetujui Atasan', "Kabar baik, permohonan cuti Anda ({$leave->type}) telah disetujui oleh atasan langsung Anda. Saat ini pengajuan sedang diteruskan ke tim HRD untuk persetujuan akhir.", 'info');
@@ -401,11 +403,11 @@ class LeaveController extends Controller
 
         // HR overrides directly to approved
         $leave->update([
-            'status'                => 'approved',
-            'approved_by'           => $user->id,
-            'remark'                => $request->remark,
-            'supervisor_approved_by'=> $user->id,
-            'supervisor_approved_at'=> now(),
+            'status' => 'approved',
+            'approved_by' => $user->id,
+            'remark' => $request->remark,
+            'supervisor_approved_by' => $user->id,
+            'supervisor_approved_at' => now(),
         ]);
 
         return $this->finalizeLeaveApproval($leave);
@@ -414,16 +416,16 @@ class LeaveController extends Controller
     /**
      * Handle approval when leave is in pending_hr or pending state.
      */
-    private function handlePendingHrApproval(Request $request, Leave $leave, $user, bool $isHR): \Illuminate\Http\JsonResponse
+    private function handlePendingHrApproval(Request $request, Leave $leave, $user, bool $isHR): JsonResponse
     {
         if (! $isHR) {
             return response()->json(['status' => 'error', 'message' => 'Hanya HRD.'], 403);
         }
 
         $leave->update([
-            'status'     => 'approved',
-            'approved_by'=> $user->id,
-            'remark'     => $request->remark,
+            'status' => 'approved',
+            'approved_by' => $user->id,
+            'remark' => $request->remark,
         ]);
 
         return $this->finalizeLeaveApproval($leave);
@@ -432,7 +434,7 @@ class LeaveController extends Controller
     /**
      * Deduct annual leave balance and notify submitter after full approval.
      */
-    private function finalizeLeaveApproval(Leave $leave): \Illuminate\Http\JsonResponse
+    private function finalizeLeaveApproval(Leave $leave): JsonResponse
     {
         self::processLeaveApprovalDeduction();
 
@@ -490,7 +492,7 @@ class LeaveController extends Controller
         }
     }
 
-    public function reject(Request $request, $id): \Illuminate\Http\JsonResponse
+    public function reject(Request $request, $id): JsonResponse
     {
         $user = $request->user();
         $leave = Leave::findOrFail($id);
@@ -502,7 +504,7 @@ class LeaveController extends Controller
         return $this->rejectFallbackWorkflow($request, $leave, $user);
     }
 
-    private function rejectDynamicWorkflow(Request $request, Leave $leave, $user): \Illuminate\Http\JsonResponse
+    private function rejectDynamicWorkflow(Request $request, Leave $leave, $user): JsonResponse
     {
         $result = ApprovalService::processApproval(
             'leave', $leave->company_id, $user, $leave->user, $leave->current_approval_step, 'reject'
@@ -533,7 +535,7 @@ class LeaveController extends Controller
         $this->notifySuperAdmins(
             $leave->company_id,
             'PERMOHONAN CUTI DITOLAK',
-            "Permohonan cuti {$leave->user->name} ({$leave->type}) telah DITOLAK oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            "Permohonan cuti {$leave->user->name} ({$leave->type}) telah DITOLAK oleh {$user->name}.".($request->remark ? " Catatan: {$request->remark}" : ''),
             'danger',
             self::ROUTE_APPROVALS,
             $user->id
@@ -542,7 +544,7 @@ class LeaveController extends Controller
         return $this->successResponse(null, 'Permohonan cuti ditolak.');
     }
 
-    private function rejectFallbackWorkflow(Request $request, Leave $leave, $user): \Illuminate\Http\JsonResponse
+    private function rejectFallbackWorkflow(Request $request, Leave $leave, $user): JsonResponse
     {
         $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
         $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
@@ -578,7 +580,7 @@ class LeaveController extends Controller
         $this->notifySuperAdmins(
             $leave->company_id,
             'PERMOHONAN CUTI DITOLAK',
-            "Permohonan cuti {$leave->user->name} ({$leave->type}) telah DITOLAK oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            "Permohonan cuti {$leave->user->name} ({$leave->type}) telah DITOLAK oleh {$user->name}.".($request->remark ? " Catatan: {$request->remark}" : ''),
             'danger',
             self::ROUTE_APPROVALS,
             $user->id
@@ -587,13 +589,13 @@ class LeaveController extends Controller
         return $this->successResponse(null, 'Permohonan cuti ditolak.');
     }
 
-    public function update(Request $request, $id): \Illuminate\Http\JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
         $user = $request->user();
         $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
 
         $leave = Leave::where(function ($q) use ($user, $isSuperAdmin) {
-            if (!$isSuperAdmin && !$user->canAccessAllCompanies()) {
+            if (! $isSuperAdmin && ! $user->canAccessAllCompanies()) {
                 $q->where('company_id', $user->company_id);
             }
         })->findOrFail($id);
@@ -653,29 +655,29 @@ class LeaveController extends Controller
 
     private function checkLeaveUpdateAccess(Leave $leave, $user, bool $isSuperAdmin): ?string
     {
-        if (!$isSuperAdmin && $leave->user_id !== $user->id) {
+        if (! $isSuperAdmin && $leave->user_id !== $user->id) {
             return 'Anda tidak memiliki akses untuk mengubah pengajuan cuti ini.';
         }
 
-        if (!$isSuperAdmin && !in_array($leave->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
+        if (! $isSuperAdmin && ! in_array($leave->status, ['pending', 'pending_supervisor', 'pending_hr'])) {
             return 'Hanya permohonan cuti yang masih menunggu persetujuan yang bisa diubah.';
         }
 
         return null;
     }
 
-    public function destroy(Request $request, $id): \Illuminate\Http\JsonResponse
+    public function destroy(Request $request, $id): JsonResponse
     {
         $user = $request->user();
         $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
 
         $leave = Leave::with('user')->where(function ($q) use ($user, $isSuperAdmin) {
-            if (!$isSuperAdmin && !$user->canAccessAllCompanies()) {
+            if (! $isSuperAdmin && ! $user->canAccessAllCompanies()) {
                 $q->where('company_id', $user->company_id);
             }
         })->findOrFail($id);
 
-        if (!$isSuperAdmin && $leave->user_id !== $user->id) {
+        if (! $isSuperAdmin && $leave->user_id !== $user->id) {
             return $this->errorResponse('Anda tidak berhak menghapus pengajuan ini.', 403);
         }
 
@@ -695,7 +697,7 @@ class LeaveController extends Controller
         return $this->successResponse(null, 'Permohonan cuti berhasil dihapus.');
     }
 
-    public function getLeaveTypes(): \Illuminate\Http\JsonResponse
+    public function getLeaveTypes(): JsonResponse
     {
         return response()->json([
             'status' => 'success',

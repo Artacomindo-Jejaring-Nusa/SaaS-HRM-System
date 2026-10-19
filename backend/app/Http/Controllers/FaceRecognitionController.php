@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Services\FaceRecognitionService;
+use App\Support\SelfieImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -31,7 +32,7 @@ class FaceRecognitionController extends Controller
             'image_base64' => 'nullable|string',
         ]);
 
-        if (!$request->hasFile('image') && !$request->filled('image_base64')) {
+        if (! $request->hasFile('image') && ! $request->filled('image_base64')) {
             return $this->errorResponse('Foto wajah selfie pendaftaran wajib disertakan.', 422);
         }
 
@@ -48,8 +49,8 @@ class FaceRecognitionController extends Controller
         // 2. Simpan file foto pendaftaran
         $photoPath = null;
         if ($imageInput) {
-            $filename = 'face_' . $user->id . '_' . Str::random(10) . '.jpg';
-            $photoPath = \App\Support\SelfieImage::storeNormalized($imageInput, self::DIR_FACE_REGISTRATIONS . $filename);
+            $filename = 'face_'.$user->id.'_'.Str::random(10).'.jpg';
+            $photoPath = SelfieImage::storeNormalized($imageInput, self::DIR_FACE_REGISTRATIONS.$filename);
         }
 
         // 3. Update data User dengan status PENDING
@@ -100,7 +101,7 @@ class FaceRecognitionController extends Controller
         $query = User::query();
 
         // Multi-tenant check
-        if (Auth::user()->company_id && !Auth::user()->canAccessAllCompanies()) {
+        if (Auth::user()->company_id && ! Auth::user()->canAccessAllCompanies()) {
             $query->where('company_id', Auth::user()->company_id);
         }
 
@@ -122,7 +123,7 @@ class FaceRecognitionController extends Controller
                 'id', 'name', 'nik', 'email', 'company_id', 'office_id', 'role_id',
                 'profile_photo_path', 'face_registered_photo_path',
                 'face_status', 'face_rejection_reason',
-                'face_registered_at', 'face_approved_at', 'face_approved_by'
+                'face_registered_at', 'face_approved_at', 'face_approved_by',
             ])
             ->orderByRaw("FIELD(face_status, 'pending', 'rejected', 'approved', 'not_registered')")
             ->orderBy('face_registered_at', 'desc')
@@ -201,21 +202,21 @@ class FaceRecognitionController extends Controller
 
         $user = User::findOrFail($id);
 
-        if (!$request->hasFile('image') && !$request->filled('image_base64')) {
+        if (! $request->hasFile('image') && ! $request->filled('image_base64')) {
             return $this->errorResponse('Foto wajah pendaftaran wajib disertakan.', 422);
         }
 
         $imageInput = $request->hasFile('image') ? $request->file('image') : $request->input('image_base64');
         $extraction = $this->faceService->extractFaceEmbedding($imageInput);
 
-        if (!isset($extraction['success']) || !$extraction['success']) {
+        if (! isset($extraction['success']) || ! $extraction['success']) {
             return $this->errorResponse($extraction['message'] ?? 'Gagal mendeteksi wajah pada foto.', 422);
         }
 
         $photoPath = null;
         if ($imageInput) {
-            $filename = 'face_admin_' . $user->id . '_' . Str::random(10) . '.jpg';
-            $photoPath = \App\Support\SelfieImage::storeNormalized($imageInput, self::DIR_FACE_REGISTRATIONS . $filename);
+            $filename = 'face_admin_'.$user->id.'_'.Str::random(10).'.jpg';
+            $photoPath = SelfieImage::storeNormalized($imageInput, self::DIR_FACE_REGISTRATIONS.$filename);
         }
 
         $user->update([
@@ -299,7 +300,7 @@ class FaceRecognitionController extends Controller
         $error = null;
         $code = 422;
 
-        if (!isset($extraction['success']) || !$extraction['success']) {
+        if (! isset($extraction['success']) || ! $extraction['success']) {
             $error = $extraction['message'] ?? 'Gagal mendeteksi wajah pada foto. Pastikan wajah terlihat jelas dan pencahayaan cukup.';
         } elseif (isset($extraction['face_count']) && $extraction['face_count'] > 1) {
             // STRICT REGISTRATION: Pastikan HANYA 1 wajah yang terdeteksi
@@ -313,7 +314,7 @@ class FaceRecognitionController extends Controller
             }
         }
 
-        if (!$error && (empty($extraction['embedding']) || count($extraction['embedding']) !== 512)) {
+        if (! $error && (empty($extraction['embedding']) || count($extraction['embedding']) !== 512)) {
             $count = isset($extraction['embedding']) ? count($extraction['embedding']) : 0;
             $error = "Gagal menghasilkan representasi vektor wajah 512-d yang valid. (Dimensi diterima: {$count})";
             $code = 500;
@@ -332,7 +333,7 @@ class FaceRecognitionController extends Controller
     protected function authorizeAdminOrHrd()
     {
         $user = Auth::user();
-        if (!$user) {
+        if (! $user) {
             abort(401, 'Unauthenticated.');
         }
 

@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import axiosInstance from "@/lib/axios";
+import axios from "axios";
 import { 
   CreditCard, Download, Eye, Printer, Calendar, ArrowUpRight, 
-  ArrowDownRight, CheckCircle2, Building, User as UserIcon, 
-  FileText, ShieldCheck, Wallet, RefreshCw, X, AlertCircle, 
-  ChevronRight, Sparkles, Building2
+  ArrowDownRight, CheckCircle2, 
+  FileText, ShieldCheck, Wallet, RefreshCw, X
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -86,15 +86,15 @@ interface SalaryRecord {
   };
 }
 
-function parseAmount(val: any): number {
+function parseAmount(val: number | string | null | undefined): number {
   if (val === null || val === undefined) return 0;
-  if (typeof val === "number") return isNaN(val) ? 0 : val;
-  const cleaned = String(val).replace(/[^\d.-]/g, "");
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
+  if (typeof val === "number") return Number.isNaN(val) ? 0 : val;
+  const cleaned = String(val).replaceAll(/[^\d.-]/g, "");
+  const num = Number.parseFloat(cleaned);
+  return Number.isNaN(num) ? 0 : num;
 }
 
-function formatRupiah(val: any): string {
+function formatRupiah(val: number | string | null | undefined): string {
   const num = parseAmount(val);
   return Math.round(num).toLocaleString("id-ID");
 }
@@ -117,9 +117,10 @@ export default function MyPayrollSlipPage() {
       const res = await axiosInstance.get("/payroll/my-history");
       const list = res.data?.data || [];
       setSalaries(Array.isArray(list) ? list : []);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Gagal mengambil data slip gaji", err);
-      toast.error(err.response?.data?.message || "Gagal memuat daftar slip gaji Anda.");
+      const msg = axios.isAxiosError(err) ? err.response?.data?.message : undefined;
+      toast.error(msg || "Gagal memuat daftar slip gaji Anda.");
     } finally {
       setLoading(false);
     }
@@ -157,18 +158,19 @@ export default function MyPayrollSlipPage() {
         responseType: "blob",
       });
       const blob = new Blob([response.data], { type: "application/pdf" });
-      const url = window.URL.createObjectURL(blob);
+      const url = globalThis.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
       link.setAttribute("download", `Slip_Gaji_${user?.name || "Karyawan"}_${slip.month}_${slip.year}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(url);
+      globalThis.URL.revokeObjectURL(url);
       toast.success("Slip gaji berhasil diunduh.");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Gagal mengunduh slip PDF", err);
-      toast.error(err.response?.data?.message || "Gagal mengunduh slip gaji PDF.");
+      const msg = axios.isAxiosError(err) ? err.response?.data?.message : undefined;
+      toast.error(msg || "Gagal mengunduh slip gaji PDF.");
     } finally {
       setDownloadingId(null);
     }
@@ -190,7 +192,7 @@ export default function MyPayrollSlipPage() {
         setSelectedSlip(slip);
         setIsModalOpen(true);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Gagal membuka preview slip", err);
       // Fallback: open detail breakdown modal
       setSelectedSlip(slip);
@@ -202,14 +204,15 @@ export default function MyPayrollSlipPage() {
 
   const handlePrintPreview = () => {
     if (!htmlPreview) return;
-    const printWindow = window.open("", "_blank");
+    const blob = new Blob([htmlPreview], { type: "text/html" });
+    const url = globalThis.URL.createObjectURL(blob);
+    const printWindow = globalThis.open(url, "_blank");
     if (printWindow) {
-      printWindow.document.write(htmlPreview);
-      printWindow.document.close();
       printWindow.focus();
-      setTimeout(() => {
+      printWindow.onload = () => {
         printWindow.print();
-      }, 350);
+        globalThis.URL.revokeObjectURL(url);
+      };
     }
   };
 
@@ -288,6 +291,138 @@ export default function MyPayrollSlipPage() {
     });
 
     return list;
+  };
+
+  const renderTableSection = () => {
+    if (loading) {
+      return (
+        <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center">
+          <RefreshCw size={28} className="animate-spin text-slate-400 mb-3" />
+          <p className="text-sm font-bold text-slate-600">Memuat riwayat slip gaji...</p>
+        </div>
+      );
+    }
+
+    if (filteredSalaries.length === 0) {
+      return (
+        <div className="p-16 text-center text-slate-400">
+          <CreditCard size={44} className="mx-auto mb-3 opacity-30 text-slate-500" />
+          <p className="text-base font-black text-slate-700">Belum Ada Slip Gaji</p>
+          <p className="text-xs text-slate-400 font-medium max-w-sm mx-auto mt-1">
+            Slip gaji resmi Anda akan otomatis terbit di sini setelah diproses dan dibagikan oleh pihak HR/Finance.
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr className="bg-slate-50/80 border-b border-slate-200/80">
+              <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px]">
+                Periode Gaji
+              </th>
+              <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px]">
+                Gaji Pokok
+              </th>
+              <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px]">
+                Tunjangan
+              </th>
+              <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px]">
+                Potongan
+              </th>
+              <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px]">
+                Take Home Pay (THP)
+              </th>
+              <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px]">
+                Status
+              </th>
+              <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px] text-right">
+                Aksi
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filteredSalaries.map((slip) => {
+              const allowances = parseAmount(slip.total_earnings) - parseAmount(slip.basic_salary);
+              return (
+                <tr key={slip.id} className="hover:bg-slate-50/70 transition-colors">
+                  <td className="px-5 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 font-black text-xs shrink-0 border border-slate-200/60">
+                        <Calendar size={16} />
+                      </div>
+                      <div>
+                        <span className="font-black text-slate-900 text-sm block">
+                          {slip.month} {slip.year}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-semibold">
+                          {slip.department || user?.role?.name || "Karyawan"}
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-5 py-4 whitespace-nowrap font-bold text-slate-700">
+                    Rp {formatRupiah(slip.basic_salary)}
+                  </td>
+                  <td className="px-5 py-4 whitespace-nowrap font-bold text-emerald-600">
+                    +Rp {formatRupiah(allowances)}
+                  </td>
+                  <td className="px-5 py-4 whitespace-nowrap font-bold text-rose-600">
+                    -Rp {formatRupiah(slip.total_deductions)}
+                  </td>
+                  <td className="px-5 py-4 whitespace-nowrap font-black text-sm text-slate-900">
+                    <span className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200/80">
+                      Rp {formatRupiah(slip.net_salary)}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <CheckCircle2 size={12} className="text-emerald-600" />
+                      Dibayarkan
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 whitespace-nowrap text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => {
+                          setSelectedSlip(slip);
+                          setIsModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-black rounded-xl text-xs transition-colors"
+                        title="Lihat rincian kalkulasi"
+                      >
+                        <Eye size={13} />
+                        <span>Rincian</span>
+                      </button>
+
+                      <button
+                        onClick={() => handlePreviewSlip(slip)}
+                        disabled={previewingId === slip.id}
+                        className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
+                        title="Cetak / Preview Cetak"
+                      >
+                        <Printer size={15} className={previewingId === slip.id ? "animate-pulse" : ""} />
+                      </button>
+
+                      <button
+                        onClick={() => handleDownloadPdf(slip)}
+                        disabled={downloadingId === slip.id}
+                        className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-colors"
+                        title="Unduh Slip PDF Resmi"
+                      >
+                        <Download size={15} className={downloadingId === slip.id ? "animate-bounce" : ""} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
   };
 
   return (
@@ -418,8 +553,9 @@ export default function MyPayrollSlipPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-xs font-bold text-slate-500">Tahun:</label>
+            <label htmlFor="payroll-year-filter" className="text-xs font-bold text-slate-500">Tahun:</label>
             <select
+              id="payroll-year-filter"
               value={selectedYear}
               onChange={(e) => setSelectedYear(e.target.value)}
               className="h-9 px-3 text-xs font-bold bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-slate-400 transition-colors shadow-sm"
@@ -435,127 +571,7 @@ export default function MyPayrollSlipPage() {
         </div>
 
         {/* Table */}
-        {loading ? (
-          <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center">
-            <RefreshCw size={28} className="animate-spin text-slate-400 mb-3" />
-            <p className="text-sm font-bold text-slate-600">Memuat riwayat slip gaji...</p>
-          </div>
-        ) : filteredSalaries.length === 0 ? (
-          <div className="p-16 text-center text-slate-400">
-            <CreditCard size={44} className="mx-auto mb-3 opacity-30 text-slate-500" />
-            <p className="text-base font-black text-slate-700">Belum Ada Slip Gaji</p>
-            <p className="text-xs text-slate-400 font-medium max-w-sm mx-auto mt-1">
-              Slip gaji resmi Anda akan otomatis terbit di sini setelah diproses dan dibagikan oleh pihak HR/Finance.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200/80">
-                  <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px]">
-                    Periode Gaji
-                  </th>
-                  <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px]">
-                    Gaji Pokok
-                  </th>
-                  <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px]">
-                    Tunjangan
-                  </th>
-                  <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px]">
-                    Potongan
-                  </th>
-                  <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px]">
-                    Take Home Pay (THP)
-                  </th>
-                  <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px]">
-                    Status
-                  </th>
-                  <th className="px-5 py-4 font-black text-slate-500 uppercase tracking-widest text-[10px] text-right">
-                    Aksi
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredSalaries.map((slip) => {
-                  const allowances = parseAmount(slip.total_earnings) - parseAmount(slip.basic_salary);
-                  return (
-                    <tr key={slip.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-5 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 font-black text-xs shrink-0 border border-slate-200/60">
-                            <Calendar size={16} />
-                          </div>
-                          <div>
-                            <span className="font-black text-slate-900 text-sm block">
-                              {slip.month} {slip.year}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-semibold">
-                              {slip.department || user?.role?.name || "Karyawan"}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-5 py-4 whitespace-nowrap font-bold text-slate-700">
-                        Rp {formatRupiah(slip.basic_salary)}
-                      </td>
-                      <td className="px-5 py-4 whitespace-nowrap font-bold text-emerald-600">
-                        +Rp {formatRupiah(allowances)}
-                      </td>
-                      <td className="px-5 py-4 whitespace-nowrap font-bold text-rose-600">
-                        -Rp {formatRupiah(slip.total_deductions)}
-                      </td>
-                      <td className="px-5 py-4 whitespace-nowrap font-black text-sm text-slate-900">
-                        <span className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200/80">
-                          Rp {formatRupiah(slip.net_salary)}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <CheckCircle2 size={12} className="text-emerald-600" />
-                          Dibayarkan
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 whitespace-nowrap text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => {
-                              setSelectedSlip(slip);
-                              setIsModalOpen(true);
-                            }}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-black rounded-xl text-xs transition-colors"
-                            title="Lihat rincian kalkulasi"
-                          >
-                            <Eye size={13} />
-                            <span>Rincian</span>
-                          </button>
-                          
-                          <button
-                            onClick={() => handlePreviewSlip(slip)}
-                            disabled={previewingId === slip.id}
-                            className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
-                            title="Cetak / Preview Cetak"
-                          >
-                            <Printer size={15} className={previewingId === slip.id ? "animate-pulse" : ""} />
-                          </button>
-
-                          <button
-                            onClick={() => handleDownloadPdf(slip)}
-                            disabled={downloadingId === slip.id}
-                            className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-colors"
-                            title="Unduh Slip PDF Resmi"
-                          >
-                            <Download size={15} className={downloadingId === slip.id ? "animate-bounce" : ""} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {renderTableSection()}
       </div>
 
       {/* Modal 1: Rincian Slip Gaji (Interactive Breakdown Modal) */}
@@ -627,8 +643,8 @@ export default function MyPayrollSlipPage() {
                       <span className="font-black text-slate-900">Rp {formatRupiah(selectedSlip.basic_salary)}</span>
                     </div>
 
-                    {getAllowancesList(selectedSlip).map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between py-1 border-b border-slate-50">
+                    {getAllowancesList(selectedSlip).map((item) => (
+                      <div key={item.name} className="flex items-center justify-between py-1 border-b border-slate-50">
                         <span className="text-slate-600 font-medium">{item.name}</span>
                         <span className="font-bold text-slate-800">Rp {formatRupiah(item.amount)}</span>
                       </div>
@@ -657,8 +673,8 @@ export default function MyPayrollSlipPage() {
                         Tidak ada potongan pada periode ini.
                       </div>
                     ) : (
-                      getDeductionsList(selectedSlip).map((item, idx) => (
-                        <div key={idx} className="flex items-center justify-between py-1 border-b border-slate-50">
+                      getDeductionsList(selectedSlip).map((item) => (
+                        <div key={item.name} className="flex items-center justify-between py-1 border-b border-slate-50">
                           <span className="text-slate-600 font-medium">{item.name}</span>
                           <span className="font-bold text-rose-600">-Rp {formatRupiah(item.amount)}</span>
                         </div>

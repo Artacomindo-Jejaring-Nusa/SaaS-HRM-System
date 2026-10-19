@@ -2,26 +2,28 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\EmployeeLocationUpdated;
 use App\Exports\AttendanceExport;
+use App\Http\Requests\StoreAttendanceRequest;
 use App\Models\Attendance;
 use App\Models\EmployeeTrack;
-use App\Events\EmployeeLocationUpdated;
 use App\Models\Office;
 use App\Models\Schedule;
 use App\Models\User;
+use App\Services\EmployeeQueryService;
 use App\Traits\Notifiable;
-use App\Http\Requests\StoreAttendanceRequest;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 use Intervention\Image\Laravel\Facades\Image;
 use Maatwebsite\Excel\Facades\Excel;
 
 class AttendanceController extends Controller
 {
-    use Notifiable, \App\Traits\HandlesAttendanceDinasLuar, \App\Traits\HandlesAttendanceProcessing, \App\Traits\HandlesWebAttendance, \App\Traits\HandlesAttendanceSecurity;
+    use \App\Traits\HandlesAttendanceDinasLuar, \App\Traits\HandlesAttendanceProcessing, \App\Traits\HandlesAttendanceSecurity, \App\Traits\HandlesWebAttendance, Notifiable;
+
+    private const ROUTE_APPROVALS = '/dashboard/approvals';
 
     public function checkIn(StoreAttendanceRequest $request)
     {
@@ -53,13 +55,13 @@ class AttendanceController extends Controller
             }
         }
 
-        if (!$attendance && !$response) {
+        if (! $attendance && ! $response) {
             if ($securityError = $this->validateDeviceAndSecurity($user, $request)) {
                 $response = $this->errorResponse($securityError['message'], $securityError['code']);
             } elseif ($isDinasLuar) {
                 // Dinas Luar: skip geofence, but still requires selfie (validated by request rules)
                 $response = $this->processCheckIn($user, $request, null, $now, $today);
-            } elseif (!($geoResult = $this->validateGeofencing($user, $request))['success']) {
+            } elseif (! ($geoResult = $this->validateGeofencing($user, $request))['success']) {
                 $response = $this->errorResponse($geoResult['message'], $geoResult['status']);
             } else {
                 $response = $this->processCheckIn($user, $request, $geoResult['office'], $now, $today);
@@ -121,7 +123,7 @@ class AttendanceController extends Controller
                 'ABSENSI MANUAL BUTUH VALIDASI SUPER ADMIN',
                 "Karyawan {$user->name} melakukan absen masuk manual (wajah gagal) pada pukul {$now->format('H:i')} WIB. Catatan: \"{$bypassReason}\". Menunggu validasi Super Admin.",
                 'warning',
-                '/dashboard/approvals',
+                self::ROUTE_APPROVALS,
                 $user->id
             );
         }
@@ -138,7 +140,7 @@ class AttendanceController extends Controller
             ]);
             broadcast(new EmployeeLocationUpdated($track))->toOthers();
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Auto track on checkIn failed: '.$e->getMessage());
+            Log::warning('Auto track on checkIn failed: '.$e->getMessage());
         }
 
         if ($isDinasLuar) {
@@ -178,10 +180,10 @@ class AttendanceController extends Controller
             ->first();
 
         if ($schedule && $schedule->shift && $schedule->shift->end_time) {
-            $minCheckOutTime = Carbon::parse($today . ' ' . $schedule->shift->end_time);
+            $minCheckOutTime = Carbon::parse($today.' '.$schedule->shift->end_time);
         } else {
             $workEndTime = $user->office?->work_end_time ?? $user->company?->work_end_time ?? '17:00:00';
-            $minCheckOutTime = Carbon::parse($today . ' ' . $workEndTime);
+            $minCheckOutTime = Carbon::parse($today.' '.$workEndTime);
         }
 
         $isEarly = $now->lt($minCheckOutTime);
@@ -193,7 +195,7 @@ class AttendanceController extends Controller
             $diffMinutes = $now->diffInMinutes($minCheckOutTime);
             $hours = floor($diffMinutes / 60);
             $mins = $diffMinutes % 60;
-            $timeRemaining = ($hours > 0 ? $hours . ' jam ' : '') . $mins . ' menit';
+            $timeRemaining = ($hours > 0 ? $hours.' jam ' : '').$mins.' menit';
             $response = response()->json([
                 'status' => 'error',
                 'can_bypass' => true,
@@ -229,20 +231,20 @@ class AttendanceController extends Controller
         if ($isFaceBypass) {
             $bypassFaceReason = $request->input('bypass_reason', 'Verifikasi wajah gagal');
             $updateData['is_suspicious'] = true;
-            $updateData['suspicious_reason'] = trim(($attendance->suspicious_reason ?? '') . " | Tanpa verifikasi wajah saat pulang: {$bypassFaceReason}", ' |');
+            $updateData['suspicious_reason'] = trim(($attendance->suspicious_reason ?? '')." | Tanpa verifikasi wajah saat pulang: {$bypassFaceReason}", ' |');
             $updateData['web_approval_status'] = 'pending';
 
             $this->notifySuperAdmins(
                 $user->company_id,
                 'ABSEN KELUAR MANUAL BUTUH VALIDASI SUPER ADMIN',
-                "Karyawan {$user->name} melakukan absen keluar manual (wajah gagal) pada pukul " . now()->format('H:i') . " WIB. Catatan: \"{$bypassFaceReason}\". Menunggu validasi Super Admin.",
+                "Karyawan {$user->name} melakukan absen keluar manual (wajah gagal) pada pukul ".now()->format('H:i')." WIB. Catatan: \"{$bypassFaceReason}\". Menunggu validasi Super Admin.",
                 'warning',
-                '/dashboard/approvals',
+                self::ROUTE_APPROVALS,
                 $user->id
             );
         }
 
-        if ($isEarly && !empty($earlyOutReason)) {
+        if ($isEarly && ! empty($earlyOutReason)) {
             $this->applyEarlyOutData($updateData, $attendance, $earlyOutReason, $isAutoValidated, $minCheckOutTime);
         }
 
@@ -253,7 +255,7 @@ class AttendanceController extends Controller
         $scorePercent = $score !== null ? round($score * 100, 1) : null;
         $scoreText = $scorePercent !== null ? " (Kemiripan Wajah: {$scorePercent}%)" : '';
 
-        if ($isEarly && !empty($earlyOutReason)) {
+        if ($isEarly && ! empty($earlyOutReason)) {
             return $this->handleEarlyOutNotifications($attendance, $user, $earlyOutReason, $isAutoValidated, $scoreText);
         }
 
@@ -282,7 +284,7 @@ class AttendanceController extends Controller
             $updateData['early_out_status'] = 'pending';
             $updateData['is_suspicious'] = true;
             $schedEndTimeStr = $minCheckOutTime ? " ({$minCheckOutTime->format('H:i')} WIB)" : '';
-            $updateData['suspicious_reason'] = trim(($updateData['suspicious_reason'] ?? $attendance->suspicious_reason) . " | Pulang Awal{$schedEndTimeStr}: {$earlyOutReason}", ' |');
+            $updateData['suspicious_reason'] = trim(($updateData['suspicious_reason'] ?? $attendance->suspicious_reason)." | Pulang Awal{$schedEndTimeStr}: {$earlyOutReason}", ' |');
         }
     }
 
@@ -299,7 +301,7 @@ class AttendanceController extends Controller
             ]);
             broadcast(new EmployeeLocationUpdated($track))->toOthers();
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Auto track on checkOut failed: '.$e->getMessage());
+            Log::warning('Auto track on checkOut failed: '.$e->getMessage());
         }
     }
 
@@ -309,12 +311,13 @@ class AttendanceController extends Controller
             $this->notify(
                 $user,
                 'ABSEN PULANG AWAL DISETUJUI (AUTO-VALIDASI)',
-                "Anda telah berhasil absen keluar lebih awal pada pukul " . now()->format('H:i') . " WIB dengan Validasi Otomatis Aktif. Alasan: {$earlyOutReason}",
+                'Anda telah berhasil absen keluar lebih awal pada pukul '.now()->format('H:i')." WIB dengan Validasi Otomatis Aktif. Alasan: {$earlyOutReason}",
                 'success',
                 null,
                 'notif',
                 false
             );
+
             return $this->successResponse($attendance->fresh(), "Absen pulang awal berhasil dicatat & divalidasi otomatis (Fitur Auto-Validasi Aktif).{$scoreText}");
         }
 
@@ -322,24 +325,24 @@ class AttendanceController extends Controller
         $this->notifySuperAdmins(
             $user->company_id,
             'PERMOHONAN PULANG AWAL BUTUH PERSETUJUAN',
-            "Karyawan {$user->name} melakukan absen pulang lebih awal pada pukul " . now()->format('H:i') . " WIB. Alasan: \"{$earlyOutReason}\". Membutuhkan persetujuan Anda.",
+            "Karyawan {$user->name} melakukan absen pulang lebih awal pada pukul ".now()->format('H:i')." WIB. Alasan: \"{$earlyOutReason}\". Membutuhkan persetujuan Anda.",
             'warning',
-            '/dashboard/approvals',
+            self::ROUTE_APPROVALS,
             $user->id
         );
 
         $hrds = User::where('company_id', $user->company_id)
             ->where('id', '!=', $user->id)
-            ->whereHas('role', fn($r) => $r->where('name', 'like', '%hrd%'))
+            ->whereHas('role', fn ($r) => $r->where('name', 'like', '%hrd%'))
             ->get();
 
         foreach ($hrds as $hrd) {
             $this->notify(
                 $hrd,
                 'PERMOHONAN PULANG AWAL BUTUH PERSETUJUAN',
-                "Karyawan {$user->name} melakukan absen pulang lebih awal pada pukul " . now()->format('H:i') . " WIB. Alasan: \"{$earlyOutReason}\". Membutuhkan persetujuan Anda.",
+                "Karyawan {$user->name} melakukan absen pulang lebih awal pada pukul ".now()->format('H:i')." WIB. Alasan: \"{$earlyOutReason}\". Membutuhkan persetujuan Anda.",
                 'warning',
-                '/dashboard/approvals',
+                self::ROUTE_APPROVALS,
                 'notif',
                 false
             );
@@ -348,7 +351,7 @@ class AttendanceController extends Controller
         $this->notify(
             $user,
             'ABSEN PULANG AWAL TERCATAT (MENUNGGU PERSETUJUAN)',
-            "Absen keluar lebih awal Anda pada pukul " . now()->format('H:i') . " WIB telah dicatat dan sedang menunggu persetujuan Super Admin.",
+            'Absen keluar lebih awal Anda pada pukul '.now()->format('H:i').' WIB telah dicatat dan sedang menunggu persetujuan Super Admin.',
             'info',
             null,
             'notif',
@@ -388,41 +391,49 @@ class AttendanceController extends Controller
         $canViewReports = $isSuperAdmin || $user->hasPermission('view-reports');
         $scope = $request->input('scope');
 
-        // 1. Explicit Company/All Scope (used for Company Attendance Reports)
         if (($scope === 'company' || $scope === 'all') && $canViewReports) {
-            if ($request->company_id && $request->company_id !== 'all' && $isSuperAdmin) {
-                $query->where('company_id', $request->company_id);
-            } elseif ($user->company_id && !$user->canAccessAllCompanies()) {
-                $query->where('company_id', $user->company_id);
-            }
-            if ($request->filled('user_id')) {
-                $query->where('user_id', $request->user_id);
-            }
+            $this->applyCompanyScopeFilter($query, $user, $request, $isSuperAdmin);
             return;
         }
 
-        // 2. Explicit Team Scope (used for Supervisor Monitoring / Approvals)
         if ($scope === 'team') {
-            $subordinateIds = \App\Services\EmployeeQueryService::resolveSubordinateIds($user->id);
-            $query->whereIn('user_id', $subordinateIds);
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
-                $query->where('company_id', $user->company_id);
-            }
+            $this->applyTeamScopeFilter($query, $user);
             return;
         }
 
-        // 3. Explicit User Filter if authorized to view reports / super admin
         if ($request->filled('user_id') && $canViewReports) {
             $query->where('user_id', $request->user_id);
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
-                $query->where('company_id', $user->company_id);
-            }
+            $this->applyUserCompanyConstraint($query, $user);
             return;
         }
 
-        // 4. DEFAULT: Strictly isolate to the logged-in user's OWN attendance records
+        // DEFAULT: Strictly isolate to the logged-in user's OWN attendance records
         $query->where('user_id', $user->id);
-        if ($user->company_id && !$user->canAccessAllCompanies()) {
+        $this->applyUserCompanyConstraint($query, $user);
+    }
+
+    private function applyCompanyScopeFilter($query, User $user, Request $request, bool $isSuperAdmin): void
+    {
+        if ($request->company_id && $request->company_id !== 'all' && $isSuperAdmin) {
+            $query->where('company_id', $request->company_id);
+        } elseif ($user->company_id && ! $user->canAccessAllCompanies()) {
+            $query->where('company_id', $user->company_id);
+        }
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->user_id);
+        }
+    }
+
+    private function applyTeamScopeFilter($query, User $user): void
+    {
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        $query->whereIn('user_id', $subordinateIds);
+        $this->applyUserCompanyConstraint($query, $user);
+    }
+
+    private function applyUserCompanyConstraint($query, User $user): void
+    {
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
             $query->where('company_id', $user->company_id);
         }
     }
@@ -456,7 +467,7 @@ class AttendanceController extends Controller
             $search = $request->search;
             $query->whereHas('user', function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('email', 'like', "%{$search}%");
             });
         }
     }
@@ -590,4 +601,3 @@ class AttendanceController extends Controller
         return $this->successResponse($attendance, 'Data absensi berhasil dikoreksi.');
     }
 }
-

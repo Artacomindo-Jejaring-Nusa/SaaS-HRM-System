@@ -9,13 +9,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class Salary extends Model
 {
-    use BelongsToCompany, Auditable, EncryptsSensitiveFields;
+    use Auditable, BelongsToCompany, EncryptsSensitiveFields;
 
     protected array $encryptedFields = ['bank_account_no'];
 
     protected string $auditModule = 'payroll';
+
     protected array $auditMasked = ['bank_account_no', 'net_salary'];
+
     protected array $auditExclude = ['updated_at', 'created_at', 'details'];
+
     protected $fillable = [
         'user_id',
         'company_id',

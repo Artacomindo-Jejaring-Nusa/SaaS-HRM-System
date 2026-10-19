@@ -24,7 +24,7 @@ class EmployeeLocationUpdated implements ShouldBroadcastNow
         $this->track = $track->load([
             'user:id,name,nik,profile_photo_path,company_id,role_id,phone',
             'user.role:id,name',
-            'user.company:id,name'
+            'user.company:id,name',
         ]);
 
         if ($this->track->user) {

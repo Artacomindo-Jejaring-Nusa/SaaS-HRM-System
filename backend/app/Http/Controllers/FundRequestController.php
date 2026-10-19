@@ -9,15 +9,14 @@ use App\Services\EmployeeQueryService;
 use App\Traits\Notifiable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\File;
-use Intervention\Image\Laravel\Facades\Image;
 
 class FundRequestController extends Controller
 {
     use Notifiable;
 
     private const ROLE_HRD_MANAGER = 'HRD Manager';
+
     private const FUND_REQUEST_MSG_PREFIX = 'Pengajuan dana Anda sebesar Rp ';
 
     public function index(Request $request)
@@ -28,14 +27,14 @@ class FundRequestController extends Controller
         $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
         if ($isSuperAdmin) {
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
-        } elseif (!empty($subordinateIds)) {
+        } elseif (! empty($subordinateIds)) {
             $query->where(function ($q) use ($user, $subordinateIds) {
                 $q->where('user_id', $user->id)
-                  ->orWhere('supervisor_id', $user->id)
-                  ->orWhereIn('user_id', $subordinateIds);
+                    ->orWhere('supervisor_id', $user->id)
+                    ->orWhereIn('user_id', $subordinateIds);
             });
             if ($user->company_id) {
                 $query->where('company_id', $user->company_id);
@@ -101,7 +100,7 @@ class FundRequestController extends Controller
             'supervisor_id' => $user->supervisor_id,
             'status' => $workflowResult ? $workflowResult['status'] : 'pending',
             'current_approval_step' => $workflowResult['current_approval_step'] ?? null,
-            'approved_by' => (!empty($workflowResult['auto_approved'])) ? $user->id : null,
+            'approved_by' => (! empty($workflowResult['auto_approved'])) ? $user->id : null,
         ];
 
         $fundRequest = FundRequest::create($fundRequestData);
@@ -312,7 +311,7 @@ class FundRequestController extends Controller
             $this->notifySuperAdmins(
                 $fundRequest->company_id,
                 'PERMINTAAN DANA DITOLAK',
-                "Pengajuan dana {$fundRequest->user->name} sebesar Rp ".number_format($fundRequest->amount, 0, ',', '.')." telah DITOLAK oleh {$user->name}." . ($request->reject_reason ? " Alasan: {$request->reject_reason}" : ''),
+                "Pengajuan dana {$fundRequest->user->name} sebesar Rp ".number_format($fundRequest->amount, 0, ',', '.')." telah DITOLAK oleh {$user->name}.".($request->reject_reason ? " Alasan: {$request->reject_reason}" : ''),
                 'danger',
                 self::ROUTE_APPROVALS,
                 $user->id
@@ -347,7 +346,7 @@ class FundRequestController extends Controller
         $this->notifySuperAdmins(
             $fundRequest->company_id,
             'PERMINTAAN DANA DITOLAK',
-            "Pengajuan dana {$fundRequest->user->name} sebesar Rp ".number_format($fundRequest->amount, 0, ',', '.')." telah DITOLAK oleh {$user->name}." . ($request->reject_reason ? " Alasan: {$request->reject_reason}" : ''),
+            "Pengajuan dana {$fundRequest->user->name} sebesar Rp ".number_format($fundRequest->amount, 0, ',', '.')." telah DITOLAK oleh {$user->name}.".($request->reject_reason ? " Alasan: {$request->reject_reason}" : ''),
             'danger',
             self::ROUTE_APPROVALS,
             $user->id
@@ -363,11 +362,11 @@ class FundRequestController extends Controller
 
         $fundRequest = FundRequest::findOrFail($id);
 
-        if (!$isSuperAdmin && $fundRequest->user_id !== $user->id) {
+        if (! $isSuperAdmin && $fundRequest->user_id !== $user->id) {
             return response()->json(['status' => 'error', 'message' => 'Anda tidak memiliki akses untuk mengubah pengajuan dana ini.'], 403);
         }
 
-        if (!$isSuperAdmin && $fundRequest->status !== 'pending') {
+        if (! $isSuperAdmin && $fundRequest->status !== 'pending') {
             return response()->json(['status' => 'error', 'message' => 'Pengajuan yang sudah diproses tidak dapat diubah.'], 403);
         }
 
@@ -424,21 +423,21 @@ class FundRequestController extends Controller
 
         $fundRequest = FundRequest::with('user')->findOrFail($id);
 
-        if (!$isSuperAdmin && $fundRequest->user_id !== $user?->id) {
+        if (! $isSuperAdmin && $fundRequest->user_id !== $user?->id) {
             return response()->json(['status' => 'error', 'message' => 'Anda tidak memiliki hak untuk menghapus pengajuan dana ini.'], 403);
         }
 
-        if (!$isSuperAdmin && $fundRequest->status !== 'pending') {
+        if (! $isSuperAdmin && $fundRequest->status !== 'pending') {
             return response()->json(['status' => 'error', 'message' => 'Pengajuan yang sudah diproses tidak dapat dihapus.'], 403);
         }
 
         // Unlink storage file if exists
-        if (!empty($fundRequest->attachment) && Storage::disk('public')->exists($fundRequest->attachment)) {
+        if (! empty($fundRequest->attachment) && Storage::disk('public')->exists($fundRequest->attachment)) {
             Storage::disk('public')->delete($fundRequest->attachment);
         }
 
         $oldValues = $fundRequest->toArray();
-        $this->logActivity('DELETE_FUND_REQUEST', "Menghapus pengajuan dana #{$fundRequest->id} ({$fundRequest->title}) oleh " . ($fundRequest->user?->name ?? 'Karyawan'), $fundRequest, 'fund_requests', $oldValues, null);
+        $this->logActivity('DELETE_FUND_REQUEST', "Menghapus pengajuan dana #{$fundRequest->id} ({$fundRequest->title}) oleh ".($fundRequest->user?->name ?? 'Karyawan'), $fundRequest, 'fund_requests', $oldValues, null);
 
         $fundRequest->delete();
 
@@ -452,10 +451,11 @@ class FundRequestController extends Controller
         }
         if ($request->hasFile('attachments')) {
             $files = $request->file('attachments');
-            if (is_array($files) && !empty($files)) {
+            if (is_array($files) && ! empty($files)) {
                 return $files[0]->store('fund_requests', 'public');
             }
         }
+
         return null;
     }
 
@@ -467,7 +467,7 @@ class FundRequestController extends Controller
         }
 
         $amount = (float) ($request->amount ?? 0);
-        if (is_array($items) && !empty($items)) {
+        if (is_array($items) && ! empty($items)) {
             $calcTotal = 0;
             foreach ($items as $it) {
                 $qty = (float) ($it['qty'] ?? 1);
@@ -487,7 +487,7 @@ class FundRequestController extends Controller
         $formattedAmount = number_format($amount, 0, ',', '.');
 
         if ($workflowResult) {
-            if (!empty($workflowResult['auto_approved'])) {
+            if (! empty($workflowResult['auto_approved'])) {
                 $this->notify(
                     $user,
                     'PENGAJUAN DANA DISETUJUI OTOMATIS',
@@ -495,6 +495,7 @@ class FundRequestController extends Controller
                     'success',
                     self::ROUTE_APPROVALS
                 );
+
                 return;
             }
 

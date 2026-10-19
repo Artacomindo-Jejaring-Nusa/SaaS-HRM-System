@@ -5,10 +5,11 @@ namespace App\Models;
 use App\Traits\Auditable;
 use App\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Leave extends Model
 {
-    use BelongsToCompany, Auditable;
+    use Auditable, BelongsToCompany;
 
     protected $fillable = [
         'user_id', 'company_id', 'start_date', 'end_date',
@@ -19,17 +20,17 @@ class Leave extends Model
         'duration_days', 'is_paid', 'kemnaker_article',
     ];
 
-    public function user(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    public function supervisorApprover(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function supervisorApprover(): BelongsTo
     {
         return $this->belongsTo(User::class, 'supervisor_approved_by');
     }
 
-    public function hrApprover(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function hrApprover(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
     }

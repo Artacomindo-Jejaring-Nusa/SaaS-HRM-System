@@ -8,9 +8,7 @@ use App\Models\Office;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
-use App\Models\WorkflowStep;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class RealCompanySeeder extends Seeder
 {
@@ -236,7 +234,7 @@ class RealCompanySeeder extends Seeder
                     'fixed_allowance' => 500000,
                     'ptkp_status' => 'TK/0',
                     'bank_name' => 'BCA',
-                    'bank_account_no' => '00000' . $nik,
+                    'bank_account_no' => '00000'.$nik,
                     'cost_center' => 'PT. Artacomindotama',
                     'payroll_type' => 'monthly',
                 ], $extra)
@@ -567,6 +565,6 @@ class RealCompanySeeder extends Seeder
             }
         }
 
-        $this->command->info('✅ RealCompanySeeder: Created company, office, ' . User::count() . ' users, ' . Role::count() . ' roles, ' . ApprovalWorkflow::count() . ' workflows.');
+        $this->command->info('✅ RealCompanySeeder: Created company, office, '.User::count().' users, '.Role::count().' roles, '.ApprovalWorkflow::count().' workflows.');
     }
 }

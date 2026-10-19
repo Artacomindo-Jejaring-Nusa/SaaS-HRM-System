@@ -17,8 +17,11 @@ class ReimbursementController extends Controller
     use Notifiable;
 
     private const MSG_FORBIDDEN = 'Akses ditolak.';
+
     private const URL_DASHBOARD_REIMBURSEMENTS = '/dashboard/reimbursements';
+
     private const NOTIF_REIMBURSEMENT_APPROVED = 'REIMBURSEMENT DISETUJUI';
+
     private const NOTIF_REIMBURSEMENT_REJECTED = 'REIMBURSEMENT DITOLAK';
 
     public function index(Request $request)
@@ -30,13 +33,13 @@ class ReimbursementController extends Controller
         $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
 
         if ($isSuperAdmin) {
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
-        } elseif (!empty($subordinateIds)) {
+        } elseif (! empty($subordinateIds)) {
             $query->where(function ($q) use ($user, $subordinateIds) {
                 $q->where('user_id', $user->id)
-                  ->orWhereIn('user_id', $subordinateIds);
+                    ->orWhereIn('user_id', $subordinateIds);
             });
             if ($user->company_id) {
                 $query->where('company_id', $user->company_id);
@@ -57,7 +60,7 @@ class ReimbursementController extends Controller
     {
         if (is_string($request->items)) {
             $request->merge([
-                'items' => json_decode($request->items, true)
+                'items' => json_decode($request->items, true),
             ]);
         }
 
@@ -107,12 +110,13 @@ class ReimbursementController extends Controller
                 $paths[] = $path;
             }
         }
+
         return $paths;
     }
 
     private function createDynamicWorkflowReimbursement(array $workflowResult, $user, $companyId, Request $request, array $paths, $items): Reimbursement
     {
-        $isAutoApproved = !empty($workflowResult['auto_approved']);
+        $isAutoApproved = ! empty($workflowResult['auto_approved']);
         $reimbursement = Reimbursement::create([
             'company_id' => $companyId,
             'user_id' => $user->id,
@@ -135,7 +139,7 @@ class ReimbursementController extends Controller
             $this->notify(
                 $user,
                 'KLAIM REIMBURSEMENT DISETUJUI OTOMATIS',
-                "Klaim reimbursement Anda '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.')." telah DISETUJUI OTOMATIS karena alur persetujuan dinonaktifkan.",
+                "Klaim reimbursement Anda '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').' telah DISETUJUI OTOMATIS karena alur persetujuan dinonaktifkan.',
                 'success',
                 self::URL_DASHBOARD_REIMBURSEMENTS
             );
@@ -305,13 +309,13 @@ class ReimbursementController extends Controller
 
         // ── Fallback: Default logic ──
         $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
-        if (!$isSuperAdmin) {
+        if (! $isSuperAdmin) {
             $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
-            if (!in_array($reimbursement->user_id, $subordinateIds)) {
+            if (! in_array($reimbursement->user_id, $subordinateIds)) {
                 abort(403, 'Akses ditolak. Anda tidak memiliki wewenang untuk memproses klaim karyawan ini.');
             }
         }
-        abort_if(! $user->hasPermission('approve-reimbursements') && !$isSuperAdmin, 403, self::MSG_FORBIDDEN);
+        abort_if(! $user->hasPermission('approve-reimbursements') && ! $isSuperAdmin, 403, self::MSG_FORBIDDEN);
 
         $reimbursement->update([
             'status' => 'approved',
@@ -352,52 +356,18 @@ class ReimbursementController extends Controller
 
         // ── Dynamic Workflow Path ──
         if ($reimbursement->current_approval_step !== null) {
-            $result = ApprovalService::processApproval(
-                'reimbursement', $reimbursement->company_id, $user, $reimbursement->user, $reimbursement->current_approval_step, 'reject'
-            );
-
-            if ($result === null) {
-                return $this->errorResponse('Workflow tidak ditemukan.', 400);
-            }
-            if (isset($result['error'])) {
-                return $this->errorResponse($result['error'], 403);
-            }
-
-            $reimbursement->update([
-                'status' => 'rejected',
-                'current_approval_step' => null,
-                'remark' => $request->remark,
-            ]);
-
-            $msg = "Mohon maaf, klaim reimbursement Anda '{$reimbursement->title}' telah DITOLAK.";
-            if ($request->remark) {
-                $msg .= " Alasan: {$request->remark}";
-            }
-
-            $this->notify($reimbursement->user, self::NOTIF_REIMBURSEMENT_REJECTED, $msg, 'danger', self::URL_DASHBOARD_REIMBURSEMENTS);
-            $this->logActivity('REJECT_REIMBURSEMENT', "Menolak klaim '{$reimbursement->title}' dari {$reimbursement->user->name}", $reimbursement);
-
-            $this->notifySuperAdmins(
-                $reimbursement->company_id,
-                self::NOTIF_REIMBURSEMENT_REJECTED,
-                "Klaim reimbursement '{$reimbursement->title}' dari {$reimbursement->user->name} telah DITOLAK oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
-                'danger',
-                self::ROUTE_APPROVALS,
-                $user->id
-            );
-
-            return $this->successResponse($reimbursement, 'Klaim ditolak.');
+            return $this->handleDynamicReject($reimbursement, $request, $user);
         }
 
         // ── Fallback: Default logic ──
         $isSuperAdmin = $user->isSuperAdmin() || $user->role_id === 1 || $user->canAccessAllCompanies();
-        if (!$isSuperAdmin) {
+        if (! $isSuperAdmin) {
             $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
-            if (!in_array($reimbursement->user_id, $subordinateIds)) {
+            if (! in_array($reimbursement->user_id, $subordinateIds)) {
                 abort(403, 'Akses ditolak. Anda tidak memiliki wewenang untuk memproses klaim karyawan ini.');
             }
         }
-        abort_if(! $user->hasPermission('approve-reimbursements') && !$isSuperAdmin, 403, self::MSG_FORBIDDEN);
+        abort_if(! $user->hasPermission('approve-reimbursements') && ! $isSuperAdmin, 403, self::MSG_FORBIDDEN);
 
         $reimbursement->update([
             'status' => 'rejected',
@@ -422,10 +392,49 @@ class ReimbursementController extends Controller
         $this->notifySuperAdmins(
             $reimbursement->company_id,
             self::NOTIF_REIMBURSEMENT_REJECTED,
-            "Klaim reimbursement '{$reimbursement->title}' dari {$reimbursement->user->name} telah DITOLAK oleh {$request->user()->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            "Klaim reimbursement '{$reimbursement->title}' dari {$reimbursement->user->name} telah DITOLAK oleh {$request->user()->name}.".($request->remark ? " Catatan: {$request->remark}" : ''),
             'danger',
             self::ROUTE_APPROVALS,
             $request->user()->id
+        );
+
+        return $this->successResponse($reimbursement, 'Klaim ditolak.');
+    }
+
+    private function handleDynamicReject(Reimbursement $reimbursement, Request $request, User $user): JsonResponse
+    {
+        $result = ApprovalService::processApproval(
+            'reimbursement', $reimbursement->company_id, $user, $reimbursement->user, $reimbursement->current_approval_step, 'reject'
+        );
+
+        if ($result === null) {
+            return $this->errorResponse('Workflow tidak ditemukan.', 400);
+        }
+        if (isset($result['error'])) {
+            return $this->errorResponse($result['error'], 403);
+        }
+
+        $reimbursement->update([
+            'status' => 'rejected',
+            'current_approval_step' => null,
+            'remark' => $request->remark,
+        ]);
+
+        $msg = "Mohon maaf, klaim reimbursement Anda '{$reimbursement->title}' telah DITOLAK.";
+        if ($request->remark) {
+            $msg .= " Alasan: {$request->remark}";
+        }
+
+        $this->notify($reimbursement->user, self::NOTIF_REIMBURSEMENT_REJECTED, $msg, 'danger', self::URL_DASHBOARD_REIMBURSEMENTS);
+        $this->logActivity('REJECT_REIMBURSEMENT', "Menolak klaim '{$reimbursement->title}' dari {$reimbursement->user->name}", $reimbursement);
+
+        $this->notifySuperAdmins(
+            $reimbursement->company_id,
+            self::NOTIF_REIMBURSEMENT_REJECTED,
+            "Klaim reimbursement '{$reimbursement->title}' dari {$reimbursement->user->name} telah DITOLAK oleh {$user->name}.".($request->remark ? " Catatan: {$request->remark}" : ''),
+            'danger',
+            self::ROUTE_APPROVALS,
+            $user->id
         );
 
         return $this->successResponse($reimbursement, 'Klaim ditolak.');
@@ -436,7 +445,7 @@ class ReimbursementController extends Controller
         $reimbursement = Reimbursement::with('user')->findOrFail($id);
         $user = $request->user();
 
-        if (!$user->is_manager && $reimbursement->user_id !== $user->id) {
+        if (! $user->is_manager && $reimbursement->user_id !== $user->id) {
             abort(403, self::MSG_FORBIDDEN);
         }
 
@@ -449,7 +458,7 @@ class ReimbursementController extends Controller
         $isSuperAdmin = $user->role_id === 1 || ($user->role && strtolower($user->role->name) === 'super admin');
 
         $reimbursement = Reimbursement::where(function ($q) use ($user, $isSuperAdmin) {
-            if (!$isSuperAdmin && !$user->canAccessAllCompanies()) {
+            if (! $isSuperAdmin && ! $user->canAccessAllCompanies()) {
                 $q->where('company_id', $user->company_id);
             }
         })->findOrFail($id);
@@ -502,11 +511,11 @@ class ReimbursementController extends Controller
 
     private function validateReimbursementCanBeUpdated(Reimbursement $reimbursement, $user, bool $isSuperAdmin): ?string
     {
-        if (!$isSuperAdmin && $reimbursement->user_id !== $user->id) {
+        if (! $isSuperAdmin && $reimbursement->user_id !== $user->id) {
             return self::MSG_FORBIDDEN;
         }
 
-        if (!$isSuperAdmin && $reimbursement->status !== 'pending') {
+        if (! $isSuperAdmin && $reimbursement->status !== 'pending') {
             return 'Hanya klaim yang masih pending yang dapat diubah.';
         }
 
@@ -518,9 +527,10 @@ class ReimbursementController extends Controller
         if (is_array($attachment)) {
             return $attachment;
         }
-        if (!empty($attachment)) {
+        if (! empty($attachment)) {
             return [$attachment];
         }
+
         return [];
     }
 
@@ -536,6 +546,7 @@ class ReimbursementController extends Controller
             if ($error === self::MSG_FORBIDDEN) {
                 abort(403, self::MSG_FORBIDDEN);
             }
+
             return $this->errorResponse($error, 403);
         }
 
@@ -557,11 +568,11 @@ class ReimbursementController extends Controller
         $isOwner = $reimbursement->user_id === $user->id;
         $canDelete = $user->hasPermission('delete-reimbursements') || $user->hasPermission('approve-reimbursements');
 
-        if (!$isSuperAdmin && !$isOwner && !$canDelete) {
+        if (! $isSuperAdmin && ! $isOwner && ! $canDelete) {
             return self::MSG_FORBIDDEN;
         }
 
-        if (!$isSuperAdmin && $reimbursement->status !== 'pending') {
+        if (! $isSuperAdmin && $reimbursement->status !== 'pending') {
             return 'Klaim yang sudah diproses tidak bisa dihapus.';
         }
 

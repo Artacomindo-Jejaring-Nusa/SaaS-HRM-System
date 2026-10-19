@@ -100,7 +100,6 @@ export default function TasksPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showActivitiesModal, setShowActivitiesModal] = useState(false);
-  const [showActivitiesForm, setShowActivitiesForm] = useState(false);
   const [assignType, setAssignType] = useState<'users' | 'division'>('users');
 
   useEffect(() => {
@@ -125,7 +124,7 @@ export default function TasksPage() {
   useEffect(() => {
     if (user && echo) {
       const channelName = `notifications.${user.id}`;
-      echo.private(channelName).listen('NotificationCreated', (e: any) => {
+      echo.private(channelName).listen('NotificationCreated', () => {
         console.log("Real-time task refresh triggered");
         fetchTasks();
       });
@@ -226,7 +225,7 @@ export default function TasksPage() {
     try {
       await axiosInstance.post(`/tasks/${taskId}/status`, { status: newStatus });
       fetchTasks();
-    } catch (error) {
+    } catch {
       console.error("Failed to update status");
     }
   };
@@ -241,7 +240,7 @@ export default function TasksPage() {
             await axiosInstance.delete(`/tasks/${taskId}`);
             toast.success("Tugas berhasil dihapus");
             fetchTasks();
-          } catch (error) {
+          } catch {
             toast.error("Gagal menghapus tugas");
           }
         },

@@ -143,6 +143,7 @@ class DynamicPayrollEngine
             $anniversaryThisYear = $joinDate->copy()->year($startDate->year);
             if ($anniversaryThisYear->between($startDate, $endDate)) {
                 $yearsCompleted = $joinDate->diffInYears($anniversaryThisYear);
+
                 return $reqYears === 0 || $yearsCompleted >= $reqYears;
             }
         } catch (\Throwable) {

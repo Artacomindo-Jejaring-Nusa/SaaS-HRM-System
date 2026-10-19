@@ -71,7 +71,7 @@ class ApprovalTimelineService
 
         $workflow = ApprovalService::getWorkflow($moduleKey, (int) $companyId, $submitter);
         $step = $workflow?->steps()->where('step_number', $currentStep)->first();
-        if (!$step) {
+        if (! $step) {
             return null;
         }
 
@@ -92,7 +92,7 @@ class ApprovalTimelineService
         if ($submitter->supervisor_id) {
             $spv = User::find($submitter->supervisor_id);
             if ($spv) {
-                $approverName = $spv->name . ' (Atasan Langsung)';
+                $approverName = $spv->name.' (Atasan Langsung)';
             }
         }
 
@@ -108,18 +108,18 @@ class ApprovalTimelineService
             'current_step' => 1,
             'total_steps' => 1,
             'status' => $status,
-            'current_step_label' => 'Tahap 1: ' . $approverName,
+            'current_step_label' => 'Tahap 1: '.$approverName,
             'steps' => [
                 [
                     'step_number' => 1,
                     'name' => 'Persetujuan Atasan / HRD',
-                    'label' => 'Otorisasi ' . $approverName,
+                    'label' => 'Otorisasi '.$approverName,
                     'approver_type' => 'supervisor',
                     'approver_candidates' => [$approverName],
                     'status' => $stepStatus,
                     'is_current' => $stepStatus === 'pending',
                     'remark' => $remark,
-                ]
+                ],
             ],
         ];
     }
@@ -129,7 +129,7 @@ class ApprovalTimelineService
         $approverCandidates = [];
         $approverUsers = ApprovalService::getApproversForStep($st, $submitter, $companyId);
         foreach ($approverUsers as $u) {
-            $approverCandidates[] = $u->name . ($u->role ? ' (' . $u->role->name . ')' : '');
+            $approverCandidates[] = $u->name.($u->role ? ' ('.$u->role->name.')' : '');
         }
 
         if (empty($approverCandidates)) {
@@ -168,7 +168,7 @@ class ApprovalTimelineService
             return 'Disetujui Sepenuhnya';
         }
         if ($status === 'rejected') {
-            return 'Ditolak pada ' . $currentLabel;
+            return 'Ditolak pada '.$currentLabel;
         }
 
         return "Tahap {$activeStepNumber} dari {$totalSteps}: {$currentLabel}";

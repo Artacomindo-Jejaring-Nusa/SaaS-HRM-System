@@ -2,8 +2,9 @@
 
 namespace App\Traits;
 
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Crypt;
 
 /**
  * EncryptsSensitiveFields Trait
@@ -16,7 +17,7 @@ use Illuminate\Contracts\Encryption\DecryptException;
  * Example:
  *   protected array $encryptedFields = ['ktp_no', 'bank_account_no'];
  *
- * @mixin \Illuminate\Database\Eloquent\Model
+ * @mixin Model
  */
 trait EncryptsSensitiveFields
 {
@@ -28,7 +29,7 @@ trait EncryptsSensitiveFields
         // Encrypt before saving to database
         if (method_exists(static::class, 'saving')) {
             call_user_func([static::class, 'saving'], function ($model) {
-                /** @var \Illuminate\Database\Eloquent\Model|\App\Traits\EncryptsSensitiveFields $model */
+                /** @var Model|EncryptsSensitiveFields $model */
                 $model->encryptSensitiveFields();
             });
         }
@@ -36,7 +37,7 @@ trait EncryptsSensitiveFields
         // Decrypt after retrieving from database
         if (method_exists(static::class, 'retrieved')) {
             call_user_func([static::class, 'retrieved'], function ($model) {
-                /** @var \Illuminate\Database\Eloquent\Model|\App\Traits\EncryptsSensitiveFields $model */
+                /** @var Model|EncryptsSensitiveFields $model */
                 $model->decryptSensitiveFields();
             });
         }
@@ -51,7 +52,7 @@ trait EncryptsSensitiveFields
             if (isset($this->attributes[$field]) && $this->attributes[$field] !== null) {
                 $value = $this->attributes[$field];
                 // Don't double-encrypt: if the value is already encrypted, skip
-                if (!self::isEncrypted($value)) {
+                if (! self::isEncrypted($value)) {
                     $this->attributes[$field] = Crypt::encryptString($value);
                 }
             }
@@ -88,7 +89,7 @@ trait EncryptsSensitiveFields
      */
     protected static function isEncrypted(mixed $value): bool
     {
-        if (!is_string($value) || strlen($value) < 50) {
+        if (! is_string($value) || strlen($value) < 50) {
             return false;
         }
 
@@ -98,6 +99,7 @@ trait EncryptsSensitiveFields
         }
 
         $json = json_decode($decoded, true);
+
         return is_array($json) && isset($json['iv'], $json['value'], $json['mac']);
     }
 }

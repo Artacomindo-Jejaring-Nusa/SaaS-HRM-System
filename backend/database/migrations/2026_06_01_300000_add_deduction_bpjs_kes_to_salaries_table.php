@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('salaries', function (Blueprint $table) {
-            if (!Schema::hasColumn('salaries', 'deduction_bpjs_kes')) {
+            if (! Schema::hasColumn('salaries', 'deduction_bpjs_kes')) {
                 $table->decimal('deduction_bpjs_kes', 15, 2)->default(0)->after('deduction_bpjs_jp');
             }
         });

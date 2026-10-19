@@ -2,7 +2,10 @@
 
 namespace App\Http\Requests;
 
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 
 class StoreAttendanceRequest extends FormRequest
 {
@@ -31,10 +34,10 @@ class StoreAttendanceRequest extends FormRequest
                 $tempFile = tempnam(sys_get_temp_dir(), 'selfie_');
                 file_put_contents($tempFile, $imageBase64);
 
-                $file = new \Illuminate\Http\UploadedFile(
+                $file = new UploadedFile(
                     $tempFile,
-                    'selfie.' . $imageType,
-                    'image/' . $imageType,
+                    'selfie.'.$imageType,
+                    'image/'.$imageType,
                     null,
                     true
                 );
@@ -42,7 +45,7 @@ class StoreAttendanceRequest extends FormRequest
                 $this->merge(['image' => $file]);
                 $this->files->set('image', $file);
             } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::error('Base64 image conversion failed: ' . $e->getMessage());
+                Log::error('Base64 image conversion failed: '.$e->getMessage());
                 // Set image to null so validation passes (image is nullable)
                 $this->merge(['image' => null]);
             }
@@ -77,9 +80,9 @@ class StoreAttendanceRequest extends FormRequest
         ];
     }
 
-    protected function failedValidation(\Illuminate\Contracts\Validation\Validator $validator)
+    protected function failedValidation(Validator $validator)
     {
-        \Illuminate\Support\Facades\Log::error('Validation Failed Details: ' . json_encode($validator->errors()->toArray()));
+        Log::error('Validation Failed Details: '.json_encode($validator->errors()->toArray()));
         parent::failedValidation($validator);
     }
 }

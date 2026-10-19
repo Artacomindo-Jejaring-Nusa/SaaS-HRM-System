@@ -13,7 +13,7 @@ return new class extends Migration
     {
         if (Schema::hasTable('payroll_batches')) {
             Schema::table('payroll_batches', function (Blueprint $table) {
-                if (!Schema::hasColumn('payroll_batches', 'current_approval_step')) {
+                if (! Schema::hasColumn('payroll_batches', 'current_approval_step')) {
                     $table->unsignedInteger('current_approval_step')->nullable()->after('status');
                 }
             });

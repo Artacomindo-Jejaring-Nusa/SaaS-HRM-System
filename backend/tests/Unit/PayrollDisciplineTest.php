@@ -7,7 +7,6 @@ use App\Models\PayrollSetting;
 use App\Models\Schedule;
 use App\Models\Shift;
 use App\Services\PayrollService;
-use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Tests\TestCase;
 
@@ -18,7 +17,7 @@ class PayrollDisciplineTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->service = new PayrollService();
+        $this->service = new PayrollService;
     }
 
     public function test_late_deduction_calculation_with_custom_tiers(): void
@@ -48,7 +47,7 @@ class PayrollDisciplineTest extends TestCase
 
         $attendances = new Collection([$att1, $att2, $att3]);
         $shift = new Shift(['start_time' => '09:00:00']);
-        $schedule = new Schedule();
+        $schedule = new Schedule;
         $schedule->setRelation('shift', $shift);
         $schedulesMap = [
             '2026-09-01' => $schedule,

@@ -9,13 +9,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            if (!Schema::hasColumn('users', 'is_tracking_enabled')) {
+            if (! Schema::hasColumn('users', 'is_tracking_enabled')) {
                 $table->boolean('is_tracking_enabled')->default(true)->after('attendance_type');
             }
         });
 
         Schema::table('roles', function (Blueprint $table) {
-            if (!Schema::hasColumn('roles', 'is_tracking_enabled')) {
+            if (! Schema::hasColumn('roles', 'is_tracking_enabled')) {
                 $table->boolean('is_tracking_enabled')->default(true)->after('name');
             }
         });

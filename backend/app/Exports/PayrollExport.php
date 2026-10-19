@@ -89,10 +89,10 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
         $isArtacomindo = str_contains($cc, 'artacomindo');
         $isNarwasthu = str_contains($cc, 'narwastu') || str_contains($cc, 'narwasthu');
 
-        $artacomindoVal = $isArtacomindo ? "=W{$row}" : "";
-        $narwasthuVal = $isNarwasthu ? "=W{$row}" : "";
+        $artacomindoVal = $isArtacomindo ? "=W{$row}" : '';
+        $narwasthuVal = $isNarwasthu ? "=W{$row}" : '';
         // If not matching specific sub-entities, assign to primary column so THP is always fully accounted for
-        $ajnusaVal = (! $isArtacomindo && ! $isNarwasthu) ? "=W{$row}" : "";
+        $ajnusaVal = (! $isArtacomindo && ! $isNarwasthu) ? "=W{$row}" : '';
 
         return [
             $this->rowNumber,
@@ -229,7 +229,6 @@ class PayrollExport implements FromCollection, WithDrawings, WithHeadings, WithM
         if (! $signaturePath) {
             return [];
         }
-
 
         $count = $this->collection()->count();
         $lastRow = $count + 3; // rows 1, 2, 3 are headers

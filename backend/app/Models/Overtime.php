@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Overtime extends Model
 {
-    use BelongsToCompany, Auditable;
+    use Auditable, BelongsToCompany;
 
     protected $fillable = [
         'user_id',
@@ -59,4 +59,3 @@ class Overtime extends Model
         return $this->hasMany(OvertimeItem::class);
     }
 }
-

@@ -2,8 +2,8 @@
 
 namespace Tests\Unit;
 
-use App\Models\Overtime;
 use App\Models\Company;
+use App\Models\Overtime;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;

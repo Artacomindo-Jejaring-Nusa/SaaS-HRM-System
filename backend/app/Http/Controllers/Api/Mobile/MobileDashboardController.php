@@ -92,6 +92,7 @@ class MobileDashboardController extends Controller
             ->map(function ($emp) use ($todayObj) {
                 $dob = Carbon::parse($emp->date_of_birth);
                 $birthdayThisYear = Carbon::createFromDate($todayObj->year, $dob->month, $dob->day)->startOfDay();
+
                 return [
                     'id' => $emp->id,
                     'name' => $emp->name,

@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\AttendanceController;
-use App\Http\Resources\Mobile\AttendanceResource;
 use App\Http\Requests\StoreAttendanceRequest;
+use App\Http\Resources\Mobile\AttendanceResource;
 use App\Models\Attendance;
 use Carbon\Carbon;
 use Illuminate\Http\Request;

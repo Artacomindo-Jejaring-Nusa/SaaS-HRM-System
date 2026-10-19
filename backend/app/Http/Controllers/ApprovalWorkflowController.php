@@ -3,24 +3,25 @@
 namespace App\Http\Controllers;
 
 use App\Models\ApprovalWorkflow;
+use App\Models\AttendanceCorrection;
 use App\Models\Company;
-use App\Models\Role;
-use App\Models\User;
-use App\Models\Task;
+use App\Models\FundRequest;
 use App\Models\Leave;
 use App\Models\Overtime;
+use App\Models\PayrollBatch;
 use App\Models\Permit;
 use App\Models\Reimbursement;
-use App\Models\FundRequest;
-use App\Models\AttendanceCorrection;
+use App\Models\Role;
+use App\Models\Salary;
 use App\Models\ShiftSwap;
+use App\Models\Task;
+use App\Models\User;
 use App\Models\VehicleLog;
 use App\Services\ApprovalService;
+use App\Traits\HandlesApprovalWorkflowHelpers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-
-use App\Traits\HandlesApprovalWorkflowHelpers;
 
 class ApprovalWorkflowController extends Controller
 {
@@ -53,7 +54,7 @@ class ApprovalWorkflowController extends Controller
         if (is_numeric($idOrModuleKey)) {
             $workflow = $query->where('id', $idOrModuleKey)->first();
         } else {
-            if ($request->has('workflow_id') && !empty($request->workflow_id)) {
+            if ($request->has('workflow_id') && ! empty($request->workflow_id)) {
                 $workflow = (clone $query)->where('id', $request->workflow_id)->first();
             } else {
                 $workflow = (clone $query)->where('module_key', $idOrModuleKey)
@@ -66,6 +67,7 @@ class ApprovalWorkflowController extends Controller
             if (! is_numeric($idOrModuleKey) && array_key_exists($idOrModuleKey, ApprovalService::SYSTEM_MODULES)) {
                 $meta = ApprovalService::SYSTEM_MODULES[$idOrModuleKey];
                 $defaultSteps = $this->getDefaultStepsForModule($idOrModuleKey);
+
                 return $this->successResponse([
                     'id' => null,
                     'company_id' => $companyId,
@@ -588,7 +590,7 @@ class ApprovalWorkflowController extends Controller
                 break;
 
             case 'payroll':
-                $item = \App\Models\PayrollBatch::findOrFail($request->target_id);
+                $item = PayrollBatch::findOrFail($request->target_id);
                 $payrollStatus = $action === 'approve' ? 'approved' : 'rejected';
                 $item->update([
                     'status' => $payrollStatus,
@@ -597,7 +599,7 @@ class ApprovalWorkflowController extends Controller
                     'approved_at' => $action === 'approve' ? now() : null,
                     'rejection_note' => $action === 'reject' ? $reason : null,
                 ]);
-                \App\Models\Salary::where('batch_id', $item->id)->update(['status' => $payrollStatus]);
+                Salary::where('batch_id', $item->id)->update(['status' => $payrollStatus]);
                 break;
 
             case 'shift_swap':
@@ -662,9 +664,9 @@ class ApprovalWorkflowController extends Controller
         $companyId = $this->resolveCompanyId($request);
 
         $users = User::where(function ($q) use ($companyId) {
-                $q->where('company_id', $companyId)
-                    ->orWhereNull('company_id');
-            })
+            $q->where('company_id', $companyId)
+                ->orWhereNull('company_id');
+        })
             ->select('id', 'name', 'email', 'role_id')
             ->with('role:id,name')
             ->orderBy('name')
@@ -695,6 +697,7 @@ class ApprovalWorkflowController extends Controller
                 1,
                 'draft'
             );
+
             return $this->successResponse($timeline, 'Tahap alur persetujuan default berhasil dimuat.');
         }
 
@@ -733,16 +736,16 @@ class ApprovalWorkflowController extends Controller
     private function resolveModelForModule(string $module, int $id)
     {
         return match ($module) {
-            'leave' => \App\Models\Leave::with(['user.supervisor', 'user.role'])->find($id),
-            'permit' => \App\Models\Permit::with(['user.supervisor', 'user.role'])->find($id),
-            'overtime' => \App\Models\Overtime::with(['user.supervisor', 'user.role'])->find($id),
-            'reimbursement' => \App\Models\Reimbursement::with(['user.supervisor', 'user.role'])->find($id),
-            'fund_request' => \App\Models\FundRequest::with(['user.supervisor', 'user.role'])->find($id),
-            'attendance_correction' => \App\Models\AttendanceCorrection::with(['user.supervisor', 'user.role'])->find($id),
-            'shift_swap' => \App\Models\ShiftSwap::with(['requester.supervisor', 'requester.role', 'receiver'])->find($id),
-            'vehicle_log' => \App\Models\VehicleLog::with(['user.supervisor', 'user.role'])->find($id),
-            'task' => \App\Models\Task::with(['user.supervisor', 'user.role'])->find($id),
-            'payroll' => \App\Models\PayrollBatch::with(['creator.role'])->find($id),
+            'leave' => Leave::with(['user.supervisor', 'user.role'])->find($id),
+            'permit' => Permit::with(['user.supervisor', 'user.role'])->find($id),
+            'overtime' => Overtime::with(['user.supervisor', 'user.role'])->find($id),
+            'reimbursement' => Reimbursement::with(['user.supervisor', 'user.role'])->find($id),
+            'fund_request' => FundRequest::with(['user.supervisor', 'user.role'])->find($id),
+            'attendance_correction' => AttendanceCorrection::with(['user.supervisor', 'user.role'])->find($id),
+            'shift_swap' => ShiftSwap::with(['requester.supervisor', 'requester.role', 'receiver'])->find($id),
+            'vehicle_log' => VehicleLog::with(['user.supervisor', 'user.role'])->find($id),
+            'task' => Task::with(['user.supervisor', 'user.role'])->find($id),
+            'payroll' => PayrollBatch::with(['creator.role'])->find($id),
             default => null,
         };
     }

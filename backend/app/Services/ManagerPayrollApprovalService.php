@@ -19,7 +19,7 @@ class ManagerPayrollApprovalService
     {
         $batch = PayrollBatch::with(['creator', 'company'])
             ->where('id', $request->id)
-            ->when(! $isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))
+            ->when(! $isGlobalAdmin, fn ($q) => $q->where('company_id', $user->company_id))
             ->firstOrFail();
 
         $submitter = $batch->creator ?: $user;
@@ -72,7 +72,7 @@ class ManagerPayrollApprovalService
         $this->notifySuperAdmins(
             $companyId,
             "BATCH PAYROLL {$statusLabel}",
-            "Batch payroll periode {$batch->period_month} {$batch->period_year} telah {$statusLabel} oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            "Batch payroll periode {$batch->period_month} {$batch->period_year} telah {$statusLabel} oleh {$user->name}.".($request->remark ? " Catatan: {$request->remark}" : ''),
             $isApproved ? 'success' : 'danger',
             self::ROUTE_PAYROLL_APPROVAL,
             $user->id
@@ -129,7 +129,7 @@ class ManagerPayrollApprovalService
         $this->notifySuperAdmins(
             $batch->company_id ?? $user->company_id,
             "BATCH PAYROLL {$statusLabel}",
-            "Batch payroll periode {$batch->period_month} {$batch->period_year} telah {$statusLabel} oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            "Batch payroll periode {$batch->period_month} {$batch->period_year} telah {$statusLabel} oleh {$user->name}.".($request->remark ? " Catatan: {$request->remark}" : ''),
             $isApproved ? 'success' : 'danger',
             self::ROUTE_PAYROLL_APPROVAL,
             $user->id

@@ -5,8 +5,8 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Traits\Auditable;
 use App\Traits\EncryptsSensitiveFields;
-use App\Models\Notification;
-use Database\Factories\UserFactory;
+use App\Traits\HasUserRelations;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -14,14 +14,16 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable, Auditable, EncryptsSensitiveFields, \App\Traits\HasKemnakerLeave, \App\Traits\HasUserRelations {
-        \App\Traits\HasUserRelations::notifications insteadof Notifiable;
+    use \App\Traits\HasKemnakerLeave, \App\Traits\HasUserRelations, Auditable, EncryptsSensitiveFields, HasApiTokens, HasFactory, Notifiable {
+        HasUserRelations::notifications insteadof Notifiable;
     }
 
     protected array $encryptedFields = ['ktp_no', 'bank_account_no', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no'];
 
     protected string $auditModule = 'employee';
+
     protected array $auditMasked = ['ktp_no', 'bank_account_no', 'bpjs_kesehatan_no', 'bpjs_ketenagakerjaan_no', 'basic_salary'];
+
     protected array $auditExclude = ['password', 'remember_token', 'fcm_token', 'face_embedding', 'updated_at', 'created_at'];
 
     protected $fillable = [
@@ -61,12 +63,12 @@ class User extends Authenticatable
 
     public function getIsWebAutoValidatedAttribute(): bool
     {
-        if (!$this->auto_validate_web_attendance) {
+        if (! $this->auto_validate_web_attendance) {
             return false;
         }
 
         if ($this->auto_validate_until) {
-            return \Carbon\Carbon::parse($this->auto_validate_until)->endOfDay()->isFuture();
+            return Carbon::parse($this->auto_validate_until)->endOfDay()->isFuture();
         }
 
         return true;
@@ -84,7 +86,7 @@ class User extends Authenticatable
 
     public function getIsFaceApprovedAttribute(): bool
     {
-        return $this->face_status === 'approved' && !empty($this->face_embedding);
+        return $this->face_status === 'approved' && ! empty($this->face_embedding);
     }
 
     public function getProfilePhotoUrlAttribute()
@@ -99,6 +101,7 @@ class User extends Authenticatable
         }
 
         $roleName = strtolower($this->role?->name ?? '');
+
         return $roleName === 'super admin'
             || str_contains($roleName, 'super admin')
             || (method_exists($this, 'hasRole') && $this->hasRole('Super Admin'));
@@ -111,17 +114,7 @@ class User extends Authenticatable
             return (bool) $this->attributes['can_access_manager_portal'];
         }
 
-        if ($this->isSuperAdmin()) {
-            return true;
-        }
-
-        // 2. Default: evaluate approval permissions given by Super Admin
-        if ($this->hasApprovalPermissions()) {
-            return true;
-        }
-
-        // 3. Or if user is a supervisor with assigned subordinates
-        return $this->subordinates()->exists();
+        return $this->isSuperAdmin() || $this->hasApprovalPermissions() || $this->subordinates()->exists();
     }
 
     private function hasApprovalPermissions(): bool
@@ -212,7 +205,7 @@ class User extends Authenticatable
         return $query->where(function ($q) use ($permissionSlug) {
             $q->whereHas('role', function ($r) {
                 $r->where('name', 'like', '%HRD%')
-                  ->orWhere('name', 'like', '%Admin%');
+                    ->orWhere('name', 'like', '%Admin%');
             })->orWhereHas('role.permissions', function ($p) use ($permissionSlug) {
                 $p->where('slug', $permissionSlug);
             });

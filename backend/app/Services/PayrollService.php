@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\PayrollSetting;
+use Carbon\Carbon;
+use Illuminate\Support\Collection;
 
 class PayrollService
 {
@@ -13,9 +15,9 @@ class PayrollService
     /**
      * Calculate PPh 21 based on the configured tax method.
      *
-     * @param float $grossSalary Total gross salary (gaji pokok + tunjangan + lembur)
-     * @param string|null $ptkpStatus PTKP status (TK/0, K/1, etc.)
-     * @param string $method Tax method: 'TER', 'GROSS', 'GROSS_UP'
+     * @param  float  $grossSalary  Total gross salary (gaji pokok + tunjangan + lembur)
+     * @param  string|null  $ptkpStatus  PTKP status (TK/0, K/1, etc.)
+     * @param  string  $method  Tax method: 'TER', 'GROSS', 'GROSS_UP'
      * @return array ['tax' => amount, 'method' => string, 'details' => [...]]
      */
     public function calculatePPh21($grossSalary, $ptkpStatus, $method = 'TER')
@@ -40,6 +42,7 @@ class PayrollService
     public function calculatePPh21TER($grossSalary, $ptkpStatus)
     {
         $result = $this->calculatePPh21TERMethod($grossSalary, $ptkpStatus);
+
         return $result['tax'];
     }
 
@@ -185,10 +188,10 @@ class PayrollService
             'TK/1' => 58500000,
             'TK/2' => 63000000,
             'TK/3' => 67500000,
-            'K/0'  => 58500000,
-            'K/1'  => 63000000,
-            'K/2'  => 67500000,
-            'K/3'  => 72000000,
+            'K/0' => 58500000,
+            'K/1' => 63000000,
+            'K/2' => 67500000,
+            'K/3' => 72000000,
         ];
 
         return $ptkpTable[strtoupper($status ?? 'TK/0')] ?? 54000000;
@@ -492,12 +495,12 @@ class PayrollService
     /**
      * Calculate late deduction based on configured tiers, shift schedules, and base type.
      *
-     * @param \Illuminate\Support\Collection $attendances
-     * @param array $schedulesMap Keyed by 'Y-m-d' date -> Schedule with Shift
-     * @param float $basicSalary
-     * @param int $totalWorkingDays
-     * @param float $totalFixedAllowance
-     * @param PayrollSetting $settings
+     * @param  Collection  $attendances
+     * @param  array  $schedulesMap  Keyed by 'Y-m-d' date -> Schedule with Shift
+     * @param  float  $basicSalary
+     * @param  int  $totalWorkingDays
+     * @param  float  $totalFixedAllowance
+     * @param  PayrollSetting  $settings
      * @return array ['amount' => float, 'late_count' => int, 'total_late_minutes' => int, 'breakdown' => array]
      */
     private function resolveShiftStartTime($att, array $schedulesMap, string $dateKey): string
@@ -519,7 +522,7 @@ class PayrollService
             }
         }
 
-        return !empty($tiers) ? end($tiers) : null;
+        return ! empty($tiers) ? end($tiers) : null;
     }
 
     private function calculateLateEventDeduction(?array $matchedTier, string $baseType, float $basicSalary, float $dailySalary, float $dailyAllowance): float
@@ -544,17 +547,16 @@ class PayrollService
     /**
      * Calculate late arrival deduction based on company tiers.
      *
-     * @param \Illuminate\Support\Collection $attendances
-     * @param array $schedulesMap Keyed by 'Y-m-d' date -> Schedule with Shift
-     * @param float $basicSalary
-     * @param int $totalWorkingDays
-     * @param float $totalFixedAllowance
-     * @param PayrollSetting $settings
+     * @param  Collection  $attendances
+     * @param  array  $schedulesMap  Keyed by 'Y-m-d' date -> Schedule with Shift
+     * @param  float  $basicSalary
+     * @param  int  $totalWorkingDays
+     * @param  float  $totalFixedAllowance
      * @return array ['amount' => float, 'late_count' => int, 'total_late_minutes' => int, 'breakdown' => array]
      */
     public function calculateLateDeduction($attendances, array $schedulesMap, $basicSalary, $totalWorkingDays, $totalFixedAllowance, PayrollSetting $settings)
     {
-        if (!($settings->late_deduction_enabled ?? true)) {
+        if (! ($settings->late_deduction_enabled ?? true)) {
             return [
                 'amount' => 0,
                 'late_count' => 0,
@@ -575,15 +577,15 @@ class PayrollService
         $breakdown = [];
 
         foreach ($attendances as $att) {
-            if (!$att->check_in) {
+            if (! $att->check_in) {
                 continue;
             }
 
-            $checkIn = \Carbon\Carbon::parse($att->check_in);
+            $checkIn = Carbon::parse($att->check_in);
             $dateKey = $checkIn->toDateString();
             $shiftStartTime = $this->resolveShiftStartTime($att, $schedulesMap, $dateKey);
 
-            $shiftStart = \Carbon\Carbon::parse($dateKey . ' ' . $shiftStartTime);
+            $shiftStart = Carbon::parse($dateKey.' '.$shiftStartTime);
             $lateThreshold = $shiftStart->copy()->addMinutes($gracePeriod);
 
             if ($checkIn->gt($lateThreshold)) {
@@ -617,15 +619,14 @@ class PayrollService
     /**
      * Calculate absence / alfa deduction.
      *
-     * @param int $absentDays
-     * @param int $totalWorkingDays
-     * @param float $basicSalary
-     * @param PayrollSetting $settings
+     * @param  int  $absentDays
+     * @param  int  $totalWorkingDays
+     * @param  float  $basicSalary
      * @return array ['amount' => float, 'rate_pct' => float, 'daily_deduction' => float]
      */
     public function calculateAbsenceDeduction($absentDays, $totalWorkingDays, $basicSalary, PayrollSetting $settings)
     {
-        if ($absentDays <= 0 || !($settings->absence_deduction_enabled ?? true)) {
+        if ($absentDays <= 0 || ! ($settings->absence_deduction_enabled ?? true)) {
             return [
                 'amount' => 0,
                 'rate_pct' => 0,
@@ -653,4 +654,3 @@ class PayrollService
         ];
     }
 }
-

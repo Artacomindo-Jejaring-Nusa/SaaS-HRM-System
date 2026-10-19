@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Imports\EmployeeImport;
 use App\Mail\WelcomeEmployeeNotification;
 use App\Models\Announcement;
+use App\Models\Notification;
 use App\Models\User;
 use App\Services\EmployeeQueryService;
 use Carbon\Carbon;
@@ -20,11 +21,17 @@ use Yajra\DataTables\Facades\DataTables;
 class EmployeeController extends Controller
 {
     private const MSG_FORBIDDEN = 'Akses ditolak.';
+
     private const RULE_NULLABLE_STRING = 'nullable|string';
+
     private const RULE_NULLABLE_DATE = 'nullable|date';
+
     private const RULE_REQ_ARRAY = 'required|array';
+
     private const RULE_IDS_ALL = 'ids.*';
+
     private const RULE_EXISTS_USER = 'exists:users,id';
+
     private const FORMAT_DATE = 'd M Y';
 
     public function index(Request $request)
@@ -578,20 +585,20 @@ class EmployeeController extends Controller
     public function discipline(Request $request, $id)
     {
         $request->validate([
-            'reason' => 'required|string|min:5'
+            'reason' => 'required|string|min:5',
         ]);
 
         $employee = User::findOrFail($id);
-        
+
         $currentUser = $request->user();
         if ($currentUser->company_id && ! $currentUser->canAccessAllCompanies() && $employee->company_id !== $currentUser->company_id) {
             return $this->errorResponse(self::MSG_FORBIDDEN, 403);
         }
 
-        \App\Models\Notification::create([
+        Notification::create([
             'user_id' => $employee->id,
             'title' => 'Peringatan / Tindakan Disiplin',
-            'message' => "Anda mendapatkan peringatan atau tindakan disiplin dari manajemen dengan detail sebagai berikut:\n\n" . $request->reason,
+            'message' => "Anda mendapatkan peringatan atau tindakan disiplin dari manajemen dengan detail sebagai berikut:\n\n".$request->reason,
             'type' => 'warning',
             'category' => 'system',
             'is_read' => false,

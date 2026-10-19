@@ -5,6 +5,7 @@ namespace App\Services;
 class ExpressionEvaluator
 {
     private array $tokens = [];
+
     private int $pos = 0;
 
     public function __construct(string $expr)
@@ -17,6 +18,7 @@ class ExpressionEvaluator
     public static function evaluate(string $expr): float
     {
         $evaluator = new self($expr);
+
         return $evaluator->calculate();
     }
 
@@ -48,6 +50,7 @@ class ExpressionEvaluator
     {
         $this->consume();
         $factor = $this->parseFactor();
+
         return $sign === '-' ? -$factor : $factor;
     }
 
@@ -59,6 +62,7 @@ class ExpressionEvaluator
             throw new \InvalidArgumentException('Tanda kurung tidak seimbang');
         }
         $this->consume();
+
         return $value;
     }
 
@@ -73,6 +77,7 @@ class ExpressionEvaluator
         }
         if ($token !== null && is_numeric($token)) {
             $this->consume();
+
             return (float) $token;
         }
         throw new \InvalidArgumentException("Token tidak valid: {$token}");
@@ -97,6 +102,7 @@ class ExpressionEvaluator
                 $value = $value * $right;
             }
         }
+
         return $value;
     }
 
@@ -112,6 +118,7 @@ class ExpressionEvaluator
             $right = $this->parseTerm();
             $value = ($op === '+') ? ($value + $right) : ($value - $right);
         }
+
         return $value;
     }
 }

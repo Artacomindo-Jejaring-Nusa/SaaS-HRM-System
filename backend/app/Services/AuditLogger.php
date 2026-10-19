@@ -10,10 +10,7 @@ class AuditLogger
     /**
      * Log a security event to the security channel.
      *
-     * @param string $event
-     * @param string $message
-     * @param array $extra
-     * @param string $severity (info, warning, critical)
+     * @param  string  $severity  (info, warning, critical)
      */
     public static function log(string $event, string $message, array $extra = [], string $severity = 'info'): void
     {

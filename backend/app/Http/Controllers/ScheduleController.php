@@ -11,6 +11,7 @@ use Maatwebsite\Excel\Facades\Excel;
 class ScheduleController extends Controller
 {
     private const MSG_FORBIDDEN = 'Akses ditolak.';
+
     public function index(Request $request)
     {
         $query = Schedule::with(['user', 'shift']);

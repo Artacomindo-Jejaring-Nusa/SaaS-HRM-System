@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class PayrollComponent extends Model
 {
-    use BelongsToCompany, Auditable;
+    use Auditable, BelongsToCompany;
 
     protected string $auditModule = 'payroll';
 

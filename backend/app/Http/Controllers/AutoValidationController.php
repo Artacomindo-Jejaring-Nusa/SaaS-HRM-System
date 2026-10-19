@@ -6,7 +6,6 @@ use App\Models\User;
 use App\Models\WebAttendanceAuditLog;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 
 class AutoValidationController extends Controller
 {
@@ -16,7 +15,7 @@ class AutoValidationController extends Controller
     public function toggle(Request $request)
     {
         $admin = $request->user();
-        if (!$this->isAuthorizedAdmin($admin)) {
+        if (! $this->isAuthorizedAdmin($admin)) {
             return $this->errorResponse('Akses ditolak. Fitur Validasi Otomatis hanya untuk Super Admin dan HRD.', 403);
         }
 
@@ -66,7 +65,7 @@ class AutoValidationController extends Controller
     public function bulk(Request $request)
     {
         $admin = $request->user();
-        if (!$this->isAuthorizedAdmin($admin)) {
+        if (! $this->isAuthorizedAdmin($admin)) {
             return $this->errorResponse('Akses ditolak. Fitur Validasi Otomatis hanya untuk Super Admin dan HRD.', 403);
         }
 
@@ -105,7 +104,7 @@ class AutoValidationController extends Controller
                 'previous_expires_at' => $prevExpiry,
                 'new_expires_at' => $newExpiry,
                 'changed_by' => $admin->id,
-                'notes' => $request->notes ?? ("Aksi Massal: " . $this->buildAutoValidateNote($newStatus, $newExpiry)),
+                'notes' => $request->notes ?? ('Aksi Massal: '.$this->buildAutoValidateNote($newStatus, $newExpiry)),
                 'ip_address' => $request->ip(),
             ]);
 
@@ -123,7 +122,7 @@ class AutoValidationController extends Controller
     public function auditLogs(Request $request)
     {
         $admin = $request->user();
-        if (!$this->isAuthorizedAdmin($admin)) {
+        if (! $this->isAuthorizedAdmin($admin)) {
             return $this->errorResponse('Akses ditolak.', 403);
         }
 
@@ -161,9 +160,9 @@ class AutoValidationController extends Controller
             || str_contains(strtolower($user->role?->name ?? ''), 'hrd');
     }
 
-    private function buildAutoValidateNote(bool $status, ?\Carbon\Carbon $expiry): string
+    private function buildAutoValidateNote(bool $status, ?Carbon $expiry): string
     {
-        if (!$status) {
+        if (! $status) {
             return 'Dinonaktifkan';
         }
 

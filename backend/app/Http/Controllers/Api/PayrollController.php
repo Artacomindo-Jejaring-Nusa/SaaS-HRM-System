@@ -12,9 +12,9 @@ use App\Models\PayrollBatch;
 use App\Models\PayrollSetting;
 use App\Models\Salary;
 use App\Models\User;
+use App\Services\ApprovalService;
 use App\Services\DynamicPayrollEngine;
 use App\Services\PayrollService;
-use App\Services\ApprovalService;
 use App\Traits\Notifiable;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -30,6 +30,7 @@ class PayrollController extends Controller
     private const ROUTE_PAYROLL_APPROVAL = '/dashboard/payroll/approval';
 
     protected $payrollService;
+
     protected $dynamicEngine;
 
     public function __construct(PayrollService $payrollService, DynamicPayrollEngine $dynamicEngine)
@@ -239,7 +240,7 @@ class PayrollController extends Controller
             }
         }
 
-        $attendedDays = $user->attendances->filter(fn($a) => $a->check_in)->count();
+        $attendedDays = $user->attendances->filter(fn ($a) => $a->check_in)->count();
         $totalActualWorkHours = 0;
         foreach ($user->attendances as $att) {
             if ($att->check_in && $att->check_out) {
@@ -341,7 +342,7 @@ class PayrollController extends Controller
         } else {
             $regularRate = $settings->overtime_rate_per_hour ?? 30000;
             $holidayRate = $settings->overtime_rate_holiday_per_hour ?? 50000;
-            
+
             $otMetrics = $this->getOvertimeMetrics($user->overtimes, $holidays, $regularRate, $holidayRate);
             $totalOvertimeHours = $otMetrics['hours'];
             $overtimeAmount = $otMetrics['amount'];
@@ -384,13 +385,13 @@ class PayrollController extends Controller
             + (float) ($bpjs['jkk']['company'] ?? 0);
         $taxMethod = $settings->tax_method ?? 'TER';
         $taxResult = $this->payrollService->calculatePPh21($taxGrossSalary, $user->ptkp_status, $taxMethod);
-        
+
         $salary->deduction_tax = $taxResult['tax'];
-        
+
         // If Gross Up, we need to add the tax allowance as an earning so it offsets the tax deduction!
         if (strtoupper($taxMethod) === 'GROSS_UP' && $taxResult['tax'] > 0) {
             $salary->earning_others = ($salary->earning_others ?? 0) + $taxResult['tax'];
-            $salary->earning_others_note = trim(($salary->earning_others_note ?? '') . ' Tunjangan Pajak (Gross-Up)');
+            $salary->earning_others_note = trim(($salary->earning_others_note ?? '').' Tunjangan Pajak (Gross-Up)');
         }
 
         $salary->bank_name = $user->bank_name ?? '-';
@@ -622,7 +623,7 @@ class PayrollController extends Controller
             $query->where('company_id', $request->user()->company_id);
         }
 
-        if ($request->has('status') && !empty($request->status)) {
+        if ($request->has('status') && ! empty($request->status)) {
             $query->where('status', $request->status);
         }
 
@@ -630,7 +631,7 @@ class PayrollController extends Controller
 
         $user = $request->user();
         $batches->each(function ($b) use ($user) {
-            if (!empty($b->current_approval_step)) {
+            if (! empty($b->current_approval_step)) {
                 $b->current_step_info = ApprovalService::getCurrentStepInfo('payroll', $b->company_id, $b->current_approval_step, $b->creator);
                 $submitter = $b->creator ?: $user;
                 $b->can_user_approve = ApprovalService::canApprove('payroll', $b->company_id, $user, $submitter, $b->current_approval_step);
@@ -653,7 +654,7 @@ class PayrollController extends Controller
         $batch = $query->findOrFail($id);
 
         $user = $request->user();
-        if (!empty($batch->current_approval_step)) {
+        if (! empty($batch->current_approval_step)) {
             $batch->current_step_info = ApprovalService::getCurrentStepInfo('payroll', $batch->company_id, $batch->current_approval_step, $batch->creator);
             $submitter = $batch->creator ?: $user;
             $batch->can_user_approve = ApprovalService::canApprove('payroll', $batch->company_id, $user, $submitter, $batch->current_approval_step);
@@ -667,12 +668,13 @@ class PayrollController extends Controller
     private function getAccessibleBatch($user, $batchId, array $with = []): PayrollBatch
     {
         $query = PayrollBatch::query();
-        if (!empty($with)) {
+        if (! empty($with)) {
             $query->with($with);
         }
         if ($user->company_id && ! $user->canAccessAllCompanies()) {
             $query->where('company_id', $user->company_id);
         }
+
         return $query->findOrFail($batchId);
     }
 
@@ -711,7 +713,7 @@ class PayrollController extends Controller
 
         Salary::where('batch_id', $batch->id)->update(['status' => $batchStatus]);
 
-        if (!empty($workflowResult['approvers'])) {
+        if (! empty($workflowResult['approvers'])) {
             foreach ($workflowResult['approvers'] as $approver) {
                 $this->notify(
                     $approver,
@@ -781,7 +783,7 @@ class PayrollController extends Controller
         }
 
         if ($result) {
-            return !empty($result['is_final'])
+            return ! empty($result['is_final'])
                 ? $this->finalizeWorkflowPayrollApproval($batch, $user, $companyId)
                 : $this->advanceWorkflowPayrollApproval($batch, $result);
         }

@@ -76,7 +76,7 @@ class ManagerLegacyApprovalService
     private function applyAttendanceCorrectionToRecord($item): void
     {
         $attendance = $item->attendance;
-        if (!$attendance) {
+        if (! $attendance) {
             return;
         }
 
@@ -87,7 +87,7 @@ class ManagerLegacyApprovalService
         if ($item->corrected_check_out) {
             $applyData['check_out'] = $item->corrected_check_out;
         }
-        if (!empty($applyData)) {
+        if (! empty($applyData)) {
             $attendance->update($applyData);
         }
     }
@@ -97,6 +97,7 @@ class ManagerLegacyApprovalService
         if ($status === 'approved') {
             return ($item->status === 'pending') ? 'approved' : 'validated';
         }
+
         return 'rejected';
     }
 
@@ -112,7 +113,7 @@ class ManagerLegacyApprovalService
     private function updateLegacyFundRequest($item, Request $request, User $user, bool $isCompanyAdmin, bool $isGlobalAdmin): string
     {
         if ($request->status === 'approved') {
-            if ($item->status === 'pending' && !$isCompanyAdmin && !$isGlobalAdmin) {
+            if ($item->status === 'pending' && ! $isCompanyAdmin && ! $isGlobalAdmin) {
                 $item->update([
                     'status' => 'approved_by_supervisor',
                     'supervisor_id' => $user->id,
@@ -153,6 +154,7 @@ class ManagerLegacyApprovalService
                 'hrd_approved_at' => now(),
                 'remark' => $request->remark,
             ]);
+
             return 'approved';
         }
 
@@ -163,12 +165,13 @@ class ManagerLegacyApprovalService
             'reject_reason' => $request->remark,
             'remark' => $request->remark,
         ]);
+
         return 'rejected';
     }
 
     private function sendLegacyNotification($item, Request $request, string $typeText, string $routePath): void
     {
-        if (!$item->user) {
+        if (! $item->user) {
             return;
         }
 
@@ -188,7 +191,7 @@ class ManagerLegacyApprovalService
         $this->notifySuperAdmins(
             $item->company_id ?? $request->user()?->company_id,
             "PENGAJUAN {$typeText} {$statusText}",
-            "Pengajuan {$typeText} {$item->user?->name} telah {$statusText} oleh " . ($request->user()?->name ?? 'Approver') . ".{$remarkText}",
+            "Pengajuan {$typeText} {$item->user?->name} telah {$statusText} oleh ".($request->user()?->name ?? 'Approver').".{$remarkText}",
             $badge,
             $routePath,
             $request->user()?->id ?? 0

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use App\Services\DataPurgeService;
 use App\Services\ManagerApprovalService;
 use App\Services\ManagerAttendanceService;
@@ -57,7 +58,7 @@ class ManagerController extends Controller
      */
     public function getTeamAttendance(Request $request, ManagerAttendanceService $attendanceService)
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = Auth::user();
         $isCompanyAdmin = ManagerAttendanceService::isCompanyWideViewer($user);
 

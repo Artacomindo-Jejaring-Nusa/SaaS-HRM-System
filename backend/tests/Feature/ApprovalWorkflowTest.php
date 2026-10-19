@@ -2,10 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Models\Company;
-use App\Models\User;
-use App\Models\Role;
 use App\Models\ApprovalWorkflow;
+use App\Models\Company;
+use App\Models\Role;
+use App\Models\User;
 use App\Models\WorkflowStep;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -15,7 +15,9 @@ class ApprovalWorkflowTest extends TestCase
     use RefreshDatabase;
 
     private $company;
+
     private $user;
+
     private $role;
 
     protected function setUp(): void
@@ -45,8 +47,8 @@ class ApprovalWorkflowTest extends TestCase
                 'status',
                 'message',
                 'data' => [
-                    '*' => ['id', 'name']
-                ]
+                    '*' => ['id', 'name'],
+                ],
             ]);
     }
 
@@ -69,8 +71,8 @@ class ApprovalWorkflowTest extends TestCase
                     'approver_type' => 'role',
                     'approver_role_id' => $this->role->id,
                     'sla_hours' => 48,
-                ]
-            ]
+                ],
+            ],
         ];
 
         $response = $this->actingAs($this->user)
@@ -146,7 +148,7 @@ class ApprovalWorkflowTest extends TestCase
             'module_key' => 'leave',
             'name' => 'Custom Cuti Workflow By Employee',
             'is_active' => true,
-            'steps' => []
+            'steps' => [],
         ];
 
         $response = $this->actingAs($employeeUser)

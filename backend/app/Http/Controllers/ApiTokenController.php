@@ -12,7 +12,7 @@ class ApiTokenController extends Controller
     public function index(Request $request)
     {
         $tokens = $request->user()->tokens()
-            ->where('name', 'like', self::TOKEN_PREFIX . '%')
+            ->where('name', 'like', self::TOKEN_PREFIX.'%')
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($token) {
@@ -46,7 +46,7 @@ class ApiTokenController extends Controller
         $expiresAt = $request->input('expires_at') ? new \DateTime($request->input('expires_at')) : null;
 
         // Prefix the token name to distinguish it from SPA session tokens (auth_token)
-        $prefixedName = self::TOKEN_PREFIX . $request->name;
+        $prefixedName = self::TOKEN_PREFIX.$request->name;
         $tokenResult = $request->user()->createToken($prefixedName, $abilities, $expiresAt);
 
         $this->logActivity('create_api_token', "Created API Token: {$request->name}");
@@ -64,10 +64,10 @@ class ApiTokenController extends Controller
     {
         // Only allow revoking tokens that are integration tokens
         $token = $request->user()->tokens()
-            ->where('name', 'like', self::TOKEN_PREFIX . '%')
+            ->where('name', 'like', self::TOKEN_PREFIX.'%')
             ->find($id);
 
-        if (!$token) {
+        if (! $token) {
             return $this->errorResponse('Token not found', 404);
         }
 

@@ -2,7 +2,6 @@
 
 namespace App\Imports;
 
-use App\Models\Role;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Maatwebsite\Excel\Concerns\ToModel;
@@ -39,10 +38,12 @@ class EmployeeImport implements ToModel, WithHeadingRow
             $updateData = $this->buildUpdateData($row, $existingUser, $nama, $roleId, $joinDate, $dob, $password);
             $existingUser->update($updateData);
             $this->importedCount++;
+
             return null;
         }
 
         $this->importedCount++;
+
         return $this->buildNewUser($row, $nama, $email, $roleId, $joinDate, $dob, $password);
     }
 
@@ -78,6 +79,7 @@ class EmployeeImport implements ToModel, WithHeadingRow
                 $data[$field] = (string) $val;
             }
         }
+
         return $data;
     }
 
@@ -87,6 +89,7 @@ class EmployeeImport implements ToModel, WithHeadingRow
         if ($supervisorId === null) {
             return null;
         }
+
         return is_numeric($supervisorId) ? (int) $supervisorId : null;
     }
 
@@ -112,7 +115,7 @@ class EmployeeImport implements ToModel, WithHeadingRow
             $updateData['supervisor_id'] = $supervisorId;
         }
 
-        if (!empty($password) && !in_array($password, ['***', 'tempPassword123!'], true)) {
+        if (! empty($password) && ! in_array($password, ['***', 'tempPassword123!'], true)) {
             $updateData['password'] = Hash::make($password);
         }
 
@@ -152,6 +155,7 @@ class EmployeeImport implements ToModel, WithHeadingRow
                 return $default;
             }
         }
+
         return date('Y-m-d', strtotime($raw));
     }
 

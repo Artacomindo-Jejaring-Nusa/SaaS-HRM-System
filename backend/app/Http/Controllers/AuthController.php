@@ -6,8 +6,8 @@ use App\Models\ActivityLog;
 use App\Models\Company;
 use App\Models\RefreshToken;
 use App\Models\User;
-use App\Services\WhatsAppService;
 use App\Services\AuditLogger;
+use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -29,7 +29,9 @@ class AuthController extends Controller
     private const REFRESH_TOKEN_DAYS = 30;
 
     private const MSG_INVALID_CREDS = 'Invalid credentials';
+
     private const RULE_REQ_STRING = 'required|string';
+
     private const RULE_REQ_EMAIL = 'required|email';
 
     public function searchCompanies(Request $request)
@@ -54,6 +56,7 @@ class AuthController extends Controller
             ]);
         } catch (ValidationException $e) {
             AuditLogger::log('login_failed', 'Validation failed during login request', ['errors' => $e->errors()], 'warning');
+
             return $this->errorResponse(self::MSG_INVALID_CREDS, 401);
         }
 
@@ -63,6 +66,7 @@ class AuthController extends Controller
 
         if (! $company) {
             AuditLogger::log('login_failed', 'Company not found', ['company_name' => $request->company_name, 'email' => $request->email], 'warning');
+
             return $this->errorResponse(self::MSG_INVALID_CREDS, 401);
         }
 
@@ -72,6 +76,7 @@ class AuthController extends Controller
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
             AuditLogger::log('login_failed', 'Invalid credentials or user not found', ['email' => $request->email, 'company_id' => $company->id], 'warning');
+
             return $this->errorResponse('Invalid credentials', 401);
         }
 
@@ -102,6 +107,7 @@ class AuthController extends Controller
                 ['email' => $user->email, 'expected_device' => $user->device_id, 'actual_device' => $deviceId],
                 'critical'
             );
+
             return 'Akun Anda terkunci pada perangkat lain. Silakan hubungi Admin untuk reset Device ID Anda.';
         }
 
@@ -177,7 +183,8 @@ class AuthController extends Controller
         $refreshToken = RefreshToken::findValidToken($request->refresh_token);
 
         if (! $refreshToken) {
-            AuditLogger::log('refresh_token_failed', 'Invalid or expired refresh token attempted', ['token' => substr($request->refresh_token, 0, 10) . '...'], 'warning');
+            AuditLogger::log('refresh_token_failed', 'Invalid or expired refresh token attempted', ['token' => substr($request->refresh_token, 0, 10).'...'], 'warning');
+
             return $this->errorResponse('Refresh token tidak valid atau sudah kadaluarsa. Silakan login ulang.', 401);
         }
 
@@ -249,6 +256,7 @@ class AuthController extends Controller
 
         if (! Hash::check($request->current_password, $user->password)) {
             AuditLogger::log('change_password_failed', 'Incorrect current password provided', ['user_id' => $user->id, 'email' => $user->email], 'warning');
+
             return $this->errorResponse('Kata sandi saat ini salah.', 422);
         }
 
@@ -348,12 +356,14 @@ class AuthController extends Controller
 
         if (! $record || ! Hash::check($request->token, $record->token)) {
             AuditLogger::log('password_reset_failed', 'Invalid reset token attempted', ['email' => $request->email], 'warning');
+
             return $this->errorResponse('Token tidak valid atau sudah kadaluarsa.', 400);
         }
 
         // Token is typically valid for 60 minutes
         if (now()->diffInMinutes($record->created_at) > 60) {
             AuditLogger::log('password_reset_failed', 'Expired reset token attempted', ['email' => $request->email, 'created_at' => $record->created_at], 'warning');
+
             return $this->errorResponse('Token sudah kadaluarsa.', 400);
         }
 
@@ -432,6 +442,7 @@ class AuthController extends Controller
         $clientId = env('GOOGLE_CLIENT_ID') ?: '1015918555814-0qod31fvuc96odo10a2uqmppoqf9vegi.apps.googleusercontent.com';
         $client = new \Google_Client(['client_id' => $clientId]);
         $payload = $client->verifyIdToken($idToken);
+
         return $payload ?: null;
     }
 
@@ -479,6 +490,7 @@ class AuthController extends Controller
 
         if (! $cachedOtp || $cachedOtp != $request->otp) {
             AuditLogger::log('otp_verification_failed', 'Invalid or expired OTP attempted', ['phone' => $request->phone], 'warning');
+
             return $this->errorResponse('Kode OTP salah atau sudah kadaluarsa.', 400);
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ApprovalService;
 use App\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -52,7 +53,7 @@ class FundRequest extends Model
         }
 
         try {
-            return \App\Services\ApprovalService::getCurrentStepInfo(
+            return ApprovalService::getCurrentStepInfo(
                 'fund_request',
                 (int) $this->company_id,
                 (int) $this->current_approval_step,

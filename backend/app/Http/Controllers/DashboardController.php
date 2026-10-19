@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 class DashboardController extends Controller
 {
     private const STORAGE_PATH_PREFIX = 'storage/';
+
     public function index(Request $request)
     {
         $user = $request->user();
@@ -129,6 +130,7 @@ class DashboardController extends Controller
                 'count' => $query->count(),
             ];
         }
+
         return $last7Days;
     }
 
@@ -174,6 +176,7 @@ class DashboardController extends Controller
         if ($isStaff) {
             return [];
         }
+
         return DB::table('users')
             ->where('users.company_id', $companyId)
             ->join('roles', 'users.role_id', '=', 'roles.id')
@@ -187,6 +190,7 @@ class DashboardController extends Controller
         if ($isStaff) {
             return [];
         }
+
         return Attendance::where('company_id', $companyId)
             ->whereDate('check_in', $today)
             ->with('user:id,role_id,name,nik,profile_photo_path')
@@ -259,7 +263,7 @@ class DashboardController extends Controller
             ->where('status', 'approved')
             ->where(function ($q) use ($monthStart, $monthEnd) {
                 $q->whereBetween('start_date', [$monthStart, $monthEnd])
-                  ->orWhereBetween('end_date', [$monthStart, $monthEnd]);
+                    ->orWhereBetween('end_date', [$monthStart, $monthEnd]);
             })
             ->with('user:id,name')
             ->get()
@@ -302,6 +306,7 @@ class DashboardController extends Controller
                 'total' => (int) $day->total,
             ];
         }
+
         return $breakdown;
     }
 
@@ -311,7 +316,7 @@ class DashboardController extends Controller
             return [];
         }
         $monthStart = Carbon::now()->startOfMonth();
-        
+
         $overtimeData = DB::table('overtimes')
             ->where('company_id', $companyId)
             ->where('status', 'approved')
@@ -336,6 +341,7 @@ class DashboardController extends Controller
             ];
             $weekIndex++;
         }
+
         return $summary;
     }
 
@@ -345,7 +351,7 @@ class DashboardController extends Controller
             return [];
         }
         $monthStart = Carbon::now()->startOfMonth();
-        
+
         return DB::table('leaves')
             ->where('company_id', $companyId)
             ->where('status', 'approved')
@@ -415,7 +421,7 @@ class DashboardController extends Controller
         $monthNames = [
             1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
             5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
-            9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+            9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember',
         ];
 
         $today = Carbon::today();
@@ -458,9 +464,9 @@ class DashboardController extends Controller
             $monthCounts[$m] = User::when($user->role_id !== 1, function ($q) use ($companyId) {
                 return $q->where('company_id', $companyId);
             })
-            ->whereNotNull('date_of_birth')
-            ->whereMonth('date_of_birth', $m)
-            ->count();
+                ->whereNotNull('date_of_birth')
+                ->whereMonth('date_of_birth', $m)
+                ->count();
         }
 
         return $this->successResponse([
@@ -517,6 +523,7 @@ class DashboardController extends Controller
             ->orderByDesc('score')->take(10)->get()
             ->map(function ($e) {
                 $e->photo_url = $e->profile_photo_path ? url(self::STORAGE_PATH_PREFIX.$e->profile_photo_path) : null;
+
                 return $e;
             })->values();
     }
@@ -533,6 +540,7 @@ class DashboardController extends Controller
             ->orderByDesc('score')->take(10)->get()
             ->map(function ($e) {
                 $e->photo_url = $e->profile_photo_path ? url(self::STORAGE_PATH_PREFIX.$e->profile_photo_path) : null;
+
                 return $e;
             })->values();
     }

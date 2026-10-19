@@ -2,8 +2,8 @@
 
 namespace Tests\Unit;
 
-use App\Models\Holiday;
 use App\Models\Company;
+use App\Models\Holiday;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -42,7 +42,7 @@ class HolidayTest extends TestCase
     /** @test */
     public function test_holiday_has_required_fillable_fields()
     {
-        $holiday = new Holiday();
+        $holiday = new Holiday;
         $this->assertContains('name', $holiday->getFillable());
         $this->assertContains('date', $holiday->getFillable());
         $this->assertContains('company_id', $holiday->getFillable());

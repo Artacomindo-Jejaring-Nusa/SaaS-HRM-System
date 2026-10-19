@@ -12,10 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('salaries', function (Blueprint $table) {
-            if (!Schema::hasColumn('salaries', 'deduction_others')) {
+            if (! Schema::hasColumn('salaries', 'deduction_others')) {
                 $table->decimal('deduction_others', 15, 2)->default(0)->after('deduction_tax');
             }
-            if (!Schema::hasColumn('salaries', 'deduction_others_note')) {
+            if (! Schema::hasColumn('salaries', 'deduction_others_note')) {
                 $table->text('deduction_others_note')->nullable()->after('deduction_others');
             }
         });

@@ -3,7 +3,9 @@
 namespace App\Traits;
 
 use App\Models\ApprovalWorkflow;
+use App\Models\Role;
 use App\Models\User;
+use App\Services\ApprovalService;
 use Illuminate\Http\Request;
 
 trait HandlesApprovalWorkflowHelpers
@@ -14,12 +16,14 @@ trait HandlesApprovalWorkflowHelpers
         if ($user && ($user->role_id === 1 || (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies())) && $request->filled('company_id')) {
             return (int) $request->company_id;
         }
+
         return $user ? ($user->company_id ?? 1) : 1;
     }
 
     private function isSuperAdmin(User $user): bool
     {
         $user->loadMissing('role');
+
         return $user->role_id === 1 ||
             $user->role?->name === 'Super Admin' ||
             (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies());
@@ -45,6 +49,7 @@ trait HandlesApprovalWorkflowHelpers
         if ($scopeType === 'role') {
             return 1;
         }
+
         return 0;
     }
 
@@ -56,6 +61,7 @@ trait HandlesApprovalWorkflowHelpers
                 'approver_type' => 'supervisor',
                 'sla_hours' => 24,
             ]);
+
             return;
         }
 
@@ -79,7 +85,7 @@ trait HandlesApprovalWorkflowHelpers
 
         $maxNum = 1;
         foreach ($existingNames as $name) {
-            if (preg_match('/^' . preg_quote($baseName, '/') . '-(\d+)$/i', trim($name), $matches)) {
+            if (preg_match('/^'.preg_quote($baseName, '/').'-(\d+)$/i', trim($name), $matches)) {
                 $num = (int) $matches[1];
                 if ($num > $maxNum) {
                     $maxNum = $num;
@@ -88,7 +94,7 @@ trait HandlesApprovalWorkflowHelpers
         }
         $nextTag = $maxNum + 1;
 
-        if ($rawName === $baseName || preg_match('/^' . preg_quote($baseName, '/') . '(-\d+)?$/i', $rawName) || str_contains($rawName, '(Khusus)')) {
+        if ($rawName === $baseName || preg_match('/^'.preg_quote($baseName, '/').'(-\d+)?$/i', $rawName) || str_contains($rawName, '(Khusus)')) {
             return "{$baseName}-{$nextTag}";
         }
 
@@ -107,9 +113,9 @@ trait HandlesApprovalWorkflowHelpers
         $mappedVariants = $variants->map(function ($wf) {
             $scopeLabel = 'Semua Karyawan (Default)';
             if ($wf->scope_type === 'role') {
-                $scopeLabel = 'Divisi/Jabatan: ' . ($wf->scopeRole ? $wf->scopeRole->name : "Role #{$wf->scope_id}");
+                $scopeLabel = 'Divisi/Jabatan: '.($wf->scopeRole ? $wf->scopeRole->name : "Role #{$wf->scope_id}");
             } elseif ($wf->scope_type === 'user') {
-                $scopeLabel = 'Karyawan: ' . ($wf->scopeUser ? $wf->scopeUser->name : "User #{$wf->scope_id}");
+                $scopeLabel = 'Karyawan: '.($wf->scopeUser ? $wf->scopeUser->name : "User #{$wf->scope_id}");
             }
 
             return [
@@ -142,6 +148,7 @@ trait HandlesApprovalWorkflowHelpers
     private function mapCustomModuleItem(string $key, $variants): array
     {
         $first = $variants->first();
+
         return [
             'key' => $key,
             'label' => $first->name,
@@ -168,10 +175,10 @@ trait HandlesApprovalWorkflowHelpers
 
     private function getDefaultStepsForModule(string $moduleKey): array
     {
-        $hrRole = \App\Models\Role::where('name', 'like', '%HR%')->orWhere('name', 'like', '%Admin%')->first();
-        $financeRole = \App\Models\Role::where('name', 'like', '%Finance%')->orWhere('name', 'like', '%Keuangan%')->first() ?? $hrRole;
+        $hrRole = Role::where('name', 'like', '%HR%')->orWhere('name', 'like', '%Admin%')->first();
+        $financeRole = Role::where('name', 'like', '%Finance%')->orWhere('name', 'like', '%Keuangan%')->first() ?? $hrRole;
 
-        $meta = \App\Services\ApprovalService::SYSTEM_MODULES[$moduleKey] ?? [];
+        $meta = ApprovalService::SYSTEM_MODULES[$moduleKey] ?? [];
         $layers = $meta['default_layers'] ?? 1;
 
         if ($moduleKey === 'payroll') {
@@ -197,6 +204,7 @@ trait HandlesApprovalWorkflowHelpers
 
         if ($layers >= 2) {
             $secondRole = in_array($moduleKey, ['reimbursement', 'fund_request']) ? $financeRole : $hrRole;
+
             return [
                 [
                     'step_number' => 1,

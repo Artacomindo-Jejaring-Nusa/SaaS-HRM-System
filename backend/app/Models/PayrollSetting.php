@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class PayrollSetting extends Model
 {
     use BelongsToCompany;
+
     protected $fillable = [
         'company_id',
         'cutoff_day',
@@ -76,7 +77,7 @@ class PayrollSetting extends Model
 
     public function getEffectiveLateTiersAttribute(): array
     {
-        return !empty($this->late_deduction_tiers) ? $this->late_deduction_tiers : self::defaultLateTiers();
+        return ! empty($this->late_deduction_tiers) ? $this->late_deduction_tiers : self::defaultLateTiers();
     }
 
     public function company()

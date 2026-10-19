@@ -3,15 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Events\EmployeeLocationUpdated;
+use App\Models\ActivityLog;
+use App\Models\Attendance;
 use App\Models\EmployeeTrack;
+use App\Models\Role;
 use App\Models\User;
-use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class TrackingController extends Controller
 {
     private const ROLE_SUPER_ADMIN = 'super admin';
+
     private const MSG_ACCESS_DENIED = 'Akses ditolak.';
 
     private function isSuperAdmin($user): bool
@@ -56,13 +60,13 @@ class TrackingController extends Controller
         try {
             broadcast(new EmployeeLocationUpdated($track))->toOthers();
         } catch (\Throwable $e) {
-            Log::warning('WebSocket broadcast failed for live tracking: ' . $e->getMessage());
+            Log::warning('WebSocket broadcast failed for live tracking: '.$e->getMessage());
         }
 
         return response()->json([
             'status' => 'success',
             'message' => 'Location updated successfully',
-            'data' => $track->load(['user.role', 'user.company'])
+            'data' => $track->load(['user.role', 'user.company']),
         ]);
     }
 
@@ -71,17 +75,17 @@ class TrackingController extends Controller
         $query = EmployeeTrack::with([
             'user:id,name,nik,profile_photo_path,company_id,role_id,phone,email',
             'user.role:id,name',
-            'user.company:id,name'
+            'user.company:id,name',
         ])
-        ->whereDate('recorded_at', $today)
-        ->whereIn('id', function ($query) use ($today) {
-            $query->selectRaw('MAX(id)')
-                  ->from('employee_tracks')
-                  ->whereDate('recorded_at', $today)
-                  ->groupBy('user_id');
-        });
+            ->whereDate('recorded_at', $today)
+            ->whereIn('id', function ($query) use ($today) {
+                $query->selectRaw('MAX(id)')
+                    ->from('employee_tracks')
+                    ->whereDate('recorded_at', $today)
+                    ->groupBy('user_id');
+            });
 
-        if ($user->company_id && !$user->canAccessAllCompanies()) {
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
             $query->whereHas('user', function ($q) use ($user) {
                 $q->where('company_id', $user->company_id);
             });
@@ -101,7 +105,7 @@ class TrackingController extends Controller
             $search = $request->search;
             $query->whereHas('user', function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('nik', 'like', "%{$search}%");
+                    ->orWhere('nik', 'like', "%{$search}%");
             });
         }
 
@@ -110,7 +114,7 @@ class TrackingController extends Controller
 
     private function matchesAttendanceFilters($att, Request $request, $user): bool
     {
-        $mismatchCompany = ($user->company_id && !$user->canAccessAllCompanies() && $att->company_id !== $user->company_id)
+        $mismatchCompany = ($user->company_id && ! $user->canAccessAllCompanies() && $att->company_id !== $user->company_id)
             || ($request->filled('company_id') && $request->company_id !== 'all' && (string) $att->company_id !== (string) $request->company_id);
 
         $mismatchRole = $request->filled('role_id') && $request->role_id !== 'all' && (string) ($att->user?->role_id ?? '') !== (string) $request->role_id;
@@ -120,28 +124,28 @@ class TrackingController extends Controller
             $search = strtolower($request->search);
             $userName = strtolower($att->user?->name ?? '');
             $userNik = strtolower($att->user?->nik ?? '');
-            $mismatchSearch = !str_contains($userName, $search) && !str_contains($userNik, $search);
+            $mismatchSearch = ! str_contains($userName, $search) && ! str_contains($userNik, $search);
         }
 
-        return !$mismatchCompany && !$mismatchRole && !$mismatchSearch;
+        return ! $mismatchCompany && ! $mismatchRole && ! $mismatchSearch;
     }
 
     private function mergeTodayAttendances($tracks, Request $request, $user, Carbon $today)
     {
         $trackedUserIds = $tracks->pluck('user_id')->toArray();
-        $attendancesToday = \App\Models\Attendance::with([
+        $attendancesToday = Attendance::with([
             'user:id,name,nik,profile_photo_path,company_id,role_id,phone,email',
             'user.role:id,name',
-            'user.company:id,name'
+            'user.company:id,name',
         ])
-        ->whereDate('check_in', $today)
-        ->whereNotNull('latitude_in')
-        ->whereNotNull('longitude_in')
-        ->whereNotIn('user_id', $trackedUserIds)
-        ->get();
+            ->whereDate('check_in', $today)
+            ->whereNotNull('latitude_in')
+            ->whereNotNull('longitude_in')
+            ->whereNotIn('user_id', $trackedUserIds)
+            ->get();
 
         foreach ($attendancesToday as $att) {
-            if (!$this->matchesAttendanceFilters($att, $request, $user)) {
+            if (! $this->matchesAttendanceFilters($att, $request, $user)) {
                 continue;
             }
 
@@ -196,8 +200,8 @@ class TrackingController extends Controller
                 'id' => $track->id,
                 'user_id' => $track->user_id,
                 'user' => $track->user,
-                'latitude' => (float)$track->latitude,
-                'longitude' => (float)$track->longitude,
+                'latitude' => (float) $track->latitude,
+                'longitude' => (float) $track->longitude,
                 'accuracy' => $track->accuracy,
                 'battery_level' => $track->battery_level,
                 'recorded_at' => $track->recorded_at,
@@ -215,7 +219,7 @@ class TrackingController extends Controller
                 'idle' => $idleCount,
                 'offline' => $offlineCount,
                 'low_battery' => $lowBatteryCount,
-            ]
+            ],
         ];
     }
 
@@ -227,7 +231,7 @@ class TrackingController extends Controller
     {
         $user = $request->user();
 
-        if (!$this->isSuperAdmin($user) && !$user->hasPermission('view-live-tracking')) {
+        if (! $this->isSuperAdmin($user) && ! $user->hasPermission('view-live-tracking')) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Akses ditolak. Fitur Live Tracking hanya untuk Super Admin.',
@@ -254,7 +258,7 @@ class TrackingController extends Controller
     {
         $user = $request->user();
 
-        if (!$this->isSuperAdmin($user) && !$user->hasPermission('view-live-tracking') && $user->id != $userId) {
+        if (! $this->isSuperAdmin($user) && ! $user->hasPermission('view-live-tracking') && $user->id != $userId) {
             return response()->json([
                 'status' => 'error',
                 'message' => self::MSG_ACCESS_DENIED,
@@ -275,10 +279,10 @@ class TrackingController extends Controller
         // Calculate total distance traveled (Haversine formula)
         $totalDistanceKm = 0;
         for ($i = 0; $i < count($tracks) - 1; $i++) {
-            $lat1 = deg2rad((float)$tracks[$i]->latitude);
-            $lon1 = deg2rad((float)$tracks[$i]->longitude);
-            $lat2 = deg2rad((float)$tracks[$i + 1]->latitude);
-            $lon2 = deg2rad((float)$tracks[$i + 1]->longitude);
+            $lat1 = deg2rad((float) $tracks[$i]->latitude);
+            $lon1 = deg2rad((float) $tracks[$i]->longitude);
+            $lat2 = deg2rad((float) $tracks[$i + 1]->latitude);
+            $lon2 = deg2rad((float) $tracks[$i + 1]->longitude);
 
             $dlat = $lat2 - $lat1;
             $dlon = $lon2 - $lon1;
@@ -307,7 +311,7 @@ class TrackingController extends Controller
                 'duration_minutes' => $durationMinutes,
                 'start_time' => $firstPoint ? Carbon::parse($firstPoint->recorded_at)->format('H:i') : null,
                 'last_time' => $lastPoint ? Carbon::parse($lastPoint->recorded_at)->format('H:i') : null,
-            ]
+            ],
         ]);
     }
 
@@ -317,23 +321,24 @@ class TrackingController extends Controller
     public function myStatus(Request $request)
     {
         $user = $request->user();
+
         return response()->json([
             'status' => 'success',
-            'is_tracking_enabled' => (bool)($user->is_tracking_enabled ?? true),
+            'is_tracking_enabled' => (bool) ($user->is_tracking_enabled ?? true),
         ]);
     }
 
     private function getRoleSettings($user)
     {
-        $rolesQuery = \App\Models\Role::withCount(['users' => function ($q) use ($user) {
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+        $rolesQuery = Role::withCount(['users' => function ($q) use ($user) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $q->where('company_id', $user->company_id);
             }
         }]);
 
         return $rolesQuery->get()->map(function ($role) use ($user) {
             $userQuery = User::where('role_id', $role->id);
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $userQuery->where('company_id', $user->company_id);
             }
             $enabledCount = (clone $userQuery)->where('is_tracking_enabled', true)->count();
@@ -342,7 +347,7 @@ class TrackingController extends Controller
             return [
                 'id' => $role->id,
                 'name' => $role->name,
-                'is_tracking_enabled' => (bool)($role->is_tracking_enabled ?? true),
+                'is_tracking_enabled' => (bool) ($role->is_tracking_enabled ?? true),
                 'total_users' => $totalCount,
                 'enabled_users' => $enabledCount,
                 'disabled_users' => $totalCount - $enabledCount,
@@ -355,7 +360,7 @@ class TrackingController extends Controller
         $usersQuery = User::with(['role:id,name', 'company:id,name', 'office:id,name'])
             ->select('id', 'name', 'nik', 'email', 'phone', 'profile_photo_path', 'company_id', 'role_id', 'office_id', 'is_tracking_enabled');
 
-        if ($user->company_id && !$user->canAccessAllCompanies()) {
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
             $usersQuery->where('company_id', $user->company_id);
         }
 
@@ -371,13 +376,14 @@ class TrackingController extends Controller
             $search = $request->search;
             $usersQuery->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('nik', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('nik', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
             });
         }
 
         return $usersQuery->orderBy('name')->get()->map(function ($u) {
-            $u->is_tracking_enabled = (bool)($u->is_tracking_enabled ?? true);
+            $u->is_tracking_enabled = (bool) ($u->is_tracking_enabled ?? true);
+
             return $u;
         });
     }
@@ -388,7 +394,7 @@ class TrackingController extends Controller
     public function getSettings(Request $request)
     {
         $user = $request->user();
-        if (!$this->isSuperAdmin($user) && !$user->hasPermission('view-live-tracking')) {
+        if (! $this->isSuperAdmin($user) && ! $user->hasPermission('view-live-tracking')) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Akses ditolak. Fitur ini hanya untuk Super Admin.',
@@ -398,8 +404,8 @@ class TrackingController extends Controller
         $roles = $this->getRoleSettings($user);
         $users = $this->getUserSettings($request, $user);
 
-        $totalUsers = User::when($user->company_id && !$user->canAccessAllCompanies(), fn($q) => $q->where('company_id', $user->company_id))->count();
-        $totalEnabled = User::when($user->company_id && !$user->canAccessAllCompanies(), fn($q) => $q->where('company_id', $user->company_id))->where('is_tracking_enabled', true)->count();
+        $totalUsers = User::when($user->company_id && ! $user->canAccessAllCompanies(), fn ($q) => $q->where('company_id', $user->company_id))->count();
+        $totalEnabled = User::when($user->company_id && ! $user->canAccessAllCompanies(), fn ($q) => $q->where('company_id', $user->company_id))->where('is_tracking_enabled', true)->count();
 
         return response()->json([
             'status' => 'success',
@@ -410,8 +416,8 @@ class TrackingController extends Controller
                     'total_users' => $totalUsers,
                     'total_enabled' => $totalEnabled,
                     'total_disabled' => $totalUsers - $totalEnabled,
-                ]
-            ]
+                ],
+            ],
         ]);
     }
 
@@ -421,35 +427,35 @@ class TrackingController extends Controller
     public function toggleUser(Request $request, $userId)
     {
         $user = $request->user();
-        if (!$this->isSuperAdmin($user) && !$user->hasPermission('view-live-tracking')) {
+        if (! $this->isSuperAdmin($user) && ! $user->hasPermission('view-live-tracking')) {
             return response()->json([
                 'status' => 'error',
                 'message' => self::MSG_ACCESS_DENIED,
             ], 403);
         }
 
-        $targetUser = User::when($user->company_id && !$user->canAccessAllCompanies(), fn($q) => $q->where('company_id', $user->company_id))->findOrFail($userId);
+        $targetUser = User::when($user->company_id && ! $user->canAccessAllCompanies(), fn ($q) => $q->where('company_id', $user->company_id))->findOrFail($userId);
 
         $newStatus = $request->has('is_tracking_enabled')
-            ? (bool)$request->is_tracking_enabled
-            : !($targetUser->is_tracking_enabled ?? true);
+            ? (bool) $request->is_tracking_enabled
+            : ! ($targetUser->is_tracking_enabled ?? true);
 
         $targetUser->update(['is_tracking_enabled' => $newStatus]);
 
-        \App\Models\ActivityLog::create([
+        ActivityLog::create([
             'company_id' => $targetUser->company_id,
             'user_id' => $user->id,
             'action' => 'UPDATE_TRACKING_SETTING',
-            'description' => "Super Admin {$user->name} mengubah status live tracking user {$targetUser->name} menjadi: " . ($newStatus ? 'AKTIF' : 'NONAKTIF'),
+            'description' => "Super Admin {$user->name} mengubah status live tracking user {$targetUser->name} menjadi: ".($newStatus ? 'AKTIF' : 'NONAKTIF'),
         ]);
 
         return response()->json([
             'status' => 'success',
-            'message' => "Live tracking untuk {$targetUser->name} berhasil " . ($newStatus ? 'diaktifkan' : 'dinonaktifkan'),
+            'message' => "Live tracking untuk {$targetUser->name} berhasil ".($newStatus ? 'diaktifkan' : 'dinonaktifkan'),
             'data' => [
                 'user_id' => $targetUser->id,
                 'is_tracking_enabled' => $newStatus,
-            ]
+            ],
         ]);
     }
 
@@ -459,43 +465,43 @@ class TrackingController extends Controller
     public function toggleRole(Request $request, $roleId)
     {
         $user = $request->user();
-        if (!$this->isSuperAdmin($user) && !$user->hasPermission('view-live-tracking')) {
+        if (! $this->isSuperAdmin($user) && ! $user->hasPermission('view-live-tracking')) {
             return response()->json([
                 'status' => 'error',
                 'message' => self::MSG_ACCESS_DENIED,
             ], 403);
         }
 
-        $role = \App\Models\Role::findOrFail($roleId);
+        $role = Role::findOrFail($roleId);
 
         $newStatus = $request->has('is_tracking_enabled')
-            ? (bool)$request->is_tracking_enabled
-            : !($role->is_tracking_enabled ?? true);
+            ? (bool) $request->is_tracking_enabled
+            : ! ($role->is_tracking_enabled ?? true);
 
         $role->update(['is_tracking_enabled' => $newStatus]);
 
         // Bulk update users in that role
         $usersQuery = User::where('role_id', $roleId);
-        if ($user->company_id && !$user->canAccessAllCompanies()) {
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
             $usersQuery->where('company_id', $user->company_id);
         }
         $affected = $usersQuery->update(['is_tracking_enabled' => $newStatus]);
 
-        \App\Models\ActivityLog::create([
+        ActivityLog::create([
             'company_id' => $user->company_id,
             'user_id' => $user->id,
             'action' => 'UPDATE_ROLE_TRACKING_SETTING',
-            'description' => "Super Admin {$user->name} mengubah status live tracking divisi {$role->name} ({$affected} pegawai) menjadi: " . ($newStatus ? 'AKTIF' : 'NONAKTIF'),
+            'description' => "Super Admin {$user->name} mengubah status live tracking divisi {$role->name} ({$affected} pegawai) menjadi: ".($newStatus ? 'AKTIF' : 'NONAKTIF'),
         ]);
 
         return response()->json([
             'status' => 'success',
-            'message' => "Live tracking divisi {$role->name} ({$affected} pegawai) berhasil " . ($newStatus ? 'diaktifkan' : 'dinonaktifkan'),
+            'message' => "Live tracking divisi {$role->name} ({$affected} pegawai) berhasil ".($newStatus ? 'diaktifkan' : 'dinonaktifkan'),
             'data' => [
                 'role_id' => $role->id,
                 'is_tracking_enabled' => $newStatus,
                 'affected_users' => $affected,
-            ]
+            ],
         ]);
     }
 
@@ -505,7 +511,7 @@ class TrackingController extends Controller
     public function bulkUpdate(Request $request)
     {
         $user = $request->user();
-        if (!$this->isSuperAdmin($user) && !$user->hasPermission('view-live-tracking')) {
+        if (! $this->isSuperAdmin($user) && ! $user->hasPermission('view-live-tracking')) {
             return response()->json([
                 'status' => 'error',
                 'message' => self::MSG_ACCESS_DENIED,
@@ -520,21 +526,21 @@ class TrackingController extends Controller
             'role_ids.*' => 'integer|exists:roles,id',
         ]);
 
-        $status = (bool)$request->is_tracking_enabled;
+        $status = (bool) $request->is_tracking_enabled;
         $totalAffected = 0;
 
-        if (!empty($request->user_ids)) {
+        if (! empty($request->user_ids)) {
             $query = User::whereIn('id', $request->user_ids);
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
             $totalAffected += $query->update(['is_tracking_enabled' => $status]);
         }
 
-        if (!empty($request->role_ids)) {
-            \App\Models\Role::whereIn('id', $request->role_ids)->update(['is_tracking_enabled' => $status]);
+        if (! empty($request->role_ids)) {
+            Role::whereIn('id', $request->role_ids)->update(['is_tracking_enabled' => $status]);
             $query = User::whereIn('role_id', $request->role_ids);
-            if ($user->company_id && !$user->canAccessAllCompanies()) {
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $query->where('company_id', $user->company_id);
             }
             $totalAffected += $query->update(['is_tracking_enabled' => $status]);
@@ -546,7 +552,7 @@ class TrackingController extends Controller
             'data' => [
                 'is_tracking_enabled' => $status,
                 'affected_count' => $totalAffected,
-            ]
+            ],
         ]);
     }
 }

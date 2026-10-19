@@ -8,10 +8,8 @@ use App\Models\AttendanceCorrection;
 use App\Models\FundRequest;
 use App\Models\Leave;
 use App\Models\Overtime;
-use App\Models\PayrollBatch;
 use App\Models\Permit;
 use App\Models\Reimbursement;
-use App\Models\Salary;
 use App\Models\User;
 use App\Models\VehicleLog;
 use App\Traits\Notifiable;
@@ -24,7 +22,9 @@ class ManagerApprovalService
     use Notifiable;
 
     private const ROUTE_FUND_REQUESTS = '/dashboard/fund-requests';
+
     private const ROUTE_ATTENDANCE = '/dashboard/attendance';
+
     private const ROUTE_PAYROLL_APPROVAL = '/dashboard/payroll/approval';
 
     public const PERM_MAP = [
@@ -81,7 +81,7 @@ class ManagerApprovalService
         $isGlobalAdmin = $user->isSuperAdmin();
         $isCompanyAdmin = PendingRequestService::isExecutiveOrAdmin($user);
 
-        if (! $this->canUserApproveRequest($user, $request->type, $isGlobalAdmin, $isCompanyAdmin)) {
+        if (! $this->canUserApproveRequest($user, $request->type, $isGlobalAdmin)) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Anda tidak memiliki hak akses untuk menyetujui pengajuan ini.',
@@ -96,7 +96,7 @@ class ManagerApprovalService
         };
     }
 
-    private function canUserApproveRequest(User $user, string $type, bool $isGlobalAdmin, bool $isCompanyAdmin): bool
+    private function canUserApproveRequest(User $user, string $type, bool $isGlobalAdmin): bool
     {
         if ($isGlobalAdmin) {
             return true;
@@ -104,11 +104,11 @@ class ManagerApprovalService
 
         // Non-SuperAdmin must have subordinates
         $hasSubordinates = User::where('supervisor_id', $user->id)->exists();
-        if (!$hasSubordinates) {
+        if (! $hasSubordinates) {
             return false;
         }
 
-        return !isset(self::PERM_MAP[$type]) ||
+        return ! isset(self::PERM_MAP[$type]) ||
             $user->hasPermission(self::PERM_MAP[$type]) ||
             ($type === 'attendance_correction' && $user->hasPermission('approve-attendance-corrections'));
     }
@@ -117,16 +117,16 @@ class ManagerApprovalService
     {
         $attendance = Attendance::with('user')
             ->where('id', $request->id)
-            ->when(!$isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))
+            ->when(! $isGlobalAdmin, fn ($q) => $q->where('company_id', $user->company_id))
             ->first();
 
-        if (!$attendance) {
+        if (! $attendance) {
             return response()->json(['status' => 'error', 'message' => 'Data absensi pulang awal tidak ditemukan.'], 404);
         }
 
-        if (!$isGlobalAdmin) {
+        if (! $isGlobalAdmin) {
             $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
-            if (!in_array($attendance->user_id, $subordinateIds)) {
+            if (! in_array($attendance->user_id, $subordinateIds)) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Anda tidak memiliki wewenang untuk memproses absensi pulang awal dari karyawan yang bukan bawahan Anda.',
@@ -150,7 +150,7 @@ class ManagerApprovalService
             $isApproved ? 'ABSEN PULANG AWAL DISETUJUI' : 'ABSEN PULANG AWAL DITOLAK',
             $isApproved
                 ? "Permohonan Pulang Awal Anda pada tanggal {$dateStr} telah DISETUJUI oleh Super Admin."
-                : "Permohonan Pulang Awal Anda pada tanggal {$dateStr} DITOLAK oleh Super Admin. Alasan: " . ($request->remark ?? '-'),
+                : "Permohonan Pulang Awal Anda pada tanggal {$dateStr} DITOLAK oleh Super Admin. Alasan: ".($request->remark ?? '-'),
             $isApproved ? 'success' : 'danger',
             self::ROUTE_ATTENDANCE
         );
@@ -158,7 +158,7 @@ class ManagerApprovalService
         $this->notifySuperAdmins(
             $attendance->company_id ?? $user->company_id,
             $isApproved ? 'ABSEN PULANG AWAL DISETUJUI' : 'ABSEN PULANG AWAL DITOLAK',
-            "Permohonan Pulang Awal {$attendance->user?->name} tanggal {$dateStr} telah " . ($isApproved ? 'DISETUJUI' : 'DITOLAK') . " oleh {$user->name}." . ($request->remark ? " Catatan: {$request->remark}" : ''),
+            "Permohonan Pulang Awal {$attendance->user?->name} tanggal {$dateStr} telah ".($isApproved ? 'DISETUJUI' : 'DITOLAK')." oleh {$user->name}.".($request->remark ? " Catatan: {$request->remark}" : ''),
             $isApproved ? 'success' : 'danger',
             self::ROUTE_ATTENDANCE,
             $user->id
@@ -176,6 +176,7 @@ class ManagerApprovalService
         if ($isGlobalAdmin || $user->hasPermission('manage-attendances') || $attendance->dinas_luar_status === 'approved_spv') {
             return 'approved_hr';
         }
+
         return 'approved_spv';
     }
 
@@ -209,10 +210,12 @@ class ManagerApprovalService
             if ($remark) {
                 $msg .= " Catatan: {$remark}";
             }
+
             return $msg;
         }
 
         $reason = $remark ?? '-';
+
         return "Permohonan Dinas Luar Anda ke {$destination} DITOLAK. Alasan: {$reason}";
     }
 
@@ -221,16 +224,16 @@ class ManagerApprovalService
         $attendance = Attendance::with('user')
             ->where('id', $request->id)
             ->where('attendance_type', 'dinas_luar')
-            ->when(!$isGlobalAdmin, fn($q) => $q->where('company_id', $user->company_id))
+            ->when(! $isGlobalAdmin, fn ($q) => $q->where('company_id', $user->company_id))
             ->first();
 
-        if (!$attendance) {
+        if (! $attendance) {
             return response()->json(['status' => 'error', 'message' => 'Data absensi dinas luar tidak ditemukan.'], 404);
         }
 
-        if (!$isGlobalAdmin) {
+        if (! $isGlobalAdmin) {
             $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
-            if (!in_array($attendance->user_id, $subordinateIds)) {
+            if (! in_array($attendance->user_id, $subordinateIds)) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Anda tidak memiliki wewenang untuk memproses absensi dinas luar dari karyawan yang bukan bawahan Anda.',
@@ -267,7 +270,7 @@ class ManagerApprovalService
 
     private function handlePayrollApproval(Request $request, User $user, bool $isGlobalAdmin)
     {
-        return (new ManagerPayrollApprovalService())->handlePayrollApproval($request, $user, $isGlobalAdmin);
+        return (new ManagerPayrollApprovalService)->handlePayrollApproval($request, $user, $isGlobalAdmin);
     }
 
     private function handleGeneralRequestApproval(Request $request, User $user, bool $isGlobalAdmin, bool $isCompanyAdmin)
@@ -288,37 +291,41 @@ class ManagerApprovalService
         }
 
         $item = $query->first();
-        if (!$item) {
+        if (! $item) {
             return response()->json(['status' => 'error', 'message' => 'Pengajuan tidak ditemukan atau Anda tidak memiliki hak akses.'], 404);
         }
 
-        if (!$isGlobalAdmin) {
-            $submitter = $item->user ?: User::find($item->user_id) ?: $user;
-            $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
-            $submitterId = $item->user_id ?? $item->user?->id;
-            $isSubordinate = $submitterId && in_array($submitterId, $subordinateIds);
+        if (! $isGlobalAdmin && ! $this->isUserAuthorizedForApproval($item, $request->type, $user)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda tidak memiliki wewenang untuk menyetujui pengajuan dari karyawan yang bukan bawahan Anda.',
+            ], 403);
+        }
 
-            // Check if workflow step specifically targets this user ID
-            $isDirectUserStep = false;
-            if (!empty($item->current_approval_step)) {
-                $workflow = ApprovalService::getWorkflow($request->type, $item->company_id ?? $user->company_id, $submitter);
-                $step = $workflow?->steps()->where('step_number', $item->current_approval_step)->first();
-                if ($step && $step->approver_type === 'user' && $step->approver_user_id === $user->id) {
-                    $isDirectUserStep = true;
-                }
-            }
+        return ! empty($item->current_approval_step)
+            ? $this->handleDynamicApproval($item, $request, $user)
+            : $this->handleLegacyApproval($item, $request, $user, $isGlobalAdmin, $isCompanyAdmin);
+    }
 
-            if (!$isDirectUserStep && !$isSubordinate) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Anda tidak memiliki wewenang untuk menyetujui pengajuan dari karyawan yang bukan bawahan Anda.',
-                ], 403);
+    private function isUserAuthorizedForApproval($item, string $type, User $user): bool
+    {
+        $submitter = $item->user ?: User::find($item->user_id) ?: $user;
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        $submitterId = $item->user_id ?? $item->user?->id;
+
+        if ($submitterId && in_array($submitterId, $subordinateIds)) {
+            return true;
+        }
+
+        if (! empty($item->current_approval_step)) {
+            $workflow = ApprovalService::getWorkflow($type, $item->company_id ?? $user->company_id, $submitter);
+            $step = $workflow?->steps()->where('step_number', $item->current_approval_step)->first();
+            if ($step && $step->approver_type === 'user' && $step->approver_user_id === $user->id) {
+                return true;
             }
         }
 
-        return !empty($item->current_approval_step)
-            ? $this->handleDynamicApproval($item, $request, $user)
-            : $this->handleLegacyApproval($item, $request, $user, $isGlobalAdmin, $isCompanyAdmin);
+        return false;
     }
 
     private function handleDynamicApproval($item, Request $request, User $user)
@@ -339,7 +346,7 @@ class ManagerApprovalService
             return response()->json(['status' => 'error', 'message' => $result['error']], 403);
         }
 
-        if (!$result) {
+        if (! $result) {
             return response()->json(['status' => 'error', 'message' => 'Gagal memproses alur persetujuan.'], 400);
         }
 
@@ -363,7 +370,7 @@ class ManagerApprovalService
 
     private function processDynamicApprovalPostAction($item, string $type, array $result): void
     {
-        if (!$result['is_final'] || $result['status'] !== 'approved') {
+        if (! $result['is_final'] || $result['status'] !== 'approved') {
             return;
         }
 
@@ -377,7 +384,7 @@ class ManagerApprovalService
     private function applyAttendanceCorrectionToRecord($item): void
     {
         $attendance = $item->attendance;
-        if (!$attendance) {
+        if (! $attendance) {
             return;
         }
 
@@ -388,7 +395,7 @@ class ManagerApprovalService
         if ($item->corrected_check_out) {
             $applyData['check_out'] = $item->corrected_check_out;
         }
-        if (!empty($applyData)) {
+        if (! empty($applyData)) {
             $attendance->update($applyData);
         }
     }
@@ -419,11 +426,12 @@ class ManagerApprovalService
     private function resolveDynamicRemarkText(Request $request, User $user): ?string
     {
         $isGlobalAdmin = $user->role_id === 1 || (method_exists($user, 'canAccessAllCompanies') && $user->canAccessAllCompanies());
-        if (!$isGlobalAdmin) {
+        if (! $isGlobalAdmin) {
             return $request->remark;
         }
 
         $reasonPart = $request->filled('remark') ? ": {$request->remark}" : ' (Override Otorisasi Darurat)';
+
         return "[Disetujui Super Admin - {$user->name}]{$reasonPart}";
     }
 
@@ -455,7 +463,7 @@ class ManagerApprovalService
             $this->notify(
                 $item->user,
                 "PENGAJUAN {$typeText} {$statusText}",
-                "Pengajuan {$typeText} Anda telah {$statusText}." . $remarkSuffix,
+                "Pengajuan {$typeText} Anda telah {$statusText}.".$remarkSuffix,
                 $notifLevel,
                 $routePath
             );
@@ -464,7 +472,7 @@ class ManagerApprovalService
         $this->notifySuperAdmins(
             $item->company_id ?? $user->company_id,
             "PENGAJUAN {$typeText} {$statusText}",
-            "Pengajuan {$typeText} {$item->user?->name} telah {$statusText} oleh {$user->name}." . $remarkSuffix,
+            "Pengajuan {$typeText} {$item->user?->name} telah {$statusText} oleh {$user->name}.".$remarkSuffix,
             $notifLevel,
             $routePath,
             $user->id
@@ -479,7 +487,7 @@ class ManagerApprovalService
             foreach ($result['approvers'] as $nextApprover) {
                 $this->notify(
                     $nextApprover,
-                    "PENGAJUAN BUTUH PERSETUJUAN",
+                    'PENGAJUAN BUTUH PERSETUJUAN',
                     "Pengajuan {$typeText} dari {$item->user?->name} telah disetujui pada tahap sebelumnya dan kini membutuhkan persetujuan Anda ({$result['step_label']}).",
                     'warning',
                     $routePath
@@ -511,6 +519,6 @@ class ManagerApprovalService
 
     private function handleLegacyApproval($item, Request $request, User $user, bool $isGlobalAdmin, bool $isCompanyAdmin)
     {
-        return (new ManagerLegacyApprovalService())->handleLegacyApproval($item, $request, $user, $isGlobalAdmin, $isCompanyAdmin);
+        return (new ManagerLegacyApprovalService)->handleLegacyApproval($item, $request, $user, $isGlobalAdmin, $isCompanyAdmin);
     }
 }

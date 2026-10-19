@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -11,6 +10,7 @@ use Symfony\Component\Process\Process;
 class FaceRecognitionService
 {
     protected string $aiServiceUrl;
+
     protected float $defaultThreshold;
 
     public function __construct()
@@ -22,14 +22,13 @@ class FaceRecognitionService
     /**
      * Mengekstrak 512-d vektor wajah dari file upload atau file path.
      *
-     * @param UploadedFile|string $imageInput
-     * @return array
+     * @param  UploadedFile|string  $imageInput
      */
     public function extractFaceEmbedding($imageInput): array
     {
         $result = [
             'success' => false,
-            'message' => 'AI Service failed with unknown error.'
+            'message' => 'AI Service failed with unknown error.',
         ];
 
         try {
@@ -56,12 +55,12 @@ class FaceRecognitionService
                 if ($response->successful()) {
                     $result = $response->json();
                 } else {
-                    $result['message'] = 'AI Service HTTP Error ' . $response->status() . ': ' . $response->body();
+                    $result['message'] = 'AI Service HTTP Error '.$response->status().': '.$response->body();
                 }
             }
         } catch (\Throwable $e) {
-            Log::warning("[FaceRecognitionService] HTTP AI Service unreachable: " . $e->getMessage());
-            $result['message'] = 'AI Service Connection Error: ' . $e->getMessage();
+            Log::warning('[FaceRecognitionService] HTTP AI Service unreachable: '.$e->getMessage());
+            $result['message'] = 'AI Service Connection Error: '.$e->getMessage();
         }
 
         return $result;
@@ -70,10 +69,8 @@ class FaceRecognitionService
     /**
      * Memverifikasi wajah pada foto saat ini dengan data vektor yang terdaftar di database.
      *
-     * @param array $registeredEmbedding Array 512 float
-     * @param UploadedFile|string $currentImage
-     * @param float|null $threshold
-     * @return array
+     * @param  array  $registeredEmbedding  Array 512 float
+     * @param  UploadedFile|string  $currentImage
      */
     public function verifyFace($registeredEmbedding, $currentImage, ?float $threshold = null): array
     {
@@ -84,7 +81,7 @@ class FaceRecognitionService
             $registeredEmbedding = json_decode($registeredEmbedding, true);
         }
 
-        if (!is_array($registeredEmbedding) || empty($registeredEmbedding) || count($registeredEmbedding) !== 512) {
+        if (! is_array($registeredEmbedding) || empty($registeredEmbedding) || count($registeredEmbedding) !== 512) {
             return [
                 'success' => false,
                 'is_match' => false,
@@ -129,7 +126,7 @@ class FaceRecognitionService
                 }
             }
         } catch (\Throwable $e) {
-            Log::warning("[FaceRecognitionService] HTTP AI Service verify unreachable: " . $e->getMessage() . ". Falling back to CLI.");
+            Log::warning('[FaceRecognitionService] HTTP AI Service verify unreachable: '.$e->getMessage().'. Falling back to CLI.');
         }
 
         // 2. Fallback CLI
@@ -180,13 +177,13 @@ class FaceRecognitionService
             $tempPath = $imageInput;
         } else {
             // Write base64 to temp file
-            $tempPath = tempnam(sys_get_temp_dir(), 'face_') . '.jpg';
+            $tempPath = tempnam(sys_get_temp_dir(), 'face_').'.jpg';
             $data = str_contains($imageInput, ',') ? explode(',', $imageInput)[1] : $imageInput;
             file_put_contents($tempPath, base64_decode($data));
         }
 
         $scriptPath = base_path('face-recog-ArcFace/cli.py');
-        if (!file_exists($scriptPath)) {
+        if (! file_exists($scriptPath)) {
             $scriptPath = base_path('../face-recog-ArcFace/cli.py');
         }
 
@@ -195,16 +192,18 @@ class FaceRecognitionService
         $process->setTimeout(30);
         $process->run();
 
-        if (!$process->isSuccessful()) {
-            Log::error("[FaceRecognitionService CLI Extract Error]: " . $process->getErrorOutput() . " (Exit Code: " . $process->getExitCode() . ", Binary: $pythonBin, Script: $scriptPath)");
+        if (! $process->isSuccessful()) {
+            Log::error('[FaceRecognitionService CLI Extract Error]: '.$process->getErrorOutput().' (Exit Code: '.$process->getExitCode().", Binary: $pythonBin, Script: $scriptPath)");
+
             return [
                 'success' => false,
                 'message' => 'Gagal mengenali wajah pada foto.',
-                'error' => $process->getErrorOutput()
+                'error' => $process->getErrorOutput(),
             ];
         }
 
         $result = json_decode($process->getOutput(), true);
+
         return $result ?? ['success' => false, 'message' => 'Invalid JSON dari AI CLI.'];
     }
 
@@ -219,17 +218,17 @@ class FaceRecognitionService
         } elseif (is_string($currentImage) && file_exists($currentImage)) {
             $tempImgPath = $currentImage;
         } else {
-            $tempImgPath = tempnam(sys_get_temp_dir(), 'face_ver_') . '.jpg';
+            $tempImgPath = tempnam(sys_get_temp_dir(), 'face_ver_').'.jpg';
             $data = str_contains($currentImage, ',') ? explode(',', $currentImage)[1] : $currentImage;
             file_put_contents($tempImgPath, base64_decode($data));
         }
 
         // Tulis array embedding ke file JSON sementara untuk menghindari masalah argument escaping di Windows CLI
-        $tempJsonPath = tempnam(sys_get_temp_dir(), 'face_emb_') . '.json';
+        $tempJsonPath = tempnam(sys_get_temp_dir(), 'face_emb_').'.json';
         file_put_contents($tempJsonPath, json_encode($registeredEmbedding));
 
         $scriptPath = base_path('face-recog-ArcFace/cli.py');
-        if (!file_exists($scriptPath)) {
+        if (! file_exists($scriptPath)) {
             $scriptPath = base_path('../face-recog-ArcFace/cli.py');
         }
 
@@ -243,15 +242,16 @@ class FaceRecognitionService
             '--registered-embedding',
             $tempJsonPath,
             '--threshold',
-            (string) $threshold
+            (string) $threshold,
         ]);
         $process->setTimeout(30);
         $process->run();
 
         @unlink($tempJsonPath);
 
-        if (!$process->isSuccessful()) {
-            Log::error("[FaceRecognitionService CLI Verify Error]: " . $process->getErrorOutput() . " (Exit Code: " . $process->getExitCode() . ", Binary: $pythonBin, Script: $scriptPath)");
+        if (! $process->isSuccessful()) {
+            Log::error('[FaceRecognitionService CLI Verify Error]: '.$process->getErrorOutput().' (Exit Code: '.$process->getExitCode().", Binary: $pythonBin, Script: $scriptPath)");
+
             return [
                 'success' => false,
                 'is_match' => false,
@@ -261,6 +261,7 @@ class FaceRecognitionService
         }
 
         $result = json_decode($process->getOutput(), true);
+
         return $result ?? ['success' => false, 'is_match' => false, 'similarity' => 0.0, 'message' => 'Invalid output JSON'];
     }
 }

@@ -406,7 +406,11 @@ const normalizeWebAttendances = (rawItems: any[]): ApprovalItem[] =>
     const timeFormatted = checkInDate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
     const dateFormatted = checkInDate.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
     const isMobileManual = w.channel === 'mobile' || (w.suspicious_reason && (w.suspicious_reason.includes('Tanpa verifikasi') || w.suspicious_reason.includes('wajah gagal')));
-    
+    const anomalySuffix = w.is_suspicious ? " — Anomali Terdeteksi" : "";
+    const description = isMobileManual
+      ? `Absen Manual Mobile pada ${dateFormatted} pukul ${timeFormatted} WIB. Catatan: "${w.suspicious_reason || 'Verifikasi wajah gagal'}"`
+      : `Absen Masuk Browser via Web pada ${dateFormatted} pukul ${timeFormatted} WIB (IP: ${w.ip_address || "127.0.0.1"})${anomalySuffix}`;
+
     return {
       id: w.id,
       type: "web_attendance",
@@ -414,9 +418,7 @@ const normalizeWebAttendances = (rawItems: any[]): ApprovalItem[] =>
       user_email: w.user?.email,
       user_role: w.user?.role?.name || w.user?.role || "Karyawan",
       category: isMobileManual ? "Presensi Manual (Wajah Gagal)" : "Presensi Web (Browser)",
-      description: isMobileManual 
-        ? `Absen Manual Mobile pada ${dateFormatted} pukul ${timeFormatted} WIB. Catatan: "${w.suspicious_reason || 'Verifikasi wajah gagal'}"`
-        : `Absen Masuk Browser via Web pada ${dateFormatted} pukul ${timeFormatted} WIB (IP: ${w.ip_address || "127.0.0.1"})` + (w.is_suspicious ? " — Anomali Terdeteksi" : ""),
+      description,
       status: w.web_approval_status || w.status || "pending",
       created_at: w.check_in || w.created_at,
       web_approval_status: w.web_approval_status,

@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\LeaveSingleExport;
+use App\Exports\OvertimeSingleExport;
+use App\Exports\PermitSingleExport;
+use App\Exports\ReimbursementSingleExport;
 use App\Models\Leave;
 use App\Models\Overtime;
 use App\Models\PerformanceReview;
@@ -10,10 +14,6 @@ use App\Models\Reimbursement;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
-use App\Exports\LeaveSingleExport;
-use App\Exports\ReimbursementSingleExport;
-use App\Exports\OvertimeSingleExport;
-use App\Exports\PermitSingleExport;
 use Maatwebsite\Excel\Facades\Excel;
 
 class ExportController extends Controller
@@ -56,7 +56,7 @@ class ExportController extends Controller
             'user.office',
             'user.company',
             'supervisorApprover',
-            'hrApprover'
+            'hrApprover',
         ])
             ->where('company_id', $request->user()->company_id)
             ->findOrFail($id);
@@ -89,7 +89,7 @@ class ExportController extends Controller
             'user.office',
             'user.company',
             'approver',
-            'items'
+            'items',
         ])
             ->where('company_id', $request->user()->company_id)
             ->findOrFail($id);
@@ -122,7 +122,7 @@ class ExportController extends Controller
             'user.office',
             'user.company',
             'supervisorApprover',
-            'hrApprover'
+            'hrApprover',
         ])
             ->where('company_id', $request->user()->company_id)
             ->findOrFail($id);
@@ -151,7 +151,7 @@ class ExportController extends Controller
             'user.office',
             'user.company',
             'approver',
-            'items'
+            'items',
         ])
             ->where('company_id', $request->user()->company_id)
             ->findOrFail($id);
@@ -167,7 +167,7 @@ class ExportController extends Controller
             'user',
             'user.role',
             'user.office',
-            'user.company'
+            'user.company',
         ])
             ->where('company_id', $request->user()->company_id)
             ->findOrFail($id);

@@ -92,19 +92,19 @@ class ActivityLogController extends Controller
         foreach ($logs as $log) {
             $csvData .= implode(',', [
                 $log->id,
-                '"' . $log->created_at . '"',
-                '"' . ($log->user->name ?? 'System') . '"',
-                '"' . $log->action . '"',
-                '"' . ($log->module ?? '-') . '"',
-                '"' . str_replace('"', '""', $log->description ?? '') . '"',
-                '"' . ($log->ip_address ?? '-') . '"',
-                '"' . str_replace('"', '""', substr($log->user_agent ?? '-', 0, 100)) . '"',
-            ]) . "\n";
+                '"'.$log->created_at.'"',
+                '"'.($log->user->name ?? 'System').'"',
+                '"'.$log->action.'"',
+                '"'.($log->module ?? '-').'"',
+                '"'.str_replace('"', '""', $log->description ?? '').'"',
+                '"'.($log->ip_address ?? '-').'"',
+                '"'.str_replace('"', '""', substr($log->user_agent ?? '-', 0, 100)).'"',
+            ])."\n";
         }
 
         return response($csvData, 200, [
             'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="audit_log_' . now()->format('Y-m-d') . '.csv"',
+            'Content-Disposition' => 'attachment; filename="audit_log_'.now()->format('Y-m-d').'.csv"',
         ]);
     }
 }
