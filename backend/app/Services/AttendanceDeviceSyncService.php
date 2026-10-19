@@ -22,7 +22,12 @@ class AttendanceDeviceSyncService
     public function testDevice(AttendanceDevice $device): array
     {
         try {
-            $info = $this->zkService->testConnection($device->ip_address, $device->port, 4);
+            $info = $this->zkService->testConnection(
+                $device->ip_address,
+                $device->port,
+                4,
+                (int) ($device->comm_key ?? 0)
+            );
 
             $device->update([
                 'status' => 'online',
@@ -55,7 +60,12 @@ class AttendanceDeviceSyncService
     public function syncDeviceLogs(AttendanceDevice $device): array
     {
         try {
-            $logs = $this->zkService->getAttendanceLogs($device->ip_address, $device->port, 6);
+            $logs = $this->zkService->getAttendanceLogs(
+                $device->ip_address,
+                $device->port,
+                6,
+                (int) ($device->comm_key ?? 0)
+            );
             $device->update([
                 'status' => 'online',
                 'last_sync_at' => now(),

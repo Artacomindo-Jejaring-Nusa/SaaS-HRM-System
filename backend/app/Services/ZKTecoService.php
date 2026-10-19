@@ -19,11 +19,13 @@ class ZKTecoService
     private const CMD_DISCONNECT = 1001;
     private const CMD_DEVICE_INFO = 11;
     private const CMD_VERSION = 1100;
+    private const CMD_AUTH = 1102;
     private const CMD_ATTLOG_RRQ = 13;
     private const CMD_FREE_DATA = 1060;
 
     // Replies
     private const CMD_ACK_OK = 2000;
+    private const CMD_ACK_UNAUTH = 2005;
     private const CMD_PREPARE_DATA = 1500;
     private const CMD_DATA = 1501;
 
@@ -37,9 +39,9 @@ class ZKTecoService
     /**
      * Test connection to device. Returns device info on success or throws Exception.
      */
-    public function testConnection(string $ip, int $port = 4370, int $timeout = 4): array
+    public function testConnection(string $ip, int $port = 4370, int $timeout = 4, int|string $commKey = 0): array
     {
-        $this->connect($ip, $port, $timeout);
+        $this->connect($ip, $port, $timeout, $commKey);
         try {
             $version = $this->getVersion();
             $serialNumber = $this->getSerialNumber();
@@ -64,9 +66,9 @@ class ZKTecoService
      *
      * @return array<int, array{pin: string, timestamp: string, state: int, type: int}>
      */
-    public function getAttendanceLogs(string $ip, int $port = 4370, int $timeout = 5): array
+    public function getAttendanceLogs(string $ip, int $port = 4370, int $timeout = 5, int|string $commKey = 0): array
     {
-        $this->connect($ip, $port, $timeout);
+        $this->connect($ip, $port, $timeout, $commKey);
         try {
             return $this->fetchAttendanceLogs();
         } finally {
@@ -74,7 +76,7 @@ class ZKTecoService
         }
     }
 
-    public function connect(string $ip, int $port = 4370, int $timeout = 4): bool
+    public function connect(string $ip, int $port = 4370, int $timeout = 4, int|string $commKey = 0): bool
     {
         $this->ip = $ip;
         $this->port = $port;
@@ -101,9 +103,24 @@ class ZKTecoService
         $this->sessionId = unpack('vsession', substr($reply, 4, 2))['session'];
         $this->replyId = unpack('vreply', substr($reply, 6, 2))['reply'];
 
+        if ($code === self::CMD_ACK_UNAUTH) {
+            $authKey = $this->makeCommKey($commKey, $this->sessionId);
+            $authPacket = $this->createHeader(self::CMD_AUTH, $this->sessionId, $this->replyId, $authKey);
+            $authReply = $this->sendAndReceive($authPacket);
+
+            if (!$authReply || strlen($authReply) < 8) {
+                $this->disconnect();
+                throw new ZKTecoException("Mesin di {$ip}:{$port} tidak merespons otentikasi");
+            }
+
+            $code = unpack('vcode', substr($authReply, 0, 2))['code'];
+            $this->sessionId = unpack('vsession', substr($authReply, 4, 2))['session'];
+            $this->replyId = unpack('vreply', substr($authReply, 6, 2))['reply'];
+        }
+
         if ($code !== self::CMD_ACK_OK) {
             $this->disconnect();
-            throw new ZKTecoException("Handshake koneksi ditolak mesin dengan kode: {$code}");
+            throw new ZKTecoException("Handshake koneksi ditolak mesin dengan kode: {$code} (Pastikan Comm Key sesuai)");
         }
 
         return true;
@@ -287,6 +304,44 @@ class ZKTecoService
         $year = $time + 2000;
 
         return sprintf('%04d-%02d-%02d %02d:%02d:%02d', $year, $month, $day, $hour, $minute, $second);
+    }
+
+    /**
+     * Scramble communication key and session ID into authorization payload.
+     * Ported from native ZK SDK commpro.c (MakeKey).
+     */
+    private function makeCommKey(int|string $key, int $sessionId, int $ticks = 50): string
+    {
+        $key = (int) $key;
+        $k = 0;
+        for ($i = 0; $i < 32; $i++) {
+            if ($key & (1 << $i)) {
+                $k = ($k << 1) | 1;
+            } else {
+                $k = $k << 1;
+            }
+        }
+
+        $k = ($k + $sessionId) & 0xFFFFFFFF;
+        $kBytes = pack('V', $k);
+
+        $b0 = ord($kBytes[0]) ^ ord('Z');
+        $b1 = ord($kBytes[1]) ^ ord('K');
+        $b2 = ord($kBytes[2]) ^ ord('S');
+        $b3 = ord($kBytes[3]) ^ ord('O');
+
+        $w0 = ($b0 | ($b1 << 8));
+        $w1 = ($b2 | ($b3 << 8));
+
+        $swapped = pack('vv', $w1, $w0);
+
+        $b = $ticks & 0xFF;
+        $out0 = ord($swapped[0]) ^ $b;
+        $out1 = ord($swapped[1]) ^ $b;
+        $out2 = $b;
+        $out3 = ord($swapped[3]) ^ $b;
+
+        return pack('CCCC', $out0, $out1, $out2, $out3);
     }
 
     private function createHeader(int $command, int $sessionId, int $replyId, string $payload = ''): string
