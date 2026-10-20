@@ -214,9 +214,6 @@ class ApiService {
   static Future<Map<String, dynamic>> deleteOvertime(int id) =>
       OvertimeRepository.deleteOvertime(id);
 
-  static Future<List<dynamic>?> getEmployees() =>
-      OvertimeRepository.getEmployees();
-
   // ============ SALARY (GAJI) ============
 
   static Future<List<dynamic>?> getSalaries() =>

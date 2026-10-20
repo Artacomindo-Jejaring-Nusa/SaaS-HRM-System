@@ -22,7 +22,7 @@ class ApiClient {
   // ============ CONFIGURATION ============
 
   /// Toggle between Development and Production
-  static const String _prodIp = 'staging-dev.jelantik.com';
+  static const String _prodIp = 'ontime.jelantik.com';
   static const String _devIp =
       '192.168.100.46'; // Current local Wi-Fi IP address 2.2.2.104
 
