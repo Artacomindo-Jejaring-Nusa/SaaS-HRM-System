@@ -260,6 +260,7 @@ pipeline {
                                 docker compose -p hrms-prod -f docker-compose.prod.yml build ai-service
                                 
                                 echo "Mengaktifkan Container Baru..."
+                                docker rm -f hrms-ai-face-service 2>/dev/null || true
                                 docker compose -p hrms-prod --env-file .env.prod -f docker-compose.prod.yml up -d
                                 
                                 echo "Membersihkan Image Lama yang Gantung..."
@@ -292,6 +293,7 @@ pipeline {
                                         docker compose -p hrms-prod -f docker-compose.prod.yml build ai-service
                                         
                                         echo "Mengaktifkan Container Baru..."
+                                        docker rm -f hrms-ai-face-service 2>/dev/null || true
                                         docker compose -p hrms-prod --env-file .env.prod -f docker-compose.prod.yml up -d
                                         
                                         echo "Membersihkan Image Lama yang Gantung..."
