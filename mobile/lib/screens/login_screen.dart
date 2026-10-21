@@ -270,12 +270,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     "Kebijakan Privasi Aplikasi OnTime HRMS (PT. Artacomindo Jejaring Nusa)\n\n"
                     "Kerahasiaan dan keamanan data pribadi Anda merupakan komitmen utama kami. Dokumen ini menjelaskan pengumpulan, penggunaan, dan perlindungan data pada ekosistem OnTime HRMS:\n\n"
                     "1. PENGUMPULAN DATA BIOMETRIK WAJAH\n"
-                    "• Foto selfie yang diambil saat pendaftaran wajah dan proses absensi diubah menjadi representasi vektor numerik 128-dimensi terenkripsi.\n"
+                    "• Foto selfie yang diambil saat pendaftaran wajah dan proses absensi diubah menjadi representasi vektor numerik 512-dimensi terenkripsi.\n"
                     "• Data biometrik hanya digunakan untuk memverifikasi keaslian dan kesesuaian identitas karyawan saat melakukan absensi masuk & pulang.\n"
                     "• Kami tidak pernah membagikan atau menjual data biometrik Anda kepada pihak ketiga mana pun.\n\n"
-                    "2. DATA LOKASI GEOGRAFIS (GPS & BACKGROUND TRACKING)\n"
+                    "2. DATA LOKASI GEOGRAFIS & PELACAKAN TUGAS LAPANGAN\n"
                     "• Koordinat GPS dikumpulkan pada saat absensi untuk memastikan kehadiran berada dalam radius kantor cabang yang sah (Geofencing).\n"
-                    "• Layanan Lokasi Latar Belakang (Background Location) hanya aktif selama shift kerja berlangsung bagi teknisi/lapangan yang bertugas dengan indikator notifikasi aktif di bilah status. Pelacakan otomatis berhenti saat absen pulang.\n\n"
+                    "• Layanan Pelacakan Tugas Lapangan (Foreground Service) hanya aktif selama shift kerja berlangsung bagi teknisi/lapangan yang bertugas dengan indikator notifikasi aktif di bilah status. Pelacakan otomatis berhenti saat absen pulang.\n\n"
                     "3. DATA TRANSAKSI & DOKUMEN LAMPIRAN\n"
                     "• Foto nota klaim pengeluaran, surat keterangan dokter, foto odometer kendaraan, dan tanda tangan digital disimpan dengan aman di server internal perusahaan untuk keperluan audit dan persetujuan operasional.\n\n"
                     "4. DATA PERANGKAT (DEVICE ID) & KEAMANAN\n"
@@ -283,7 +283,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     "5. DATA PENGGAJIAN & KEUANGAN\n"
                     "• Informasi nomor rekening bank, rincian komponen gaji, dan pemotongan pajak PPh 21 dikelola secara ketat dengan protokol enkripsi enterprise dan hanya dapat diakses oleh bagian Finance & HRD yang berwenang.\n\n"
                     "6. HAK AKSES DAN PENGHAPUSAN DATA\n"
-                    "• Karyawan berhak meninjau seluruh data riwayat kehadiran, dokumen pengajuan, dan mengajukan pembaruan data profil atau pendaftaran ulang biometrik wajah melalui Super Admin perusahaan.\n\n\n"
+                    "• Karyawan berhak meninjau riwayat kehadiran, dokumen pengajuan, dan mengajukan permohonan penutupan akun serta pembersihan data pribadi/biometrik melalui Super Admin atau bagian HRD perusahaan masing-masing.\n\n\n"
                     "PT. Artacomindo Jejaring Nusa",
                     style: GoogleFonts.outfit(
                       fontSize: 13,

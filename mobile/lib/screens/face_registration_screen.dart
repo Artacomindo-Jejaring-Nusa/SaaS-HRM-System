@@ -48,7 +48,6 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
   Color _stepColor = Colors.blueAccent;
   double _progressValue = 0.15;
   bool _isProcessingFrame = false;
-  bool _hasBlinkedClosed = false;
 
   // Counters to prevent false-positive step transitions
   int _faceAlignedFrames = 0;
@@ -66,7 +65,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
 
   Future<void> _setMaxBrightness() async {
     try {
-      await ScreenBrightness().setScreenBrightness(1.0);
+      await ScreenBrightness().setApplicationScreenBrightness(1.0);
     } catch (e) {
       debugPrint("Failed to set brightness: $e");
     }
@@ -74,7 +73,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
 
   Future<void> _resetBrightness() async {
     try {
-      await ScreenBrightness().resetScreenBrightness();
+      await ScreenBrightness().resetApplicationScreenBrightness();
     } catch (e) {
       debugPrint("Failed to reset brightness: $e");
     }
@@ -178,7 +177,6 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
     _stepColor = Colors.blueAccent;
     _progressValue = 0.15;
     _isProcessingFrame = false;
-    _hasBlinkedClosed = false;
     _faceAlignedFrames = 0;
     _holdStillFrames = 0;
   }
@@ -224,8 +222,6 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
       final face = faces.first;
       final eulerY = face.headEulerAngleY ?? 0.0;
       final eulerX = face.headEulerAngleX ?? 0.0;
-      final leftEye = face.leftEyeOpenProbability ?? 1.0;
-      final rightEye = face.rightEyeOpenProbability ?? 1.0;
 
       switch (_currentStep) {
         case LivenessStep.positionFace:
@@ -333,7 +329,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen>
         throw Exception("File foto terlalu kecil ($fileSize bytes), kemungkinan kamera belum siap.");
       }
 
-      // 4. Upload to backend (which calls AI Service for 128-d extraction)
+      // 4. Upload to backend (which calls AI Service for 512-d extraction)
       debugPrint("[FaceRegistration] Uploading to backend...");
       final result = await ApiService.registerFace(image.path);
       debugPrint("[FaceRegistration] Upload result: $result");

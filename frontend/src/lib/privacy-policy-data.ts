@@ -59,12 +59,12 @@ export const policySections: PolicySection[] = [
     title: "Data Biometrik & Kecerdasan Buatan (AI Face Recognition)",
     icon: Camera,
     audience: "all",
-    badge: "Enkripsi Vektor 128-Dimensi",
+    badge: "Enkripsi Vektor 512-Dimensi",
     summary:
       "Mekanisme penangkapan foto wajah saat presensi, konversi ke representasi numerik matematis, dan teknologi deteksi keaslian (Liveness Detection).",
     content: [
       "Aplikasi OnTime HRMS memanfaatkan teknologi Pengenalan Wajah Berbasis AI (ArcFace Deep Learning) untuk menjamin validitas kehadiran karyawan secara akurat, cepat, dan adil tanpa kontak fisik.",
-      "Saat proses Pendaftaran Wajah (Face Enrollment) pertama kali dan saat pengambilan absensi masuk/pulang, sistem menangkap citra selfie karyawan. Citra ini secara otomatis diekstraksi menjadi representasi vektor matematis numerik 128-dimensi (embedding) yang dienkripsi.",
+      "Saat proses Pendaftaran Wajah (Face Enrollment) pertama kali dan saat pengambilan absensi masuk/pulang, sistem menangkap citra selfie karyawan. Citra ini secara otomatis diekstraksi menjadi representasi vektor matematis numerik 512-dimensi (embedding) yang dienkripsi.",
       "Algoritma pencocokan bekerja dengan membandingkan jarak kosinus (Cosine Distance) antara embedding presensi harian dengan embedding template registrasi yang telah disetujui Super Admin.",
       "Sistem dilengkapi modul Anti-Spoofing & Liveness Detection mutakhir guna menangkal manipulasi presensi menggunakan foto cetak, tampilan layar smartphone lain, rekaman video berulang, atau topeng 3D."
     ],
@@ -90,12 +90,11 @@ export const policySections: PolicySection[] = [
     content: [
       "Sistem membaca koordinat garis lintang (Latitude), garis bujur (Longitude), serta akurasi sinyal satelit GPS saat karyawan menekan tombol absensi masuk atau absensi pulang.",
       "Validasi Radius Kantor (Geofencing): Koordinat presensi dicocokkan dengan titik koordinat resmi kantor cabang atau area proyek yang telah dikonfigurasi Super Admin. Presensi hanya dinyatakan valid jika berada di dalam batas radius toleransi yang ditetapkan perusahaan.",
-      "Pelacakan Latar Belakang (Background Location Tracking / Live Tracking): Fitur ini HANYA aktif bagi karyawan dengan profil tugas lapangan, teknisi keliling, kurir logistik, atau dinas luar yang memerlukan pemantauan rute operasional.",
+      "Pelacakan Tugas Lapangan (Live Tracking via Foreground Service): Fitur ini HANYA aktif bagi karyawan dengan profil tugas lapangan, teknisi keliling, kurir logistik, atau dinas luar yang memerlukan pemantauan rute operasional.",
       "Kerahasiaan di Luar Jam Kerja: Pelacakan otomatis berhenti permanen saat karyawan menekan tombol 'Absen Pulang' atau saat shift kerja berakhir. OnTime HRMS sama sekali TIDAK MELAKUKAN pelacakan saat karyawan libur, cuti, atau di luar jadwal tugas dinas."
     ],
     keyPoints: [
-      "Terdapat indikator status notifikasi aktif di bilah status ponsel (Foreground Service Notification) selama pelacakan lapangan berlangsung.",
-      "Aplikasi meminta izin 'Akses Lokasi Selalu' (Background Location Permission) secara eksplisit dengan penjelasan tujuan sebelum diaktifkan.",
+      "Pelacakan rute beroperasi menggunakan Layanan Latar Depan (Foreground Service) dengan indikator notifikasi aktif di bilah status ponsel selama jam shift berlangsung.",
       "Riwayat rute perjalanan teknisi lapangan hanya tersimpan selama periode evaluasi penugasan operasional."
     ],
     adminNotes: [
@@ -115,7 +114,7 @@ export const policySections: PolicySection[] = [
     content: [
       "Untuk menjaga keadilan dan integritas presensi seluruh karyawan, OnTime HRMS menerapkan kebijakan Device Binding (1 akun karyawan terikat secara eksklusif pada 1 smartphone terdaftar).",
       "Saat pertama kali login, sistem mencatat pengidentifikasi unik perangkat (Device UUID, Model Smartphone, Versi Sistem Operasi Android/iOS, dan Status Keamanan Perangkat).",
-      "Sistem Keamanan Aktif secara otomatis mendeteksi dan memblokir upaya presensi yang menggunakan aplikasi Fake GPS (Mock Location Provider), perangkat yang di-root atau di-jailbreak, serta aplikasi kloning atau emulator PC.",
+      "Sistem Keamanan Aktif secara otomatis mendeteksi dan memblokir upaya presensi yang menggunakan aplikasi Lokasi Palsu (Mock Location / Fake GPS) serta mendeteksi ketidaksesuaian pengenal unik perangkat (Device Binding).",
       "Apabila karyawan mencoba login dari smartphone yang berbeda tanpa izin pelepasan ikatan (unbinding), sistem akan menolak otentikasi demi mencegah penyalahgunaan akun oleh rekan kerja."
     ],
     keyPoints: [
@@ -138,7 +137,7 @@ export const policySections: PolicySection[] = [
       "Pengelolaan berkas klaim biaya, surat izin dokter, odometer kendaraan operasional, serta keabsahan tanda tangan elektronik.",
     content: [
       "Karyawan dapat mengunggah berkas pendukung dalam rangka keperluan operasional ketenagakerjaan, seperti nota struk reimbursement, surat keterangan sakit dari dokter, foto odometer awal/akhir kendaraan dinas, serta dokumen perizinan lainnya.",
-      "Seluruh berkas gambar (JPG, PNG) dan dokumen (PDF) disimpan pada penyimpanan berkas terisolasi (private object storage) dengan tautan akses sementara bertanda tangan (Signed URLs) yang kedaluwarsa otomatis.",
+      "Seluruh berkas gambar (JPG, PNG) dan dokumen (PDF) disimpan pada direktori penyimpanan server yang terlindung dan hanya dapat diakses melalui mekanisme otentikasi serta kontrol otorisasi tingkat pengguna yang sah.",
       "Tanda Tangan Digital (Digital Signature): Goresan tanda tangan elektronik yang dibuat pada modul pengajuan klaim, kasbon, atau approval berstatus sah secara internal dan disimpan bersama timestamp UTC+7 sebagai bukti persetujuan operasional."
     ],
     keyPoints: [
@@ -253,10 +252,11 @@ export const policySections: PolicySection[] = [
       "Data operasional kehadiran, rekam jejak lembur, perizinan, dan slip gaji disimpan selama masa hubungan kerja karyawan berlangsung secara aktif.",
       "Setelah hubungan kerja berakhir (PHK, pensiun, atau pengunduran diri), data diarsipkan dalam status non-aktif selama periode retensi hukum yang dipersyaratkan oleh regulasi perpajakan dan ketenagakerjaan Indonesia (umumnya 5 hingga 10 tahun untuk kepentingan audit resmi).",
       "Pemusnahan Data Biometrik: Template embedding wajah karyawan yang telah resmi berhenti dapat dihapus secara permanen dari basis data aktif atas permintaan tertulis Super Admin perusahaan.",
-      "Pencadangan Sistem (Automated Backup): Salinan cadangan data disimpan di pusat data terlindung dengan enkripsi penuh dan dirotasi secara otomatis sesuai kebijakan disaster recovery."
+      "Prosedur Permintaan Penghapusan Akun & Data Pribadi: Karyawan berhak mengajukan penutupan akun serta pemusnahan data pribadi atau biometrik dengan menyampaikan permohonan resmi kepada Super Admin / HRD instansi masing-masing atau melalui modul Bantuan & Dukungan di dalam aplikasi."
     ],
     keyPoints: [
       "Akun karyawan yang telah non-aktif tidak akan dapat login kembali ke aplikasi seluler maupun portal web.",
+      "Permintaan penghapusan atau penutupan akun diproses melalui verifikasi Super Admin organisasi pemberi kerja.",
       "Arsip data historis dilindungi dengan akses read-only yang diawasi ketat."
     ]
   },
@@ -272,8 +272,8 @@ export const policySections: PolicySection[] = [
     content: [
       "PT. Artacomindo Jejaring Nusa menerapkan arsitektur keamanan bertingkat (Defense-in-Depth) untuk melindungi infrastruktur SaaS OnTime HRMS:",
       "• Enkripsi in-Transit: Seluruh transmisi data antara aplikasi browser/seluler dengan server backend dilindungi protokol TLS 1.3 (HTTPS) dengan sertifikat SSL enkripsi 256-bit.",
-      "• Enkripsi at-Rest: Seluruh data sensitif pada basis data MySQL dan penyimpanan file attachments dienkripsi menggunakan standar AES-256.",
-      "• Otentikasi Berlapis: Menggunakan JSON Web Tokens (JWT) dengan rotasi refresh token otomatis, dukungan Google OAuth 2.0 resmi, serta session token yang tersimpan pada Secure Storage perangkat seluler dan Cookie HttpOnly pada web.",
+      "• Enkripsi at-Rest: Seluruh data sensitif pada basis data MySQL dan penyimpanan file attachments dilindungi enkripsi standar industri.",
+      "• Otentikasi Berlapis: Menggunakan token otentikasi terenkripsi (Sanctum Bearer Token & Google OAuth 2.0 resmi) yang tersimpan aman pada penyimpanan aplikasi terisolasi dan Cookie terproteksi pada platform web.",
       "• Audit Trail Komprehensif: Setiap aksi login, perubahan data profil, approval izin, hingga proses payroll dicatat lengkap dengan timestamp presisi milidetik, alamat IP, dan User Agent untuk mitigasi insiden siber."
     ],
     keyPoints: [
@@ -294,6 +294,7 @@ export const policySections: PolicySection[] = [
       "Apabila Anda memiliki pertanyaan, klarifikasi, keluhan, atau ingin melaksanakan hak-hak subjek data sehubungan dengan Kebijakan Privasi ini, silakan menghubungi Petugas Pelindungan Data (Data Protection Officer / DPO) kami melalui saluran resmi berikut:",
       "• Nama Pengembang & Penyedia Layanan: PT. Artacomindo Jejaring Nusa",
       "• Produk Platform: OnTime HRMS (Enterprise SaaS Edition)",
+      "• Saluran Bantuan: Menu Pusat Bantuan (Help Center) & Layanan Dukungan di dalam portal web dan aplikasi seluler OnTime HRMS.",
       "Perubahan Kebijakan: Kebijakan Privasi ini dapat diperbarui sewaktu-waktu seiring penyempurnaan fitur sistem atau perubahan regulasi pemerintah. Pembaruan signifikan akan diumumkan melalui bilah pengumuman di dashboard aplikasi."
     ],
     keyPoints: [

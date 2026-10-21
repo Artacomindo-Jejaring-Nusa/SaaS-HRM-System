@@ -534,16 +534,16 @@ export default function LoginPage() {
               <div className="login-privacy-section">
                 <h4>1. PENGUMPULAN DATA BIOMETRIK WAJAH</h4>
                 <p>
-                  • Foto selfie yang diambil saat pendaftaran wajah dan proses absensi diubah menjadi representasi vektor numerik 128-dimensi terenkripsi.<br />
+                  • Foto selfie yang diambil saat pendaftaran wajah dan proses absensi diubah menjadi representasi vektor numerik 512-dimensi terenkripsi.<br />
                   • Data biometrik hanya digunakan untuk memverifikasi keaslian dan kesesuaian identitas karyawan saat melakukan absensi masuk &amp; pulang.<br />
                   • Kami tidak pernah membagikan atau menjual data biometrik Anda kepada pihak ketiga mana pun.
                 </p>
               </div>
               <div className="login-privacy-section">
-                <h4>2. DATA LOKASI GEOGRAFIS (GPS &amp; BACKGROUND TRACKING)</h4>
+                <h4>2. DATA LOKASI GEOGRAFIS &amp; PELACAKAN TUGAS LAPANGAN</h4>
                 <p>
                   • Koordinat GPS dikumpulkan pada saat absensi untuk memastikan kehadiran berada dalam radius kantor cabang yang sah (Geofencing).<br />
-                  • Layanan Lokasi Latar Belakang (Background Location) hanya aktif selama shift kerja berlangsung bagi teknisi/lapangan yang bertugas dengan indikator notifikasi aktif di bilah status. Pelacakan otomatis berhenti saat absen pulang.
+                  • Layanan Pelacakan Tugas Lapangan (Foreground Service) hanya aktif selama shift kerja berlangsung bagi teknisi/lapangan yang bertugas dengan indikator notifikasi aktif di bilah status. Pelacakan otomatis berhenti saat absen pulang.
                 </p>
               </div>
               <div className="login-privacy-section">
@@ -567,7 +567,7 @@ export default function LoginPage() {
               <div className="login-privacy-section">
                 <h4>6. HAK AKSES DAN PENGHAPUSAN DATA</h4>
                 <p>
-                  • Karyawan berhak meninjau seluruh data riwayat kehadiran, dokumen pengajuan, dan mengajukan pembaruan data profil atau pendaftaran ulang biometrik wajah melalui Super Admin perusahaan.
+                  • Karyawan berhak meninjau riwayat kehadiran, dokumen pengajuan, dan mengajukan permohonan penutupan akun serta pembersihan data pribadi/biometrik melalui Super Admin atau bagian HRD perusahaan masing-masing.
                 </p>
               </div>
 

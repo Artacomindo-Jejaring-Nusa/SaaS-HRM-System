@@ -18,7 +18,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 /// 5. Cocok (≥70%) = absen berhasil, Tidak cocok = peringatan jelas
 ///
 /// TIDAK ADA kedip, tengok, atau klik tombol manual.
-/// Keamanan tetap terjamin karena pencocokan vektor 128-d dilakukan di server.
+/// Keamanan tetap terjamin karena pencocokan vektor 512-d dilakukan di server.
 class AttendanceScreen extends StatefulWidget {
   final bool isCheckIn;
   final String attendanceType;
