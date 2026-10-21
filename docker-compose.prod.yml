@@ -9,6 +9,7 @@ services:
     env_file: .env.prod
     environment:
       DB_READ_HOST: mysql-slave
+      AI_SERVICE_URL: http://ai-service:8001
     depends_on:
       mysql-master:
         condition: service_healthy
@@ -30,6 +31,7 @@ services:
     env_file: .env.prod
     environment:
       DB_READ_HOST: mysql-slave
+      AI_SERVICE_URL: http://ai-service:8001
     depends_on:
       mysql-master:
         condition: service_healthy
@@ -74,6 +76,30 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
+
+  # ── AI Face Recognition Service (Python / ArcFace IR-50, 512-d) ─────
+  ai-service:
+    build:
+      context: ./face-recog-ArcFace
+      dockerfile: Dockerfile
+    container_name: hrms-ai-face-service
+    restart: always
+    environment:
+      PORT: 8001
+      FACE_RECOGNITION_THRESHOLD: ${FACE_RECOGNITION_THRESHOLD:-0.45}
+    volumes:
+      - ./face-recog-ArcFace/checkpoint:/app/checkpoint:ro
+    networks:
+      hrms-network:
+        aliases:
+          - ai-service
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1536M
+        reservations:
+          memory: 512M
 
   # ── Frontend (Next.js) ────────────────────────────
   frontend:

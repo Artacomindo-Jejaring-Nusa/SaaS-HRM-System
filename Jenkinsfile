@@ -245,6 +245,7 @@ pipeline {
                         
                         sh "cp docker-compose.prod.yml ${TARGET_DIR}/docker-compose.prod.yml"
                         sh "cp .env.prod ${TARGET_DIR}/.env.prod"
+                        sh "cp -r face-recog-ArcFace ${TARGET_DIR}/"
                         sh "echo \"[VERIFY] .env.prod lines: \$(wc -l < ${TARGET_DIR}/.env.prod), DB_PASSWORD set: \$(grep -c DB_PASSWORD ${TARGET_DIR}/.env.prod)\""
                         
                         withCredentials([usernamePassword(credentialsId: "${GHCR_AUTH_ID}", usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
@@ -254,6 +255,9 @@ pipeline {
                                 
                                 echo "Menarik Image Terbaru..."
                                 docker compose -p hrms-prod -f docker-compose.prod.yml pull
+                                
+                                echo "Membangun Image AI Face Recognition (Production)..."
+                                docker compose -p hrms-prod -f docker-compose.prod.yml build ai-service
                                 
                                 echo "Mengaktifkan Container Baru..."
                                 docker compose -p hrms-prod --env-file .env.prod -f docker-compose.prod.yml up -d
@@ -272,6 +276,7 @@ pipeline {
                         withCredentials([sshUserPrivateKey(credentialsId: "${SSH_CREDENTIAL_ID}", keyFileVariable: 'SSH_KEY')]) {
                             sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no docker-compose.prod.yml ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/docker-compose.prod.yml"
                             sh "scp -i \${SSH_KEY} -o StrictHostKeyChecking=no .env.prod ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/.env.prod"
+                            sh "scp -r -i \${SSH_KEY} -o StrictHostKeyChecking=no face-recog-ArcFace ${TARGET_VM_USER}@${TARGET_VM_IP}:${TARGET_DIR}/"
                             sh "ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no ${TARGET_VM_USER}@${TARGET_VM_IP} 'echo \"[VERIFY] .env.prod lines: \$(wc -l < ${TARGET_DIR}/.env.prod), DB_PASSWORD set: \$(grep -c DB_PASSWORD ${TARGET_DIR}/.env.prod)\"'"
                             
                             withCredentials([usernamePassword(credentialsId: "${GHCR_AUTH_ID}", usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
@@ -282,6 +287,9 @@ pipeline {
                                         
                                         echo "Menarik Image Terbaru..."
                                         docker compose -p hrms-prod -f docker-compose.prod.yml pull
+                                        
+                                        echo "Membangun Image AI Face Recognition (Production)..."
+                                        docker compose -p hrms-prod -f docker-compose.prod.yml build ai-service
                                         
                                         echo "Mengaktifkan Container Baru..."
                                         docker compose -p hrms-prod --env-file .env.prod -f docker-compose.prod.yml up -d
