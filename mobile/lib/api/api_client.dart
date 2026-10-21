@@ -161,9 +161,13 @@ class ApiClient {
 
         _isRefreshing = false;
         return true;
-      } else {
-        // Refresh token is invalid/expired — user must re-login
+      } else if (response.statusCode == 401) {
+        // Only clear tokens if the backend explicitly rejected the refresh token
         await secureStorage.clearTokens();
+        _isRefreshing = false;
+        return false;
+      } else {
+        // Temporary server error, rate limit, or maintenance — keep tokens intact!
         _isRefreshing = false;
         return false;
       }

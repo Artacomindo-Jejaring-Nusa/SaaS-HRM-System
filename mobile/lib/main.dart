@@ -42,24 +42,32 @@ void main() async {
     debugPrint("TrackingService initialization error: $e");
   }
   
-  bool hasToken = false;
+  // 1. Load user settings
   try {
-    // Load Settings
-    final prefs = await SharedPreferences.getInstance().timeout(const Duration(seconds: 3));
+    final prefs = await SharedPreferences.getInstance();
     final isDark = prefs.getBool('dark_mode') ?? false;
     themeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
     languageNotifier.value = prefs.getString('language') ?? 'ID';
-    
+  } catch (e) {
+    debugPrint("Failed to load settings in main: $e");
+  }
+
+  // 2. Check login session (Secure Storage)
+  bool hasToken = false;
+  try {
+    final secureStorage = await SecureStorageService.getInstance();
+    await secureStorage.migrateFromPlainPrefs();
+    hasToken = await secureStorage.hasValidToken();
+    debugPrint("App Startup - User hasValidToken: $hasToken");
+  } catch (e) {
+    debugPrint("App Startup token check error: $e");
+  }
+
+  // 3. Initialize background / notification services
+  try {
     NotificationService().init();
     await AttendanceAlarmService().init();
-    
-    // Initialize secure storage and migrate old plaintext tokens
-    final secureStorage = await SecureStorageService.getInstance().timeout(const Duration(seconds: 6));
-    await secureStorage.migrateFromPlainPrefs().timeout(const Duration(seconds: 4));
-    
-    // Check for valid token (encrypted)
-    hasToken = await secureStorage.hasValidToken().timeout(const Duration(seconds: 5));
-    
+
     if (hasToken) {
       AttendanceAlarmService().start();
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -71,7 +79,7 @@ void main() async {
       });
     }
   } catch (e) {
-    debugPrint("App Startup initialization fallback: $e");
+    debugPrint("App Startup background services init note: $e");
   }
 
   runApp(MyApp(isLoggedIn: hasToken));
@@ -85,7 +93,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeNotifier,
-      builder: (_, ThemeMode currentMode, __) {
+      builder: (_, ThemeMode currentMode, child) {
         return ValueListenableBuilder<String>(
           valueListenable: languageNotifier,
           builder: (context, lang, _) {

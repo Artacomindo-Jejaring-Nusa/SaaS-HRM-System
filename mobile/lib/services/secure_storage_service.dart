@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -13,6 +14,7 @@ import 'dart:math';
 /// ensuring data is only readable on the same physical device.
 class SecureStorageService {
   static SecureStorageService? _instance;
+  static Completer<SecureStorageService>? _initCompleter;
   static String? _deviceKey;
 
   static const String _prefix = 'secure_';
@@ -24,18 +26,40 @@ class SecureStorageService {
   SecureStorageService._();
 
   static Future<SecureStorageService> getInstance() async {
-    if (_instance == null) {
-      _instance = SecureStorageService._();
-      await _instance!._initDeviceKey();
+    if (_instance != null && _deviceKey != null) {
+      return _instance!;
     }
-    return _instance!;
+    if (_initCompleter != null) {
+      return _initCompleter!.future;
+    }
+    final completer = Completer<SecureStorageService>();
+    _initCompleter = completer;
+
+    try {
+      final service = SecureStorageService._();
+      await service._initDeviceKey();
+      _instance = service;
+      completer.complete(service);
+      return service;
+    } catch (e) {
+      _initCompleter = null;
+      rethrow;
+    }
   }
 
   /// Initialize the device-unique encryption key from hardware identifiers.
+  /// Persists the derived salt so it remains 100% stable across reboots.
   Future<void> _initDeviceKey() async {
     if (_deviceKey != null) return;
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final storedKey = prefs.getString('${_prefix}app_device_salt');
+      if (storedKey != null && storedKey.isNotEmpty) {
+        _deviceKey = storedKey;
+        return;
+      }
+
       final deviceInfo = DeviceInfoPlugin();
       String rawKey;
 
@@ -52,6 +76,7 @@ class SecureStorageService {
 
       // Derive a 32-byte key from the raw device info using simple hash
       _deviceKey = _deriveKey(rawKey, 32);
+      await prefs.setString('${_prefix}app_device_salt', _deviceKey!);
     } catch (e) {
       debugPrint('SecureStorage: Failed to get device key, using fallback: $e');
       _deviceKey = _deriveKey('hrms_fallback_key_v1', 32);
@@ -99,9 +124,13 @@ class SecureStorageService {
 
   /// Decrypt a string value using the device key.
   String _decrypt(String encryptedText) {
+    if (_deviceKey == null || _deviceKey!.isEmpty) {
+      return '';
+    }
     try {
       final keyBytes = base64Decode(_deviceKey!);
       final combined = base64Decode(encryptedText);
+      if (combined.length < 16) return '';
       
       // Extract IV (first 16 bytes) and encrypted data
       final iv = combined.sublist(0, 16);
@@ -147,36 +176,66 @@ class SecureStorageService {
 
   // ============ TOKEN-SPECIFIC METHODS ============
 
-  /// Save access token (encrypted).
+  /// Save access token (encrypted with plain fallback for maximum resilience).
   Future<void> saveAccessToken(String token) async {
     await setSecure(_accessTokenKey, token);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('token', token);
   }
 
-  /// Get access token (decrypted).
+  /// Get access token (decrypted with automatic fallback).
   Future<String?> getAccessToken() async {
-    return await getSecure(_accessTokenKey);
+    final token = await getSecure(_accessTokenKey);
+    if (token != null && token.isNotEmpty) return token;
+
+    // Resilient fallback: read from SharedPreferences if decryption had any issue
+    final prefs = await SharedPreferences.getInstance();
+    final fallbackToken = prefs.getString('token');
+    if (fallbackToken != null && fallbackToken.isNotEmpty) {
+      await setSecure(_accessTokenKey, fallbackToken);
+      return fallbackToken;
+    }
+    return null;
   }
 
-  /// Save refresh token (encrypted).
+  /// Save refresh token (encrypted with plain fallback).
   Future<void> saveRefreshToken(String token) async {
     await setSecure(_refreshTokenKey, token);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('refresh_token', token);
   }
 
-  /// Get refresh token (decrypted).
+  /// Get refresh token (decrypted with automatic fallback).
   Future<String?> getRefreshToken() async {
-    return await getSecure(_refreshTokenKey);
+    final token = await getSecure(_refreshTokenKey);
+    if (token != null && token.isNotEmpty) return token;
+
+    final prefs = await SharedPreferences.getInstance();
+    final fallbackToken = prefs.getString('refresh_token');
+    if (fallbackToken != null && fallbackToken.isNotEmpty) {
+      await setSecure(_refreshTokenKey, fallbackToken);
+      return fallbackToken;
+    }
+    return null;
   }
 
   /// Save token expiry time (in epoch seconds).
   Future<void> saveTokenExpiry(int expiresInSeconds) async {
     final expiryEpoch = DateTime.now().millisecondsSinceEpoch + (expiresInSeconds * 1000);
     await setSecure(_tokenExpiryKey, expiryEpoch.toString());
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('token_expiry_epoch', expiryEpoch);
   }
 
   /// Check if the access token is expired or about to expire (within 2 min buffer).
   Future<bool> isAccessTokenExpired() async {
-    final expiryStr = await getSecure(_tokenExpiryKey);
-    if (expiryStr == null) return true;
+    String? expiryStr = await getSecure(_tokenExpiryKey);
+    if (expiryStr == null) {
+      final prefs = await SharedPreferences.getInstance();
+      final epochInt = prefs.getInt('token_expiry_epoch');
+      if (epochInt != null) expiryStr = epochInt.toString();
+    }
+    if (expiryStr == null) return false; // Do not assume expired if unset
 
     try {
       final expiryEpoch = int.parse(expiryStr);
@@ -184,7 +243,7 @@ class SecureStorageService {
       // Add 2-minute buffer to prevent edge-case token expiry during request
       return now >= (expiryEpoch - 120000);
     } catch (e) {
-      return true;
+      return false;
     }
   }
 
@@ -202,13 +261,16 @@ class SecureStorageService {
   /// Save user preference for keeping session active across app restarts.
   Future<void> setKeepLoggedIn(bool value) async {
     await setSecure(_keepLoggedInKey, value ? '1' : '0');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('keep_logged_in_plain', value);
   }
 
   /// Check whether user chose to keep logged in (defaults to true if unset).
   Future<bool> isKeepLoggedIn() async {
     final value = await getSecure(_keepLoggedInKey);
-    if (value == null) return true; // Default behavior
-    return value == '1';
+    if (value != null) return value == '1';
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('keep_logged_in_plain') ?? true;
   }
 
   /// Clear all tokens (on logout).
@@ -217,6 +279,11 @@ class SecureStorageService {
     await removeSecure(_refreshTokenKey);
     await removeSecure(_tokenExpiryKey);
     await removeSecure(_keepLoggedInKey);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('token');
+    await prefs.remove('refresh_token');
+    await prefs.remove('token_expiry_epoch');
+    await prefs.remove('keep_logged_in_plain');
   }
 
   /// Check if user has any stored token (for auto-login check).
@@ -230,16 +297,21 @@ class SecureStorageService {
   /// Migrate old plaintext tokens from SharedPreferences to encrypted storage.
   /// Call this once during app startup to migrate existing users.
   Future<bool> migrateFromPlainPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final oldToken = prefs.getString('token');
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final migrated = prefs.getBool('${_prefix}migrated_v2') ?? false;
+      if (migrated) return true;
 
-    if (oldToken != null && oldToken.isNotEmpty) {
-      debugPrint('SecureStorage: Migrating old plaintext token to encrypted storage...');
-      await saveAccessToken(oldToken);
-      await prefs.remove('token'); // Remove the old plaintext token
-      debugPrint('SecureStorage: Migration complete.');
+      final oldToken = prefs.getString('token');
+      if (oldToken != null && oldToken.isNotEmpty) {
+        debugPrint('SecureStorage: Migrating old plaintext token to encrypted storage...');
+        await setSecure(_accessTokenKey, oldToken);
+      }
+      await prefs.setBool('${_prefix}migrated_v2', true);
       return true;
+    } catch (e) {
+      debugPrint('SecureStorage: Migration note: $e');
+      return false;
     }
-    return false;
   }
 }

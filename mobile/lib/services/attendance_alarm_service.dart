@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -93,9 +92,6 @@ class AttendanceAlarmService {
     await _notificationsPlugin.initialize(initializationSettings);
 
     _isInitialized = true;
-
-    // Asynchronously sync latest work hours from server
-    unawaited(syncWorkHoursFromBackend());
   }
 
   Future<void> setEnabled(bool value) async {
