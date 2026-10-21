@@ -29,7 +29,9 @@ void main() async {
   }
 
   try {
-    GoogleSignIn.instance.initialize();
+    await GoogleSignIn.instance.initialize(
+      serverClientId: '1015918555814-0qod31fvuc96odo10a2uqmppoqf9vegi.apps.googleusercontent.com',
+    );
   } catch (e) {
     debugPrint("Google Sign In initialize note: $e");
   }

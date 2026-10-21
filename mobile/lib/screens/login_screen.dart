@@ -133,18 +133,21 @@ class _LoginScreenState extends State<LoginScreen> {
     final googleAuth = GoogleAuthService();
 
     try {
-      // signInWithGoogle() sekarang mengembalikan Google ID Token langsung
-      final String? idToken = await googleAuth.signInWithGoogle();
+      final authResult = await googleAuth.signInWithGoogle();
 
-      if (idToken == null) {
-        // User membatalkan login
-        if (mounted) setState(() => _isLoading = false);
+      if (!authResult.success) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          if (!authResult.isCanceled && authResult.errorMessage != null) {
+            _showSnackBar(authResult.errorMessage!);
+          }
+        }
         return;
       }
 
       // Kirim Google ID Token ke backend Laravel
       final result = await ApiService.loginWithGoogle(
-        idToken: idToken,
+        idToken: authResult.idToken!,
         companyName: _companyController.text,
         keepLoggedIn: _keepLoggedIn,
       );
@@ -169,7 +172,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showSnackBar("Gagal login dengan Google. Silakan coba lagi.");
+        _showSnackBar("Gagal login dengan Google: $e");
       }
     }
   }
