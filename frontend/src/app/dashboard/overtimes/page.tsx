@@ -85,6 +85,7 @@ export default function OvertimesPage() {
   );
 
   const canAssign = isSuperAdmin || hasPermission('manage-overtimes') || hasPermission('assign-overtimes');
+  const canApply = isSuperAdmin || hasPermission('apply-overtimes') || hasPermission('manage-overtimes');
   const canReceive = true; // All employees can receive overtime orders
 
   const [activeTab, setActiveTab] = useState<'received' | 'sent'>(() => {
@@ -100,6 +101,7 @@ export default function OvertimesPage() {
 
   // Modals state
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [isSelfModalOpen, setIsSelfModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [selectedOvertime, setSelectedOvertime] = useState<OvertimeRecord | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "detail" | "print">("list");
@@ -185,12 +187,13 @@ export default function OvertimesPage() {
 
     try {
       setIsSubmitting(true);
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         title: formTitle,
         date: formDate,
         start_time: formStartTime,
         end_time: formEndTime,
         reason: formReason,
+        is_assignment: true,
       };
 
       if (assignTargetType === 'users') {
@@ -204,9 +207,42 @@ export default function OvertimesPage() {
       setIsAssignModalOpen(false);
       resetAssignForm();
       fetchOvertimes(1);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Gagal menugaskan lembur", err);
-      toast.error(err.response?.data?.message || "Gagal menerbitkan perintah lembur.");
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(msg || "Gagal menerbitkan perintah lembur.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSelfSubmitOvertime = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formDate || !formStartTime || !formEndTime || !formReason.trim()) {
+      toast.error("Mohon lengkapi semua field yang berbintang merah.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const payload = {
+        title: formTitle || `Pengajuan Lembur - ${formDate}`,
+        date: formDate,
+        start_time: formStartTime,
+        end_time: formEndTime,
+        reason: formReason,
+        is_assignment: false,
+      };
+
+      await axiosInstance.post('/overtimes', payload);
+      toast.success("Permohonan lembur berhasil diajukan dan sedang menunggu persetujuan.");
+      setIsSelfModalOpen(false);
+      resetAssignForm();
+      fetchOvertimes(1);
+    } catch (err: unknown) {
+      console.error("Gagal mengajukan lembur mandiri", err);
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(msg || "Gagal mengajukan lembur.");
     } finally {
       setIsSubmitting(false);
     }
@@ -238,8 +274,9 @@ export default function OvertimesPage() {
       await axiosInstance.post(`/overtimes/${id}/respond`, { action: 'accept' });
       toast.success("Perintah lembur telah Anda setujui.");
       fetchOvertimes(page);
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Gagal merespon lembur.");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(msg || "Gagal merespon lembur.");
     } finally {
       setLoading(false);
     }
@@ -264,8 +301,9 @@ export default function OvertimesPage() {
       setSelectedOvertime(null);
       setRejectionReason("");
       fetchOvertimes(page);
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Gagal menolak lembur.");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(msg || "Gagal menolak lembur.");
     } finally {
       setIsRejecting(false);
     }
@@ -278,8 +316,9 @@ export default function OvertimesPage() {
       await axiosInstance.delete(`/overtimes/${id}`);
       toast.success("Perintah lembur berhasil dibatalkan.");
       fetchOvertimes(page);
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Gagal menghapus perintah lembur.");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(msg || "Gagal menghapus perintah lembur.");
     } finally {
       setLoading(false);
     }
@@ -376,18 +415,33 @@ export default function OvertimesPage() {
           </p>
         </div>
 
-        {canAssign && (
-          <button
-            onClick={() => {
-              resetAssignForm();
-              setIsAssignModalOpen(true);
-            }}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#800000] hover:bg-[#990000] text-white text-sm font-semibold rounded-xl shadow-sm transition-all focus:ring-2 focus:ring-[#800000]/20"
-          >
-            <Plus className="w-4 h-4" />
-            Tugaskan Lembur (SPKL)
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {canApply && (
+            <button
+              onClick={() => {
+                resetAssignForm();
+                setIsSelfModalOpen(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-semibold rounded-xl shadow-sm transition-all focus:ring-2 focus:ring-[#800000]/20"
+            >
+              <Calendar className="w-4 h-4 text-[#800000]" />
+              Ajukan Lembur Mandiri
+            </button>
+          )}
+
+          {canAssign && (
+            <button
+              onClick={() => {
+                resetAssignForm();
+                setIsAssignModalOpen(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#800000] hover:bg-[#990000] text-white text-sm font-semibold rounded-xl shadow-sm transition-all focus:ring-2 focus:ring-[#800000]/20"
+            >
+              <Plus className="w-4 h-4" />
+              Tugaskan Lembur (SPKL)
+            </button>
+          )}
+        </div>
       </div>
 
       {/* KPI Stats Cards */}
@@ -931,6 +985,122 @@ export default function OvertimesPage() {
                   className="px-5 py-2.5 bg-[#800000] hover:bg-[#990000] text-white text-sm font-semibold rounded-xl shadow-sm disabled:opacity-50 transition"
                 >
                   {isSubmitting ? "Menerbitkan..." : "Terbitkan SPKL"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PENGAJUAN LEMBUR MANDIRI */}
+      {isSelfModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700 animate-in fade-in zoom-in-95 duration-150 my-8">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-red-50 dark:bg-red-950/40 text-[#800000] flex items-center justify-center font-bold">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                    Pengajuan Lembur Mandiri
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Masuk ke Approval Workflow yang telah ditentukan Super Admin
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSelfModalOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSelfSubmitOvertime} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Judul / Agenda Lembur
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Penyelesaian Laporan Keuangan Bulanan"
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-[#800000]/20 text-gray-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Tanggal Lembur <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={formDate}
+                  onChange={(e) => setFormDate(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none text-gray-900 dark:text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Jam Mulai <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={formStartTime}
+                    onChange={(e) => setFormStartTime(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none text-gray-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Jam Selesai <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={formEndTime}
+                    onChange={(e) => setFormEndTime(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none text-gray-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Alasan & Uraian Pekerjaan <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Jelaskan kebutuhan mendesak atau pekerjaan yang harus diselesaikan pada lembur ini..."
+                  value={formReason}
+                  onChange={(e) => setFormReason(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-[#800000]/20 text-gray-900 dark:text-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setIsSelfModalOpen(false)}
+                  className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 rounded-xl font-medium"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-5 py-2.5 bg-[#800000] hover:bg-[#990000] text-white text-sm font-semibold rounded-xl shadow-sm disabled:opacity-50 transition"
+                >
+                  {isSubmitting ? "Mengirimkan..." : "Kirim Pengajuan"}
                 </button>
               </div>
             </form>

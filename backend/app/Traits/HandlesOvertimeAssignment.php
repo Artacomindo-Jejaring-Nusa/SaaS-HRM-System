@@ -15,8 +15,7 @@ trait HandlesOvertimeAssignment
         return $user->isSuperAdmin()
             || $user->role_id === 1
             || $user->hasPermission('assign-overtimes')
-            || $user->hasPermission('manage-overtimes')
-            || $user->hasPermission('apply-overtimes');
+            || $user->hasPermission('manage-overtimes');
     }
 
     private function validateStoreRequest(Request $request): void
@@ -45,7 +44,12 @@ trait HandlesOvertimeAssignment
         }
 
         if ($request->filled('user_id')) {
-            return is_array($request->user_id) ? $request->user_id : [$request->user_id];
+            $userIds = is_array($request->user_id) ? $request->user_id : [$request->user_id];
+            if ($user->company_id && ! $user->canAccessAllCompanies()) {
+                return User::whereIn('id', $userIds)->where('company_id', $user->company_id)->pluck('id')->toArray();
+            }
+
+            return $userIds;
         }
 
         return [];
