@@ -66,7 +66,7 @@ pipeline {
                         sh "echo \${GH_TOKEN} | docker login ${REGISTRY} -u \${GH_USER} --password-stdin"
                         
                         echo "Membangun Image Backend (Staging)..."
-                        sh "docker build -t ${BACKEND_IMAGE_NAME}:staging -f ./backend/Dockerfile ./backend"
+                        sh "docker build --pull -t ${BACKEND_IMAGE_NAME}:staging -f ./backend/Dockerfile ./backend"
                         sh "docker push ${BACKEND_IMAGE_NAME}:staging"
                         
                         echo "Membangun Image Frontend (Staging)..."
@@ -191,7 +191,7 @@ pipeline {
                         sh "echo \${GH_TOKEN} | docker login ${REGISTRY} -u \${GH_USER} --password-stdin"
                         
                         echo "Membangun Image Backend (Production)..."
-                        sh "docker build -t ${BACKEND_IMAGE_NAME}:latest -f ./backend/Dockerfile ./backend"
+                        sh "docker build --pull -t ${BACKEND_IMAGE_NAME}:latest -f ./backend/Dockerfile ./backend"
                         sh "docker push ${BACKEND_IMAGE_NAME}:latest"
                         
                         echo "Membangun Image Frontend (Production)..."

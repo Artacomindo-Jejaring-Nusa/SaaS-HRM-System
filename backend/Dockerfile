@@ -17,7 +17,9 @@ RUN composer install \
     --ignore-platform-reqs
 
 # ── Stage 2: Production Image ──────────────────────────────
-FROM php:8.3-fpm-alpine AS production
+# Security Note: PHP >= 8.3.36 mitigates CVE-2026-109618 (OOM RCE) & CVE-2026-109619 (Stale Global State RCE)
+ARG PHP_VERSION=8.3.36-fpm-alpine
+FROM php:${PHP_VERSION} AS production
 
 LABEL maintainer="Ahmad Rizki <ahmadrizki@narwastuarthatama.com>"
 LABEL description="HRMS Narwasthu Group - Laravel Backend API"
