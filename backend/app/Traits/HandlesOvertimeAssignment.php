@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\DB;
 
 trait HandlesOvertimeAssignment
 {
+    private const ROUTE_OVERTIMES = '/dashboard/overtimes';
+
     private function canAssignOvertime(User $user): bool
     {
         return $user->isSuperAdmin()

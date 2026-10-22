@@ -23,6 +23,8 @@ class AttendanceController extends Controller
 {
     use \App\Traits\HandlesAttendanceDinasLuar, \App\Traits\HandlesAttendanceProcessing, \App\Traits\HandlesAttendanceSecurity, \App\Traits\HandlesWebAttendance, Notifiable;
 
+    private const DEFAULT_FACE_BYPASS_REASON = 'Verifikasi wajah gagal';
+
     public function checkIn(StoreAttendanceRequest $request)
     {
         $user = $request->user();
@@ -72,7 +74,6 @@ class AttendanceController extends Controller
     private function processCheckIn(User $user, StoreAttendanceRequest $request, $matchedOffice, Carbon $now, string $today)
     {
         $isDinasLuar = $request->attendance_type === 'dinas_luar';
-        $isBypass = $request->boolean('bypass_face_recognition');
 
         $schedule = Schedule::with('shift')
             ->where('user_id', $user->id)
@@ -83,19 +84,23 @@ class AttendanceController extends Controller
         $imageName = $this->saveCompressedAttendanceImage($request, 'in');
         $isAutoValidated = $user->isWebAttendanceAutoValidated();
 
-        $attendanceData = $this->buildMobileAttendanceData($user, $request, $matchedOffice, $status, $imageName, $now, $isDinasLuar, $isBypass, $isAutoValidated);
+        $attendanceData = $this->buildMobileAttendanceData($user, $request, $matchedOffice, $status, $imageName, $now);
         $attendance = Attendance::create($attendanceData);
 
         $this->recordCheckInEmployeeTrack($user, $request, $now);
-        $this->dispatchCheckInNotifications($user, $attendance, $isDinasLuar, $isAutoValidated, $isBypass, $status, $now, $request);
+        $this->dispatchCheckInNotifications($user, $attendance, $request, $status, $now);
 
         $message = $this->buildCheckInSuccessMessage($isDinasLuar, $isAutoValidated, $status, $request);
 
         return $this->successResponse($attendance, $message);
     }
 
-    private function buildMobileAttendanceData(User $user, StoreAttendanceRequest $request, $matchedOffice, string $status, ?string $imageName, Carbon $now, bool $isDinasLuar, bool $isBypass, bool $isAutoValidated): array
+    private function buildMobileAttendanceData(User $user, StoreAttendanceRequest $request, $matchedOffice, string $status, ?string $imageName, Carbon $now): array
     {
+        $isDinasLuar = $request->attendance_type === 'dinas_luar';
+        $isBypass = $request->boolean('bypass_face_recognition');
+        $isAutoValidated = $user->isWebAttendanceAutoValidated();
+
         $data = [
             'user_id' => $user->id,
             'company_id' => $user->company_id,
@@ -112,7 +117,7 @@ class AttendanceController extends Controller
         ];
 
         if ($isBypass) {
-            $bypassReason = $request->input('bypass_reason', 'Verifikasi wajah gagal');
+            $bypassReason = $request->input('bypass_reason', self::DEFAULT_FACE_BYPASS_REASON);
             $data['is_suspicious'] = ! $isAutoValidated;
             $data['suspicious_reason'] = $isAutoValidated
                 ? "Auto-Validated: Tanpa verifikasi wajah ({$bypassReason})"
@@ -153,10 +158,14 @@ class AttendanceController extends Controller
         }
     }
 
-    private function dispatchCheckInNotifications(User $user, Attendance $attendance, bool $isDinasLuar, bool $isAutoValidated, bool $isBypass, string $status, Carbon $now, StoreAttendanceRequest $request): void
+    private function dispatchCheckInNotifications(User $user, Attendance $attendance, StoreAttendanceRequest $request, string $status, Carbon $now): void
     {
+        $isDinasLuar = $attendance->attendance_type === 'dinas_luar';
+        $isBypass = $request->boolean('bypass_face_recognition');
+        $isAutoValidated = $user->isWebAttendanceAutoValidated();
+
         if ($isBypass && ! $isAutoValidated) {
-            $bypassReason = $request->input('bypass_reason', 'Verifikasi wajah gagal');
+            $bypassReason = $request->input('bypass_reason', self::DEFAULT_FACE_BYPASS_REASON);
             $this->notifySuperAdmins(
                 $user->company_id,
                 'ABSENSI MANUAL BUTUH VALIDASI SUPER ADMIN',
@@ -270,7 +279,7 @@ class AttendanceController extends Controller
         ];
 
         if ($isFaceBypass) {
-            $bypassFaceReason = $request->input('bypass_reason', 'Verifikasi wajah gagal');
+            $bypassFaceReason = $request->input('bypass_reason', self::DEFAULT_FACE_BYPASS_REASON);
             $updateData['is_suspicious'] = ! $isAutoValidated;
             $updateData['suspicious_reason'] = trim(($attendance->suspicious_reason ?? '').' | '.($isAutoValidated ? "Auto-Validated: Tanpa verifikasi wajah saat pulang ({$bypassFaceReason})" : "Tanpa verifikasi wajah saat pulang: {$bypassFaceReason}"), ' |');
             $updateData['web_approval_status'] = $isAutoValidated ? 'valid' : 'pending';
@@ -428,92 +437,7 @@ class AttendanceController extends Controller
         return $this->successResponse($history, 'Riwayat absensi berhasil diambil.');
     }
 
-    private function scopeHistoryAccess($query, User $user, Request $request): void
-    {
-        $isSuperAdmin = $user->canAccessAllCompanies() || $user->isSuperAdmin() || $user->role_id === 1;
-        $canViewReports = $isSuperAdmin || $user->hasPermission('view-reports');
-        $scope = $request->input('scope');
 
-        if (($scope === 'company' || $scope === 'all') && $canViewReports) {
-            $this->applyCompanyScopeFilter($query, $user, $request, $isSuperAdmin);
-            return;
-        }
-
-        if ($scope === 'team') {
-            $this->applyTeamScopeFilter($query, $user);
-            return;
-        }
-
-        if ($request->filled('user_id') && $canViewReports) {
-            $query->where('user_id', $request->user_id);
-            $this->applyUserCompanyConstraint($query, $user);
-            return;
-        }
-
-        // DEFAULT: Strictly isolate to the logged-in user's OWN attendance records
-        $query->where('user_id', $user->id);
-        $this->applyUserCompanyConstraint($query, $user);
-    }
-
-    private function applyCompanyScopeFilter($query, User $user, Request $request, bool $isSuperAdmin): void
-    {
-        if ($request->company_id && $request->company_id !== 'all' && $isSuperAdmin) {
-            $query->where('company_id', $request->company_id);
-        } elseif ($user->company_id && ! $user->canAccessAllCompanies()) {
-            $query->where('company_id', $user->company_id);
-        }
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->user_id);
-        }
-    }
-
-    private function applyTeamScopeFilter($query, User $user): void
-    {
-        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
-        $query->whereIn('user_id', $subordinateIds);
-        $this->applyUserCompanyConstraint($query, $user);
-    }
-
-    private function applyUserCompanyConstraint($query, User $user): void
-    {
-        if ($user->company_id && ! $user->canAccessAllCompanies()) {
-            $query->where('company_id', $user->company_id);
-        }
-    }
-
-    private function applyHistoryFilters($query, Request $request): void
-    {
-        if ($request->start_date && $request->end_date) {
-            $query->whereDate('check_in', '>=', $request->start_date)
-                ->whereDate('check_in', '<=', $request->end_date);
-        } elseif ($request->date) {
-            $query->whereDate('check_in', $request->date);
-        }
-
-        if ($request->user_id) {
-            $query->where('user_id', $request->user_id);
-        }
-
-        if ($request->channel && $request->channel !== 'all') {
-            $query->where('channel', $request->channel);
-        }
-
-        if ($request->status && $request->status !== 'all') {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->attendance_type && $request->attendance_type !== 'all') {
-            $query->where('attendance_type', $request->attendance_type);
-        }
-
-        if ($request->search) {
-            $search = $request->search;
-            $query->whereHas('user', function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
-            });
-        }
-    }
 
     public function heatmap()
     {

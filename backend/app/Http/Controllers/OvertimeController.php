@@ -32,8 +32,6 @@ class OvertimeController extends Controller
 
     private const NOTIF_NEW_OVERTIME = 'PENGAJUAN LEMBUR BARU';
 
-    private const ROUTE_OVERTIMES = '/dashboard/overtimes';
-
     public function index(Request $request)
     {
         $query = Overtime::with(['user.role', 'assigner.role', 'division', 'approver', 'items']);
