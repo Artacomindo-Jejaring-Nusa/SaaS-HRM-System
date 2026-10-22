@@ -31,21 +31,28 @@ trait HandlesWebAttendance
 
         $imageName = $this->saveCompressedAttendanceImage($request, 'web_in');
 
+        $isDinasLuar = $request->attendance_type === 'dinas_luar';
+        $dinasDestination = $request->input('dinas_luar_destination');
+        $dinasNotes = $request->input('dinas_luar_notes');
+
         $schedule = Schedule::with('shift')
             ->where('user_id', $user->id)
             ->where('date', $today)
             ->first();
 
-        $normalStatus = $this->determineCheckInStatus($user, $schedule, $now);
-        $anomalyReason = $this->detectWebAttendanceAnomaly($user, $request, $schedule, $now);
+        $normalStatus = $isDinasLuar ? 'dinas_luar' : $this->determineCheckInStatus($user, $schedule, $now);
+        $anomalyReason = $isDinasLuar ? null : $this->detectWebAttendanceAnomaly($user, $request, $schedule, $now);
         $hasAnomaly = $anomalyReason !== null;
         $isWhitelisted = $user->isWebAttendanceAutoValidated();
 
-        $isAutoValid = $isWhitelisted && ! $hasAnomaly;
+        // When whitelisted (Auto-Validation active), web attendance is immediately auto-approved!
+        $isAutoValid = $isWhitelisted;
         $webApprovalStatus = $isAutoValid ? 'valid' : 'pending';
         $finalStatus = $isAutoValid ? $normalStatus : 'pending';
+        $isSuspicious = $isWhitelisted ? false : $hasAnomaly;
+        $suspiciousReason = $hasAnomaly ? ($isWhitelisted ? "Auto-Validated: {$anomalyReason}" : $anomalyReason) : null;
 
-        $attendance = Attendance::create([
+        $attendanceData = [
             'user_id' => $user->id,
             'company_id' => $user->company_id,
             'office_id' => $user->office_id,
@@ -57,13 +64,28 @@ trait HandlesWebAttendance
             'ip_address' => $request->ip(),
             'user_agent' => substr((string) $request->userAgent(), 0, 999),
             'web_approval_status' => $webApprovalStatus,
+            'web_approved_at' => $isAutoValid ? $now : null,
             'status' => $finalStatus,
-            'is_suspicious' => $hasAnomaly,
-            'suspicious_reason' => $anomalyReason,
-            'attendance_type' => 'office',
-        ]);
+            'is_suspicious' => $isSuspicious,
+            'suspicious_reason' => $suspiciousReason,
+            'attendance_type' => $isDinasLuar ? 'dinas_luar' : 'office',
+        ];
 
-        $message = $this->dispatchWebAttendanceNotifications($user, $webApprovalStatus, $finalStatus, $now, $anomalyReason);
+        if ($isDinasLuar) {
+            $attendanceData['dinas_luar_destination'] = $dinasDestination;
+            $attendanceData['dinas_luar_notes'] = $dinasNotes;
+            $attendanceData['dinas_luar_status'] = $isAutoValid ? 'approved' : 'pending';
+            if ($isAutoValid) {
+                $attendanceData['approved_by_hr'] = $user->id;
+                $attendanceData['approved_at_hr'] = $now;
+                $attendanceData['approved_by_spv'] = $user->id;
+                $attendanceData['approved_at_spv'] = $now;
+            }
+        }
+
+        $attendance = Attendance::create($attendanceData);
+
+        $message = $this->dispatchWebAttendanceNotifications($user, $webApprovalStatus, $finalStatus, $now, $anomalyReason, $isDinasLuar, $dinasDestination);
 
         return $this->successResponse($attendance->fresh(), $message);
     }
@@ -124,12 +146,41 @@ trait HandlesWebAttendance
         return null;
     }
 
-    private function dispatchWebAttendanceNotifications(User $user, string $webApprovalStatus, string $finalStatus, Carbon $now, ?string $anomalyReason): string
+    private function dispatchWebAttendanceNotifications(User $user, string $webApprovalStatus, string $finalStatus, Carbon $now, ?string $anomalyReason, bool $isDinasLuar = false, ?string $destination = null): string
     {
         if ($webApprovalStatus === 'valid') {
+            if ($isDinasLuar) {
+                $this->notify(
+                    $user,
+                    'DINAS LUAR WEB DISETUJUI (AUTO-VALIDASI)',
+                    "Absen dinas luar via web Anda ke {$destination} pada pukul {$now->format('H:i')} WIB telah disahkan secara otomatis (Validasi Otomatis Aktif).",
+                    'success',
+                    null,
+                    'notif',
+                    false
+                );
+
+                return 'Absen Masuk Dinas Luar via Web berhasil disahkan secara otomatis (Validasi Otomatis Aktif).';
+            }
+
             $this->sendCheckInNotifications($user, $finalStatus, $now);
 
             return 'Absen Masuk via Web berhasil disahkan secara otomatis (Validasi Otomatis Aktif). Status: '.strtoupper($finalStatus);
+        }
+
+        if ($isDinasLuar) {
+            $this->notifyAdminsAboutPendingWebAttendance($user, $now, "Dinas Luar ke {$destination}: ".$anomalyReason);
+            $this->notify(
+                $user,
+                'ABSEN DINAS LUAR WEB TERCATAT (MENUNGGU PERSETUJUAN)',
+                "Absen masuk dinas luar via web Anda ke {$destination} pada pukul {$now->format('H:i')} WIB telah dicatat dan sedang menunggu persetujuan Superadmin / HRD.",
+                'info',
+                null,
+                'notif',
+                false
+            );
+
+            return 'Absen Masuk Dinas Luar via Web berhasil dikirim. Menunggu persetujuan Superadmin / HRD.';
         }
 
         $this->notifyAdminsAboutPendingWebAttendance($user, $now, $anomalyReason);

@@ -99,23 +99,36 @@ class AttendanceController extends Controller
             'channel' => 'mobile',
         ];
 
+        $isAutoValidated = $user->isWebAttendanceAutoValidated();
+
         if ($isBypass) {
             $bypassReason = $request->input('bypass_reason', 'Verifikasi wajah gagal');
-            $attendanceData['is_suspicious'] = true;
-            $attendanceData['suspicious_reason'] = "Tanpa verifikasi wajah: {$bypassReason}";
-            $attendanceData['web_approval_status'] = 'pending';
+            $attendanceData['is_suspicious'] = ! $isAutoValidated;
+            $attendanceData['suspicious_reason'] = $isAutoValidated
+                ? "Auto-Validated: Tanpa verifikasi wajah ({$bypassReason})"
+                : "Tanpa verifikasi wajah: {$bypassReason}";
+            $attendanceData['web_approval_status'] = $isAutoValidated ? 'valid' : 'pending';
+            $attendanceData['web_approved_at'] = $isAutoValidated ? $now : null;
         }
 
         // Add dinas luar specific fields
         if ($isDinasLuar) {
             $attendanceData['dinas_luar_destination'] = $request->dinas_luar_destination;
             $attendanceData['dinas_luar_notes'] = $request->dinas_luar_notes;
-            $attendanceData['dinas_luar_status'] = 'pending';
+            if ($isAutoValidated) {
+                $attendanceData['dinas_luar_status'] = 'approved';
+                $attendanceData['approved_by_hr'] = $user->id;
+                $attendanceData['approved_at_hr'] = $now;
+                $attendanceData['approved_by_spv'] = $user->id;
+                $attendanceData['approved_at_spv'] = $now;
+            } else {
+                $attendanceData['dinas_luar_status'] = 'pending';
+            }
         }
 
         $attendance = Attendance::create($attendanceData);
 
-        if ($isBypass) {
+        if ($isBypass && ! $isAutoValidated) {
             $this->notifySuperAdmins(
                 $user->company_id,
                 'ABSENSI MANUAL BUTUH VALIDASI SUPER ADMIN',
@@ -142,7 +155,19 @@ class AttendanceController extends Controller
         }
 
         if ($isDinasLuar) {
-            $this->sendDinasLuarNotifications($user, $attendance);
+            if ($isAutoValidated) {
+                $this->notify(
+                    $user,
+                    'DINAS LUAR DISETUJUI OTOMATIS',
+                    "Absen dinas luar Anda ke {$attendance->dinas_luar_destination} berhasil disahkan secara otomatis (Validasi Otomatis Aktif).",
+                    'success',
+                    null,
+                    'notif',
+                    false
+                );
+            } else {
+                $this->sendDinasLuarNotifications($user, $attendance);
+            }
         } else {
             $this->sendCheckInNotifications($user, $status, $now);
         }
@@ -151,9 +176,13 @@ class AttendanceController extends Controller
         $scorePercent = $score !== null ? round($score * 100, 1) : null;
         $scoreText = $scorePercent !== null ? " (Kemiripan Wajah: {$scorePercent}%)" : '';
 
-        $message = $isDinasLuar
-            ? "Absen Dinas Luar berhasil tercatat{$scoreText}. Menunggu persetujuan Supervisor."
-            : "Check-in berhasil{$scoreText}. Status: {$status}";
+        if ($isDinasLuar) {
+            $message = $isAutoValidated
+                ? "Absen Dinas Luar berhasil disahkan secara otomatis{$scoreText} (Validasi Otomatis Aktif)."
+                : "Absen Dinas Luar berhasil tercatat{$scoreText}. Menunggu persetujuan Supervisor.";
+        } else {
+            $message = "Check-in berhasil{$scoreText}. Status: {$status}";
+        }
 
         return $this->successResponse($attendance, $message);
     }
@@ -228,18 +257,20 @@ class AttendanceController extends Controller
 
         if ($isFaceBypass) {
             $bypassFaceReason = $request->input('bypass_reason', 'Verifikasi wajah gagal');
-            $updateData['is_suspicious'] = true;
-            $updateData['suspicious_reason'] = trim(($attendance->suspicious_reason ?? '')." | Tanpa verifikasi wajah saat pulang: {$bypassFaceReason}", ' |');
-            $updateData['web_approval_status'] = 'pending';
+            $updateData['is_suspicious'] = ! $isAutoValidated;
+            $updateData['suspicious_reason'] = trim(($attendance->suspicious_reason ?? '').' | '.($isAutoValidated ? "Auto-Validated: Tanpa verifikasi wajah saat pulang ({$bypassFaceReason})" : "Tanpa verifikasi wajah saat pulang: {$bypassFaceReason}"), ' |');
+            $updateData['web_approval_status'] = $isAutoValidated ? 'valid' : 'pending';
 
-            $this->notifySuperAdmins(
-                $user->company_id,
-                'ABSEN KELUAR MANUAL BUTUH VALIDASI SUPER ADMIN',
-                "Karyawan {$user->name} melakukan absen keluar manual (wajah gagal) pada pukul ".now()->format('H:i')." WIB. Catatan: \"{$bypassFaceReason}\". Menunggu validasi Super Admin.",
-                'warning',
-                self::ROUTE_APPROVALS,
-                $user->id
-            );
+            if (! $isAutoValidated) {
+                $this->notifySuperAdmins(
+                    $user->company_id,
+                    'ABSEN KELUAR MANUAL BUTUH VALIDASI SUPER ADMIN',
+                    "Karyawan {$user->name} melakukan absen keluar manual (wajah gagal) pada pukul ".now()->format('H:i')." WIB. Catatan: \"{$bypassFaceReason}\". Menunggu validasi Super Admin.",
+                    'warning',
+                    self::ROUTE_APPROVALS,
+                    $user->id
+                );
+            }
         }
 
         if ($isEarly && ! empty($earlyOutReason)) {
