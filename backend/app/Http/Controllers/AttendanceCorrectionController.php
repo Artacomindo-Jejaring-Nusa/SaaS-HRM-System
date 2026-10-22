@@ -192,39 +192,31 @@ class AttendanceCorrectionController extends Controller
                 false
             );
 
-            // Notify Supervisor
-            if ($user->supervisor_id) {
-                $supervisor = User::find($user->supervisor_id);
-                if ($supervisor) {
+            // Notify Supervisor (hanya atasan langsung jika ada)
+            if ($user->supervisor_id && $user->supervisor) {
+                $this->notify(
+                    $user->supervisor,
+                    'KOREKSI ABSEN BAWAHAN',
+                    "{$user->name} mengajukan koreksi absen untuk tanggal {$attendanceDate}. Alasan: {$request->reason}",
+                    'warning',
+                    self::ROUTE_ATTENDANCE_CORRECTIONS
+                );
+            } else {
+                // Hanya jika TIDAK memiliki atasan langsung, teruskan ke HRD/Admin yang berwenang
+                $hrds = User::where('company_id', $companyId)
+                    ->where('id', '!=', $user->id)
+                    ->whereHrdOrAdmin('approve-attendances')
+                    ->get();
+
+                foreach ($hrds as $hrd) {
                     $this->notify(
-                        $supervisor,
-                        'KOREKSI ABSEN BAWAHAN',
+                        $hrd,
+                        'KOREKSI ABSEN BARU (HRD)',
                         "{$user->name} mengajukan koreksi absen untuk tanggal {$attendanceDate}. Alasan: {$request->reason}",
                         'warning',
                         self::ROUTE_ATTENDANCE_CORRECTIONS
                     );
                 }
-            }
-
-            // Notify Admins/HR (excluding the submitter and the supervisor if already notified)
-            $adminQuery = User::where('company_id', $companyId)
-                ->where('role_id', '>', 1)
-                ->where('id', '!=', $user->id); // Exclude the user who submitted
-
-            if ($user->supervisor_id) {
-                $adminQuery->where('id', '!=', $user->supervisor_id); // Don't double-notify supervisor
-            }
-
-            $admins = $adminQuery->get();
-            foreach ($admins as $admin) {
-                /** @var User $admin */
-                $this->notify(
-                    $admin,
-                    'KOREKSI ABSEN BARU',
-                    "{$user->name} mengajukan koreksi absen untuk tanggal {$attendanceDate}.",
-                    'warning',
-                    self::ROUTE_ATTENDANCE_CORRECTIONS
-                );
             }
         }
 

@@ -538,18 +538,18 @@ class FundRequestController extends Controller
                         self::ROUTE_APPROVALS
                     );
                 }
+            } else {
+                // 2. Jika tidak ada atasan langsung, notifikasi Admin / HRD Perusahaan
+                $this->notifyCompanyApprovers(
+                    $user->company_id,
+                    'PERMINTAAN DANA BARU',
+                    "Karyawan {$user->name} mengajukan dana sebesar Rp {$formattedAmount}.",
+                    'warning',
+                    self::ROUTE_APPROVALS,
+                    $user->id,
+                    'approve-fund-requests'
+                );
             }
         }
-
-        // 2. Notifikasi Admin / HRD Perusahaan dan Super Admin
-        $this->notifyCompanyApprovers(
-            $user->company_id,
-            'PERMINTAAN DANA BARU',
-            "Karyawan {$user->name} mengajukan dana sebesar Rp {$formattedAmount}.",
-            'warning',
-            self::ROUTE_APPROVALS,
-            $user->id,
-            'approve-fund-requests'
-        );
     }
 }

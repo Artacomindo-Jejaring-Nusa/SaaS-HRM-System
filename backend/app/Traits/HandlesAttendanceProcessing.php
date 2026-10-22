@@ -6,8 +6,10 @@ use App\Models\Attendance;
 use App\Models\Office;
 use App\Models\Schedule;
 use App\Models\User;
+use App\Services\EmployeeQueryService;
 use App\Support\SelfieImage;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 
@@ -199,5 +201,95 @@ trait HandlesAttendanceProcessing
         $imageName = "attendance/{$prefix}_".Str::random(40).'.jpg';
 
         return SelfieImage::storeNormalized($file, $imageName);
+    }
+
+    private function scopeHistoryAccess($query, User $user, Request $request): void
+    {
+        $isSuperAdmin = $user->canAccessAllCompanies() || $user->isSuperAdmin() || $user->role_id === 1;
+        $canViewReports = $isSuperAdmin || $user->hasPermission('view-reports');
+        $scope = $request->input('scope');
+
+        if (($scope === 'company' || $scope === 'all') && $canViewReports) {
+            $this->applyCompanyScopeFilter($query, $user, $request, $isSuperAdmin);
+
+            return;
+        }
+
+        if ($scope === 'team') {
+            $this->applyTeamScopeFilter($query, $user);
+
+            return;
+        }
+
+        if ($request->filled('user_id') && $canViewReports) {
+            $query->where('user_id', $request->user_id);
+            $this->applyUserCompanyConstraint($query, $user);
+
+            return;
+        }
+
+        // DEFAULT: Strictly isolate to the logged-in user's OWN attendance records
+        $query->where('user_id', $user->id);
+        $this->applyUserCompanyConstraint($query, $user);
+    }
+
+    private function applyCompanyScopeFilter($query, User $user, Request $request, bool $isSuperAdmin): void
+    {
+        if ($request->company_id && $request->company_id !== 'all' && $isSuperAdmin) {
+            $query->where('company_id', $request->company_id);
+        } elseif ($user->company_id && ! $user->canAccessAllCompanies()) {
+            $query->where('company_id', $user->company_id);
+        }
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->user_id);
+        }
+    }
+
+    private function applyTeamScopeFilter($query, User $user): void
+    {
+        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
+        $query->whereIn('user_id', $subordinateIds);
+        $this->applyUserCompanyConstraint($query, $user);
+    }
+
+    private function applyUserCompanyConstraint($query, User $user): void
+    {
+        if ($user->company_id && ! $user->canAccessAllCompanies()) {
+            $query->where('company_id', $user->company_id);
+        }
+    }
+
+    private function applyHistoryFilters($query, Request $request): void
+    {
+        if ($request->start_date && $request->end_date) {
+            $query->whereDate('check_in', '>=', $request->start_date)
+                ->whereDate('check_in', '<=', $request->end_date);
+        } elseif ($request->date) {
+            $query->whereDate('check_in', $request->date);
+        }
+
+        if ($request->user_id) {
+            $query->where('user_id', $request->user_id);
+        }
+
+        if ($request->channel && $request->channel !== 'all') {
+            $query->where('channel', $request->channel);
+        }
+
+        if ($request->status && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->attendance_type && $request->attendance_type !== 'all') {
+            $query->where('attendance_type', $request->attendance_type);
+        }
+
+        if ($request->search) {
+            $search = $request->search;
+            $query->whereHas('user', function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
     }
 }

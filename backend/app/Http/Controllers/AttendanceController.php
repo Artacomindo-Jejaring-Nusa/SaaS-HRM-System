@@ -23,6 +23,8 @@ class AttendanceController extends Controller
 {
     use \App\Traits\HandlesAttendanceDinasLuar, \App\Traits\HandlesAttendanceProcessing, \App\Traits\HandlesAttendanceSecurity, \App\Traits\HandlesWebAttendance, Notifiable;
 
+    private const DEFAULT_FACE_BYPASS_REASON = 'Verifikasi wajah gagal';
+
     public function checkIn(StoreAttendanceRequest $request)
     {
         $user = $request->user();
@@ -72,7 +74,6 @@ class AttendanceController extends Controller
     private function processCheckIn(User $user, StoreAttendanceRequest $request, $matchedOffice, Carbon $now, string $today)
     {
         $isDinasLuar = $request->attendance_type === 'dinas_luar';
-        $isBypass = $request->boolean('bypass_face_recognition');
 
         $schedule = Schedule::with('shift')
             ->where('user_id', $user->id)
@@ -80,11 +81,27 @@ class AttendanceController extends Controller
             ->first();
 
         $status = $isDinasLuar ? 'dinas_luar' : $this->determineCheckInStatus($user, $schedule, $now);
-
-        // Handle Image & Compression
         $imageName = $this->saveCompressedAttendanceImage($request, 'in');
+        $isAutoValidated = $user->isWebAttendanceAutoValidated();
 
-        $attendanceData = [
+        $attendanceData = $this->buildMobileAttendanceData($user, $request, $matchedOffice, $status, $imageName, $now);
+        $attendance = Attendance::create($attendanceData);
+
+        $this->recordCheckInEmployeeTrack($user, $request, $now);
+        $this->dispatchCheckInNotifications($user, $attendance, $request, $status, $now);
+
+        $message = $this->buildCheckInSuccessMessage($isDinasLuar, $isAutoValidated, $status, $request);
+
+        return $this->successResponse($attendance, $message);
+    }
+
+    private function buildMobileAttendanceData(User $user, StoreAttendanceRequest $request, $matchedOffice, string $status, ?string $imageName, Carbon $now): array
+    {
+        $isDinasLuar = $request->attendance_type === 'dinas_luar';
+        $isBypass = $request->boolean('bypass_face_recognition');
+        $isAutoValidated = $user->isWebAttendanceAutoValidated();
+
+        $data = [
             'user_id' => $user->id,
             'company_id' => $user->company_id,
             'check_in' => $now,
@@ -100,33 +117,32 @@ class AttendanceController extends Controller
         ];
 
         if ($isBypass) {
-            $bypassReason = $request->input('bypass_reason', 'Verifikasi wajah gagal');
-            $attendanceData['is_suspicious'] = true;
-            $attendanceData['suspicious_reason'] = "Tanpa verifikasi wajah: {$bypassReason}";
-            $attendanceData['web_approval_status'] = 'pending';
+            $bypassReason = $request->input('bypass_reason', self::DEFAULT_FACE_BYPASS_REASON);
+            $data['is_suspicious'] = ! $isAutoValidated;
+            $data['suspicious_reason'] = $isAutoValidated
+                ? "Auto-Validated: Tanpa verifikasi wajah ({$bypassReason})"
+                : "Tanpa verifikasi wajah: {$bypassReason}";
+            $data['web_approval_status'] = $isAutoValidated ? 'valid' : 'pending';
+            $data['web_approved_at'] = $isAutoValidated ? $now : null;
         }
 
-        // Add dinas luar specific fields
         if ($isDinasLuar) {
-            $attendanceData['dinas_luar_destination'] = $request->dinas_luar_destination;
-            $attendanceData['dinas_luar_notes'] = $request->dinas_luar_notes;
-            $attendanceData['dinas_luar_status'] = 'pending';
+            $data['dinas_luar_destination'] = $request->dinas_luar_destination;
+            $data['dinas_luar_notes'] = $request->dinas_luar_notes;
+            $data['dinas_luar_status'] = $isAutoValidated ? 'approved' : 'pending';
+            if ($isAutoValidated) {
+                $data['approved_by_hr'] = $user->id;
+                $data['approved_at_hr'] = $now;
+                $data['approved_by_spv'] = $user->id;
+                $data['approved_at_spv'] = $now;
+            }
         }
 
-        $attendance = Attendance::create($attendanceData);
+        return $data;
+    }
 
-        if ($isBypass) {
-            $this->notifySuperAdmins(
-                $user->company_id,
-                'ABSENSI MANUAL BUTUH VALIDASI SUPER ADMIN',
-                "Karyawan {$user->name} melakukan absen masuk manual (wajah gagal) pada pukul {$now->format('H:i')} WIB. Catatan: \"{$bypassReason}\". Menunggu validasi Super Admin.",
-                'warning',
-                self::ROUTE_APPROVALS,
-                $user->id
-            );
-        }
-
-        // Auto-record initial position into employee_tracks & broadcast live location to Superadmin
+    private function recordCheckInEmployeeTrack(User $user, StoreAttendanceRequest $request, Carbon $now): void
+    {
         try {
             $track = EmployeeTrack::create([
                 'user_id' => $user->id,
@@ -140,22 +156,58 @@ class AttendanceController extends Controller
         } catch (\Throwable $e) {
             Log::warning('Auto track on checkIn failed: '.$e->getMessage());
         }
+    }
+
+    private function dispatchCheckInNotifications(User $user, Attendance $attendance, StoreAttendanceRequest $request, string $status, Carbon $now): void
+    {
+        $isDinasLuar = $attendance->attendance_type === 'dinas_luar';
+        $isBypass = $request->boolean('bypass_face_recognition');
+        $isAutoValidated = $user->isWebAttendanceAutoValidated();
+
+        if ($isBypass && ! $isAutoValidated) {
+            $bypassReason = $request->input('bypass_reason', self::DEFAULT_FACE_BYPASS_REASON);
+            $this->notifySuperAdmins(
+                $user->company_id,
+                'ABSENSI MANUAL BUTUH VALIDASI SUPER ADMIN',
+                "Karyawan {$user->name} melakukan absen masuk manual (wajah gagal) pada pukul {$now->format('H:i')} WIB. Catatan: \"{$bypassReason}\". Menunggu validasi Super Admin.",
+                'warning',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
+        }
 
         if ($isDinasLuar) {
-            $this->sendDinasLuarNotifications($user, $attendance);
+            if ($isAutoValidated) {
+                $this->notify(
+                    $user,
+                    'DINAS LUAR DISETUJUI OTOMATIS',
+                    "Absen dinas luar Anda ke {$attendance->dinas_luar_destination} berhasil disahkan secara otomatis (Validasi Otomatis Aktif).",
+                    'success',
+                    null,
+                    'notif',
+                    false
+                );
+            } else {
+                $this->sendDinasLuarNotifications($user, $attendance);
+            }
         } else {
             $this->sendCheckInNotifications($user, $status, $now);
         }
+    }
 
+    private function buildCheckInSuccessMessage(bool $isDinasLuar, bool $isAutoValidated, string $status, StoreAttendanceRequest $request): string
+    {
         $score = $request->attributes->get('face_similarity_score_in');
         $scorePercent = $score !== null ? round($score * 100, 1) : null;
         $scoreText = $scorePercent !== null ? " (Kemiripan Wajah: {$scorePercent}%)" : '';
 
-        $message = $isDinasLuar
-            ? "Absen Dinas Luar berhasil tercatat{$scoreText}. Menunggu persetujuan Supervisor."
-            : "Check-in berhasil{$scoreText}. Status: {$status}";
+        if ($isDinasLuar) {
+            return $isAutoValidated
+                ? "Absen Dinas Luar berhasil disahkan secara otomatis{$scoreText} (Validasi Otomatis Aktif)."
+                : "Absen Dinas Luar berhasil tercatat{$scoreText}. Menunggu persetujuan Supervisor.";
+        }
 
-        return $this->successResponse($attendance, $message);
+        return "Check-in berhasil{$scoreText}. Status: {$status}";
     }
 
     public function checkOut(StoreAttendanceRequest $request)
@@ -227,19 +279,21 @@ class AttendanceController extends Controller
         ];
 
         if ($isFaceBypass) {
-            $bypassFaceReason = $request->input('bypass_reason', 'Verifikasi wajah gagal');
-            $updateData['is_suspicious'] = true;
-            $updateData['suspicious_reason'] = trim(($attendance->suspicious_reason ?? '')." | Tanpa verifikasi wajah saat pulang: {$bypassFaceReason}", ' |');
-            $updateData['web_approval_status'] = 'pending';
+            $bypassFaceReason = $request->input('bypass_reason', self::DEFAULT_FACE_BYPASS_REASON);
+            $updateData['is_suspicious'] = ! $isAutoValidated;
+            $updateData['suspicious_reason'] = trim(($attendance->suspicious_reason ?? '').' | '.($isAutoValidated ? "Auto-Validated: Tanpa verifikasi wajah saat pulang ({$bypassFaceReason})" : "Tanpa verifikasi wajah saat pulang: {$bypassFaceReason}"), ' |');
+            $updateData['web_approval_status'] = $isAutoValidated ? 'valid' : 'pending';
 
-            $this->notifySuperAdmins(
-                $user->company_id,
-                'ABSEN KELUAR MANUAL BUTUH VALIDASI SUPER ADMIN',
-                "Karyawan {$user->name} melakukan absen keluar manual (wajah gagal) pada pukul ".now()->format('H:i')." WIB. Catatan: \"{$bypassFaceReason}\". Menunggu validasi Super Admin.",
-                'warning',
-                self::ROUTE_APPROVALS,
-                $user->id
-            );
+            if (! $isAutoValidated) {
+                $this->notifySuperAdmins(
+                    $user->company_id,
+                    'ABSEN KELUAR MANUAL BUTUH VALIDASI SUPER ADMIN',
+                    "Karyawan {$user->name} melakukan absen keluar manual (wajah gagal) pada pukul ".now()->format('H:i')." WIB. Catatan: \"{$bypassFaceReason}\". Menunggu validasi Super Admin.",
+                    'warning',
+                    self::ROUTE_APPROVALS,
+                    $user->id
+                );
+            }
         }
 
         if ($isEarly && ! empty($earlyOutReason)) {
@@ -383,92 +437,7 @@ class AttendanceController extends Controller
         return $this->successResponse($history, 'Riwayat absensi berhasil diambil.');
     }
 
-    private function scopeHistoryAccess($query, User $user, Request $request): void
-    {
-        $isSuperAdmin = $user->canAccessAllCompanies() || $user->isSuperAdmin() || $user->role_id === 1;
-        $canViewReports = $isSuperAdmin || $user->hasPermission('view-reports');
-        $scope = $request->input('scope');
 
-        if (($scope === 'company' || $scope === 'all') && $canViewReports) {
-            $this->applyCompanyScopeFilter($query, $user, $request, $isSuperAdmin);
-            return;
-        }
-
-        if ($scope === 'team') {
-            $this->applyTeamScopeFilter($query, $user);
-            return;
-        }
-
-        if ($request->filled('user_id') && $canViewReports) {
-            $query->where('user_id', $request->user_id);
-            $this->applyUserCompanyConstraint($query, $user);
-            return;
-        }
-
-        // DEFAULT: Strictly isolate to the logged-in user's OWN attendance records
-        $query->where('user_id', $user->id);
-        $this->applyUserCompanyConstraint($query, $user);
-    }
-
-    private function applyCompanyScopeFilter($query, User $user, Request $request, bool $isSuperAdmin): void
-    {
-        if ($request->company_id && $request->company_id !== 'all' && $isSuperAdmin) {
-            $query->where('company_id', $request->company_id);
-        } elseif ($user->company_id && ! $user->canAccessAllCompanies()) {
-            $query->where('company_id', $user->company_id);
-        }
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->user_id);
-        }
-    }
-
-    private function applyTeamScopeFilter($query, User $user): void
-    {
-        $subordinateIds = EmployeeQueryService::resolveSubordinateIds($user->id);
-        $query->whereIn('user_id', $subordinateIds);
-        $this->applyUserCompanyConstraint($query, $user);
-    }
-
-    private function applyUserCompanyConstraint($query, User $user): void
-    {
-        if ($user->company_id && ! $user->canAccessAllCompanies()) {
-            $query->where('company_id', $user->company_id);
-        }
-    }
-
-    private function applyHistoryFilters($query, Request $request): void
-    {
-        if ($request->start_date && $request->end_date) {
-            $query->whereDate('check_in', '>=', $request->start_date)
-                ->whereDate('check_in', '<=', $request->end_date);
-        } elseif ($request->date) {
-            $query->whereDate('check_in', $request->date);
-        }
-
-        if ($request->user_id) {
-            $query->where('user_id', $request->user_id);
-        }
-
-        if ($request->channel && $request->channel !== 'all') {
-            $query->where('channel', $request->channel);
-        }
-
-        if ($request->status && $request->status !== 'all') {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->attendance_type && $request->attendance_type !== 'all') {
-            $query->where('attendance_type', $request->attendance_type);
-        }
-
-        if ($request->search) {
-            $search = $request->search;
-            $query->whereHas('user', function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
-            });
-        }
-    }
 
     public function heatmap()
     {

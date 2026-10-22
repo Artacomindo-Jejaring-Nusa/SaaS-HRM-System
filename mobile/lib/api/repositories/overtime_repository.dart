@@ -109,4 +109,21 @@ class OvertimeRepository {
       return null;
     }
   }
+
+  static Future<List<dynamic>?> getRoles() async {
+    try {
+      final headers = await ApiClient.getHeaders();
+      final response = await ApiClient.client.get(
+        Uri.parse('${ApiClient.baseUrl}/roles'),
+        headers: headers,
+      );
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return body['data']?['data'] ?? body['data'];
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
 }

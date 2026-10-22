@@ -45,7 +45,7 @@ class EmployeeQueryService
         $isGlobalAdmin = $user->role_id === 1 || $user->hasRole('Super Admin');
         $isCompanyAdmin = $user->hasRole(['Admin', 'HRD', 'Direktur']) || $user->canAccessAllCompanies();
 
-        if ($isGlobalAdmin || $isCompanyAdmin) {
+        if ($isGlobalAdmin || $isCompanyAdmin || $user->hasPermission('manage-tasks') || $user->hasPermission('assign-tasks') || $user->hasPermission('assign-overtimes') || $user->hasPermission('manage-overtimes')) {
             $query->where('id', '!=', $user->id);
 
             return;
@@ -55,8 +55,6 @@ class EmployeeQueryService
 
         if (! empty($allSubordinateIds)) {
             $query->whereIn('id', $allSubordinateIds);
-        } elseif ($user->hasPermission('manage-tasks') || $user->hasPermission('assign-tasks')) {
-            $query->where('id', '!=', $user->id);
         } else {
             $query->where('supervisor_id', $user->id);
         }

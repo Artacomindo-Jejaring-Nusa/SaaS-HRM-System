@@ -211,19 +211,46 @@ class PayrollController extends Controller
         }
     }
 
-    private function getOvertimeMetrics($overtimes, $holidays, $regularRate, $holidayRate)
+    private function getOvertimeMetrics($overtimes, $holidays, $regularRate, $holidayRate, $attendances = null)
     {
         $overtimeAmount = 0;
         $totalOvertimeHours = 0;
 
         foreach ($overtimes as $ot) {
-            $hours = Carbon::parse($ot->start_time)->diffInHours(Carbon::parse($ot->end_time));
-            $totalOvertimeHours += $hours;
-            $isHoliday = in_array(Carbon::parse($ot->date)->format('Y-m-d'), $holidays) || Carbon::parse($ot->date)->isWeekend();
-            $overtimeAmount += ($hours * ($isHoliday ? $holidayRate : $regularRate));
+            if ($ot->status !== 'approved') {
+                continue;
+            }
+
+            $plannedHours = Carbon::parse($ot->start_time)->diffInHours(Carbon::parse($ot->end_time));
+            if ($plannedHours <= 0) {
+                continue;
+            }
+
+            $otDate = Carbon::parse($ot->date)->toDateString();
+            if (! $this->hasValidOvertimeAttendance($attendances, $otDate)) {
+                continue;
+            }
+
+            $totalOvertimeHours += $plannedHours;
+            $isHoliday = in_array($otDate, $holidays) || Carbon::parse($otDate)->isWeekend();
+            $rate = $isHoliday ? $holidayRate : $regularRate;
+            $overtimeAmount += ($plannedHours * $rate);
         }
 
         return ['hours' => $totalOvertimeHours, 'amount' => $overtimeAmount];
+    }
+
+    private function hasValidOvertimeAttendance($attendances, string $otDate): bool
+    {
+        if (! $attendances) {
+            return true;
+        }
+
+        $att = $attendances->first(function ($a) use ($otDate) {
+            return $a->check_in && Carbon::parse($a->check_in)->toDateString() === $otDate;
+        });
+
+        return (bool) ($att && $att->check_in && $att->check_out);
     }
 
     private function calculateAttendanceMetrics(
@@ -343,7 +370,7 @@ class PayrollController extends Controller
             $regularRate = $settings->overtime_rate_per_hour ?? 30000;
             $holidayRate = $settings->overtime_rate_holiday_per_hour ?? 50000;
 
-            $otMetrics = $this->getOvertimeMetrics($user->overtimes, $holidays, $regularRate, $holidayRate);
+            $otMetrics = $this->getOvertimeMetrics($user->overtimes, $holidays, $regularRate, $holidayRate, $user->attendances);
             $totalOvertimeHours = $otMetrics['hours'];
             $overtimeAmount = $otMetrics['amount'];
         }

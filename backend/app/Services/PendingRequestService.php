@@ -229,10 +229,14 @@ class PendingRequestService
             ? $modelClass::whereIn('status', $pendingStatus)
             : $modelClass::where('status', $pendingStatus);
 
-        if (! $isGlobalAdmin && $user->company_id) {
-            $query->where('company_id', $user->company_id);
-        } elseif ($request && $request->filled('company_id') && $request->company_id !== 'all') {
+        if ($request && $request->filled('company_id') && $request->company_id !== 'all') {
             $query->where('company_id', $request->company_id);
+        } elseif (! $isGlobalAdmin && $user->company_id) {
+            $query->where('company_id', $user->company_id);
+        }
+
+        if ($type === 'overtime') {
+            $query->whereNull('assigned_by');
         }
 
         self::applyDateFilter($query, $request);
@@ -253,7 +257,7 @@ class PendingRequestService
     {
         return match ($type) {
             'leave' => Leave::with(['user.role', 'user.office', 'user.supervisor'])->whereIn('status', ['pending', 'pending_supervisor', 'pending_hr']),
-            'overtime' => Overtime::with(['user.role', 'user.office', 'user.supervisor', 'items'])->where('status', 'pending'),
+            'overtime' => Overtime::with(['user.role', 'user.office', 'user.supervisor', 'items'])->where('status', 'pending')->whereNull('assigned_by'),
             'reimbursement' => Reimbursement::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
             'permit' => Permit::with(['user.role', 'user.office', 'user.supervisor'])->where('status', 'pending'),
             'vehicle_log' => VehicleLog::with(['user.role', 'user.office', 'user.supervisor', 'vehicle'])->whereIn('status', ['pending', 'completed']),

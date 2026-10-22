@@ -23,25 +23,33 @@ services:
     command:
       - "--mysql-native-password=ON"
       - "--bind-address=0.0.0.0"
+      - "--performance-schema=OFF"
+      - "--innodb-buffer-pool-size=128M"
+      - "--max-connections=50"
     deploy:
       resources:
         limits:
           cpus: '1.0'
-          memory: 512M
+          memory: 1G
+        reservations:
+          memory: 256M
     volumes:
       - mysql_staging_data:/var/lib/mysql
     networks:
       - hrms-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_PASSWORD:-StagingPass2026!}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${DB_PASSWORD:-StagingPass2026!}"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 12
+      start_period: 60s
 
   # ── Backend Staging (Laravel) ───────────────────────────
   backend-staging:
     image: ghcr.io/ahmad-rizki21/saas-backend:staging
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: hrms-backend-staging
     restart: unless-stopped
     env_file: .env.staging

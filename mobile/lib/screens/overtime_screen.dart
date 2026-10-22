@@ -21,7 +21,6 @@ class _OvertimeScreenState extends State<OvertimeScreen> with SingleTickerProvid
   bool _isLoading = true;
   bool _canAssign = false;
   bool _canReceive = true;
-  Map<String, dynamic>? _userProfile;
 
   @override
   void initState() {
@@ -61,7 +60,6 @@ class _OvertimeScreenState extends State<OvertimeScreen> with SingleTickerProvid
       }
 
       setState(() {
-        _userProfile = profile;
         _canAssign = isSuperAdmin ||
             perms.contains('assign-overtimes') ||
             perms.contains('manage-overtimes') ||
@@ -241,9 +239,10 @@ class _OvertimeScreenState extends State<OvertimeScreen> with SingleTickerProvid
   }
 
   void _showDetailBottomSheet(Map<String, dynamic> overtime) {
+    final isAssigned = overtime['assigned_by'] != null;
     final status = (overtime['status'] ?? 'pending').toString().toLowerCase();
     Color statusColor = Colors.orange;
-    String statusLabel = "Menunggu Konfirmasi";
+    String statusLabel = isAssigned ? "Perlu Konfirmasi" : "Menunggu Approval";
     if (status == 'approved') {
       statusColor = Colors.green;
       statusLabel = "Disetujui";
@@ -410,12 +409,13 @@ class _OvertimeScreenState extends State<OvertimeScreen> with SingleTickerProvid
 
   Widget _buildOvertimeCard(Map<String, dynamic> ot, {required bool isSentTab}) {
     final status = (ot['status'] ?? 'pending').toString().toLowerCase();
+    final isAssigned = ot['assigned_by'] != null;
     final isPending = status == 'pending';
     final isApproved = status == 'approved';
     final isRejected = status == 'rejected';
 
-    Color statusColor = Colors.orange;
-    String statusText = "Menunggu Konfirmasi";
+    Color statusColor = isAssigned ? Colors.orange : Colors.blue.shade700;
+    String statusText = isAssigned ? "Perlu Konfirmasi" : "Menunggu Approval";
     if (isApproved) {
       statusColor = Colors.green;
       statusText = "Disetujui";
@@ -472,7 +472,7 @@ class _OvertimeScreenState extends State<OvertimeScreen> with SingleTickerProvid
                           Text(
                             isSentTab
                                 ? "Kepada: ${ot['user']?['name'] ?? '-'}"
-                                : "Oleh: ${ot['assigner']?['name'] ?? 'Atasan'}",
+                                : (isAssigned ? "Oleh: ${ot['assigner']?['name'] ?? 'Atasan'}" : "Pengajuan Mandiri Anda"),
                             style: GoogleFonts.inter(fontSize: 11, color: Colors.grey[600]),
                           ),
                         ],
@@ -551,8 +551,8 @@ class _OvertimeScreenState extends State<OvertimeScreen> with SingleTickerProvid
                   ),
                 ],
 
-                // Action buttons for employee on pending received overtime
-                if (!isSentTab && isPending) ...[
+                // Action buttons for employee on pending received overtime ONLY IF it is an assignment
+                if (!isSentTab && isPending && isAssigned) ...[
                   const SizedBox(height: 12),
                   const Divider(height: 1),
                   const SizedBox(height: 10),
@@ -631,21 +631,83 @@ class _OvertimeScreenState extends State<OvertimeScreen> with SingleTickerProvid
                   ],
                 )
               : _buildTabContent(_receivedOvertimes, isSentTab: false),
-      floatingActionButton: _canAssign
-          ? FloatingActionButton.extended(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => OvertimeAssignScreen(onSubmitted: _fetchData),
-                  ),
-                );
-              },
-              backgroundColor: primaryColor,
-              icon: const Icon(Icons.add, color: Colors.white),
-              label: Text("Tugaskan Lembur", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white)),
-            )
-          : null,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showAddOvertimeOptions(context),
+        backgroundColor: primaryColor,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: Text(_canAssign ? "Tambah Lembur" : "Ajukan Lembur", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white)),
+      ),
+    );
+  }
+
+  void _showAddOvertimeOptions(BuildContext context) {
+    if (!_canAssign) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OvertimeSelfApplyScreen(onSubmitted: _fetchData),
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "Pilih Jenis Pembuatan Lembur",
+                style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10)),
+                  child: Icon(Icons.person_outline, color: Colors.blue.shade700),
+                ),
+                title: Text("Ajukan Lembur Mandiri", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: Text("Mengajukan jam lembur untuk diri sendiri (masuk workflow approval)", style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade600)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => OvertimeSelfApplyScreen(onSubmitted: _fetchData),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                  child: Icon(Icons.assignment_outlined, color: primaryColor),
+                ),
+                title: Text("Tugaskan Lembur (SPKL)", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: Text("Menerbitkan perintah lembur kepada karyawan lain atau divisi", style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade600)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => OvertimeAssignScreen(onSubmitted: _fetchData),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -706,8 +768,11 @@ class _OvertimeAssignScreenState extends State<OvertimeAssignScreen> {
   TimeOfDay _startTime = const TimeOfDay(hour: 17, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 20, minute: 0);
 
+  String _targetType = "users"; // 'users' or 'division'
   List<dynamic> _employees = [];
-  List<int> _selectedEmployeeIds = [];
+  List<dynamic> _roles = [];
+  final List<int> _selectedEmployeeIds = [];
+  int? _selectedRoleId;
   bool _isLoadingEmployees = true;
   bool _isSubmitting = false;
   String _employeeFilter = "";
@@ -715,23 +780,32 @@ class _OvertimeAssignScreenState extends State<OvertimeAssignScreen> {
   @override
   void initState() {
     super.initState();
-    _loadEmployees();
+    _loadOptions();
   }
 
-  Future<void> _loadEmployees() async {
-    final emps = await ApiService.getEmployees();
+  Future<void> _loadOptions() async {
+    final empsFuture = ApiService.getEmployees();
+    final rolesFuture = ApiService.getRoles();
+    final results = await Future.wait([empsFuture, rolesFuture]);
     if (mounted) {
       setState(() {
-        _employees = emps ?? [];
+        _employees = results[0] ?? [];
+        _roles = results[1] ?? [];
         _isLoadingEmployees = false;
       });
     }
   }
 
   Future<void> _submitAssignment() async {
-    if (_selectedEmployeeIds.isEmpty) {
+    if (_targetType == 'users' && _selectedEmployeeIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Pilih minimal satu karyawan untuk ditugaskan"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_targetType == 'division' && _selectedRoleId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Pilih divisi / jabatan penerima tugas lembur"), backgroundColor: Colors.red),
       );
       return;
     }
@@ -756,14 +830,20 @@ class _OvertimeAssignScreenState extends State<OvertimeAssignScreen> {
       final endStr = "${_endTime.hour.toString().padLeft(2, '0')}:${_endTime.minute.toString().padLeft(2, '0')}";
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
-      final payload = {
+      final payload = <String, dynamic>{
         'title': _titleController.text.trim(),
-        'user_id': _selectedEmployeeIds,
         'date': dateStr,
         'start_time': startStr,
         'end_time': endStr,
         'reason': _reasonController.text.trim(),
+        'is_assignment': true,
       };
+
+      if (_targetType == 'users') {
+        payload['user_id'] = _selectedEmployeeIds;
+      } else {
+        payload['division_id'] = _selectedRoleId;
+      }
 
       final res = await ApiService.submitOvertime(payload);
       LoadingDialog.hide(context);
@@ -809,58 +889,165 @@ class _OvertimeAssignScreenState extends State<OvertimeAssignScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("PILIH KARYAWAN PENERIMA (${_selectedEmployeeIds.length} Dipilih)",
+            // Target Type Selector (Karyawan vs Divisi)
+            Text("TARGET PENUGASAN LEMBUR",
                 style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey[700])),
             const SizedBox(height: 8),
-
-            // Employee Search Field
-            TextField(
-              decoration: InputDecoration(
-                hintText: "Cari nama karyawan...",
-                prefixIcon: const Icon(Icons.search, size: 18),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onChanged: (val) => setState(() => _employeeFilter = val),
-            ),
-            const SizedBox(height: 8),
-
-            // Employee select box
-            Container(
-              height: 140,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: _isLoadingEmployees
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView.builder(
-                      itemCount: filteredEmps.length,
-                      itemBuilder: (ctx, idx) {
-                        final emp = filteredEmps[idx];
-                        final empId = emp['id'] as int;
-                        final isSelected = _selectedEmployeeIds.contains(empId);
-
-                        return CheckboxListTile(
-                          dense: true,
-                          title: Text(emp['name'] ?? '-', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
-                          subtitle: Text(emp['role']?['name'] ?? 'Staff', style: GoogleFonts.inter(fontSize: 11, color: Colors.grey)),
-                          value: isSelected,
-                          activeColor: primaryColor,
-                          onChanged: (val) {
-                            setState(() {
-                              if (val == true) {
-                                _selectedEmployeeIds.add(empId);
-                              } else {
-                                _selectedEmployeeIds.remove(empId);
-                              }
-                            });
-                          },
-                        );
-                      },
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _targetType = 'users'),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _targetType == 'users' ? primaryColor.withOpacity(0.1) : Colors.grey.shade100,
+                        border: Border.all(
+                          color: _targetType == 'users' ? primaryColor : Colors.grey.shade300,
+                          width: _targetType == 'users' ? 1.5 : 1,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.person, size: 16, color: _targetType == 'users' ? primaryColor : Colors.grey),
+                          const SizedBox(width: 6),
+                          Text(
+                            "Pilih Karyawan",
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: _targetType == 'users' ? primaryColor : Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _targetType = 'division'),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _targetType == 'division' ? primaryColor.withOpacity(0.1) : Colors.grey.shade100,
+                        border: Border.all(
+                          color: _targetType == 'division' ? primaryColor : Colors.grey.shade300,
+                          width: _targetType == 'division' ? 1.5 : 1,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.corporate_fare, size: 16, color: _targetType == 'division' ? primaryColor : Colors.grey),
+                          const SizedBox(width: 6),
+                          Text(
+                            "Pilih Divisi / Jabatan",
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: _targetType == 'division' ? primaryColor : Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 14),
+
+            if (_targetType == 'users') ...[
+              Text("DAFTAR KARYAWAN (${_selectedEmployeeIds.length} Dipilih)",
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey[700])),
+              const SizedBox(height: 8),
+
+              // Employee Search Field
+              TextField(
+                decoration: InputDecoration(
+                  hintText: "Cari nama karyawan...",
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onChanged: (val) => setState(() => _employeeFilter = val),
+              ),
+              const SizedBox(height: 8),
+
+              // Employee select box
+              Container(
+                height: 140,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: _isLoadingEmployees
+                    ? const Center(child: CircularProgressIndicator())
+                    : ListView.builder(
+                        itemCount: filteredEmps.length,
+                        itemBuilder: (ctx, idx) {
+                          final emp = filteredEmps[idx];
+                          final empId = emp['id'] as int;
+                          final isSelected = _selectedEmployeeIds.contains(empId);
+
+                          return CheckboxListTile(
+                            dense: true,
+                            title: Text(emp['name'] ?? '-', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
+                            subtitle: Text(emp['role']?['name'] ?? 'Staff', style: GoogleFonts.inter(fontSize: 11, color: Colors.grey)),
+                            value: isSelected,
+                            activeColor: primaryColor,
+                            onChanged: (val) {
+                              setState(() {
+                                if (val == true) {
+                                  _selectedEmployeeIds.add(empId);
+                                } else {
+                                  _selectedEmployeeIds.remove(empId);
+                                }
+                              });
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ] else ...[
+              Text("PILIH DIVISI / JABATAN PENERIMA",
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey[700])),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    isExpanded: true,
+                    hint: Text("Pilih divisi / jabatan...", style: GoogleFonts.inter(fontSize: 13, color: Colors.grey)),
+                    value: _selectedRoleId,
+                    items: _roles.map<DropdownMenuItem<int>>((r) {
+                      return DropdownMenuItem<int>(
+                        value: r['id'] as int,
+                        child: Text(r['name'] ?? 'Divisi', style: GoogleFonts.inter(fontSize: 13)),
+                      );
+                    }).toList(),
+                    onChanged: (val) => setState(() => _selectedRoleId = val),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                "Semua karyawan dalam divisi ini akan menerima perintah lembur secara serentak.",
+                style: GoogleFonts.inter(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Judul
@@ -998,6 +1185,275 @@ class _OvertimeAssignScreenState extends State<OvertimeAssignScreen> {
                 ),
                 child: Text(
                   _isSubmitting ? "Menerbitkan..." : "Terbitkan Surat Perintah Lembur",
+                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Screen untuk karyawan mengajukan lembur mandiri (masuk ke Approval Workflow Super Admin)
+class OvertimeSelfApplyScreen extends StatefulWidget {
+  final VoidCallback onSubmitted;
+  const OvertimeSelfApplyScreen({Key? key, required this.onSubmitted}) : super(key: key);
+
+  @override
+  _OvertimeSelfApplyScreenState createState() => _OvertimeSelfApplyScreenState();
+}
+
+class _OvertimeSelfApplyScreenState extends State<OvertimeSelfApplyScreen> {
+  final Color primaryColor = const Color(0xFF800000);
+  final _titleController = TextEditingController();
+  final _reasonController = TextEditingController();
+
+  DateTime _selectedDate = DateTime.now();
+  TimeOfDay _startTime = const TimeOfDay(hour: 17, minute: 0);
+  TimeOfDay _endTime = const TimeOfDay(hour: 20, minute: 0);
+  bool _isSubmitting = false;
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now().add(const Duration(days: 60)),
+    );
+    if (picked != null) {
+      setState(() => _selectedDate = picked);
+    }
+  }
+
+  Future<void> _pickTime(bool isStart) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: isStart ? _startTime : _endTime,
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStart) {
+          _startTime = picked;
+        } else {
+          _endTime = picked;
+        }
+      });
+    }
+  }
+
+  Future<void> _submitSelfApply() async {
+    if (_reasonController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Alasan atau rincian pekerjaan lembur wajib diisi"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    LoadingDialog.show(context, message: "Mengirim permohonan lembur...");
+
+    try {
+      final startStr = "${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}";
+      final endStr = "${_endTime.hour.toString().padLeft(2, '0')}:${_endTime.minute.toString().padLeft(2, '0')}";
+      final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+
+      final payload = {
+        'title': _titleController.text.trim().isEmpty
+            ? "Pengajuan Lembur - $dateStr"
+            : _titleController.text.trim(),
+        'date': dateStr,
+        'start_time': startStr,
+        'end_time': endStr,
+        'reason': _reasonController.text.trim(),
+        'is_assignment': false,
+      };
+
+      final res = await ApiService.submitOvertime(payload);
+      LoadingDialog.hide(context);
+
+      if (res['status'] == 'success' || res['data'] != null) {
+        Navigator.pop(context);
+        widget.onSubmitted();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Permohonan lembur berhasil diajukan dan sedang menunggu persetujuan"), backgroundColor: Colors.green),
+        );
+      } else {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message'] ?? "Gagal mengajukan lembur"), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      LoadingDialog.hide(context);
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: Text("Pengajuan Lembur Mandiri", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0.5,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade100),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "Permohonan lembur mandiri akan diproses melalui alur persetujuan berjenjang (Approval Workflow) yang telah ditentukan Super Admin.",
+                      style: GoogleFonts.inter(fontSize: 12, color: Colors.blue.shade900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Judul Agenda
+            Text("Judul / Agenda Lembur (Opsional)", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _titleController,
+              decoration: InputDecoration(
+                hintText: "Contoh: Penyelesaian Laporan Bulanan",
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Tanggal Lembur
+            Text("Tanggal Lembur *", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 6),
+            InkWell(
+              onTap: _pickDate,
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(DateFormat('dd MMMM yyyy').format(_selectedDate), style: GoogleFonts.inter(fontSize: 14)),
+                    const Icon(Icons.calendar_today, size: 18, color: Colors.grey),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Waktu Mulai & Selesai
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Jam Mulai *", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: () => _pickTime(true),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(_startTime.format(context), style: GoogleFonts.inter(fontSize: 14)),
+                              const Icon(Icons.access_time, size: 18, color: Colors.grey),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Jam Selesai *", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: () => _pickTime(false),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(_endTime.format(context), style: GoogleFonts.inter(fontSize: 14)),
+                              const Icon(Icons.access_time, size: 18, color: Colors.grey),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Alasan / Uraian Pekerjaan
+            Text("Uraian Pekerjaan / Alasan Lembur *", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _reasonController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: "Jelaskan rincian tugas lembur yang Anda kerjakan...",
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Submit Button
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: _isSubmitting ? null : _submitSelfApply,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(
+                  _isSubmitting ? "Mengirimkan..." : "Kirim Permohonan Lembur",
                   style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
                 ),
               ),
