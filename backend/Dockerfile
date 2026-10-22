@@ -1,3 +1,6 @@
+# Security Note: PHP >= 8.3.36 mitigates CVE-2026-109618 (OOM RCE) & CVE-2026-109619 (Stale Global State RCE)
+ARG PHP_VERSION=8.3.36-fpm-alpine
+
 # ============================================
 # HRMS Narwasthu Group - Backend (Laravel 13)
 # Multi-stage, Production-Ready Dockerfile
@@ -17,8 +20,6 @@ RUN composer install \
     --ignore-platform-reqs
 
 # ── Stage 2: Production Image ──────────────────────────────
-# Security Note: PHP >= 8.3.36 mitigates CVE-2026-109618 (OOM RCE) & CVE-2026-109619 (Stale Global State RCE)
-ARG PHP_VERSION=8.3.36-fpm-alpine
 FROM php:${PHP_VERSION} AS production
 
 LABEL maintainer="Ahmad Rizki <ahmadrizki@narwastuarthatama.com>"
