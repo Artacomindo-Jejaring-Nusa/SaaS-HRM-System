@@ -612,15 +612,26 @@ export default function OvertimesPage() {
                       <td className="px-6 py-4">
                         {activeTab === 'received' ? (
                           <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-[#800000]/10 text-[#800000] font-bold text-xs flex items-center justify-center">
-                              {ot.assigner?.name?.charAt(0) || "A"}
+                            <div className={`w-8 h-8 rounded-full font-bold text-xs flex items-center justify-center ${
+                              ot.assigned_by
+                                ? 'bg-[#800000]/10 text-[#800000]'
+                                : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+                            }`}>
+                              {ot.assigned_by ? (ot.assigner?.name?.charAt(0) || "A") : (user?.name?.charAt(0) || "M")}
                             </div>
                             <div>
-                              <div className="font-medium text-gray-900 dark:text-white">
-                                {ot.assigner?.name || "Atasan / Supervisor"}
+                              <div className="font-medium text-gray-900 dark:text-white flex items-center gap-1.5">
+                                <span>{ot.assigned_by ? (ot.assigner?.name || "Atasan / Supervisor") : "Pengajuan Mandiri"}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                                  ot.assigned_by
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
+                                }`}>
+                                  {ot.assigned_by ? "SPKL" : "Mandiri"}
+                                </span>
                               </div>
                               <div className="text-xs text-gray-400">
-                                {ot.assigner?.role?.name || "Pemberi Tugas"}
+                                {ot.assigned_by ? (ot.assigner?.role?.name || "Pemberi Tugas") : "Diajukan oleh Anda"}
                               </div>
                             </div>
                           </div>
@@ -658,10 +669,17 @@ export default function OvertimesPage() {
                       {/* Status Respon */}
                       <td className="px-6 py-4">
                         {isPending && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800">
-                            <Clock className="w-3.5 h-3.5" />
-                            Menunggu Konfirmasi
-                          </span>
+                          ot.assigned_by ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800">
+                              <Clock className="w-3.5 h-3.5" />
+                              Perlu Konfirmasi Anda
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800">
+                              <Clock className="w-3.5 h-3.5" />
+                              Menunggu Approval Atasan
+                            </span>
+                          )
                         )}
                         {isApproved && (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
@@ -673,7 +691,7 @@ export default function OvertimesPage() {
                           <div>
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800">
                               <XCircle className="w-3.5 h-3.5" />
-                              Ditolak Karyawan
+                              Ditolak
                             </span>
                             {ot.rejection_reason && (
                               <div className="text-[11px] text-rose-600 dark:text-rose-400 mt-1 max-w-xs truncate" title={ot.rejection_reason}>
@@ -687,8 +705,8 @@ export default function OvertimesPage() {
                       {/* Tombol Aksi */}
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {/* Aksi khusus karyawan pada lembur diterima yang pending */}
-                          {activeTab === 'received' && isPending && (
+                          {/* Aksi khusus karyawan pada lembur diterima yang pending (Hanya untuk penugasan SPKL) */}
+                          {activeTab === 'received' && isPending && ot.assigned_by && (
                             <>
                               <button
                                 onClick={() => handleRespond(ot.id, 'accept')}
