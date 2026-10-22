@@ -122,11 +122,10 @@ trait Notifiable
                 });
         });
 
-        // Tenant filtering: Global super admins (role_id 1 or null company_id) or tenant super admin of this company
+        // Tenant filtering: Global super admins (null company_id) or tenant super admin of this company
         if ($companyId) {
             $query->where(function ($q) use ($companyId) {
                 $q->whereNull('company_id')
-                    ->orWhere('role_id', 1)
                     ->orWhere('company_id', $companyId);
             });
         }
@@ -175,7 +174,6 @@ trait Notifiable
         if ($companyId) {
             $query->where(function ($q) use ($companyId) {
                 $q->whereNull('company_id')
-                    ->orWhere('role_id', 1)
                     ->orWhere('company_id', $companyId);
             });
         }

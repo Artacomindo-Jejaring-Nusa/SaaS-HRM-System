@@ -228,6 +228,31 @@ class OvertimeController extends Controller
 
         if (! $this->handleOvertimeWorkflowNotification($user, $companyId)) {
             $this->notify($user, self::NOTIFICATION_OVERTIME_SUCCESS, 'Permohonan lembur Anda sedang menunggu persetujuan.', 'info');
+
+            if ($user->supervisor_id && $user->supervisor) {
+                $this->notify(
+                    $user->supervisor,
+                    'PENGAJUAN LEMBUR BAWAHAN',
+                    "Karyawan {$user->name} mengajukan lembur '{$overtime->title}' pada tanggal {$overtime->date}. Mohon segera tinjau.",
+                    'warning',
+                    self::ROUTE_APPROVALS
+                );
+            } else {
+                $hrds = User::where('company_id', $companyId)
+                    ->where('id', '!=', $user->id)
+                    ->whereHrdOrAdmin('approve-overtimes')
+                    ->get();
+
+                foreach ($hrds as $hrd) {
+                    $this->notify(
+                        $hrd,
+                        'PENGAJUAN LEMBUR BARU',
+                        "Karyawan {$user->name} mengajukan lembur '{$overtime->title}' pada tanggal {$overtime->date}. Mohon segera tinjau.",
+                        'warning',
+                        self::ROUTE_APPROVALS
+                    );
+                }
+            }
         }
 
         $this->notifySuperAdmins(

@@ -208,22 +208,21 @@ class ReimbursementController extends Controller
                 'warning',
                 self::ROUTE_APPROVALS
             );
-        }
+        } else {
+            $admins = User::where('company_id', $companyId)
+                ->where('id', '!=', $user->id)
+                ->whereHrdOrAdmin('approve-reimbursements')
+                ->get();
 
-        $admins = User::where('company_id', $companyId)
-            ->whereIn('role_id', [7, 2, 10, 8])
-            ->where('id', '!=', $user->id)
-            ->where('id', '!=', $user->supervisor_id)
-            ->get();
-
-        foreach ($admins as $admin) {
-            $this->notify(
-                $admin,
-                'KLAIM REIMBURSEMENT BARU (ADMIN)',
-                "Karyawan {$user->name} mengajukan klaim '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'.',
-                'warning',
-                self::ROUTE_APPROVALS
-            );
+            foreach ($admins as $admin) {
+                $this->notify(
+                    $admin,
+                    'KLAIM REIMBURSEMENT BARU',
+                    "Karyawan {$user->name} mengajukan klaim '{$request->title}' sebesar Rp ".number_format($request->amount, 0, ',', '.').'.',
+                    'warning',
+                    self::ROUTE_APPROVALS
+                );
+            }
         }
 
         $this->notifySuperAdmins(

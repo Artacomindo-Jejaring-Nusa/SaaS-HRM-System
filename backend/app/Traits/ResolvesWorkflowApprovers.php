@@ -111,10 +111,8 @@ trait ResolvesWorkflowApprovers
             return collect();
         }
 
-        $roleUsers = User::with('role')->where(function ($q) use ($companyId) {
-            $q->where('company_id', $companyId)
-                ->orWhereNull('company_id');
-        })
+        $roleUsers = User::with('role')
+            ->where('company_id', $companyId)
             ->where('role_id', $step->approver_role_id)
             ->where('id', '!=', $submitter->id)
             ->get();
