@@ -1038,10 +1038,11 @@ export default function OvertimesPage() {
 
             <form onSubmit={handleSelfSubmitOvertime} className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="self-form-title" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   Judul / Agenda Lembur
                 </label>
                 <input
+                  id="self-form-title"
                   type="text"
                   placeholder="Contoh: Penyelesaian Laporan Keuangan Bulanan"
                   value={formTitle}
@@ -1051,10 +1052,11 @@ export default function OvertimesPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="self-form-date" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   Tanggal Lembur <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="self-form-date"
                   type="date"
                   required
                   value={formDate}
@@ -1065,10 +1067,11 @@ export default function OvertimesPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="self-form-start-time" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                     Jam Mulai <span className="text-red-500">*</span>
                   </label>
                   <input
+                    id="self-form-start-time"
                     type="time"
                     required
                     value={formStartTime}
@@ -1078,10 +1081,11 @@ export default function OvertimesPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="self-form-end-time" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                     Jam Selesai <span className="text-red-500">*</span>
                   </label>
                   <input
+                    id="self-form-end-time"
                     type="time"
                     required
                     value={formEndTime}
@@ -1092,10 +1096,11 @@ export default function OvertimesPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="self-form-reason" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   Alasan & Uraian Pekerjaan <span className="text-red-500">*</span>
                 </label>
                 <textarea
+                  id="self-form-reason"
                   required
                   rows={3}
                   placeholder="Jelaskan kebutuhan mendesak atau pekerjaan yang harus diselesaikan pada lembur ini..."

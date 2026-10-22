@@ -217,7 +217,6 @@ class PayrollController extends Controller
         $totalOvertimeHours = 0;
 
         foreach ($overtimes as $ot) {
-            // Lembur hanya dihitung jika berstatus approved (disetujui)
             if ($ot->status !== 'approved') {
                 continue;
             }
@@ -228,36 +227,30 @@ class PayrollController extends Controller
             }
 
             $otDate = Carbon::parse($ot->date)->toDateString();
-
-            // Rekonsiliasi: Jam keluar presensi melebihi batas TIDAK otomatis dihitung lembur tambahan.
-            // Lembur dihitung maksimal sebesar durasi tiket approved asalkan ada bukti kehadiran valid (check-out).
-            $hasValidAttendance = false;
-            if ($attendances) {
-                $att = $attendances->first(function ($a) use ($otDate) {
-                    return $a->check_in && Carbon::parse($a->check_in)->toDateString() === $otDate;
-                });
-
-                if ($att && $att->check_in && $att->check_out) {
-                    $hasValidAttendance = true;
-                }
-            } else {
-                $hasValidAttendance = true;
-            }
-
-            // Jika karyawan tidak ada presensi check-in/out pada tanggal lembur, lembur gugur (0 jam)
-            if (! $hasValidAttendance) {
+            if (! $this->hasValidOvertimeAttendance($attendances, $otDate)) {
                 continue;
             }
 
-            $recognizedHours = $plannedHours;
-            $totalOvertimeHours += $recognizedHours;
-
+            $totalOvertimeHours += $plannedHours;
             $isHoliday = in_array($otDate, $holidays) || Carbon::parse($otDate)->isWeekend();
             $rate = $isHoliday ? $holidayRate : $regularRate;
-            $overtimeAmount += ($recognizedHours * $rate);
+            $overtimeAmount += ($plannedHours * $rate);
         }
 
         return ['hours' => $totalOvertimeHours, 'amount' => $overtimeAmount];
+    }
+
+    private function hasValidOvertimeAttendance($attendances, string $otDate): bool
+    {
+        if (! $attendances) {
+            return true;
+        }
+
+        $att = $attendances->first(function ($a) use ($otDate) {
+            return $a->check_in && Carbon::parse($a->check_in)->toDateString() === $otDate;
+        });
+
+        return (bool) ($att && $att->check_in && $att->check_out);
     }
 
     private function calculateAttendanceMetrics(

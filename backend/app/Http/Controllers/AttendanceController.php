@@ -80,11 +80,23 @@ class AttendanceController extends Controller
             ->first();
 
         $status = $isDinasLuar ? 'dinas_luar' : $this->determineCheckInStatus($user, $schedule, $now);
-
-        // Handle Image & Compression
         $imageName = $this->saveCompressedAttendanceImage($request, 'in');
+        $isAutoValidated = $user->isWebAttendanceAutoValidated();
 
-        $attendanceData = [
+        $attendanceData = $this->buildMobileAttendanceData($user, $request, $matchedOffice, $status, $imageName, $now, $isDinasLuar, $isBypass, $isAutoValidated);
+        $attendance = Attendance::create($attendanceData);
+
+        $this->recordCheckInEmployeeTrack($user, $request, $now);
+        $this->dispatchCheckInNotifications($user, $attendance, $isDinasLuar, $isAutoValidated, $isBypass, $status, $now, $request);
+
+        $message = $this->buildCheckInSuccessMessage($isDinasLuar, $isAutoValidated, $status, $request);
+
+        return $this->successResponse($attendance, $message);
+    }
+
+    private function buildMobileAttendanceData(User $user, StoreAttendanceRequest $request, $matchedOffice, string $status, ?string $imageName, Carbon $now, bool $isDinasLuar, bool $isBypass, bool $isAutoValidated): array
+    {
+        $data = [
             'user_id' => $user->id,
             'company_id' => $user->company_id,
             'check_in' => $now,
@@ -99,47 +111,33 @@ class AttendanceController extends Controller
             'channel' => 'mobile',
         ];
 
-        $isAutoValidated = $user->isWebAttendanceAutoValidated();
-
         if ($isBypass) {
             $bypassReason = $request->input('bypass_reason', 'Verifikasi wajah gagal');
-            $attendanceData['is_suspicious'] = ! $isAutoValidated;
-            $attendanceData['suspicious_reason'] = $isAutoValidated
+            $data['is_suspicious'] = ! $isAutoValidated;
+            $data['suspicious_reason'] = $isAutoValidated
                 ? "Auto-Validated: Tanpa verifikasi wajah ({$bypassReason})"
                 : "Tanpa verifikasi wajah: {$bypassReason}";
-            $attendanceData['web_approval_status'] = $isAutoValidated ? 'valid' : 'pending';
-            $attendanceData['web_approved_at'] = $isAutoValidated ? $now : null;
+            $data['web_approval_status'] = $isAutoValidated ? 'valid' : 'pending';
+            $data['web_approved_at'] = $isAutoValidated ? $now : null;
         }
 
-        // Add dinas luar specific fields
         if ($isDinasLuar) {
-            $attendanceData['dinas_luar_destination'] = $request->dinas_luar_destination;
-            $attendanceData['dinas_luar_notes'] = $request->dinas_luar_notes;
+            $data['dinas_luar_destination'] = $request->dinas_luar_destination;
+            $data['dinas_luar_notes'] = $request->dinas_luar_notes;
+            $data['dinas_luar_status'] = $isAutoValidated ? 'approved' : 'pending';
             if ($isAutoValidated) {
-                $attendanceData['dinas_luar_status'] = 'approved';
-                $attendanceData['approved_by_hr'] = $user->id;
-                $attendanceData['approved_at_hr'] = $now;
-                $attendanceData['approved_by_spv'] = $user->id;
-                $attendanceData['approved_at_spv'] = $now;
-            } else {
-                $attendanceData['dinas_luar_status'] = 'pending';
+                $data['approved_by_hr'] = $user->id;
+                $data['approved_at_hr'] = $now;
+                $data['approved_by_spv'] = $user->id;
+                $data['approved_at_spv'] = $now;
             }
         }
 
-        $attendance = Attendance::create($attendanceData);
+        return $data;
+    }
 
-        if ($isBypass && ! $isAutoValidated) {
-            $this->notifySuperAdmins(
-                $user->company_id,
-                'ABSENSI MANUAL BUTUH VALIDASI SUPER ADMIN',
-                "Karyawan {$user->name} melakukan absen masuk manual (wajah gagal) pada pukul {$now->format('H:i')} WIB. Catatan: \"{$bypassReason}\". Menunggu validasi Super Admin.",
-                'warning',
-                self::ROUTE_APPROVALS,
-                $user->id
-            );
-        }
-
-        // Auto-record initial position into employee_tracks & broadcast live location to Superadmin
+    private function recordCheckInEmployeeTrack(User $user, StoreAttendanceRequest $request, Carbon $now): void
+    {
         try {
             $track = EmployeeTrack::create([
                 'user_id' => $user->id,
@@ -152,6 +150,21 @@ class AttendanceController extends Controller
             broadcast(new EmployeeLocationUpdated($track))->toOthers();
         } catch (\Throwable $e) {
             Log::warning('Auto track on checkIn failed: '.$e->getMessage());
+        }
+    }
+
+    private function dispatchCheckInNotifications(User $user, Attendance $attendance, bool $isDinasLuar, bool $isAutoValidated, bool $isBypass, string $status, Carbon $now, StoreAttendanceRequest $request): void
+    {
+        if ($isBypass && ! $isAutoValidated) {
+            $bypassReason = $request->input('bypass_reason', 'Verifikasi wajah gagal');
+            $this->notifySuperAdmins(
+                $user->company_id,
+                'ABSENSI MANUAL BUTUH VALIDASI SUPER ADMIN',
+                "Karyawan {$user->name} melakukan absen masuk manual (wajah gagal) pada pukul {$now->format('H:i')} WIB. Catatan: \"{$bypassReason}\". Menunggu validasi Super Admin.",
+                'warning',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
         }
 
         if ($isDinasLuar) {
@@ -171,20 +184,21 @@ class AttendanceController extends Controller
         } else {
             $this->sendCheckInNotifications($user, $status, $now);
         }
+    }
 
+    private function buildCheckInSuccessMessage(bool $isDinasLuar, bool $isAutoValidated, string $status, StoreAttendanceRequest $request): string
+    {
         $score = $request->attributes->get('face_similarity_score_in');
         $scorePercent = $score !== null ? round($score * 100, 1) : null;
         $scoreText = $scorePercent !== null ? " (Kemiripan Wajah: {$scorePercent}%)" : '';
 
         if ($isDinasLuar) {
-            $message = $isAutoValidated
+            return $isAutoValidated
                 ? "Absen Dinas Luar berhasil disahkan secara otomatis{$scoreText} (Validasi Otomatis Aktif)."
                 : "Absen Dinas Luar berhasil tercatat{$scoreText}. Menunggu persetujuan Supervisor.";
-        } else {
-            $message = "Check-in berhasil{$scoreText}. Status: {$status}";
         }
 
-        return $this->successResponse($attendance, $message);
+        return "Check-in berhasil{$scoreText}. Status: {$status}";
     }
 
     public function checkOut(StoreAttendanceRequest $request)

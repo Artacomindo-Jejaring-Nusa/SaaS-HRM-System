@@ -34,25 +34,25 @@ trait HandlesOvertimeAssignment
 
     private function resolveTargetUserIds(Request $request, User $user): array
     {
+        $targetUserIds = [];
+
         if ($request->filled('division_id')) {
             $divQuery = User::where('role_id', $request->division_id);
             if ($user->company_id && ! $user->canAccessAllCompanies()) {
                 $divQuery->where('company_id', $user->company_id);
             }
 
-            return $divQuery->pluck('id')->toArray();
-        }
-
-        if ($request->filled('user_id')) {
+            $targetUserIds = $divQuery->pluck('id')->toArray();
+        } elseif ($request->filled('user_id')) {
             $userIds = is_array($request->user_id) ? $request->user_id : [$request->user_id];
             if ($user->company_id && ! $user->canAccessAllCompanies()) {
-                return User::whereIn('id', $userIds)->where('company_id', $user->company_id)->pluck('id')->toArray();
+                $targetUserIds = User::whereIn('id', $userIds)->where('company_id', $user->company_id)->pluck('id')->toArray();
+            } else {
+                $targetUserIds = $userIds;
             }
-
-            return $userIds;
         }
 
-        return [];
+        return $targetUserIds;
     }
 
     private function dispatchOvertimeAssignments(Request $request, User $user, array $targetUserIds): array
@@ -125,5 +125,61 @@ trait HandlesOvertimeAssignment
             'end_time' => $request->end_time,
             'reason' => $request->reason,
         ]);
+    }
+
+    private function handleOvertimeAssignmentStore(Request $request, User $user)
+    {
+        if (! $this->canAssignOvertime($user)) {
+            return $this->errorResponse('Akses ditolak. Anda tidak memiliki izin untuk memberikan penugasan lembur (assign-overtimes).', 403);
+        }
+
+        $this->normalizeOvertimeItems($request);
+        $this->validateStoreRequest($request);
+
+        $targetUserIds = $this->resolveTargetUserIds($request, $user);
+        if (empty($targetUserIds)) {
+            return $this->errorResponse('Pilih minimal satu karyawan atau divisi penerima perintah lembur.', 422);
+        }
+
+        $createdOvertimes = $this->dispatchOvertimeAssignments($request, $user, $targetUserIds);
+
+        $this->logActivity('ASSIGN_OVERTIME', "Memberikan perintah lembur '{$request->title}' kepada ".count($createdOvertimes).' karyawan', $createdOvertimes[0] ?? null);
+
+        return $this->successResponse([
+            'overtimes' => $createdOvertimes,
+            'total_assigned' => count($createdOvertimes),
+        ], 'Perintah lembur berhasil diberikan kepada '.count($createdOvertimes).' karyawan.', 201);
+    }
+
+    private function processOvertimeResponse(Overtime $overtime, User $user, Request $request): string
+    {
+        $isAccept = $request->action === 'accept';
+
+        $overtime->update([
+            'status' => $isAccept ? 'approved' : 'rejected',
+            'responded_at' => now(),
+            'rejection_reason' => $isAccept ? null : $request->reason,
+        ]);
+
+        if ($overtime->assigner) {
+            $this->notify(
+                $overtime->assigner,
+                $isAccept ? 'PERINTAH LEMBUR DISETUJUI ✅' : 'PERINTAH LEMBUR DITOLAK ⚠️',
+                $isAccept
+                    ? "Karyawan {$user->name} telah menyetujui perintah lembur: '{$overtime->title}'."
+                    : "Karyawan {$user->name} menolak perintah lembur: '{$overtime->title}'. Alasan: {$request->reason}",
+                $isAccept ? 'success' : 'danger',
+                self::ROUTE_OVERTIMES
+            );
+        }
+
+        $action = $isAccept ? 'ACCEPT_OVERTIME' : 'REJECT_OVERTIME';
+        $desc = $isAccept
+            ? "Menerima perintah lembur #{$overtime->id} ('{$overtime->title}')"
+            : "Menolak perintah lembur #{$overtime->id} ('{$overtime->title}'). Alasan: {$request->reason}";
+
+        $this->logActivity($action, $desc, $overtime);
+
+        return $isAccept ? 'Perintah lembur berhasil Anda setujui.' : 'Perintah lembur telah ditolak dengan komentar.';
     }
 }
