@@ -6,8 +6,6 @@ import { toast } from "sonner";
 import { 
   User, 
   Calendar, 
-  Filter, 
-  ChevronRight, 
   FileSpreadsheet, 
   AlertCircle, 
   Map as MapIcon, 
@@ -23,7 +21,9 @@ import {
   Camera,
   Edit2,
   Save,
-  X
+  X,
+  Building2,
+  Laptop
 } from "lucide-react";
 import { ReportSkeleton } from "@/components/Skeleton";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -44,6 +44,12 @@ const getCellStyle = (record: any, isWk: boolean) => {
   if (!record) {
     return isWk ? "bg-rose-50/10 text-rose-300 font-normal text-[9px]" : "text-gray-300 bg-white";
   }
+  if (record.attendance_type === 'dinas_luar') {
+    return "bg-rose-50/90 text-rose-800 border border-rose-200/90 rounded-md shadow-[inset_0_0_0_1px_rgba(244,63,94,0.12)]";
+  }
+  if (record.attendance_type === 'wfh') {
+    return "bg-indigo-50/90 text-indigo-800 border border-indigo-200/90 rounded-md shadow-[inset_0_0_0_1px_rgba(99,102,241,0.15)]";
+  }
   return record.status === 'late'
     ? "bg-amber-50 text-amber-800 border border-amber-100/70 rounded-md shadow-[inset_0_0_0_1px_rgba(217,119,6,0.1)]"
     : "bg-emerald-50 text-emerald-800 border border-emerald-100/70 rounded-md shadow-[inset_0_0_0_1px_rgba(16,185,129,0.1)]";
@@ -58,15 +64,36 @@ const AttendanceCell = ({ record, isWk, onEdit }: { record: any, isWk: boolean, 
   const cursorStyle = record ? 'cursor-pointer hover:brightness-95 hover:scale-95' : '';
   const isWeekendOff = isWk && !record;
   const weekendStyle = isWeekendOff ? 'bg-gray-50/40' : '';
+  const isDinasLuar = record?.attendance_type === 'dinas_luar';
+  const isWfa = record?.attendance_type === 'wfh';
+
+  const cellTitle = record 
+    ? (isDinasLuar 
+        ? `Dinas Luar: ${record.dinas_luar_destination || 'Tugas Luar Kantor'}` 
+        : (isWfa ? 'WFA (Work From Anywhere)' : 'Absen Di Kantor'))
+    : undefined;
 
   return (
     <td 
       onClick={clickHandler}
       className={`px-1 py-1.5 text-center text-[10px] border-r border-[#ebedf0] align-middle select-none transition-all ${cursorStyle} ${weekendStyle}`}
+      title={cellTitle}
     >
       {record ? (
         <div className={`py-1 px-1 flex flex-col items-center justify-center font-bold font-mono tracking-tighter ${cellStyle}`}>
-          <span className="leading-tight">{checkInStr}</span>
+          <div className="flex items-center justify-center gap-0.5 w-full">
+            <span className="leading-tight">{checkInStr}</span>
+            {isDinasLuar && (
+              <span className="px-0.5 py-0.2 rounded text-[7px] font-black uppercase bg-rose-200/90 text-rose-800 leading-none shrink-0" title="Dinas Luar">
+                DL
+              </span>
+            )}
+            {isWfa && (
+              <span className="px-0.5 py-0.2 rounded text-[7px] font-black uppercase bg-indigo-200/90 text-indigo-800 leading-none shrink-0" title="WFA (Work From Anywhere)">
+                WFA
+              </span>
+            )}
+          </div>
           <span className={`text-[8px] leading-tight ${record.check_out ? 'opacity-65' : 'text-rose-500 font-extrabold uppercase'}`}>
             {checkOutStr}
           </span>
@@ -229,13 +256,19 @@ const LogView = ({ employees, startDate, endDate, selectedUser, onStartDateChang
               })}
 
               {/* Summary columns */}
-              <th className="px-3 py-3 text-center text-[10px] font-bold text-[#03543f] uppercase tracking-wider min-w-[70px] max-w-[70px] w-[70px] bg-[#def7ec]/30 border-r border-[#ebedf0]">
+              <th className="px-2 py-3 text-center text-[10px] font-bold text-[#03543f] uppercase tracking-wider min-w-[65px] max-w-[65px] w-[65px] bg-[#def7ec]/30 border-r border-[#ebedf0]">
                 Hadir
               </th>
-              <th className="px-3 py-3 text-center text-[10px] font-bold text-[#723b13] uppercase tracking-wider min-w-[70px] max-w-[70px] w-[70px] bg-[#fdf6b2]/30 border-r border-[#ebedf0]">
+              <th className="px-2 py-3 text-center text-[10px] font-bold text-rose-700 uppercase tracking-wider min-w-[70px] max-w-[70px] w-[70px] bg-rose-50/50 border-r border-[#ebedf0]" title="Total kehadiran tugas luar kantor">
+                Dinas Luar
+              </th>
+              <th className="px-2 py-3 text-center text-[10px] font-bold text-indigo-700 uppercase tracking-wider min-w-[65px] max-w-[65px] w-[65px] bg-indigo-50/50 border-r border-[#ebedf0]" title="Total kehadiran Work From Anywhere (WFA)">
+                WFA
+              </th>
+              <th className="px-2 py-3 text-center text-[10px] font-bold text-[#723b13] uppercase tracking-wider min-w-[65px] max-w-[65px] w-[65px] bg-[#fdf6b2]/30 border-r border-[#ebedf0]">
                 Telat
               </th>
-              <th className="px-3 py-3 text-center text-[10px] font-bold text-[#9b1c1c] uppercase tracking-wider min-w-[75px] max-w-[75px] w-[75px] bg-[#fde8e8]/30">
+              <th className="px-2 py-3 text-center text-[10px] font-bold text-[#9b1c1c] uppercase tracking-wider min-w-[70px] max-w-[70px] w-[70px] bg-[#fde8e8]/30">
                 Lupa Out
               </th>
             </tr>
@@ -244,6 +277,8 @@ const LogView = ({ employees, startDate, endDate, selectedUser, onStartDateChang
             {filteredEmployees.map((emp: any, rowIdx: number) => {
               // Pre-calculate totals for this employee
               let totalPresent = 0;
+              let totalDinasLuar = 0;
+              let totalWfa = 0;
               let totalLate = 0;
               let totalMissedOut = 0;
 
@@ -253,6 +288,11 @@ const LogView = ({ employees, startDate, endDate, selectedUser, onStartDateChang
                 const record = attendanceMap[key];
                 if (record) {
                   totalPresent++;
+                  if (record.attendance_type === 'dinas_luar') {
+                    totalDinasLuar++;
+                  } else if (record.attendance_type === 'wfh') {
+                    totalWfa++;
+                  }
                   if (record.status === 'late') {
                     totalLate++;
                   }
@@ -302,6 +342,24 @@ const LogView = ({ employees, startDate, endDate, selectedUser, onStartDateChang
                   {/* Dynamic Metrics summaries */}
                   <td className="px-2 py-3 text-center text-xs font-bold text-[#03543f] bg-[#def7ec]/15 border-r border-[#ebedf0]">
                     {totalPresent}
+                  </td>
+                  <td className="px-2 py-3 text-center text-xs font-bold text-rose-700 bg-rose-50/25 border-r border-[#ebedf0]">
+                    {totalDinasLuar > 0 ? (
+                      <span className="px-1.5 py-0.5 rounded-md bg-rose-100 text-rose-800 text-[11px] font-black">
+                        {totalDinasLuar}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 font-normal">0</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-3 text-center text-xs font-bold text-indigo-700 bg-indigo-50/25 border-r border-[#ebedf0]">
+                    {totalWfa > 0 ? (
+                      <span className="px-1.5 py-0.5 rounded-md bg-indigo-100 text-indigo-800 text-[11px] font-black">
+                        {totalWfa}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 font-normal">0</span>
+                    )}
                   </td>
                   <td className="px-2 py-3 text-center text-xs font-bold text-[#723b13] bg-[#fdf6b2]/15 border-r border-[#ebedf0]">
                     {totalLate}
@@ -454,68 +512,109 @@ const SummaryView = ({ startDate, endDate, selectedUser }: any) => {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-lg shadow-gray-100/50 flex flex-col gap-2">
-             <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 mb-2">
-                <CheckCircle2 size={20} />
+       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+          <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-lg shadow-gray-100/50 flex flex-col gap-2">
+             <div className="w-9 h-9 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 mb-1">
+                <CheckCircle2 size={18} />
              </div>
-             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Akumulasi Hadir</span>
-             <h4 className="text-3xl font-black text-gray-900 leading-none">{summary.reduce((acc, curr) => acc + curr.total_present, 0)} <span className="text-lg text-emerald-500 opacity-50">Hari</span></h4>
+             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Hadir</span>
+             <h4 className="text-2xl font-black text-gray-900 leading-none">{summary.reduce((acc, curr) => acc + curr.total_present, 0)} <span className="text-sm text-emerald-500 opacity-60">Hari</span></h4>
           </div>
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-lg shadow-gray-100/50 flex flex-col gap-2">
-             <div className="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600 mb-2">
-                <Clock size={20} />
+          <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-lg shadow-gray-100/50 flex flex-col gap-2">
+             <div className="w-9 h-9 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-700 mb-1">
+                <Building2 size={18} />
              </div>
-             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Terlambat</span>
-             <h4 className="text-3xl font-black text-gray-900 leading-none">{summary.reduce((acc, curr) => acc + curr.total_late, 0)} <span className="text-lg text-amber-500 opacity-50">Kali</span></h4>
+             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Di Kantor</span>
+             <h4 className="text-2xl font-black text-slate-800 leading-none">{summary.reduce((acc, curr) => acc + (curr.total_di_kantor ?? (curr.total_present - (curr.total_dinas_luar || 0) - (curr.total_wfa || 0))), 0)} <span className="text-sm text-slate-400">Hari</span></h4>
           </div>
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-lg shadow-gray-100/50 flex flex-col gap-2 border-b-4 border-b-rose-500">
-             <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600 mb-2">
-                <ShieldAlert size={20} />
+          <div className="bg-white p-5 rounded-3xl border border-rose-100 shadow-lg shadow-rose-100/30 flex flex-col gap-2 bg-gradient-to-br from-rose-50/40 to-white">
+             <div className="w-9 h-9 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center mb-1">
+                <MapPin size={18} />
              </div>
-             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Terdeteksi Anomali</span>
-             <h4 className="text-3xl font-black text-gray-900 leading-none">{summary.reduce((acc, curr) => acc + curr.total_suspicious, 0)} <span className="text-lg text-rose-500 opacity-50">Kasus</span></h4>
+             <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest">Dinas Luar</span>
+             <h4 className="text-2xl font-black text-rose-700 leading-none">{summary.reduce((acc, curr) => acc + (curr.total_dinas_luar || 0), 0)} <span className="text-sm text-rose-400">Hari</span></h4>
           </div>
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-lg shadow-gray-100/50 flex flex-col gap-2">
-             <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 mb-2">
-                <History size={20} />
+          <div className="bg-white p-5 rounded-3xl border border-indigo-100 shadow-lg shadow-indigo-100/30 flex flex-col gap-2 bg-gradient-to-br from-indigo-50/40 to-white">
+             <div className="w-9 h-9 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center mb-1">
+                <Laptop size={18} />
              </div>
-             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Rata-rata Kehadiran</span>
-             <h4 className="text-3xl font-black text-gray-900 leading-none">{(summary.reduce((acc, curr) => acc + curr.total_present, 0) / (summary.length || 1)).toFixed(1)} <span className="text-lg text-blue-500 opacity-50">D/m</span></h4>
+             <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">WFA</span>
+             <h4 className="text-2xl font-black text-indigo-700 leading-none">{summary.reduce((acc, curr) => acc + (curr.total_wfa || 0), 0)} <span className="text-sm text-indigo-400">Hari</span></h4>
+          </div>
+          <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-lg shadow-gray-100/50 flex flex-col gap-2">
+             <div className="w-9 h-9 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600 mb-1">
+                <Clock size={18} />
+             </div>
+             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Terlambat</span>
+             <h4 className="text-2xl font-black text-gray-900 leading-none">{summary.reduce((acc, curr) => acc + curr.total_late, 0)} <span className="text-sm text-amber-500 opacity-60">Kali</span></h4>
+          </div>
+          <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-lg shadow-gray-100/50 flex flex-col gap-2 border-b-4 border-b-rose-500 col-span-2 sm:col-span-1">
+             <div className="w-9 h-9 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600 mb-1">
+                <ShieldAlert size={18} />
+             </div>
+             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Anomali Fraud</span>
+             <h4 className="text-2xl font-black text-gray-900 leading-none">{summary.reduce((acc, curr) => acc + curr.total_suspicious, 0)} <span className="text-sm text-rose-500 opacity-60">Kasus</span></h4>
           </div>
        </div>
 
        <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 overflow-hidden">
           <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full text-left min-w-[800px]">
+            <table className="w-full text-left min-w-[940px]">
               <thead>
                 <tr className="bg-gray-50/50 border-b border-gray-50">
                   <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Karyawan</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Presentase</th>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-center text-emerald-600">Total Hadir</th>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-center text-blue-600">Tepat Waktu</th>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-center text-amber-600">Terlambat</th>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-center text-rose-600">Suspicious</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Persentase</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-center text-emerald-600">Total Hadir</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-center text-slate-700">Di Kantor</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-center text-rose-600">Dinas Luar</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-center text-indigo-600">WFA</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-center text-blue-600">Tepat Waktu</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-center text-amber-600">Terlambat</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-center text-rose-600">Suspicious</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {summary.map((row) => (
-                  <tr key={row.user_id} className="hover:bg-gray-50 transition-colors group">
-                    <td className="px-6 py-4 font-black text-gray-900 text-xs">{row.name}</td>
-                    <td className="px-6 py-4">
-                       <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                             <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(100, (row.total_on_time / (row.total_present || 1)) * 100)}%` }} />
-                          </div>
-                          <span className="text-[10px] font-black text-gray-400">{Math.round((row.total_on_time / (row.total_present || 1)) * 100)}%</span>
-                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-center font-black text-sm text-gray-700">{row.total_present} Hari</td>
-                    <td className="px-6 py-4 text-center font-black text-sm text-emerald-600">{row.total_on_time}</td>
-                    <td className="px-6 py-4 text-center font-black text-sm text-amber-600">{row.total_late}</td>
-                    <td className="px-6 py-4 text-center font-black text-sm text-rose-600 bg-rose-50/30 font-mono">{row.total_suspicious}</td>
-                  </tr>
-                ))}
+                {summary.map((row) => {
+                  const diKantorCount = row.total_di_kantor ?? (row.total_present - (row.total_dinas_luar || 0) - (row.total_wfa || 0));
+                  const dinasLuarCount = row.total_dinas_luar || 0;
+                  const wfaCount = row.total_wfa || 0;
+                  return (
+                    <tr key={row.user_id} className="hover:bg-gray-50 transition-colors group">
+                      <td className="px-6 py-4 font-black text-gray-900 text-xs">{row.name}</td>
+                      <td className="px-6 py-4">
+                         <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                               <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(100, (row.total_on_time / (row.total_present || 1)) * 100)}%` }} />
+                            </div>
+                            <span className="text-[10px] font-black text-gray-400">{Math.round((row.total_on_time / (row.total_present || 1)) * 100)}%</span>
+                         </div>
+                      </td>
+                      <td className="px-4 py-4 text-center font-black text-sm text-gray-700">{row.total_present} Hari</td>
+                      <td className="px-4 py-4 text-center font-black text-sm text-slate-800">{diKantorCount}</td>
+                      <td className="px-4 py-4 text-center font-black text-sm text-rose-600">
+                        {dinasLuarCount > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-black">
+                            {dinasLuarCount}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300 font-normal">0</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-center font-black text-sm text-indigo-600">
+                        {wfaCount > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-black">
+                            {wfaCount}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300 font-normal">0</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-center font-black text-sm text-emerald-600">{row.total_on_time}</td>
+                      <td className="px-4 py-4 text-center font-black text-sm text-amber-600">{row.total_late}</td>
+                      <td className="px-4 py-4 text-center font-black text-sm text-rose-600 bg-rose-50/30 font-mono">{row.total_suspicious}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

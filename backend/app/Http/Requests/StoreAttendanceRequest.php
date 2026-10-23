@@ -63,7 +63,7 @@ class StoreAttendanceRequest extends FormRequest
             'image' => 'nullable|file|mimes:jpeg,png,jpg,webp|max:5120', // Selfie image (max 5MB to comply with safe content length limits)
             'is_mocked' => 'nullable',
             'device_id' => 'nullable|string|max:255',
-            'attendance_type' => 'nullable|string|in:office,dinas_luar',
+            'attendance_type' => 'nullable|string|in:office,dinas_luar,wfh',
             'dinas_luar_destination' => 'required_if:attendance_type,dinas_luar|nullable|string|max:255',
             'dinas_luar_notes' => 'nullable|string|max:1000',
         ];

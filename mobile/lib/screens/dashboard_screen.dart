@@ -44,6 +44,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _profilePhotoUrl;
   bool _isManager = false;
   String? _attendanceType;
+  bool _isWfhActive = false;
   Set<String> _permissions = {};
 
   bool _hasPermission(String slug, [String? fallbackSlug]) {
@@ -360,6 +361,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
 
         _attendanceType = userData['attendance_type'];
+        _isWfhActive = userData['is_wfh_active'] == true;
         final isShiftWorker = _attendanceType == 'shift';
         final hasShiftToday = userData['today_shift'] != null;
 
@@ -520,12 +522,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    // Pilihan Absen Masuk: Kantor vs Dinas Luar
+    // Pilihan Absen Masuk: WFA (jika aktif), Kantor, atau Dinas Luar
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
-        padding: const EdgeInsets.all(25),
+        padding: const EdgeInsets.fromLTRB(25, 16, 25, 28),
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
@@ -534,22 +537,127 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 50,
+              width: 44,
               height: 5,
               decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)),
             ),
-            const SizedBox(height: 25),
+            const SizedBox(height: 20),
             Text(
-              "Pilih Jenis Absen Masuk",
+              "Pilih Jenis Presensi Masuk",
               style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             Text(
-              "Pilih Absen Kantor jika berada di kantor, atau Dinas Luar jika bertugas di luar area kantor.",
+              _isWfhActive 
+                ? "Anda memiliki izin WFA aktif. Anda dapat memilih Presensi WFA untuk absen dari mana saja."
+                : "Pilih Absen Kantor jika berada di kantor, atau Dinas Luar jika bertugas di luar area kantor.",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[600], fontSize: 13),
             ),
-            const SizedBox(height: 25),
+            const SizedBox(height: 20),
+
+            // Card Khusus WFA (Hanya muncul jika diizinkan oleh Super Admin)
+            if (_isWfhActive) ...[
+              GestureDetector(
+                onTap: () async {
+                  Navigator.pop(context);
+                  final dynamic res = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (c) => const AttendanceScreen(isCheckIn: true, attendanceType: 'wfh'),
+                    ),
+                  );
+                  if (res != null) {
+                    _refreshData();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Absen WFA Berhasil! Selamat bekerja."),
+                        backgroundColor: Color(0xFF4F46E5),
+                      ),
+                    );
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF3730A3), Color(0xFF4F46E5)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF4F46E5).withOpacity(0.35),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Icon(Icons.roofing_rounded, color: Colors.white, size: 28),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  "Presensi WFA",
+                                  style: GoogleFonts.outfit(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981).withOpacity(0.3),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: const Color(0xFF34D399).withOpacity(0.6)),
+                                  ),
+                                  child: const Text(
+                                    "Izin Aktif",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              "Bebas absen dari mana saja tanpa batasan radius kantor",
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.88),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white70, size: 16),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
             Row(
               children: [
                 Expanded(
@@ -570,7 +678,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       }
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      padding: const EdgeInsets.symmetric(vertical: 18),
                       decoration: BoxDecoration(
                         color: primaryColor,
                         borderRadius: BorderRadius.circular(20),
@@ -578,16 +686,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       child: const Column(
                         children: [
-                          Icon(Icons.face_retouching_natural, color: Colors.white, size: 32),
-                          SizedBox(height: 10),
-                          Text("Absen Kantor", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          Text("(Selfie / Normal)", style: TextStyle(color: Colors.white, fontSize: 10)),
+                          Icon(Icons.face_retouching_natural, color: Colors.white, size: 28),
+                          SizedBox(height: 8),
+                          Text("Absen Kantor", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text("(Selfie / Normal)", style: TextStyle(color: Colors.white70, fontSize: 10)),
                         ],
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 15),
+                const SizedBox(width: 14),
                 Expanded(
                   child: GestureDetector(
                     onTap: () {
@@ -595,7 +703,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       _showDinasLuarDialog();
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      padding: const EdgeInsets.symmetric(vertical: 18),
                       decoration: BoxDecoration(
                         color: Colors.amber[700],
                         borderRadius: BorderRadius.circular(20),
@@ -603,10 +711,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       child: const Column(
                         children: [
-                          Icon(Icons.business_center, color: Colors.white, size: 32),
-                          SizedBox(height: 10),
-                          Text("Dinas Luar", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          Text("(Luar Kantor)", style: TextStyle(color: Colors.white, fontSize: 10)),
+                          Icon(Icons.business_center, color: Colors.white, size: 28),
+                          SizedBox(height: 8),
+                          Text("Dinas Luar", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text("(Luar Kantor)", style: TextStyle(color: Colors.white70, fontSize: 10)),
                         ],
                       ),
                     ),
@@ -614,7 +722,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 10),
           ],
         ),
       ),
@@ -1571,33 +1679,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ],
                           ),
                           const SizedBox(height: 16),
-                          if (_scheduleLabel != null) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.schedule_rounded, color: Colors.white, size: 13),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    "Jadwal: $_scheduleLabel",
-                                    style: GoogleFonts.outfit(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              if (_scheduleLabel != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
                                   ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                          ] else
-                            const SizedBox(height: 12),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.schedule_rounded, color: Colors.white, size: 13),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        "Jadwal: $_scheduleLabel",
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (_isWfhActive)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF4338CA).withValues(alpha: 0.45),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0xFF818CF8).withValues(alpha: 0.5)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.roofing_rounded, color: Colors.white, size: 13),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        "Izin WFA Aktif",
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
                           Row(
                             children: [
                               Expanded(
@@ -2156,12 +2292,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
+    final String type = (_attendanceData?['attendance_type'] ?? '').toString();
+    final bool isWfa = type == 'wfh';
+    final bool isDinasLuar = type == 'dinas_luar';
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: const Color(0xFF10B981).withValues(alpha: 0.25),
+        color: isWfa
+            ? const Color(0xFF6366F1).withValues(alpha: 0.3)
+            : (isDinasLuar
+                ? const Color(0xFFF59E0B).withValues(alpha: 0.3)
+                : const Color(0xFF10B981).withValues(alpha: 0.25)),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF34D399)),
+        border: Border.all(
+          color: isWfa
+              ? const Color(0xFF818CF8)
+              : (isDinasLuar ? const Color(0xFFFBBF24) : const Color(0xFF34D399)),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -2169,14 +2317,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Container(
             width: 7,
             height: 7,
-            decoration: const BoxDecoration(
-              color: Color(0xFF34D399),
+            decoration: BoxDecoration(
+              color: isWfa
+                  ? const Color(0xFFA5B4FC)
+                  : (isDinasLuar ? const Color(0xFFFDE68A) : const Color(0xFF34D399)),
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 6),
           Text(
-            "Aktif Bekerja",
+            isWfa ? "WFA Aktif" : (isDinasLuar ? "Dinas Luar" : "Aktif Bekerja"),
             style: GoogleFonts.outfit(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
           ),
         ],

@@ -73,6 +73,7 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                           final checkOut = item['check_out_time'] ?? '--:--';
                           final status = item['status'] ?? 'unknown';
                           final location = item['check_in_location'] ?? '';
+                          final attendanceType = item['attendance_type'] ?? '';
 
                           Color statusColor;
                           String statusLabel;
@@ -130,7 +131,48 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(date, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14)),
+                                      Row(
+                                        children: [
+                                          Text(date, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14)),
+                                          if (attendanceType == 'wfh') ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF4F46E5).withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: const Color(0xFF818CF8).withValues(alpha: 0.5)),
+                                              ),
+                                              child: const Text(
+                                                "WFA",
+                                                style: TextStyle(
+                                                  color: Color(0xFF4338CA),
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ] else if (attendanceType == 'dinas_luar') ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: Colors.amber.withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+                                              ),
+                                              child: const Text(
+                                                "Dinas Luar",
+                                                style: TextStyle(
+                                                  color: Colors.amber,
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
                                       SizedBox(height: 4),
                                       Row(
                                         children: [

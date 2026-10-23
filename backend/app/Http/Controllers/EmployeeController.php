@@ -352,18 +352,30 @@ class EmployeeController extends Controller
             $employee->wfh_start_date = $request->start_date ?? now()->toDateString();
             $employee->wfh_end_date = $request->end_date ?? now()->addDays(7)->toDateString();
 
-            // Create Generic Announcement (only if activating)
-            Announcement::create([
-                'company_id' => $employee->company_id,
-                'user_id' => $request->user()->id,
-                'title' => 'PENGUMUMAN WFA (DINAS LUAR)',
-                'content' => 'Diberitahukan kepada seluruh tim, bahwa perusahaan memberlakukan kebijakan WFA (Work From Anywhere) atau Dinas Luar terhitung mulai tanggal '.
+            // Kirim notifikasi personal langsung ke user yang bersangkutan (tanpa blast announcement)
+            Notification::create([
+                'user_id' => $employee->id,
+                'title' => 'Izin WFA (Work From Anywhere) Diaktifkan',
+                'message' => 'Anda telah diberikan izin WFA terhitung mulai tanggal '.
                              Carbon::parse($employee->wfh_start_date)->format(self::FORMAT_DATE).' sampai '.
-                             Carbon::parse($employee->wfh_end_date)->format(self::FORMAT_DATE).'. Selama periode ini, karyawan yang telah diberikan izin dapat melakukan absensi di luar radius kantor.',
+                             Carbon::parse($employee->wfh_end_date)->format(self::FORMAT_DATE).'. Anda dapat memilih tab WFA saat melakukan absensi.',
+                'type' => 'info',
+                'category' => 'wfh',
+                'is_read' => false,
+                'link' => '/dashboard/live-attendance',
             ]);
         } else {
             $employee->wfh_start_date = null;
             $employee->wfh_end_date = null;
+
+            Notification::create([
+                'user_id' => $employee->id,
+                'title' => 'Izin WFA Dinonaktifkan',
+                'message' => 'Izin WFA Anda telah dinonaktifkan oleh Administrator. Silakan lakukan absensi di kantor sesuai jadwal.',
+                'type' => 'info',
+                'category' => 'wfh',
+                'is_read' => false,
+            ]);
         }
 
         $employee->save();
@@ -371,7 +383,7 @@ class EmployeeController extends Controller
         $status = $employee->is_wfh ? 'AKTIF' : 'NONAKTIF';
         $this->logActivity('TOGGLE_WFH', "Mengubah status WFA karyawan {$employee->name} menjadi {$status}", $employee);
 
-        return $this->successResponse($employee, "Status WFA (Dinas Luar) berhasil diubah menjadi {$status}.");
+        return $this->successResponse($employee, "Status WFA berhasil diubah menjadi {$status}.");
     }
 
     public function bulkWfh(Request $request)
@@ -395,23 +407,32 @@ class EmployeeController extends Controller
             if ($isWfh) {
                 $user->wfh_start_date = $request->start_date;
                 $user->wfh_end_date = $request->end_date;
+
+                Notification::create([
+                    'user_id' => $user->id,
+                    'title' => 'Izin WFA (Work From Anywhere) Diaktifkan',
+                    'message' => 'Anda telah diberikan izin WFA terhitung mulai tanggal '.
+                                 Carbon::parse($request->start_date)->format(self::FORMAT_DATE).' sampai '.
+                                 Carbon::parse($request->end_date)->format(self::FORMAT_DATE).'. Anda dapat memilih tab WFA saat melakukan absensi.',
+                    'type' => 'info',
+                    'category' => 'wfh',
+                    'is_read' => false,
+                    'link' => '/dashboard/live-attendance',
+                ]);
             } else {
                 $user->wfh_start_date = null;
                 $user->wfh_end_date = null;
+
+                Notification::create([
+                    'user_id' => $user->id,
+                    'title' => 'Izin WFA Dinonaktifkan',
+                    'message' => 'Izin WFA Anda telah dinonaktifkan oleh Administrator.',
+                    'type' => 'info',
+                    'category' => 'wfh',
+                    'is_read' => false,
+                ]);
             }
             $user->save();
-        }
-
-        if ($isWfh && count($users) > 0) {
-            // Create Single Generic Announcement for all
-            Announcement::create([
-                'company_id' => $users->first()->company_id,
-                'user_id' => $request->user()->id,
-                'title' => 'PENGUMUMAN WFA (DINAS LUAR)',
-                'content' => 'Diberitahukan kepada seluruh karyawan, bahwa perusahaan memberlakukan kebijakan WFA (Work From Anywhere) atau Dinas Luar terhitung mulai tanggal '.
-                             Carbon::parse($request->start_date)->format(self::FORMAT_DATE).' sampai '.
-                             Carbon::parse($request->end_date)->format(self::FORMAT_DATE).'. Selama periode ini, karyawan yang mendapatkan izin dapat melakukan absensi melalui perangkat mobile tanpa batasan radius kantor.',
-            ]);
         }
 
         return $this->successResponse(null, 'Berhasil memperbarui status WFA untuk '.count($users).' karyawan.');

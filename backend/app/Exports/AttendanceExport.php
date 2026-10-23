@@ -52,6 +52,8 @@ class AttendanceExport implements FromQuery, WithHeadings, WithMapping
             'No.',
             'Tanggal',
             'Nama Karyawan',
+            'Tipe Kehadiran',
+            'Tujuan / Lokasi Dinas',
             'Jam Masuk',
             'Jam Keluar',
             'Status',
@@ -74,10 +76,23 @@ class AttendanceExport implements FromQuery, WithHeadings, WithMapping
             $statusIndo = ucfirst($statusIndo);
         }
 
+        $tipeKehadiran = match ($attendance->attendance_type) {
+            'dinas_luar' => 'Dinas Luar',
+            'wfh' => 'WFA',
+            default => 'Di Kantor',
+        };
+        $tujuanDinas = match ($attendance->attendance_type) {
+            'dinas_luar' => ($attendance->dinas_luar_destination ?: ($attendance->dinas_luar_notes ?: 'Tugas Luar Kantor')),
+            'wfh' => 'Work From Anywhere (WFA)',
+            default => '-',
+        };
+
         return [
             ++$this->rowNumber,
             $attendance->date,
             $attendance->user->name ?? 'N/A',
+            $tipeKehadiran,
+            $tujuanDinas,
             $attendance->check_in_time ?: '-',
             $attendance->check_out_time ?: '-',
             $statusIndo,

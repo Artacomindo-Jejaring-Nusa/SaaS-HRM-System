@@ -115,18 +115,17 @@ function validateAttendanceParams(
   location: { lat: number; lng: number } | null,
   video: HTMLVideoElement | null,
   canvas: HTMLCanvasElement | null,
-  attendanceType: 'office' | 'dinas_luar',
+  attendanceType: 'office' | 'dinas_luar' | 'wfh',
   distance: number | null,
   officeConfig: OfficeTarget | null,
   destination: string
 ): string | null {
   if (!location) return "Menunggu titik koordinat lokasi GPS...";
   if (!video || !canvas) return "Kamera tidak siap!";
-  const isDinasLuar = attendanceType === 'dinas_luar';
-  if (!isDinasLuar && distance !== null && officeConfig && distance > officeConfig.radius) {
+  if (attendanceType === 'office' && distance !== null && officeConfig && distance > officeConfig.radius) {
     return `Akses Ditolak: Anda berada ${Math.round(distance - officeConfig.radius)}m di luar radius kantor!`;
   }
-  if (isDinasLuar && !destination.trim()) {
+  if (attendanceType === 'dinas_luar' && !destination.trim()) {
     return "Tujuan Dinas Luar wajib diisi!";
   }
   return null;
@@ -244,6 +243,18 @@ function AttendanceGpsSection(props: AttendanceGpsSectionProps) {
           <strong>AKSES DIBLOKIR:</strong> Anda terdeteksi berada {Math.round(distance - officeConfig.radius)} meter di luar area Radius Kantor yang diizinkan. Silakan mendekat ke area kantor untuk melakukan absensi.
         </p>
       )}
+
+      {attendanceType === 'wfh' && (
+        <div className="mt-3 p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-900 flex items-start gap-2.5">
+          <span className="text-base leading-none">🏡</span>
+          <div>
+            <span className="font-bold block">Mode WFA (Work From Anywhere) Aktif</span>
+            <span className="text-[11px] text-indigo-700 leading-normal">
+              Anda diizinkan absen dari lokasi mana pun tanpa batasan radius kantor. Titik koordinat GPS tetap dicatat untuk verifikasi sistem.
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -282,7 +293,7 @@ export default function LiveAttendancePage() {
   const [loading, setLoading] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [officeConfig, setOfficeConfig] = useState<OfficeTarget | null>(null);
-  const [attendanceType, setAttendanceType] = useState<'office' | 'dinas_luar'>('office');
+  const [attendanceType, setAttendanceType] = useState<'office' | 'dinas_luar' | 'wfh'>('office');
   const [destination, setDestination] = useState("");
   const [notes, setNotes] = useState("");
   const [showEarlyOutModal, setShowEarlyOutModal] = useState(false);
@@ -417,6 +428,14 @@ export default function LiveAttendancePage() {
     }
   };
 
+  const isWfaPermitted = Boolean(
+    user?.is_wfh_active ||
+    (user?.is_wfh && (
+      (!user?.wfh_start_date || new Date(user.wfh_start_date) <= new Date()) &&
+      (!user?.wfh_end_date || new Date(user.wfh_end_date) >= new Date())
+    ))
+  );
+
   const isBlocked = (attendanceType === 'office' && distance !== null && officeConfig && distance > officeConfig.radius) ||
     (attendanceType === 'dinas_luar' && !destination.trim());
 
@@ -468,14 +487,21 @@ export default function LiveAttendancePage() {
             <hr className="border-gray-100" />
 
             <div className="space-y-4">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Tipe Absensi</h3>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Tipe Absensi</h3>
+                {isWfaPermitted && (
+                  <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200 uppercase tracking-wider">
+                    Izin WFA Aktif
+                  </span>
+                )}
+              </div>
+              <div className={`grid ${isWfaPermitted ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
                 <button
                   type="button"
                   onClick={() => setAttendanceType('office')}
                   className={`py-2 px-3 rounded-xl font-bold text-xs uppercase transition-all ${attendanceType === 'office' ? 'bg-gray-900 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
                 >
-                  🏢 Hadir di Kantor
+                  🏢 Di Kantor
                 </button>
                 <button
                   type="button"
@@ -484,7 +510,27 @@ export default function LiveAttendancePage() {
                 >
                   🚗 Dinas Luar
                 </button>
+                {isWfaPermitted && (
+                  <button
+                    type="button"
+                    onClick={() => setAttendanceType('wfh')}
+                    className={`py-2 px-3 rounded-xl font-bold text-xs uppercase transition-all ${attendanceType === 'wfh' ? 'bg-indigo-700 text-white shadow-sm ring-2 ring-indigo-500/30' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/60'}`}
+                  >
+                    🏡 WFA
+                  </button>
+                )}
               </div>
+
+              {attendanceType === 'wfh' && (
+                <div className="space-y-1.5 p-3.5 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl animate-in slide-in-from-top-2 duration-300">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900">
+                    <span>🏡 Mode WFA (Work From Anywhere)</span>
+                  </div>
+                  <p className="text-[11px] text-indigo-700 leading-relaxed">
+                    Anda diizinkan absen dari mana saja tanpa batasan radius kantor. Harap posisikan wajah ke kamera untuk verifikasi selfie.
+                  </p>
+                </div>
+              )}
 
               {attendanceType === 'dinas_luar' && (
                 <div className="space-y-3 p-4 bg-red-50/50 border border-red-100 rounded-2xl animate-in slide-in-from-top-2 duration-300">

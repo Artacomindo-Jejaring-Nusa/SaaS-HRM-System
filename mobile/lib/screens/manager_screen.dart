@@ -79,7 +79,8 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
           final role = (member['role'] ?? '').toString().toLowerCase();
           final dest = (member['dinas_luar_destination'] ?? '').toString().toLowerCase();
           final isDl = member['is_dinas_luar'] == true || member['attendance_type'] == 'dinas_luar';
-          final dlLabel = isDl ? 'dinas luar' : 'di kantor';
+          final isWfa = member['is_wfa'] == true || member['attendance_type'] == 'wfh';
+          final dlLabel = isWfa ? 'wfa' : (isDl ? 'dinas luar' : 'di kantor');
           return name.contains(_searchQuery) || role.contains(_searchQuery) || dest.contains(_searchQuery) || dlLabel.contains(_searchQuery);
         }).toList();
       }
@@ -2359,13 +2360,26 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
                     if (sub['status'] == 'Selesai') statusColor = Colors.blue;
 
                     final bool isDinasLuar = sub['is_dinas_luar'] == true || sub['attendance_type'] == 'dinas_luar';
+                    final bool isWfa = sub['is_wfa'] == true || sub['attendance_type'] == 'wfh';
                     final String? destination = sub['dinas_luar_destination'];
                     final bool isPresent = sub['status'] != 'Belum Masuk';
+
+                    Color cardBorderColor = Colors.grey.withValues(alpha: 0.12);
+                    Color cardBgColor = Colors.white;
+                    if (isPresent) {
+                      if (isWfa) {
+                        cardBgColor = const Color(0xFFF5F3FF);
+                        cardBorderColor = const Color(0xFFDDD6FE);
+                      } else if (isDinasLuar) {
+                        cardBgColor = const Color(0xFFFFFBFB);
+                        cardBorderColor = const Color(0xFFFECDD3);
+                      }
+                    }
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: isDinasLuar && isPresent ? const Color(0xFFFFFBFB) : Colors.white,
+                        color: cardBgColor,
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
@@ -2375,10 +2389,8 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
                           ),
                         ],
                         border: Border.all(
-                          color: isDinasLuar && isPresent
-                              ? const Color(0xFFFECDD3)
-                              : Colors.grey.withOpacity(0.12),
-                          width: isDinasLuar && isPresent ? 1.2 : 1.0,
+                          color: cardBorderColor,
+                          width: (isDinasLuar || isWfa) && isPresent ? 1.2 : 1.0,
                         ),
                       ),
                       child: ListTile(
@@ -2418,27 +2430,39 @@ class _ManagerScreenState extends State<ManagerScreen> with SingleTickerProvider
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: isDinasLuar ? const Color(0xFFFFF1F2) : const Color(0xFFF1F5F9),
+                                      color: isWfa
+                                          ? const Color(0xFFEDE9FE)
+                                          : (isDinasLuar ? const Color(0xFFFFF1F2) : const Color(0xFFF1F5F9)),
                                       borderRadius: BorderRadius.circular(6),
                                       border: Border.all(
-                                        color: isDinasLuar ? const Color(0xFFFECDD3) : const Color(0xFFE2E8F0),
+                                        color: isWfa
+                                            ? const Color(0xFFDDD6FE)
+                                            : (isDinasLuar ? const Color(0xFFFECDD3) : const Color(0xFFE2E8F0)),
                                       ),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Icon(
-                                          isDinasLuar ? Icons.location_on_rounded : Icons.business_rounded,
+                                          isWfa
+                                              ? Icons.roofing_rounded
+                                              : (isDinasLuar ? Icons.location_on_rounded : Icons.business_rounded),
                                           size: 11,
-                                          color: isDinasLuar ? const Color(0xFFBE123C) : const Color(0xFF475569),
+                                          color: isWfa
+                                              ? const Color(0xFF6D28D9)
+                                              : (isDinasLuar ? const Color(0xFFBE123C) : const Color(0xFF475569)),
                                         ),
                                         const SizedBox(width: 3),
                                         Text(
-                                          isDinasLuar ? "Dinas Luar" : "Di Kantor",
+                                          isWfa
+                                              ? "WFA"
+                                              : (isDinasLuar ? "Dinas Luar" : "Di Kantor"),
                                           style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
-                                            color: isDinasLuar ? const Color(0xFFBE123C) : const Color(0xFF475569),
+                                            color: isWfa
+                                                ? const Color(0xFF6D28D9)
+                                                : (isDinasLuar ? const Color(0xFFBE123C) : const Color(0xFF475569)),
                                           ),
                                         ),
                                       ],

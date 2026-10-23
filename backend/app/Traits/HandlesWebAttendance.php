@@ -31,7 +31,15 @@ trait HandlesWebAttendance
 
         $imageName = $this->saveCompressedAttendanceImage($request, 'web_in');
         $isDinasLuar = $request->attendance_type === 'dinas_luar';
+        $isWfa = $request->attendance_type === 'wfh';
         $dinasDestination = $request->input('dinas_luar_destination');
+
+        if ($isWfa) {
+            $isWfhActive = $user->is_wfh && ($user->wfh_start_date <= $today && $user->wfh_end_date >= $today);
+            if (! $isWfhActive) {
+                return $this->errorResponse('Anda tidak memiliki izin WFA (Work From Anywhere) aktif untuk hari ini.', 403);
+            }
+        }
 
         $schedule = Schedule::with('shift')
             ->where('user_id', $user->id)
@@ -39,7 +47,7 @@ trait HandlesWebAttendance
             ->first();
 
         $normalStatus = $isDinasLuar ? 'dinas_luar' : $this->determineCheckInStatus($user, $schedule, $now);
-        $anomalyReason = $isDinasLuar ? null : $this->detectWebAttendanceAnomaly($user, $request, $schedule, $now);
+        $anomalyReason = ($isDinasLuar || $isWfa) ? null : $this->detectWebAttendanceAnomaly($user, $request, $schedule, $now);
         $isWhitelisted = $user->isWebAttendanceAutoValidated();
 
         $attendanceData = $this->buildWebAttendanceData($user, $request, $imageName, $normalStatus, $anomalyReason, $isWhitelisted, $now);
@@ -62,6 +70,8 @@ trait HandlesWebAttendance
     private function buildWebAttendanceData(User $user, Request $request, ?string $imageName, string $normalStatus, ?string $anomalyReason, bool $isWhitelisted, Carbon $now): array
     {
         $isDinasLuar = $request->attendance_type === 'dinas_luar';
+        $isWfa = $request->attendance_type === 'wfh';
+        $resolvedAttendanceType = $isDinasLuar ? 'dinas_luar' : ($isWfa ? 'wfh' : 'office');
         $hasAnomaly = $anomalyReason !== null;
         $isAutoValid = $isWhitelisted;
         $webApprovalStatus = $isAutoValid ? 'valid' : 'pending';
@@ -89,7 +99,7 @@ trait HandlesWebAttendance
             'status' => $finalStatus,
             'is_suspicious' => $isSuspicious,
             'suspicious_reason' => $suspiciousReason,
-            'attendance_type' => $isDinasLuar ? 'dinas_luar' : 'office',
+            'attendance_type' => $resolvedAttendanceType,
         ];
 
         if ($isDinasLuar) {
@@ -151,7 +161,7 @@ trait HandlesWebAttendance
 
     private function checkLocationAnomaly(User $user, Request $request): ?string
     {
-        if (! $request->latitude || ! $request->longitude || $user->is_wfh || str_contains(strtolower($user->role?->name ?? ''), 'teknisi')) {
+        if (! $request->latitude || ! $request->longitude || $request->attendance_type === 'wfh' || $user->is_wfh || str_contains(strtolower($user->role?->name ?? ''), 'teknisi')) {
             return null;
         }
 

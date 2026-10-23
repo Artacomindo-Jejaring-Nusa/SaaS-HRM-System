@@ -21,6 +21,10 @@ interface User {
   auto_validate_web_attendance?: boolean;
   auto_validate_until?: string;
   is_web_auto_validated?: boolean;
+  is_wfh?: boolean;
+  wfh_start_date?: string | null;
+  wfh_end_date?: string | null;
+  is_wfh_active?: boolean;
   attendance_type?: string;
   shift_name?: string;
   today_shift?: {

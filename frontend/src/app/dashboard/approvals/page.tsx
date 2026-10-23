@@ -34,7 +34,8 @@ import {
   Laptop,
   Repeat,
   Sparkles,
-  Smartphone
+  Smartphone,
+  Camera
 } from "lucide-react";
 import { ListPageSkeleton } from "@/components/Skeleton";
 import { useAuth, isSuperAdminUser } from "@/contexts/AuthContext";
@@ -132,16 +133,29 @@ interface ApprovalItem {
 
 interface TeamMemberAttendance {
   id: number;
+  attendance_id?: number | null;
   name: string;
   role: string;
   photo_url?: string;
   status: string;
   check_in?: string | null;
   check_out?: string | null;
+  check_in_full?: string | null;
+  check_out_full?: string | null;
   attendance_type?: string;
   is_dinas_luar?: boolean;
+  is_wfa?: boolean;
   dinas_luar_destination?: string | null;
+  dinas_luar_notes?: string | null;
   dinas_luar_status?: string | null;
+  image_in?: string | null;
+  image_out?: string | null;
+  image_in_url?: string | null;
+  image_out_url?: string | null;
+  latitude_in?: number | string | null;
+  longitude_in?: number | string | null;
+  latitude_out?: number | string | null;
+  longitude_out?: number | string | null;
   location_label?: string | null;
   work_pattern?: "office_hour" | "shift" | "flexible";
   user_attendance_type?: string;
@@ -497,6 +511,7 @@ const dispatchApprovalRequest = async (
 
 const renderMemberStatusBadge = (member: TeamMemberAttendance) => {
   const isDinasLuar = member.is_dinas_luar || member.attendance_type === "dinas_luar";
+  const isWfa = member.is_wfa || member.attendance_type === "wfh";
 
   if (member.status === "Belum Masuk") {
     return (
@@ -508,11 +523,16 @@ const renderMemberStatusBadge = (member: TeamMemberAttendance) => {
 
   return (
     <div className="flex flex-col items-end gap-1.5">
-      {/* Location Badge */}
+      {/* 3-Label Location Badge: Di Kantor, Dinas Luar, WFA */}
       {isDinasLuar ? (
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200 shadow-xs">
           <MapPin size={10} className="text-rose-600 shrink-0" />
           <span>Dinas Luar</span>
+        </span>
+      ) : isWfa ? (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-xs">
+          <Laptop size={10} className="text-indigo-600 shrink-0" />
+          <span>WFA</span>
         </span>
       ) : (
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200">
@@ -798,10 +818,12 @@ export default function ApprovalsPage() {
   const itemsPerPage = 10;
 
   // Team attendance state & Pattern filter
+  type TeamStatusFilter = "all" | "di_kantor" | "dinas_luar" | "wfa" | "finished" | "absent";
   const [teamMembers, setTeamMembers] = useState<TeamMemberAttendance[]>([]);
   const [loadingTeam, setLoadingTeam] = useState(false);
   const [teamSearchQuery, setTeamSearchQuery] = useState("");
   const [patternFilter, setPatternFilter] = useState<"all" | "office_hour" | "shift" | "flexible">("all");
+  const [teamStatusFilter, setTeamStatusFilter] = useState<TeamStatusFilter>("all");
 
   // Tab 3 Attendance History State
   const [historyTab, setHistoryTab] = useState<"requests" | "attendance">("requests");
@@ -819,6 +841,7 @@ export default function ApprovalsPage() {
   const [selectedItem, setSelectedItem] = useState<ApprovalItem | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
+  const [selectedTeamDetail, setSelectedTeamDetail] = useState<TeamMemberAttendance | null>(null);
 
   const [actionModal, setActionModal] = useState<{
     isOpen: boolean;
@@ -1219,23 +1242,68 @@ export default function ApprovalsPage() {
     };
   }, [teamMembers]);
 
-  // Filtered team members based on search and patternFilter
+  // Filtered team members based on search, patternFilter, and teamStatusFilter with smart priority sorting
   const filteredTeam = useMemo(() => {
     let list = teamMembers;
+
+    // Filter by work pattern
     if (patternFilter !== "all") {
       list = list.filter(m => (m.work_pattern || "office_hour") === patternFilter);
     }
-    if (!teamSearchQuery.trim()) return list;
-    const q = teamSearchQuery.toLowerCase();
-    return list.filter(m => 
-      m.name.toLowerCase().includes(q) || 
-      m.role.toLowerCase().includes(q) ||
-      m.status.toLowerCase().includes(q) ||
-      Boolean(m.dinas_luar_destination?.toLowerCase().includes(q)) ||
-      (m.is_dinas_luar && "dinas luar".includes(q)) ||
-      (!m.is_dinas_luar && "di kantor".includes(q))
-    );
-  }, [teamMembers, patternFilter, teamSearchQuery]);
+
+    // Filter by team status card
+    if (teamStatusFilter !== "all") {
+      if (teamStatusFilter === "di_kantor") {
+        list = list.filter(m => (!m.is_dinas_luar && m.attendance_type !== "dinas_luar" && !m.is_wfa && m.attendance_type !== "wfh") && m.status !== "Belum Masuk");
+      } else if (teamStatusFilter === "dinas_luar") {
+        list = list.filter(m => (m.is_dinas_luar || m.attendance_type === "dinas_luar") && m.status !== "Belum Masuk");
+      } else if (teamStatusFilter === "wfa") {
+        list = list.filter(m => (m.is_wfa || m.attendance_type === "wfh") && m.status !== "Belum Masuk");
+      } else if (teamStatusFilter === "finished") {
+        list = list.filter(m => m.status === "Selesai");
+      } else if (teamStatusFilter === "absent") {
+        list = list.filter(m => m.status === "Belum Masuk");
+      }
+    }
+
+    // Filter by search query
+    if (teamSearchQuery.trim()) {
+      const q = teamSearchQuery.toLowerCase();
+      list = list.filter(m => 
+        m.name.toLowerCase().includes(q) || 
+        m.role.toLowerCase().includes(q) ||
+        m.status.toLowerCase().includes(q) ||
+        Boolean(m.dinas_luar_destination?.toLowerCase().includes(q)) ||
+        (m.is_dinas_luar && "dinas luar".includes(q)) ||
+        ((m.is_wfa || m.attendance_type === "wfh") && "wfa work from anywhere".includes(q)) ||
+        (!m.is_dinas_luar && !m.is_wfa && "di kantor".includes(q))
+      );
+    }
+
+    // Smart Sorting:
+    // 1. Yang sudah absen (status !== "Belum Masuk" atau ada check_in) di paling atas,
+    //    diurutkan berdasarkan jam masuk paling awal (earliest check_in).
+    // 2. Yang belum masuk di paling bawah, diurutkan alfabetis berdasarkan nama (A-Z).
+    return [...list].sort((a, b) => {
+      const aCheckedIn = a.status !== "Belum Masuk" || Boolean(a.check_in);
+      const bCheckedIn = b.status !== "Belum Masuk" || Boolean(b.check_in);
+
+      if (aCheckedIn && !bCheckedIn) return -1;
+      if (!aCheckedIn && bCheckedIn) return 1;
+
+      if (aCheckedIn && bCheckedIn) {
+        // Both checked in: sort by earliest check_in (ascending)
+        const timeA = a.check_in || "99:99";
+        const timeB = b.check_in || "99:99";
+        const timeDiff = timeA.localeCompare(timeB);
+        if (timeDiff !== 0) return timeDiff;
+        return a.name.localeCompare(b.name);
+      }
+
+      // Both not checked in: sort alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
+  }, [teamMembers, patternFilter, teamStatusFilter, teamSearchQuery]);
 
   // Team summary counts
   const teamStats = useMemo(() => {
@@ -1244,8 +1312,9 @@ export default function ApprovalsPage() {
     const finished = teamMembers.filter(m => m.status === "Selesai").length;
     const absent = teamMembers.filter(m => m.status === "Belum Masuk").length;
     const dinasLuar = teamMembers.filter(m => (m.is_dinas_luar || m.attendance_type === "dinas_luar") && m.status !== "Belum Masuk").length;
-    const diKantor = teamMembers.filter(m => (!m.is_dinas_luar && m.attendance_type !== "dinas_luar") && m.status !== "Belum Masuk").length;
-    return { total, working, finished, absent, dinasLuar, diKantor };
+    const wfa = teamMembers.filter(m => (m.is_wfa || m.attendance_type === "wfh") && m.status !== "Belum Masuk").length;
+    const diKantor = teamMembers.filter(m => (!m.is_dinas_luar && m.attendance_type !== "dinas_luar" && !m.is_wfa && m.attendance_type !== "wfh") && m.status !== "Belum Masuk").length;
+    return { total, working, finished, absent, dinasLuar, wfa, diKantor };
   }, [teamMembers]);
 
   // Reset page when filter changes
@@ -1271,11 +1340,30 @@ export default function ApprovalsPage() {
     }
 
     if (filteredTeam.length === 0) {
+      const hasActiveFilters = teamStatusFilter !== "all" || patternFilter !== "all" || Boolean(teamSearchQuery.trim());
       return (
         <div className="col-span-full py-16 bg-white rounded-2xl border border-slate-200 text-center">
           <Users size={32} className="mx-auto text-slate-300 mb-2" />
           <p className="text-sm font-bold text-slate-700">Tidak ada data anggota tim ditemukan</p>
-          <p className="text-xs text-slate-400">Pastikan anggota tim telah terdaftar pada sistem atau ubah filter pola kehadiran</p>
+          <p className="text-xs text-slate-400">
+            {hasActiveFilters
+              ? "Tidak ada anggota tim yang cocok dengan kriteria filter saat ini."
+              : "Pastikan anggota tim telah terdaftar pada sistem atau ubah tanggal kehadiran."}
+          </p>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={() => {
+                setTeamStatusFilter("all");
+                setPatternFilter("all");
+                setTeamSearchQuery("");
+              }}
+              className="mt-3.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5 shadow-xs"
+            >
+              <RefreshCw size={12} />
+              <span>Reset Semua Filter</span>
+            </button>
+          )}
         </div>
       );
     }
@@ -1286,12 +1374,18 @@ export default function ApprovalsPage() {
         className={`bg-white rounded-2xl border p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-4 ${
           member.is_dinas_luar || member.attendance_type === "dinas_luar"
             ? "border-rose-200/90 bg-gradient-to-b from-rose-50/20 to-white"
-            : "border-slate-200"
+            : (member.is_wfa || member.attendance_type === "wfh"
+                ? "border-indigo-200/90 bg-gradient-to-b from-indigo-50/20 to-white"
+                : "border-slate-200")
         }`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-rose-50 text-[#8B0000] border border-rose-100 flex items-center justify-center text-sm font-black overflow-hidden shrink-0">
+            <div className={`w-11 h-11 rounded-2xl border flex items-center justify-center text-sm font-black overflow-hidden shrink-0 ${
+              member.is_wfa || member.attendance_type === "wfh"
+                ? "bg-indigo-50 text-indigo-700 border-indigo-100"
+                : "bg-rose-50 text-[#8B0000] border-rose-100"
+            }`}>
               {member.photo_url ? (
                 <img
                   src={getStorageUrl(member.photo_url)}
@@ -1317,11 +1411,22 @@ export default function ApprovalsPage() {
 
         {/* Dinas Luar Info Banner */}
         {(member.is_dinas_luar || member.attendance_type === "dinas_luar") && member.status !== "Belum Masuk" && (
-          <div className="p-2.5 bg-rose-50 border border-rose-200/70 rounded-xl text-xs flex items-start gap-2">
-            <MapPin size={14} className="text-rose-600 shrink-0 mt-0.5" />
+          <button
+            type="button"
+            onClick={() => setSelectedTeamDetail(member)}
+            className="p-2.5 bg-rose-50 hover:bg-rose-100/70 border border-rose-200/70 rounded-xl text-xs flex items-start gap-2 text-left w-full transition cursor-pointer group"
+            title="Klik untuk melihat form dinas luar & foto bukti"
+          >
+            <MapPin size={14} className="text-rose-600 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
             <div className="min-w-0 flex-1">
-              <span className="text-[10px] uppercase font-black text-rose-700 tracking-wider block">Lokasi Dinas Luar</span>
-              <span className="font-bold text-rose-950 text-xs truncate block">
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[10px] uppercase font-black text-rose-700 tracking-wider block">Lokasi Dinas Luar</span>
+                <span className="text-[10px] text-rose-500 font-bold group-hover:underline flex items-center gap-0.5">
+                  <span>Lihat Form</span>
+                  <ChevronRight size={11} />
+                </span>
+              </div>
+              <span className="font-bold text-rose-950 text-xs truncate block mt-0.5">
                 {member.dinas_luar_destination || "Tugas di luar kantor"}
               </span>
               {member.dinas_luar_status && (
@@ -1330,7 +1435,31 @@ export default function ApprovalsPage() {
                 </span>
               )}
             </div>
-          </div>
+          </button>
+        )}
+
+        {/* WFA Info Banner */}
+        {(member.is_wfa || member.attendance_type === "wfh") && member.status !== "Belum Masuk" && (
+          <button
+            type="button"
+            onClick={() => setSelectedTeamDetail(member)}
+            className="p-2.5 bg-indigo-50/80 hover:bg-indigo-100/70 border border-indigo-200/70 rounded-xl text-xs flex items-start gap-2 text-left w-full transition cursor-pointer group"
+            title="Klik untuk melihat foto bukti absensi WFA"
+          >
+            <Laptop size={14} className="text-indigo-600 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[10px] uppercase font-black text-indigo-700 tracking-wider block">Absen WFA</span>
+                <span className="text-[10px] text-indigo-500 font-bold group-hover:underline flex items-center gap-0.5">
+                  <span>Lihat Foto Absen</span>
+                  <ChevronRight size={11} />
+                </span>
+              </div>
+              <span className="font-bold text-indigo-950 text-xs truncate block mt-0.5">
+                Work From Anywhere
+              </span>
+            </div>
+          </button>
         )}
 
         {/* Attendance Times */}
@@ -1348,6 +1477,33 @@ export default function ApprovalsPage() {
             </div>
           </div>
         </div>
+
+        {/* View Form & Uploaded Photos Action Button */}
+        {member.status !== "Belum Masuk" && (
+          <div className="pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setSelectedTeamDetail(member)}
+              className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
+                member.is_dinas_luar || member.attendance_type === "dinas_luar"
+                  ? "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200"
+                  : "bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200"
+              }`}
+            >
+              {member.is_dinas_luar || member.attendance_type === "dinas_luar" ? (
+                <>
+                  <FileText size={13} className="text-rose-600" />
+                  <span>Form Dinas Luar & Foto Absen</span>
+                </>
+              ) : (
+                <>
+                  <Camera size={13} className="text-slate-600" />
+                  <span>Lihat Foto Unggahan Absen</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     ));
   };
@@ -2264,62 +2420,197 @@ export default function ApprovalsPage() {
             </div>
           </div>
 
-          {/* Top Summary Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-            <div className="bg-white rounded-2xl border border-slate-200 p-4.5 shadow-xs flex items-center justify-between">
+          {/* Top Summary Metrics - Interactive Filters */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+            {/* Total Tim Card */}
+            <button
+              type="button"
+              onClick={() => setTeamStatusFilter("all")}
+              className={`p-4.5 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden flex items-center justify-between ${
+                teamStatusFilter === "all"
+                  ? "bg-slate-900 text-white border-slate-900 ring-2 ring-slate-900/20 shadow-sm"
+                  : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-xs text-slate-900"
+              }`}
+            >
               <div>
-                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Tim</div>
-                <div className="text-xl font-black text-slate-900 mt-0.5">{teamStats.total}</div>
-                <div className="text-[10px] text-slate-400">Karyawan terdaftar</div>
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-[11px] font-bold uppercase tracking-wider ${teamStatusFilter === "all" ? "text-slate-300" : "text-slate-500"}`}>
+                    Total Tim
+                  </span>
+                  {teamStatusFilter === "all" && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-white/20 text-white">
+                      Aktif
+                    </span>
+                  )}
+                </div>
+                <div className={`text-xl font-black mt-0.5 ${teamStatusFilter === "all" ? "text-white" : "text-slate-900"}`}>
+                  {teamStats.total}
+                </div>
+                <div className={`text-[10px] ${teamStatusFilter === "all" ? "text-slate-300" : "text-slate-400"}`}>
+                  {teamStatusFilter === "all" ? "Semua karyawan" : "Karyawan terdaftar"}
+                </div>
               </div>
-              <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
+                teamStatusFilter === "all" ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"
+              }`}>
                 <Users size={20} />
               </div>
-            </div>
+            </button>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-4.5 shadow-xs flex items-center justify-between">
+            {/* Di Kantor Card */}
+            <button
+              type="button"
+              onClick={() => setTeamStatusFilter(prev => prev === "di_kantor" ? "all" : "di_kantor")}
+              className={`p-4.5 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden flex items-center justify-between ${
+                teamStatusFilter === "di_kantor"
+                  ? "bg-emerald-50/90 border-emerald-500 ring-2 ring-emerald-500/25 shadow-sm"
+                  : "bg-white border-slate-200 hover:border-emerald-200 hover:shadow-xs text-slate-900"
+              }`}
+            >
               <div>
-                <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Di Kantor</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Di Kantor</span>
+                  {teamStatusFilter === "di_kantor" && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-emerald-600 text-white">
+                      Aktif
+                    </span>
+                  )}
+                </div>
                 <div className="text-xl font-black text-emerald-700 mt-0.5">{teamStats.diKantor}</div>
                 <div className="text-[10px] text-emerald-600/80">Absen di kantor</div>
               </div>
-              <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-100 shrink-0">
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border transition-colors ${
+                teamStatusFilter === "di_kantor"
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : "bg-emerald-50 text-emerald-700 border-emerald-100"
+              }`}>
                 <Building2 size={20} />
               </div>
-            </div>
+            </button>
 
-            <div className="bg-white rounded-2xl border border-rose-200 p-4.5 shadow-xs flex items-center justify-between bg-gradient-to-br from-rose-50/40 to-white">
+            {/* Dinas Luar Card */}
+            <button
+              type="button"
+              onClick={() => setTeamStatusFilter(prev => prev === "dinas_luar" ? "all" : "dinas_luar")}
+              className={`p-4.5 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden flex items-center justify-between ${
+                teamStatusFilter === "dinas_luar"
+                  ? "bg-rose-50/90 border-rose-500 ring-2 ring-rose-500/25 shadow-sm"
+                  : "bg-white border-rose-200/80 hover:border-rose-300 hover:shadow-xs bg-gradient-to-br from-rose-50/40 to-white text-slate-900"
+              }`}
+            >
               <div>
-                <div className="text-[11px] font-bold text-rose-600 uppercase tracking-wider">Dinas Luar</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-rose-600 uppercase tracking-wider">Dinas Luar</span>
+                  {teamStatusFilter === "dinas_luar" && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-rose-600 text-white">
+                      Aktif
+                    </span>
+                  )}
+                </div>
                 <div className="text-xl font-black text-rose-700 mt-0.5">{teamStats.dinasLuar}</div>
                 <div className="text-[10px] text-rose-600/80">Tugas luar kantor</div>
               </div>
-              <div className="w-10 h-10 rounded-2xl bg-rose-100/70 text-rose-700 flex items-center justify-center border border-rose-200 shrink-0">
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border transition-colors ${
+                teamStatusFilter === "dinas_luar"
+                  ? "bg-rose-600 text-white border-rose-600"
+                  : "bg-rose-100/70 text-rose-700 border-rose-200"
+              }`}>
                 <MapPin size={20} />
               </div>
-            </div>
+            </button>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-4.5 shadow-xs flex items-center justify-between">
+            {/* WFA Card */}
+            <button
+              type="button"
+              onClick={() => setTeamStatusFilter(prev => prev === "wfa" ? "all" : "wfa")}
+              className={`p-4.5 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden flex items-center justify-between ${
+                teamStatusFilter === "wfa"
+                  ? "bg-indigo-50/90 border-indigo-500 ring-2 ring-indigo-500/25 shadow-sm"
+                  : "bg-white border-indigo-200/80 hover:border-indigo-300 hover:shadow-xs bg-gradient-to-br from-indigo-50/40 to-white text-slate-900"
+              }`}
+            >
               <div>
-                <div className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Selesai</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">WFA</span>
+                  {teamStatusFilter === "wfa" && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-indigo-600 text-white">
+                      Aktif
+                    </span>
+                  )}
+                </div>
+                <div className="text-xl font-black text-indigo-700 mt-0.5">{teamStats.wfa}</div>
+                <div className="text-[10px] text-indigo-600/80">Work From Anywhere</div>
+              </div>
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border transition-colors ${
+                teamStatusFilter === "wfa"
+                  ? "bg-indigo-600 text-white border-indigo-600"
+                  : "bg-indigo-100/70 text-indigo-700 border-indigo-200"
+              }`}>
+                <Laptop size={20} />
+              </div>
+            </button>
+
+            {/* Selesai Card */}
+            <button
+              type="button"
+              onClick={() => setTeamStatusFilter(prev => prev === "finished" ? "all" : "finished")}
+              className={`p-4.5 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden flex items-center justify-between ${
+                teamStatusFilter === "finished"
+                  ? "bg-blue-50/90 border-blue-500 ring-2 ring-blue-500/25 shadow-sm"
+                  : "bg-white border-slate-200 hover:border-blue-200 hover:shadow-xs text-slate-900"
+              }`}
+            >
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Selesai</span>
+                  {teamStatusFilter === "finished" && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-blue-600 text-white">
+                      Aktif
+                    </span>
+                  )}
+                </div>
                 <div className="text-xl font-black text-blue-700 mt-0.5">{teamStats.finished}</div>
                 <div className="text-[10px] text-blue-600/80">Sudah check-out</div>
               </div>
-              <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-100 shrink-0">
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border transition-colors ${
+                teamStatusFilter === "finished"
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-blue-50 text-blue-700 border-blue-100"
+              }`}>
                 <CheckCircle2 size={20} />
               </div>
-            </div>
+            </button>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-4.5 shadow-xs flex items-center justify-between col-span-2 sm:col-span-1">
+            {/* Belum Masuk Card */}
+            <button
+              type="button"
+              onClick={() => setTeamStatusFilter(prev => prev === "absent" ? "all" : "absent")}
+              className={`p-4.5 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden flex items-center justify-between ${
+                teamStatusFilter === "absent"
+                  ? "bg-amber-50/90 border-amber-500 ring-2 ring-amber-500/25 shadow-sm"
+                  : "bg-white border-slate-200 hover:border-amber-200 hover:shadow-xs text-slate-900"
+              }`}
+            >
               <div>
-                <div className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">Belum Masuk</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">Belum Masuk</span>
+                  {teamStatusFilter === "absent" && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-600 text-white">
+                      Aktif
+                    </span>
+                  )}
+                </div>
                 <div className="text-xl font-black text-amber-700 mt-0.5">{teamStats.absent}</div>
                 <div className="text-[10px] text-amber-600/80">Belum absen</div>
               </div>
-              <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-100 shrink-0">
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border transition-colors ${
+                teamStatusFilter === "absent"
+                  ? "bg-amber-600 text-white border-amber-600"
+                  : "bg-amber-50 text-amber-700 border-amber-100"
+              }`}>
                 <Clock size={20} />
               </div>
-            </div>
+            </button>
           </div>
 
           {/* Pola Kehadiran Card Boxes (Office Hour vs Shift Hour vs Fleksibel) */}
@@ -2505,7 +2796,7 @@ export default function ApprovalsPage() {
             </button>
           </div>
 
-          {/* Search bar & Pattern Filter Pills */}
+          {/* Search bar, Active Status Indicator & Pattern Filter Pills */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="relative flex-1 max-w-md">
               <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -2518,48 +2809,74 @@ export default function ApprovalsPage() {
               />
             </div>
 
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-bold text-slate-500 mr-1">Filter Pola:</span>
-              <button
-                onClick={() => setPatternFilter("all")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  patternFilter === "all"
-                    ? "bg-slate-900 text-white shadow-xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                Semua ({teamMembers.length})
-              </button>
-              <button
-                onClick={() => setPatternFilter("office_hour")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  patternFilter === "office_hour"
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                Office Hour ({patternStats.office.total})
-              </button>
-              <button
-                onClick={() => setPatternFilter("shift")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  patternFilter === "shift"
-                    ? "bg-purple-600 text-white shadow-xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                Shift Hour ({patternStats.shift.total})
-              </button>
-              <button
-                onClick={() => setPatternFilter("flexible")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  patternFilter === "flexible"
-                    ? "bg-teal-600 text-white shadow-xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                Fleksibel ({patternStats.flexible.total})
-              </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {teamStatusFilter !== "all" && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700">
+                  <span className="text-[10px] uppercase text-slate-400 font-extrabold tracking-wider">Status:</span>
+                  <span className={
+                    teamStatusFilter === "di_kantor" ? "text-emerald-700" :
+                    teamStatusFilter === "dinas_luar" ? "text-rose-700" :
+                    teamStatusFilter === "finished" ? "text-blue-700" : "text-amber-700"
+                  }>
+                    {teamStatusFilter === "di_kantor" && "Di Kantor"}
+                    {teamStatusFilter === "dinas_luar" && "Dinas Luar"}
+                    {teamStatusFilter === "finished" && "Selesai"}
+                    {teamStatusFilter === "absent" && "Belum Masuk"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setTeamStatusFilter("all")}
+                    className="ml-0.5 text-slate-400 hover:text-rose-600 transition"
+                    title="Hapus filter status"
+                  >
+                    <XCircle size={14} />
+                  </button>
+                </div>
+              )}
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-bold text-slate-500 mr-1">Filter Pola:</span>
+                <button
+                  onClick={() => setPatternFilter("all")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    patternFilter === "all"
+                      ? "bg-slate-900 text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Semua ({teamMembers.length})
+                </button>
+                <button
+                  onClick={() => setPatternFilter("office_hour")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    patternFilter === "office_hour"
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Office Hour ({patternStats.office.total})
+                </button>
+                <button
+                  onClick={() => setPatternFilter("shift")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    patternFilter === "shift"
+                      ? "bg-purple-600 text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Shift Hour ({patternStats.shift.total})
+                </button>
+                <button
+                  onClick={() => setPatternFilter("flexible")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    patternFilter === "flexible"
+                      ? "bg-teal-600 text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Fleksibel ({patternStats.flexible.total})
+                </button>
+              </div>
             </div>
           </div>
 
@@ -3020,6 +3337,232 @@ export default function ApprovalsPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* TEAM ATTENDANCE & DINAS LUAR DETAIL MODAL */}
+      {selectedTeamDetail && (
+        <div className="fixed inset-0 z-120 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-[#8B0000] border border-rose-100 flex items-center justify-center font-black text-sm shrink-0 overflow-hidden">
+                  {selectedTeamDetail.photo_url ? (
+                    <img
+                      src={getStorageUrl(selectedTeamDetail.photo_url)}
+                      alt={selectedTeamDetail.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    selectedTeamDetail.name.charAt(0).toUpperCase()
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 leading-tight">
+                    {selectedTeamDetail.name}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {selectedTeamDetail.role} • {teamDate}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedTeamDetail(null)}
+                className="p-1 hover:bg-slate-200 rounded-full transition text-slate-400 hover:text-slate-600"
+              >
+                <XCircle size={20} />
+              </button>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <div className="p-6 overflow-y-auto space-y-5">
+              {/* Status & Work Pattern Badges */}
+              <div className="flex items-center justify-between gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tipe:</span>
+                  {selectedTeamDetail.is_dinas_luar || selectedTeamDetail.attendance_type === "dinas_luar" ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-rose-50 text-rose-700 border border-rose-200">
+                      <MapPin size={12} className="text-rose-600" />
+                      <span>Dinas Luar</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <Building2 size={12} className="text-emerald-600" />
+                      <span>Di Kantor</span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status:</span>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-white text-slate-800 border border-slate-200">
+                    {selectedTeamDetail.status}
+                  </span>
+                </div>
+              </div>
+
+              {/* Form Dinas Luar (if Dinas Luar) */}
+              {(selectedTeamDetail.is_dinas_luar || selectedTeamDetail.attendance_type === "dinas_luar") && (
+                <div className="p-4 rounded-2xl bg-rose-50/70 border border-rose-200/80 space-y-3">
+                  <div className="flex items-center gap-2 text-rose-800 font-bold text-xs uppercase tracking-wider">
+                    <FileText size={15} className="text-rose-600" />
+                    <span>Formulir Keterangan Dinas Luar</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="bg-white p-3 rounded-xl border border-rose-100">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Lokasi / Destinasi</span>
+                      <span className="font-bold text-slate-900 mt-0.5 block">
+                        {selectedTeamDetail.dinas_luar_destination || "Tugas Luar Kantor"}
+                      </span>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-xl border border-rose-100">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Persetujuan Manajerial</span>
+                      <span className="font-bold text-rose-700 mt-0.5 block">
+                        {getDinasLuarStatusText(selectedTeamDetail.dinas_luar_status)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {selectedTeamDetail.dinas_luar_notes && (
+                    <div className="bg-white p-3 rounded-xl border border-rose-100 text-xs">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Catatan / Alasan Tugas</span>
+                      <p className="text-slate-700 mt-1 leading-relaxed">
+                        {selectedTeamDetail.dinas_luar_notes}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* GPS Coordinates & Google Maps Link */}
+                  {(selectedTeamDetail.latitude_in && selectedTeamDetail.longitude_in) && (
+                    <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-rose-100 text-xs">
+                      <div className="flex items-center gap-2 text-slate-600">
+                        <MapPin size={14} className="text-rose-600 shrink-0" />
+                        <span className="font-mono text-[11px]">
+                          {Number(selectedTeamDetail.latitude_in).toFixed(5)}, {Number(selectedTeamDetail.longitude_in).toFixed(5)}
+                        </span>
+                      </div>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${selectedTeamDetail.latitude_in},${selectedTeamDetail.longitude_in}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 hover:text-rose-800 underline"
+                      >
+                        <span>Lihat Maps</span>
+                        <ExternalLink size={12} />
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Attendance Times Summary */}
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Waktu Masuk</span>
+                  <span className="text-sm font-black text-slate-800 mt-0.5 block">
+                    {selectedTeamDetail.check_in_full ? new Date(selectedTeamDetail.check_in_full).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WIB" : (selectedTeamDetail.check_in ? selectedTeamDetail.check_in + " WIB" : "-- : --")}
+                  </span>
+                </div>
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Waktu Pulang</span>
+                  <span className="text-sm font-black text-slate-800 mt-0.5 block">
+                    {selectedTeamDetail.check_out_full ? new Date(selectedTeamDetail.check_out_full).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WIB" : (selectedTeamDetail.check_out ? selectedTeamDetail.check_out + " WIB" : "Belum Check-Out")}
+                  </span>
+                </div>
+              </div>
+
+              {/* Foto Unggahan Saat Absen */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-slate-700 font-bold text-xs uppercase tracking-wider">
+                  <Camera size={15} className="text-[#8B0000]" />
+                  <span>Foto Unggahan Saat Absen</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Foto Check-in */}
+                  <div className="rounded-2xl border border-slate-200 p-3 bg-slate-50 flex flex-col items-center">
+                    <span className="text-[11px] font-bold text-slate-600 mb-2">Foto Selfie Check-In</span>
+                    {selectedTeamDetail.image_in_url || selectedTeamDetail.image_in ? (
+                      <div
+                        className="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white aspect-[4/3] w-full flex items-center justify-center"
+                        onClick={() => {
+                          const url = selectedTeamDetail.image_in_url || getStorageUrl(selectedTeamDetail.image_in || "");
+                          setPreviewImage({ url, title: `Foto Masuk: ${selectedTeamDetail.name}` });
+                        }}
+                      >
+                        <img
+                          src={selectedTeamDetail.image_in_url || getStorageUrl(selectedTeamDetail.image_in || "")}
+                          alt="Foto Check In"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "https://placehold.co/400x300?text=Foto+Masuk";
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1.5">
+                          <Eye size={16} />
+                          <span>Perbesar</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-full aspect-[4/3] rounded-xl border border-dashed border-slate-200 bg-white flex flex-col items-center justify-center text-slate-300 p-4 text-center">
+                        <Camera size={24} className="mb-1" />
+                        <span className="text-[10px]">Tidak ada foto masuk</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Foto Check-out */}
+                  <div className="rounded-2xl border border-slate-200 p-3 bg-slate-50 flex flex-col items-center">
+                    <span className="text-[11px] font-bold text-slate-600 mb-2">Foto Selfie Check-Out</span>
+                    {selectedTeamDetail.image_out_url || selectedTeamDetail.image_out ? (
+                      <div
+                        className="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white aspect-[4/3] w-full flex items-center justify-center"
+                        onClick={() => {
+                          const url = selectedTeamDetail.image_out_url || getStorageUrl(selectedTeamDetail.image_out || "");
+                          setPreviewImage({ url, title: `Foto Pulang: ${selectedTeamDetail.name}` });
+                        }}
+                      >
+                        <img
+                          src={selectedTeamDetail.image_out_url || getStorageUrl(selectedTeamDetail.image_out || "")}
+                          alt="Foto Check Out"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "https://placehold.co/400x300?text=Foto+Pulang";
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1.5">
+                          <Eye size={16} />
+                          <span>Perbesar</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-full aspect-[4/3] rounded-xl border border-dashed border-slate-200 bg-white flex flex-col items-center justify-center text-slate-300 p-4 text-center">
+                        <Camera size={24} className="mb-1" />
+                        <span className="text-[10px]">
+                          {selectedTeamDetail.check_out ? "Tidak ada foto pulang" : "Belum check-out"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedTeamDetail(null)}
+                className="text-xs font-bold px-5"
+              >
+                Tutup
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

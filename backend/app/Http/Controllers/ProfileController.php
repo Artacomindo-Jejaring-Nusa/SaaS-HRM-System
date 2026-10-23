@@ -117,6 +117,8 @@ class ProfileController extends Controller
         }
 
         $userData = $user->toArray();
+        $isWfhActive = (bool) ($user->is_wfh && ($user->wfh_start_date <= $today && $user->wfh_end_date >= $today));
+        $userData['is_wfh_active'] = $isWfhActive;
         $userData['work_start_time'] = $workStartTime;
         $userData['work_end_time'] = $workEndTime;
         $userData['shift_name'] = $shiftName;

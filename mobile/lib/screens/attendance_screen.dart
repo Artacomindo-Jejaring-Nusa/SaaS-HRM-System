@@ -1026,6 +1026,8 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     String screenTitle = "Absen ${widget.isCheckIn ? 'Masuk' : 'Pulang'}";
     if (widget.isCheckIn && widget.attendanceType == 'dinas_luar') {
       screenTitle = "Absen Masuk (Dinas Luar)";
+    } else if (widget.isCheckIn && widget.attendanceType == 'wfh') {
+      screenTitle = "Absen Masuk (WFA)";
     }
 
     return Scaffold(
@@ -1165,6 +1167,32 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                   ],
                 ),
               ),
+              if (widget.attendanceType == 'wfh') ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4338CA).withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.indigoAccent.withValues(alpha: 0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.roofing_rounded, color: Colors.white, size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        "Mode WFA: Bebas Radius",
+                        style: GoogleFonts.outfit(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               // Progress Bar Visual
               if (_progressValue > 0 && !_hasAutoCaptured)
                 Container(

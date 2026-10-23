@@ -71,7 +71,11 @@ class ManagerAttendanceService
 
         $locationLabel = null;
         if ($attendance) {
-            $locationLabel = ($attendance->attendance_type === 'dinas_luar') ? 'Dinas Luar' : 'Di Kantor';
+            $locationLabel = match ($attendance->attendance_type) {
+                'dinas_luar' => 'Dinas Luar',
+                'wfh' => 'WFA',
+                default => 'Di Kantor',
+            };
         }
 
         $checkInFormatted = null;
@@ -93,17 +97,30 @@ class ManagerAttendanceService
 
         return [
             'id' => $sub->id,
+            'attendance_id' => $attendance?->id,
             'name' => $sub->name,
             'role' => $sub->role?->name ?? 'Karyawan',
             'photo_url' => $sub->profile_photo_url,
             'status' => $status,
+            'location_label' => $locationLabel,
             'check_in' => $checkInFormatted,
             'check_out' => $checkOutFormatted,
+            'check_in_full' => $attendance?->check_in,
+            'check_out_full' => $attendance?->check_out,
             'attendance_type' => $attendance?->attendance_type ?? 'office',
             'is_dinas_luar' => $attendance?->attendance_type === 'dinas_luar',
+            'is_wfa' => $attendance?->attendance_type === 'wfh',
             'dinas_luar_destination' => $attendance?->dinas_luar_destination,
+            'dinas_luar_notes' => $attendance?->dinas_luar_notes,
             'dinas_luar_status' => $attendance?->dinas_luar_status,
-            'location_label' => $locationLabel,
+            'image_in' => $attendance?->image_in,
+            'image_out' => $attendance?->image_out,
+            'image_in_url' => $attendance?->image_in_url,
+            'image_out_url' => $attendance?->image_out_url,
+            'latitude_in' => $attendance?->latitude_in,
+            'longitude_in' => $attendance?->longitude_in,
+            'latitude_out' => $attendance?->latitude_out,
+            'longitude_out' => $attendance?->longitude_out,
             'work_pattern' => $normalizedPattern,
             'user_attendance_type' => $sub->attendance_type,
         ];

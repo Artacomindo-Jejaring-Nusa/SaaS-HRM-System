@@ -32,6 +32,14 @@ class AttendanceController extends Controller
         $today = Carbon::today()->toDateString();
         $response = null;
         $isDinasLuar = $request->attendance_type === 'dinas_luar';
+        $isWfa = $request->attendance_type === 'wfh';
+
+        if ($isWfa) {
+            $isWfhActive = $user->is_wfh && ($user->wfh_start_date <= $today && $user->wfh_end_date >= $today);
+            if (! $isWfhActive) {
+                return $this->errorResponse('Anda tidak memiliki izin WFA (Work From Anywhere) aktif untuk hari ini.', 403);
+            }
+        }
 
         $attendance = Attendance::where('user_id', $user->id)
             ->whereDate('check_in', $today)
@@ -58,8 +66,8 @@ class AttendanceController extends Controller
         if (! $attendance && ! $response) {
             if ($securityError = $this->validateDeviceAndSecurity($user, $request)) {
                 $response = $this->errorResponse($securityError['message'], $securityError['code']);
-            } elseif ($isDinasLuar) {
-                // Dinas Luar: skip geofence, but still requires selfie (validated by request rules)
+            } elseif ($isDinasLuar || $isWfa) {
+                // Dinas Luar / WFA: skip geofence, but still requires selfie (validated by request rules)
                 $response = $this->processCheckIn($user, $request, null, $now, $today);
             } elseif (! ($geoResult = $this->validateGeofencing($user, $request))['success']) {
                 $response = $this->errorResponse($geoResult['message'], $geoResult['status']);
@@ -98,6 +106,8 @@ class AttendanceController extends Controller
     private function buildMobileAttendanceData(User $user, StoreAttendanceRequest $request, $matchedOffice, string $status, ?string $imageName, Carbon $now): array
     {
         $isDinasLuar = $request->attendance_type === 'dinas_luar';
+        $isWfa = $request->attendance_type === 'wfh';
+        $resolvedAttendanceType = $isDinasLuar ? 'dinas_luar' : ($isWfa ? 'wfh' : 'office');
         $isBypass = $request->boolean('bypass_face_recognition');
         $isAutoValidated = $user->isWebAttendanceAutoValidated();
 
@@ -112,7 +122,7 @@ class AttendanceController extends Controller
             'is_face_verified_in' => (bool) $request->attributes->get('is_face_verified_in', false),
             'status' => $status,
             'office_id' => $matchedOffice ? $matchedOffice->id : null,
-            'attendance_type' => $isDinasLuar ? 'dinas_luar' : 'office',
+            'attendance_type' => $resolvedAttendanceType,
             'channel' => 'mobile',
         ];
 
@@ -514,10 +524,12 @@ class AttendanceController extends Controller
                 'user_id' => $emp->id,
                 'name' => $emp->name,
                 'total_present' => $atts->count(),
+                'total_di_kantor' => $atts->filter(fn ($a) => ! in_array($a->attendance_type, ['dinas_luar', 'wfh']))->count(),
+                'total_dinas_luar' => $atts->where('attendance_type', 'dinas_luar')->count(),
+                'total_wfa' => $atts->where('attendance_type', 'wfh')->count(),
                 'total_late' => $atts->where('status', 'late')->count(),
                 'total_on_time' => $atts->where('status', 'present')->count(),
                 'total_suspicious' => $atts->where('is_suspicious', true)->count(),
-                // Placeholder for alphabetic/absent logic if needed
             ];
         });
 

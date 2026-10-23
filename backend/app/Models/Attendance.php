@@ -88,6 +88,11 @@ class Attendance extends Model
         return $this->attendance_type === 'dinas_luar';
     }
 
+    public function isWfa(): bool
+    {
+        return $this->attendance_type === 'wfh';
+    }
+
     public function isDinasLuarApproved(): bool
     {
         return $this->dinas_luar_status === 'approved_hr';

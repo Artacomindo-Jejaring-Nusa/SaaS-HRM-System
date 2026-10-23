@@ -3,13 +3,13 @@
 import { useEffect, useState, Suspense } from "react";
 import axiosInstance from "@/lib/axios";
 import { toast } from "sonner";
-import { Plus, Search, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, UserX, ShieldAlert, Mail, MapPin, Phone, Building2, BadgeCheck, Clock, Eye, Key, Briefcase, ChevronDown, UserCog, ShieldCheck, History } from "lucide-react";
+import { Plus, Search, Trash2, X, FileUp, FileDown, User as UserIcon, Camera, MoreVertical, UserX, ShieldAlert, Mail, MapPin, Phone, Building2, BadgeCheck, Clock, Eye, Key, Briefcase, ChevronDown, UserCog, ShieldCheck, History, Home } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/AuthContext";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import Pagination from "@/components/Pagination";
 import { TableSkeleton } from "@/components/Skeleton";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ErrorModal } from "@/components/ErrorModal";
 import { 
@@ -976,8 +976,10 @@ function EmployeeActionsDropdown({
   onAutoValidation,
 }: EmployeeActionsDropdownProps) {
   const { hasPermission } = useAuth();
+  const router = useRouter();
   const canEdit = hasPermission('edit-employees') || hasPermission('manage-employees');
   const canDelete = hasPermission('delete-employees');
+  const canManageWfh = hasPermission('manage-wfh');
 
   return (
     <DropdownMenu>
@@ -1031,6 +1033,21 @@ function EmployeeActionsDropdown({
             <p className="text-[10px] text-gray-400 font-medium">Pengaturan auto-validate & masa berlaku</p>
           </div>
         </DropdownMenuItem>
+
+        {canManageWfh && (
+          <DropdownMenuItem 
+            onClick={() => router.push(`/dashboard/attendance/wfh?search=${encodeURIComponent(emp.name)}`)}
+            className="w-full flex items-center gap-3 p-3 text-left hover:bg-indigo-50/60 rounded-xl transition-colors cursor-pointer group/item outline-none"
+          >
+            <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 group-hover/item:bg-indigo-100 group-hover/item:text-indigo-700 transition-colors">
+              <Home size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-black text-gray-900 group-hover/item:text-indigo-600 transition-colors">Kelola Izin WFA</p>
+              <p className="text-[10px] text-gray-400 font-medium">Atur izin kerja fleksibel dari mana saja</p>
+            </div>
+          </DropdownMenuItem>
+        )}
         
         {canDelete && (
           <DropdownMenuItem 

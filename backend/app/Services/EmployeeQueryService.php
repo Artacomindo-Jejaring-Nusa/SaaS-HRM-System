@@ -28,6 +28,23 @@ class EmployeeQueryService
             $query->where('attendance_type', $request->attendance_type);
         }
 
+        if ($request->filled('is_wfh') && $request->is_wfh !== 'all') {
+            $today = now()->toDateString();
+            if ($request->is_wfh === 'active') {
+                $query->where('is_wfh', true)
+                      ->where('wfh_start_date', '<=', $today)
+                      ->where('wfh_end_date', '>=', $today);
+            } elseif ($request->is_wfh === 'scheduled') {
+                $query->where('is_wfh', true)
+                      ->where(function ($q) use ($today) {
+                          $q->where('wfh_start_date', '>', $today)
+                            ->orWhere('wfh_end_date', '<', $today);
+                      });
+            } elseif ($request->is_wfh === 'office') {
+                $query->where('is_wfh', false);
+            }
+        }
+
         $employees = $query
             ->when($request->search, fn ($q) => self::applySearchFilter($q, (string) $request->search))
             ->when($request->id, fn ($q) => $q->where('id', $request->id))
