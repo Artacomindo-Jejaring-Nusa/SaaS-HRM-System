@@ -912,7 +912,7 @@ const getCostCenterDisplay = (costCenter?: string) => {
 const getTenureYears = (joinDate?: string) => {
   if (!joinDate) return 0;
   const joinYear = new Date(joinDate).getFullYear();
-  return isNaN(joinYear) ? 0 : Math.max(0, 2026 - joinYear);
+  return Number.isNaN(joinYear) ? 0 : Math.max(0, 2026 - joinYear);
 };
 
 type AutoValidationPreset = 'permanent' | '7_days' | '30_days' | '90_days' | 'custom';

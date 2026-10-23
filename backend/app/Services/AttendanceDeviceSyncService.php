@@ -141,7 +141,7 @@ class AttendanceDeviceSyncService
 
             // Match PIN and DateTime in standard formats:
             // e.g. "101\t2026-10-23 08:00:15\t1\t0" or "101,2026-10-23 08:00:15"
-            if (preg_match('/^([0-9a-zA-Z_-]+)[\s,;\t]+(\d{4}[-\/]\d{2}[-\/]\d{2}\s+\d{2}:\d{2}(?::\d{2})?)/', $line, $matches)) {
+            if (preg_match('/^([0-9a-zA-Z_-]+)[\s,;]+(\d{4}[-\/]\d{2}[-\/]\d{2}\s+\d{2}:\d{2}(?::\d{2})?)/', $line, $matches)) {
                 $logs[] = [
                     'pin' => $matches[1],
                     'timestamp' => str_replace('/', '-', $matches[2]),

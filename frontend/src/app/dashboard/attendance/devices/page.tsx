@@ -630,16 +630,21 @@ export default function AttendanceDevicesPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                <label
+                  htmlFor="upload-log-file-input"
+                  className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5"
+                >
                   Pilih File Log (.dat / .csv / .txt)
                 </label>
                 <input
+                  id="upload-log-file-input"
                   type="file"
                   required
                   accept=".dat,.csv,.txt"
                   onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      setSelectedFile(e.target.files[0]);
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setSelectedFile(file);
                       setIngestSummary(null);
                     }
                   }}
@@ -722,7 +727,7 @@ export default function AttendanceDevicesPage() {
               <div className="space-y-2">
                 <h4 className="font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
                   <span className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 flex items-center justify-center text-xs font-bold">1</span>
-                  Install Python & Library di PC Kantor
+                  <span>Install Python &amp; Library di PC Kantor</span>
                 </h4>
                 <div className="bg-gray-900 text-gray-100 p-2.5 rounded-xl font-mono text-[11px]">
                   pip install pyzk requests
@@ -733,16 +738,20 @@ export default function AttendanceDevicesPage() {
                 <div className="flex items-center justify-between">
                   <h4 className="font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
                     <span className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 flex items-center justify-center text-xs font-bold">2</span>
-                    Simpan Script Agent (x100c_sync_agent.py)
+                    <span>Simpan Script Agent (x100c_sync_agent.py)</span>
                   </h4>
                   <button
                     type="button"
                     onClick={() => {
+                      const serverUrl = typeof globalThis.window === 'undefined'
+                        ? 'https://ontime.jelantik.com'
+                        : globalThis.location.origin;
+
                       const scriptContent = `# OnTime HRMS - Dynamic Multi-Device Sync Agent
 import time, requests
 from zk import ZK
 
-SERVER_URL = "${typeof window !== 'undefined' ? window.location.origin : 'https://ontime.jelantik.com'}"
+SERVER_URL = "${serverUrl}"
 API_TOKEN = "GANTI_DENGAN_TOKEN_ADMIN"
 
 def get_devices():
