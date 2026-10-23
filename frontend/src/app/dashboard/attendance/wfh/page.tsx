@@ -72,11 +72,11 @@ function EmployeeWfaStatusBadge({
   isDateActive, 
   isScheduledFuture, 
   isWfh 
-}: { 
+}: Readonly<{ 
   isDateActive: boolean; 
   isScheduledFuture: boolean; 
   isWfh: boolean; 
-}) {
+}>) {
   if (isDateActive) {
     return (
       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tight bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -117,13 +117,13 @@ function EmployeeWfaRow({
   isSelected,
   onToggleSelect,
   onOpenModal,
-}: {
+}: Readonly<{
   emp: Employee;
   todayStr: string;
   isSelected: boolean;
   onToggleSelect: (id: number) => void;
   onOpenModal: (emp: Employee) => void;
-}) {
+}>) {
   const isDateActive = Boolean(
     emp.is_wfh && 
     emp.wfh_start_date && 

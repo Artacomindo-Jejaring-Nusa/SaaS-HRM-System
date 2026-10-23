@@ -67,14 +67,10 @@ trait HandlesWebAttendance
             return $this->errorResponse('Foto selfie wajib diunggah sebagai bukti kehadiran.', 422);
         }
 
-        if ($request->attendance_type === 'wfh') {
-            $isWfhActive = $user->is_wfh && ($user->wfh_start_date <= $today && $user->wfh_end_date >= $today);
-            if (! $isWfhActive) {
-                return $this->errorResponse('Anda tidak memiliki izin WFA (Work From Anywhere) aktif untuk hari ini.', 403);
-            }
-        }
-
-        return null;
+        $isWfhInvalid = $request->attendance_type === 'wfh' && ! ($user->is_wfh && ($user->wfh_start_date <= $today && $user->wfh_end_date >= $today));
+        return $isWfhInvalid
+            ? $this->errorResponse('Anda tidak memiliki izin WFA (Work From Anywhere) aktif untuk hari ini.', 403)
+            : null;
     }
 
     private function resolveWebAttendanceType(Request $request): string
@@ -121,7 +117,7 @@ trait HandlesWebAttendance
             'attendance_type' => $resolvedAttendanceType,
         ];
 
-        if ($isDinasLuar) {
+        if ($resolvedAttendanceType === 'dinas_luar') {
             $data['dinas_luar_destination'] = $request->input('dinas_luar_destination');
             $data['dinas_luar_notes'] = $request->input('dinas_luar_notes');
             $data['dinas_luar_status'] = $isAutoValid ? 'approved' : 'pending';

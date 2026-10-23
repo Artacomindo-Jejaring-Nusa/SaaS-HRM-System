@@ -2,19 +2,225 @@
 
 namespace App\Traits;
 
+use App\Events\EmployeeLocationUpdated;
+use App\Http\Requests\StoreAttendanceRequest;
 use App\Models\Attendance;
+use App\Models\EmployeeTrack;
 use App\Models\Office;
 use App\Models\Schedule;
 use App\Models\User;
 use App\Services\EmployeeQueryService;
 use App\Support\SelfieImage;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 trait HandlesAttendanceProcessing
 {
+    protected const DEFAULT_FACE_BYPASS_REASON = 'Verifikasi wajah gagal';
+    protected const ROUTE_APPROVALS = '/dashboard/approvals';
+
+    private function resolveExistingAttendanceConflict(?Attendance &$attendance): ?JsonResponse
+    {
+        if (! $attendance) {
+            return null;
+        }
+
+        if ($attendance->channel === 'web' && $attendance->web_approval_status === 'pending') {
+            $attendance->delete();
+            $attendance = null;
+            return null;
+        }
+
+        $isDualConflict = $attendance->channel === 'web' && $attendance->web_approval_status === 'valid';
+        if ($isDualConflict) {
+            $attendance->update([
+                'is_suspicious' => true,
+                'suspicious_reason' => 'Konflik Entri Ganda: Terdeteksi Absen Web Valid dan Absen Mobile Sinkronisasi pada hari yang sama.',
+            ]);
+        }
+
+        $errorMessage = $isDualConflict
+            ? 'Konflik Sinkronisasi: Anda sudah memiliki catatan Absen Web yang tervalidasi hari ini. Data ditandai untuk ditinjau Superadmin.'
+            : 'Anda sudah check-in hari ini.';
+
+        return $this->errorResponse($errorMessage, 400);
+    }
+
+    private function executeCheckInFlow(User $user, StoreAttendanceRequest $request, Carbon $now, string $today): JsonResponse
+    {
+        if ($securityError = $this->validateDeviceAndSecurity($user, $request)) {
+            return $this->errorResponse($securityError['message'], $securityError['code']);
+        }
+
+        if (in_array($request->attendance_type, ['dinas_luar', 'wfh'], true)) {
+            return $this->processCheckIn($user, $request, null, $now, $today);
+        }
+
+        $geoResult = $this->validateGeofencing($user, $request);
+        return $geoResult['success']
+            ? $this->processCheckIn($user, $request, $geoResult['office'], $now, $today)
+            : $this->errorResponse($geoResult['message'], $geoResult['status']);
+    }
+
+    private function processCheckIn(User $user, StoreAttendanceRequest $request, $matchedOffice, Carbon $now, string $today)
+    {
+        $isDinasLuar = $request->attendance_type === 'dinas_luar';
+
+        $schedule = Schedule::with('shift')
+            ->where('user_id', $user->id)
+            ->where('date', $today)
+            ->first();
+
+        $status = $isDinasLuar ? 'dinas_luar' : $this->determineCheckInStatus($user, $schedule, $now);
+        $imageName = $this->saveCompressedAttendanceImage($request, 'in');
+        $isAutoValidated = $user->isWebAttendanceAutoValidated();
+
+        $attendanceData = $this->buildMobileAttendanceData($user, $request, $matchedOffice, $status, $imageName, $now);
+        $attendance = Attendance::create($attendanceData);
+
+        $this->recordCheckInEmployeeTrack($user, $request, $now);
+        $this->dispatchCheckInNotifications($user, $attendance, $request, $status, $now);
+
+        $message = $this->buildCheckInSuccessMessage($isDinasLuar, $isAutoValidated, $status, $request);
+
+        return $this->successResponse($attendance, $message);
+    }
+
+    private function resolveAttendanceType(StoreAttendanceRequest $request): string
+    {
+        if ($request->attendance_type === 'dinas_luar') {
+            return 'dinas_luar';
+        }
+        if ($request->attendance_type === 'wfh') {
+            return 'wfh';
+        }
+        return 'office';
+    }
+
+    private function buildMobileAttendanceData(User $user, StoreAttendanceRequest $request, $matchedOffice, string $status, ?string $imageName, Carbon $now): array
+    {
+        $isDinasLuar = $request->attendance_type === 'dinas_luar';
+        $resolvedAttendanceType = $this->resolveAttendanceType($request);
+        $isBypass = $request->boolean('bypass_face_recognition');
+        $isAutoValidated = $user->isWebAttendanceAutoValidated();
+
+        $data = [
+            'user_id' => $user->id,
+            'company_id' => $user->company_id,
+            'check_in' => $now,
+            'latitude_in' => $request->latitude,
+            'longitude_in' => $request->longitude,
+            'image_in' => $imageName,
+            'face_similarity_score_in' => $request->attributes->get('face_similarity_score_in'),
+            'is_face_verified_in' => (bool) $request->attributes->get('is_face_verified_in', false),
+            'status' => $status,
+            'office_id' => $matchedOffice ? $matchedOffice->id : null,
+            'attendance_type' => $resolvedAttendanceType,
+            'channel' => 'mobile',
+        ];
+
+        if ($isBypass) {
+            $this->applyFaceBypassData($data, $request, $isAutoValidated, $now);
+        }
+
+        if ($isDinasLuar) {
+            $data['dinas_luar_destination'] = $request->dinas_luar_destination;
+            $data['dinas_luar_notes'] = $request->dinas_luar_notes;
+            $data['dinas_luar_status'] = $isAutoValidated ? 'approved' : 'pending';
+            if ($isAutoValidated) {
+                $data['approved_by_hr'] = $user->id;
+                $data['approved_at_hr'] = $now;
+                $data['approved_by_spv'] = $user->id;
+                $data['approved_at_spv'] = $now;
+            }
+        }
+
+        return $data;
+    }
+
+    private function applyFaceBypassData(array &$data, StoreAttendanceRequest $request, bool $isAutoValidated, Carbon $now): void
+    {
+        $bypassReason = $request->input('bypass_reason', self::DEFAULT_FACE_BYPASS_REASON);
+        $data['is_suspicious'] = ! $isAutoValidated;
+        $data['suspicious_reason'] = $isAutoValidated
+            ? "Auto-Validated: Tanpa verifikasi wajah ({$bypassReason})"
+            : "Tanpa verifikasi wajah: {$bypassReason}";
+        $data['web_approval_status'] = $isAutoValidated ? 'valid' : 'pending';
+        $data['web_approved_at'] = $isAutoValidated ? $now : null;
+    }
+
+    private function recordCheckInEmployeeTrack(User $user, StoreAttendanceRequest $request, Carbon $now): void
+    {
+        try {
+            $track = EmployeeTrack::create([
+                'user_id' => $user->id,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'accuracy' => 10.0,
+                'battery_level' => 100,
+                'recorded_at' => $now,
+            ]);
+            broadcast(new EmployeeLocationUpdated($track))->toOthers();
+        } catch (\Throwable $e) {
+            Log::warning('Auto track on checkIn failed: '.$e->getMessage());
+        }
+    }
+
+    private function dispatchCheckInNotifications(User $user, Attendance $attendance, StoreAttendanceRequest $request, string $status, Carbon $now): void
+    {
+        $isDinasLuar = $attendance->attendance_type === 'dinas_luar';
+        $isBypass = $request->boolean('bypass_face_recognition');
+        $isAutoValidated = $user->isWebAttendanceAutoValidated();
+
+        if ($isBypass && ! $isAutoValidated) {
+            $bypassReason = $request->input('bypass_reason', self::DEFAULT_FACE_BYPASS_REASON);
+            $this->notifySuperAdmins(
+                $user->company_id,
+                'ABSENSI MANUAL BUTUH VALIDASI SUPER ADMIN',
+                "Karyawan {$user->name} melakukan absen masuk manual (wajah gagal) pada pukul {$now->format('H:i')} WIB. Catatan: \"{$bypassReason}\". Menunggu validasi Super Admin.",
+                'warning',
+                self::ROUTE_APPROVALS,
+                $user->id
+            );
+        }
+
+        if ($isDinasLuar) {
+            if ($isAutoValidated) {
+                $this->notify(
+                    $user,
+                    'DINAS LUAR DISETUJUI OTOMATIS',
+                    "Absen dinas luar Anda ke {$attendance->dinas_luar_destination} berhasil disahkan secara otomatis (Validasi Otomatis Aktif).",
+                    'success',
+                    null,
+                    'notif',
+                    false
+                );
+            } else {
+                $this->sendDinasLuarNotifications($user, $attendance);
+            }
+        } else {
+            $this->sendCheckInNotifications($user, $status, $now);
+        }
+    }
+
+    private function buildCheckInSuccessMessage(bool $isDinasLuar, bool $isAutoValidated, string $status, StoreAttendanceRequest $request): string
+    {
+        $score = $request->attributes->get('face_similarity_score_in');
+        $scorePercent = $score !== null ? round($score * 100, 1) : null;
+        $scoreText = $scorePercent !== null ? " (Kemiripan Wajah: {$scorePercent}%)" : '';
+
+        if ($isDinasLuar) {
+            return $isAutoValidated
+                ? "Absen Dinas Luar berhasil disahkan secara otomatis{$scoreText} (Validasi Otomatis Aktif)."
+                : "Absen Dinas Luar berhasil tercatat{$scoreText}. Menunggu persetujuan Supervisor.";
+        }
+
+        return "Check-in berhasil{$scoreText}. Status: {$status}";
+    }
     private function determineCheckInStatus(User $user, ?Schedule $schedule, Carbon $now): string
     {
         // Pola kehadiran fleksibel khusus atasan/pimpinan: tidak ada batasan jam & bebas status terlambat
