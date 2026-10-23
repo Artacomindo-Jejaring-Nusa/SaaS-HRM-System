@@ -743,7 +743,7 @@ export default function AttendanceDevicesPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      const serverUrl = typeof globalThis.window === 'undefined'
+                      const serverUrl = globalThis.window === undefined
                         ? 'https://ontime.jelantik.com'
                         : globalThis.location.origin;
 
