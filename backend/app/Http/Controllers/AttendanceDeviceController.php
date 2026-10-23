@@ -120,4 +120,29 @@ class AttendanceDeviceController extends Controller
 
         return $this->errorResponse($result['message'], 422);
     }
+
+    /**
+     * Ingest logs via Local Sync Agent or USB file upload (.dat, .csv, .txt).
+     */
+    public function ingest(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $device = AttendanceDevice::where('company_id', $user->company_id)->findOrFail($id);
+
+        $logs = [];
+
+        if ($request->hasFile('log_file')) {
+            $file = $request->file('log_file');
+            $content = file_get_contents($file->getRealPath());
+            $logs = $this->syncService->parseLogFile($content ?: '');
+        } elseif ($request->has('logs')) {
+            $logs = (array) $request->input('logs', []);
+        }
+
+        $result = $this->syncService->ingestLogs($device, $logs);
+
+        return $result['success']
+            ? $this->successResponse($result, $result['message'])
+            : $this->errorResponse($result['message'], 422);
+    }
 }

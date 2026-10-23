@@ -57,6 +57,9 @@ class AttendanceDeviceSyncService
     /**
      * Pull attendance logs from device and record into database.
      */
+    /**
+     * Pull attendance logs from device and record into database.
+     */
     public function syncDeviceLogs(AttendanceDevice $device): array
     {
         try {
@@ -66,39 +69,7 @@ class AttendanceDeviceSyncService
                 6,
                 (int) ($device->comm_key ?? 0)
             );
-            $device->update([
-                'status' => 'online',
-                'last_sync_at' => now(),
-                'last_error' => null,
-            ]);
-
-            if (empty($logs)) {
-                return [
-                    'success' => true,
-                    'message' => 'Tidak ada log presensi baru di mesin.',
-                    'processed' => 0,
-                    'unmapped' => 0,
-                ];
-            }
-
-            $processedCount = 0;
-            $unmappedPins = [];
-
-            // Sort logs chronologically
-            usort($logs, fn($a, $b) => strcmp($a['timestamp'], $b['timestamp']));
-
-            foreach ($logs as $log) {
-                if ($this->processSingleLog($log, $device, $unmappedPins)) {
-                    $processedCount++;
-                }
-            }
-
-            return [
-                'success' => true,
-                'message' => "Berhasil memproses {$processedCount} log presensi dari mesin.",
-                'processed' => $processedCount,
-                'unmapped' => array_keys($unmappedPins),
-            ];
+            return $this->ingestLogs($device, $logs);
         } catch (Exception $e) {
             $device->update([
                 'status' => 'error',
@@ -112,6 +83,73 @@ class AttendanceDeviceSyncService
                 'unmapped' => [],
             ];
         }
+    }
+
+    /**
+     * Ingest an array of attendance logs into database (from agent or file upload).
+     */
+    public function ingestLogs(AttendanceDevice $device, array $logs): array
+    {
+        $device->update([
+            'status' => 'online',
+            'last_sync_at' => now(),
+            'last_error' => null,
+        ]);
+
+        if (empty($logs)) {
+            return [
+                'success' => true,
+                'message' => 'Tidak ada log presensi baru yang diproses.',
+                'processed' => 0,
+                'unmapped' => [],
+            ];
+        }
+
+        $processedCount = 0;
+        $unmappedPins = [];
+
+        // Sort logs chronologically
+        usort($logs, fn($a, $b) => strcmp($a['timestamp'] ?? '', $b['timestamp'] ?? ''));
+
+        foreach ($logs as $log) {
+            if ($this->processSingleLog($log, $device, $unmappedPins)) {
+                $processedCount++;
+            }
+        }
+
+        return [
+            'success' => true,
+            'message' => "Berhasil memproses {$processedCount} log presensi dari mesin.",
+            'processed' => $processedCount,
+            'unmapped' => array_keys($unmappedPins),
+        ];
+    }
+
+    /**
+     * Parse raw text/dat/csv content exported from Solution X100-C USB flashdisk.
+     */
+    public function parseLogFile(string $content): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', trim($content));
+        $logs = [];
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (empty($line) || str_starts_with($line, '#')) {
+                continue;
+            }
+
+            // Match PIN and DateTime in standard formats:
+            // e.g. "101\t2026-10-23 08:00:15\t1\t0" or "101,2026-10-23 08:00:15"
+            if (preg_match('/^([0-9a-zA-Z_-]+)[\s,;\t]+(\d{4}[-\/]\d{2}[-\/]\d{2}\s+\d{2}:\d{2}(?::\d{2})?)/', $line, $matches)) {
+                $logs[] = [
+                    'pin' => $matches[1],
+                    'timestamp' => str_replace('/', '-', $matches[2]),
+                ];
+            }
+        }
+
+        return $logs;
     }
 
     private function processSingleLog(array $log, AttendanceDevice $device, array &$unmappedPins): bool
@@ -165,6 +203,7 @@ class AttendanceDeviceSyncService
                 'check_in' => $logTime,
                 'status' => $status,
                 'attendance_type' => 'fingerprint',
+                'channel' => 'fingerprint',
             ]);
             return true;
         }

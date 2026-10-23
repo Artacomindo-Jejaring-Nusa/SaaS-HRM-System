@@ -16,7 +16,11 @@ import {
   Server,
   Hash,
   Loader2,
-  X
+  X,
+  UploadCloud,
+  Terminal,
+  Copy,
+  Check
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -60,6 +64,16 @@ export default function AttendanceDevicesPage() {
   // Action Loading States
   const [testingDeviceId, setTestingDeviceId] = useState<number | null>(null);
   const [syncingDeviceId, setSyncingDeviceId] = useState<number | null>(null);
+
+  // USB File Import State
+  const [uploadDevice, setUploadDevice] = useState<AttendanceDevice | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [ingestSummary, setIngestSummary] = useState<{ processed: number; unmapped: string[] } | null>(null);
+
+  // Agent Guide State
+  const [guideDevice, setGuideDevice] = useState<AttendanceDevice | null>(null);
+  const [copiedScript, setCopiedScript] = useState(false);
 
   // Accessible unique IDs for form controls
   const nameInputId = useId();
@@ -187,6 +201,53 @@ export default function AttendanceDevicesPage() {
     }
   };
 
+  const openUploadModal = (device: AttendanceDevice) => {
+    setUploadDevice(device);
+    setSelectedFile(null);
+    setIngestSummary(null);
+  };
+
+  const openGuideModal = (device: AttendanceDevice) => {
+    setGuideDevice(device);
+    setCopiedScript(false);
+  };
+
+  const handleUploadLogFile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadDevice || !selectedFile) {
+      toast.error("Silakan pilih file log presensi terlebih dahulu.");
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      const formData = new FormData();
+      formData.append("log_file", selectedFile);
+
+      const res = await axiosInstance.post(
+        `/attendance-devices/${uploadDevice.id}/ingest`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      const data = res.data.data || {};
+      setIngestSummary({
+        processed: data.processed ?? 0,
+        unmapped: data.unmapped || [],
+      });
+
+      toast.success(`Berhasil! ${data.processed ?? 0} presensi telah dicocokkan.`);
+      fetchDevices();
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } } };
+      toast.error(err.response?.data?.message || "Gagal memproses file log presensi.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const formatLastSync = (timestamp?: string) => {
     if (!timestamp) return "Belum pernah disinkronkan";
     const date = new Date(timestamp);
@@ -232,7 +293,6 @@ export default function AttendanceDevicesPage() {
     }
 
     return (
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {devices.map((device) => {
             const isTesting = testingDeviceId === device.id;
@@ -315,28 +375,48 @@ export default function AttendanceDevicesPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
+                <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
                       disabled={isTesting || isSyncing}
                       onClick={() => handleTestConnection(device)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-xl transition disabled:opacity-50"
-                      title="Tes koneksi socket ke mesin"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-xl transition disabled:opacity-50"
+                      title="Uji koneksi socket lokal (jika satu LAN / VPN)"
                     >
                       {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-amber-500" />}
-                      Uji Koneksi
+                      Uji
                     </button>
 
                     <button
                       type="button"
                       disabled={isTesting || isSyncing}
                       onClick={() => handleSyncLogs(device)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#800000]/10 hover:bg-[#800000]/20 text-[#800000] text-xs font-semibold rounded-xl transition disabled:opacity-50"
-                      title="Tarik data presensi dari mesin sekarang"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#800000]/10 hover:bg-[#800000]/20 text-[#800000] text-xs font-semibold rounded-xl transition disabled:opacity-50"
+                      title="Tarik data presensi langsung dari IP mesin"
                     >
                       {isSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                      Tarik Data
+                      Sync
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => openUploadModal(device)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 text-blue-700 dark:text-blue-300 text-xs font-semibold rounded-xl transition"
+                      title="Import log dari flashdisk USB X100-C (.dat / .csv)"
+                    >
+                      <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
+                      USB Log
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => openGuideModal(device)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 text-xs font-semibold rounded-xl transition"
+                      title="Panduan Script Sync Agent di PC Kantor"
+                    >
+                      <Terminal className="w-3.5 h-3.5 text-emerald-600" />
+                      Agent
                     </button>
                   </div>
 
@@ -520,6 +600,212 @@ export default function AttendanceDevicesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Upload Log Flashdisk USB */}
+      {uploadDevice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <UploadCloud className="w-5 h-5 text-blue-600" />
+                <h3 className="font-bold text-gray-900 dark:text-white text-base">
+                  Import Log USB Flashdisk ({uploadDevice.name})
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUploadDevice(null)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUploadLogFile} className="mt-4 space-y-4">
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/40 rounded-xl text-xs text-blue-800 dark:text-blue-300">
+                Colokkan Flashdisk ke mesin Solution X100-C &rarr; Pilih menu <strong>Unduh Data Presensi</strong>. File yang dihasilkan biasanya bernama <code>1_attlog.dat</code> atau file <code>.csv</code>.
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Pilih File Log (.dat / .csv / .txt)
+                </label>
+                <input
+                  type="file"
+                  required
+                  accept=".dat,.csv,.txt"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setSelectedFile(e.target.files[0]);
+                      setIngestSummary(null);
+                    }
+                  }}
+                  className="w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-[#800000] file:text-white hover:file:bg-[#990000] file:cursor-pointer"
+                />
+              </div>
+
+              {ingestSummary && (
+                <div className="space-y-2 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-700 text-xs">
+                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{ingestSummary.processed} catatan presensi berhasil dicocokkan!</span>
+                  </div>
+
+                  {ingestSummary.unmapped.length > 0 && (
+                    <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 rounded-lg text-amber-800 dark:text-amber-300">
+                      <p className="font-semibold mb-1">ID Mesin Belum Terpetakan:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {ingestSummary.unmapped.map((pin) => (
+                          <span key={pin} className="px-1.5 py-0.5 bg-amber-200 dark:bg-amber-800 font-mono text-[10px] rounded">
+                            PIN #{pin}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+                        Tambahkan nomor PIN di atas pada menu <em>Data Karyawan &rarr; Edit &rarr; PIN Fingerprint</em> agar terhubung.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setUploadDevice(null)}
+                  className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 rounded-xl font-medium"
+                >
+                  Tutup
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUploading || !selectedFile}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#800000] hover:bg-[#990000] text-white text-sm font-semibold rounded-xl shadow-sm disabled:opacity-50 transition"
+                >
+                  {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+                  {isUploading ? "Memproses File..." : "Proses & Simpan Absen"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Panduan Sync Agent */}
+      {guideDevice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-bold text-gray-900 dark:text-white text-base">
+                  Panduan Otomatisasi Local Sync Agent
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGuideDevice(null)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4 text-xs text-gray-600 dark:text-gray-300">
+              <p>
+                Karena mesin <strong>{guideDevice.name} ({guideDevice.ip_address})</strong> berada di jaringan LAN lokal kantor tanpa IP publik, gunakan script <em>Local Sync Agent</em> di salah satu komputer kantor yang menyala.
+              </p>
+
+              <div className="space-y-2">
+                <h4 className="font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 flex items-center justify-center text-xs font-bold">1</span>
+                  Install Python & Library di PC Kantor
+                </h4>
+                <div className="bg-gray-900 text-gray-100 p-2.5 rounded-xl font-mono text-[11px]">
+                  pip install pyzk requests
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 flex items-center justify-center text-xs font-bold">2</span>
+                    Simpan Script Agent (x100c_sync_agent.py)
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const scriptContent = `# OnTime HRMS - Dynamic Multi-Device Sync Agent
+import time, requests
+from zk import ZK
+
+SERVER_URL = "${typeof window !== 'undefined' ? window.location.origin : 'https://ontime.jelantik.com'}"
+API_TOKEN = "GANTI_DENGAN_TOKEN_ADMIN"
+
+def get_devices():
+    try:
+        r = requests.get(f"{SERVER_URL}/api/attendance-devices", headers={"Authorization": f"Bearer {API_TOKEN}"}, timeout=10)
+        return r.json().get("data", []) if r.status_code == 200 else []
+    except Exception:
+        return [{"id": ${guideDevice.id}, "name": "${guideDevice.name}", "ip_address": "${guideDevice.ip_address}", "port": ${guideDevice.port}, "comm_key": ${guideDevice.comm_key || 0}}]
+
+def sync_all():
+    devices = get_devices()
+    print(f"[*] Terdeteksi {len(devices)} mesin presensi aktif...")
+    for dev in devices:
+        try:
+            print(f"[*] Menghubungkan ke {dev.get('name')} ({dev.get('ip_address')})...")
+            zk = ZK(dev.get('ip_address'), port=int(dev.get('port', 4370)), timeout=5, password=int(dev.get('comm_key', 0) or 0))
+            conn = zk.connect()
+            logs = conn.get_attendance()
+            records = [{"pin": str(l.user_id), "timestamp": l.timestamp.strftime("%Y-%m-%d %H:%M:%S")} for l in logs]
+            zk.disconnect()
+            if records:
+                res = requests.post(f"{SERVER_URL}/api/attendance-devices/{dev.get('id')}/ingest", json={"logs": records}, headers={"Authorization": f"Bearer {API_TOKEN}"})
+                print(f"[✓] {dev.get('name')}: {res.json().get('message', 'Sukses')}")
+        except Exception as e:
+            print(f"[!] {dev.get('name')} Error: {e}")
+
+if __name__ == "__main__":
+    while True:
+        sync_all()
+        time.sleep(300) # Sync setiap 5 menit
+`;
+                      navigator.clipboard.writeText(scriptContent);
+                      setCopiedScript(true);
+                      toast.success("Script Multi-Device Agent berhasil disalin!");
+                      setTimeout(() => setCopiedScript(false), 2500);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 text-gray-700 dark:text-gray-200 rounded-lg text-[11px] font-semibold"
+                  >
+                    {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedScript ? "Tersalin!" : "Salin Script"}
+                  </button>
+                </div>
+
+                <div className="bg-gray-900 text-gray-200 p-3 rounded-xl font-mono text-[10px] max-h-40 overflow-y-auto leading-relaxed">
+                  <span className="text-gray-500"># Jalankan script ini di PC kantor:</span><br/>
+                  python x100c_sync_agent.py
+                </div>
+              </div>
+
+              <div className="p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-700">
+                <span className="font-semibold text-gray-800 dark:text-gray-200">Hasil:</span> Karyawan yang absen di mesin X100-C akan otomatis tersinkronisasi ke aplikasi mobile dan dashboard web OnTime setiap 5 menit.
+              </div>
+
+              <div className="flex justify-end pt-3 border-t border-gray-100 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setGuideDevice(null)}
+                  className="px-4 py-2 bg-[#800000] hover:bg-[#990000] text-white text-xs font-semibold rounded-xl"
+                >
+                  Selesai
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

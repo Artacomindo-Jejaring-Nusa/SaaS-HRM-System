@@ -187,6 +187,7 @@ async function downloadEmployeeImportTemplate(availableRoles: Role[]) {
           "nama (WAJIB)": emp.name,
           "email (WAJIB)": emp.email,
           "nik (OPSIONAL)": emp.nik || "",
+          "pin_fingerprint (OPSIONAL)": emp.fingerprint_pin || "",
           "password (WAJIB)": "", // Kosongkan agar password akun yang sudah ada tidak berubah
           "role_id (WAJIB)": emp.role_id || emp.role?.id || 3,
           "tanggal_gabung (OPSIONAL)": emp.join_date ? emp.join_date.substring(0, 10) : "",
@@ -211,6 +212,7 @@ async function downloadEmployeeImportTemplate(availableRoles: Role[]) {
         "nama (WAJIB)": "Andi Saputra",
         "email (WAJIB)": "andi@example.com",
         "nik (OPSIONAL)": "123456789",
+        "pin_fingerprint (OPSIONAL)": "101",
         "password (WAJIB)": "[Isi Password Minimal 8 Karakter]",
         "role_id (WAJIB)": 3,
         "tanggal_gabung (OPSIONAL)": "2024-01-01",
@@ -233,7 +235,7 @@ async function downloadEmployeeImportTemplate(availableRoles: Role[]) {
 
     const worksheet = XLSX.utils.json_to_sheet(templateData);
     worksheet["!cols"] = [
-      { wch: 30 }, { wch: 28 }, { wch: 18 }, { wch: 18 },
+      { wch: 30 }, { wch: 28 }, { wch: 18 }, { wch: 22 }, { wch: 18 },
       { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 30 },
       { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
       { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 18 },
@@ -244,10 +246,11 @@ async function downloadEmployeeImportTemplate(availableRoles: Role[]) {
     const guideData: Record<string, string>[] = [
       { "PANDUAN & DAFTAR JABATAN": ">>> PANDUAN PENGISIAN & PEMBARUAN DATA EXCEL <<<" },
       { "PANDUAN & DAFTAR JABATAN": "1. Tambah Orang Baru: Tambahkan baris baru di sheet 'Data Karyawan' dengan email baru." },
-      { "PANDUAN & DAFTAR JABATAN": "2. Edit Orang Lama: Edit langsung kolom yang ingin diperbarui (NIK, No HP, Jabatan, dll)." },
+      { "PANDUAN & DAFTAR JABATAN": "2. Edit Orang Lama: Edit langsung kolom yang ingin diperbarui (NIK, PIN Fingerprint, No HP, dll)." },
       { "PANDUAN & DAFTAR JABATAN": "3. Password: Pada data orang lama, jika dikosongkan password tidak akan berubah." },
       { "PANDUAN & DAFTAR JABATAN": "4. Format Tanggal: YYYY-MM-DD (Contoh: 2024-01-30)." },
-      { "PANDUAN & DAFTAR JABATAN": "5. DAFTAR KODE ROLE_ID:" },
+      { "PANDUAN & DAFTAR JABATAN": "5. PIN Fingerprint: Nomor ID / PIN yang didaftarkan di mesin presensi Solution X100-C / ZKTeco." },
+      { "PANDUAN & DAFTAR JABATAN": "6. DAFTAR KODE ROLE_ID:" },
     ];
 
     availableRoles.forEach((role) => {
@@ -906,6 +909,26 @@ const getCostCenterDisplay = (costCenter?: string) => {
   return costCenter;
 };
 
+const getTenureYears = (joinDate?: string) => {
+  if (!joinDate) return 0;
+  const joinYear = new Date(joinDate).getFullYear();
+  return isNaN(joinYear) ? 0 : Math.max(0, 2026 - joinYear);
+};
+
+type AutoValidationPreset = 'permanent' | '7_days' | '30_days' | '90_days' | 'custom';
+
+interface AuditLogItem {
+  id: number;
+  created_at: string;
+  actor?: { name?: string };
+  target_user_id?: number;
+  target_user?: { name?: string };
+  action?: string;
+  new_state?: { auto_validate_until?: string | null };
+  notes?: string;
+  ip_address?: string;
+}
+
 interface EmployeeAutoValidationCellProps {
   readonly emp: Employee;
   readonly isHRorAdmin: boolean;
@@ -1211,7 +1234,7 @@ function EmployeeTableRow({
         <div className="flex flex-col items-center gap-0.5">
           <span className="text-xs font-black text-gray-700">{formatDate(emp.join_date)}</span>
           <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1">
-            <Clock size={8} /> {emp.join_date ? Math.floor((Date.now() - new Date(emp.join_date).getTime()) / (1000 * 60 * 60 * 24 * 365)) : 0} Thn
+            <Clock size={8} /> {getTenureYears(emp.join_date)} Thn
           </span>
         </div>
       </td>
@@ -2231,7 +2254,7 @@ function EmployeesContent() {
 
   // Audit Logs State
   const [auditLogModalOpen, setAuditLogModalOpen] = useState(false);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
 
   const calculateExpiryDate = (preset: string, customDate: string): string | null => {
@@ -2273,9 +2296,10 @@ function EmployeesContent() {
       toast.success(`Validasi Otomatis untuk ${autoValidationEmp.name} berhasil diperbarui.`);
       setAutoValidationModalOpen(false);
       fetchEmployees(pagination?.current_page || 1);
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } } };
       console.error(e);
-      toast.error(e.response?.data?.message || 'Gagal memperbarui validasi otomatis.');
+      toast.error(err.response?.data?.message || 'Gagal memperbarui validasi otomatis.');
     } finally {
       setIsSubmitting(false);
     }
@@ -2309,9 +2333,10 @@ function EmployeesContent() {
       setBulkAutoValidationModalOpen(false);
       setSelectedIds([]);
       fetchEmployees(pagination?.current_page || 1);
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } } };
       console.error(e);
-      toast.error(e.response?.data?.message || 'Gagal menerapkan aksi massal.');
+      toast.error(err.response?.data?.message || 'Gagal menerapkan aksi massal.');
     } finally {
       setIsSubmitting(false);
     }
@@ -2362,7 +2387,7 @@ function EmployeesContent() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {auditLogs.map((log: any) => (
+            {auditLogs.map((log: AuditLogItem) => (
               <tr key={log.id} className="hover:bg-slate-50/50">
                 <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-600">
                   {new Date(log.created_at).toLocaleString('id-ID', {
@@ -2380,7 +2405,7 @@ function EmployeesContent() {
                   {log.target_user?.name || `ID #${log.target_user_id}`}
                 </td>
                 <td className="px-4 py-3">
-                  {renderAuditLogActionBadge(log.action)}
+                  {renderAuditLogActionBadge(log.action || '')}
                 </td>
                 <td className="px-4 py-3 text-slate-600 font-medium">
                   {log.new_state?.auto_validate_until
@@ -2758,7 +2783,7 @@ function EmployeesContent() {
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => setAutoValidationExpiryPreset(item.id as any)}
+                        onClick={() => setAutoValidationExpiryPreset(item.id as AutoValidationPreset)}
                         className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${
                           autoValidationExpiryPreset === item.id
                             ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm'
@@ -2890,7 +2915,7 @@ function EmployeesContent() {
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => setBulkAutoValidationExpiryPreset(item.id as any)}
+                        onClick={() => setBulkAutoValidationExpiryPreset(item.id as AutoValidationPreset)}
                         className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${
                           bulkAutoValidationExpiryPreset === item.id
                             ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm'

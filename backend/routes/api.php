@@ -204,6 +204,7 @@ Route::middleware(['auth:sanctum', TenantMiddleware::class])->group(function () 
     Route::delete('/attendance-devices/{id}', [AttendanceDeviceController::class, 'destroy']);
     Route::post('/attendance-devices/{id}/test', [AttendanceDeviceController::class, 'testConnection']);
     Route::post('/attendance-devices/{id}/sync', [AttendanceDeviceController::class, 'sync']);
+    Route::post('/attendance-devices/{id}/ingest', [AttendanceDeviceController::class, 'ingest']);
 
     // Dinas Luar Approval
     Route::get('/attendance/dinas-luar/pending', [AttendanceController::class, 'pendingDinasLuar']);

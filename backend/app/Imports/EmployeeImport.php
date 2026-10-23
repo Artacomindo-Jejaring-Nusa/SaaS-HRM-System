@@ -60,6 +60,7 @@ class EmployeeImport implements ToModel, WithHeadingRow
     {
         $stringFields = [
             'nik' => 'nik',
+            'fingerprint_pin' => 'pin_fingerprint',
             'phone' => 'nomor_telepon',
             'address' => 'alamat',
             'ktp_no' => 'nomor_ktp',
@@ -77,6 +78,13 @@ class EmployeeImport implements ToModel, WithHeadingRow
             $val = $this->getValue($row, $key);
             if ($val !== null && $val !== '') {
                 $data[$field] = (string) $val;
+            }
+        }
+
+        if (! isset($data['fingerprint_pin'])) {
+            $altPin = $this->getValue($row, 'fingerprint_pin');
+            if ($altPin !== null && $altPin !== '') {
+                $data['fingerprint_pin'] = (string) $altPin;
             }
         }
 
