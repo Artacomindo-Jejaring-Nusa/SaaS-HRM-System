@@ -55,23 +55,62 @@ const getCellStyle = (record: any, isWk: boolean) => {
     : "bg-emerald-50 text-emerald-800 border border-emerald-100/70 rounded-md shadow-[inset_0_0_0_1px_rgba(16,185,129,0.1)]";
 };
 
-// Nested Components for each Tab
-const AttendanceCell = ({ record, isWk, onEdit }: { record: any, isWk: boolean, onEdit: (r: any) => void }) => {
+const getCellTitle = (record: any): string | undefined => {
+  if (!record) {
+    return undefined;
+  }
+  if (record.attendance_type === 'dinas_luar') {
+    return `Dinas Luar: ${record.dinas_luar_destination || 'Tugas Luar Kantor'}`;
+  }
+  if (record.attendance_type === 'wfh') {
+    return 'WFA (Work From Anywhere)';
+  }
+  return 'Absen Di Kantor';
+};
+
+const AttendanceCellContent = ({ record, isWk }: { record: any, isWk: boolean }) => {
+  if (!record) {
+    return (
+      <span className="text-gray-300 font-normal">
+        {isWk ? <span className="text-[9px] text-gray-300">Off</span> : "-"}
+      </span>
+    );
+  }
+
   const { checkInStr, checkOutStr } = getCheckInOutStrings(record);
   const cellStyle = getCellStyle(record, isWk);
+  const isDinasLuar = record.attendance_type === 'dinas_luar';
+  const isWfa = record.attendance_type === 'wfh';
 
+  return (
+    <div className={`py-1 px-1 flex flex-col items-center justify-center font-bold font-mono tracking-tighter ${cellStyle}`}>
+      <div className="flex items-center justify-center gap-0.5 w-full">
+        <span className="leading-tight">{checkInStr}</span>
+        {isDinasLuar && (
+          <span className="px-0.5 py-0.2 rounded text-[7px] font-black uppercase bg-rose-200/90 text-rose-800 leading-none shrink-0" title="Dinas Luar">
+            DL
+          </span>
+        )}
+        {isWfa && (
+          <span className="px-0.5 py-0.2 rounded text-[7px] font-black uppercase bg-indigo-200/90 text-indigo-800 leading-none shrink-0" title="WFA (Work From Anywhere)">
+            WFA
+          </span>
+        )}
+      </div>
+      <span className={`text-[8px] leading-tight ${record.check_out ? 'opacity-65' : 'text-rose-500 font-extrabold uppercase'}`}>
+        {checkOutStr}
+      </span>
+    </div>
+  );
+};
+
+// Nested Components for each Tab
+const AttendanceCell = ({ record, isWk, onEdit }: { record: any, isWk: boolean, onEdit: (r: any) => void }) => {
   const clickHandler = record ? () => onEdit(record) : undefined;
   const cursorStyle = record ? 'cursor-pointer hover:brightness-95 hover:scale-95' : '';
   const isWeekendOff = isWk && !record;
   const weekendStyle = isWeekendOff ? 'bg-gray-50/40' : '';
-  const isDinasLuar = record?.attendance_type === 'dinas_luar';
-  const isWfa = record?.attendance_type === 'wfh';
-
-  const cellTitle = record 
-    ? (isDinasLuar 
-        ? `Dinas Luar: ${record.dinas_luar_destination || 'Tugas Luar Kantor'}` 
-        : (isWfa ? 'WFA (Work From Anywhere)' : 'Absen Di Kantor'))
-    : undefined;
+  const cellTitle = getCellTitle(record);
 
   return (
     <td 
@@ -79,30 +118,7 @@ const AttendanceCell = ({ record, isWk, onEdit }: { record: any, isWk: boolean, 
       className={`px-1 py-1.5 text-center text-[10px] border-r border-[#ebedf0] align-middle select-none transition-all ${cursorStyle} ${weekendStyle}`}
       title={cellTitle}
     >
-      {record ? (
-        <div className={`py-1 px-1 flex flex-col items-center justify-center font-bold font-mono tracking-tighter ${cellStyle}`}>
-          <div className="flex items-center justify-center gap-0.5 w-full">
-            <span className="leading-tight">{checkInStr}</span>
-            {isDinasLuar && (
-              <span className="px-0.5 py-0.2 rounded text-[7px] font-black uppercase bg-rose-200/90 text-rose-800 leading-none shrink-0" title="Dinas Luar">
-                DL
-              </span>
-            )}
-            {isWfa && (
-              <span className="px-0.5 py-0.2 rounded text-[7px] font-black uppercase bg-indigo-200/90 text-indigo-800 leading-none shrink-0" title="WFA (Work From Anywhere)">
-                WFA
-              </span>
-            )}
-          </div>
-          <span className={`text-[8px] leading-tight ${record.check_out ? 'opacity-65' : 'text-rose-500 font-extrabold uppercase'}`}>
-            {checkOutStr}
-          </span>
-        </div>
-      ) : (
-        <span className="text-gray-300 font-normal">
-          {isWk ? <span className="text-[9px] text-gray-300">Off</span> : "-"}
-        </span>
-      )}
+      <AttendanceCellContent record={record} isWk={isWk} />
     </td>
   );
 };

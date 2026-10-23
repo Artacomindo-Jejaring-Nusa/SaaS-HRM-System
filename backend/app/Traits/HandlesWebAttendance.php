@@ -20,26 +20,15 @@ trait HandlesWebAttendance
         $now = now();
         $today = Carbon::today()->toDateString();
 
-        $existingError = $this->validateExistingWebCheckIn($user, $today);
-        if ($existingError) {
-            return $existingError;
-        }
-
-        if (! $request->hasFile('image') && ! $request->image && ! $request->image_base64) {
-            return $this->errorResponse('Foto selfie wajib diunggah sebagai bukti kehadiran.', 422);
+        $preconditionError = $this->validateWebCheckInPreconditions($user, $request, $today);
+        if ($preconditionError) {
+            return $preconditionError;
         }
 
         $imageName = $this->saveCompressedAttendanceImage($request, 'web_in');
         $isDinasLuar = $request->attendance_type === 'dinas_luar';
         $isWfa = $request->attendance_type === 'wfh';
         $dinasDestination = $request->input('dinas_luar_destination');
-
-        if ($isWfa) {
-            $isWfhActive = $user->is_wfh && ($user->wfh_start_date <= $today && $user->wfh_end_date >= $today);
-            if (! $isWfhActive) {
-                return $this->errorResponse('Anda tidak memiliki izin WFA (Work From Anywhere) aktif untuk hari ini.', 403);
-            }
-        }
 
         $schedule = Schedule::with('shift')
             ->where('user_id', $user->id)
@@ -67,11 +56,41 @@ trait HandlesWebAttendance
         return $this->successResponse($attendance->fresh(), $message);
     }
 
+    private function validateWebCheckInPreconditions(User $user, Request $request, string $today): ?JsonResponse
+    {
+        $existingError = $this->validateExistingWebCheckIn($user, $today);
+        if ($existingError) {
+            return $existingError;
+        }
+
+        if (! $request->hasFile('image') && ! $request->image && ! $request->image_base64) {
+            return $this->errorResponse('Foto selfie wajib diunggah sebagai bukti kehadiran.', 422);
+        }
+
+        if ($request->attendance_type === 'wfh') {
+            $isWfhActive = $user->is_wfh && ($user->wfh_start_date <= $today && $user->wfh_end_date >= $today);
+            if (! $isWfhActive) {
+                return $this->errorResponse('Anda tidak memiliki izin WFA (Work From Anywhere) aktif untuk hari ini.', 403);
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveWebAttendanceType(Request $request): string
+    {
+        if ($request->attendance_type === 'dinas_luar') {
+            return 'dinas_luar';
+        }
+        if ($request->attendance_type === 'wfh') {
+            return 'wfh';
+        }
+        return 'office';
+    }
+
     private function buildWebAttendanceData(User $user, Request $request, ?string $imageName, string $normalStatus, ?string $anomalyReason, bool $isWhitelisted, Carbon $now): array
     {
-        $isDinasLuar = $request->attendance_type === 'dinas_luar';
-        $isWfa = $request->attendance_type === 'wfh';
-        $resolvedAttendanceType = $isDinasLuar ? 'dinas_luar' : ($isWfa ? 'wfh' : 'office');
+        $resolvedAttendanceType = $this->resolveWebAttendanceType($request);
         $hasAnomaly = $anomalyReason !== null;
         $isAutoValid = $isWhitelisted;
         $webApprovalStatus = $isAutoValid ? 'valid' : 'pending';

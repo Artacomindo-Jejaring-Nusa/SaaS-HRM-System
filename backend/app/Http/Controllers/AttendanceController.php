@@ -30,11 +30,8 @@ class AttendanceController extends Controller
         $user = $request->user();
         $now = now();
         $today = Carbon::today()->toDateString();
-        $response = null;
-        $isDinasLuar = $request->attendance_type === 'dinas_luar';
-        $isWfa = $request->attendance_type === 'wfh';
 
-        if ($isWfa) {
+        if ($request->attendance_type === 'wfh') {
             $isWfhActive = $user->is_wfh && ($user->wfh_start_date <= $today && $user->wfh_end_date >= $today);
             if (! $isWfhActive) {
                 return $this->errorResponse('Anda tidak memiliki izin WFA (Work From Anywhere) aktif untuk hari ini.', 403);
@@ -45,38 +42,56 @@ class AttendanceController extends Controller
             ->whereDate('check_in', $today)
             ->first();
 
-        if ($attendance) {
-            // Mobile Priority Conflict Resolution (Section 5 Spec)
-            if ($attendance->channel === 'web' && $attendance->web_approval_status === 'pending') {
-                // Pending web attendance is overwritten by cryptographic on-device ML verified mobile attendance
-                $attendance->delete();
-                $attendance = null;
-            } elseif ($attendance->channel === 'web' && $attendance->web_approval_status === 'valid') {
-                // Both entries valid -> flag entry as suspicious for Superadmin audit to prevent duplicated working hours
-                $attendance->update([
-                    'is_suspicious' => true,
-                    'suspicious_reason' => 'Konflik Entri Ganda: Terdeteksi Absen Web Valid dan Absen Mobile Sinkronisasi pada hari yang sama.',
-                ]);
-                $response = $this->errorResponse('Konflik Sinkronisasi: Anda sudah memiliki catatan Absen Web yang tervalidasi hari ini. Data ditandai untuk ditinjau Superadmin.', 400);
-            } else {
-                $response = $this->errorResponse('Anda sudah check-in hari ini.', 400);
-            }
+        $conflictResponse = $this->resolveExistingAttendanceConflict($attendance);
+        if ($conflictResponse) {
+            return $conflictResponse;
         }
 
-        if (! $attendance && ! $response) {
-            if ($securityError = $this->validateDeviceAndSecurity($user, $request)) {
-                $response = $this->errorResponse($securityError['message'], $securityError['code']);
-            } elseif ($isDinasLuar || $isWfa) {
-                // Dinas Luar / WFA: skip geofence, but still requires selfie (validated by request rules)
-                $response = $this->processCheckIn($user, $request, null, $now, $today);
-            } elseif (! ($geoResult = $this->validateGeofencing($user, $request))['success']) {
-                $response = $this->errorResponse($geoResult['message'], $geoResult['status']);
-            } else {
-                $response = $this->processCheckIn($user, $request, $geoResult['office'], $now, $today);
-            }
+        return $this->executeCheckInFlow($user, $request, $now, $today);
+    }
+
+    private function resolveExistingAttendanceConflict(?Attendance &$attendance): ?JsonResponse
+    {
+        if (! $attendance) {
+            return null;
         }
 
-        return $response;
+        if ($attendance->channel === 'web' && $attendance->web_approval_status === 'pending') {
+            $attendance->delete();
+            $attendance = null;
+            return null;
+        }
+
+        if ($attendance->channel === 'web' && $attendance->web_approval_status === 'valid') {
+            $attendance->update([
+                'is_suspicious' => true,
+                'suspicious_reason' => 'Konflik Entri Ganda: Terdeteksi Absen Web Valid dan Absen Mobile Sinkronisasi pada hari yang sama.',
+            ]);
+            return $this->errorResponse('Konflik Sinkronisasi: Anda sudah memiliki catatan Absen Web yang tervalidasi hari ini. Data ditandai untuk ditinjau Superadmin.', 400);
+        }
+
+        return $this->errorResponse('Anda sudah check-in hari ini.', 400);
+    }
+
+    private function executeCheckInFlow(User $user, StoreAttendanceRequest $request, Carbon $now, string $today): JsonResponse
+    {
+        if ($securityError = $this->validateDeviceAndSecurity($user, $request)) {
+            return $this->errorResponse($securityError['message'], $securityError['code']);
+        }
+
+        $isDinasLuar = $request->attendance_type === 'dinas_luar';
+        $isWfa = $request->attendance_type === 'wfh';
+
+        if ($isDinasLuar || $isWfa) {
+            return $this->processCheckIn($user, $request, null, $now, $today);
+        }
+
+        $geoResult = $this->validateGeofencing($user, $request);
+        if (! $geoResult['success']) {
+            return $this->errorResponse($geoResult['message'], $geoResult['status']);
+        }
+
+        return $this->processCheckIn($user, $request, $geoResult['office'], $now, $today);
     }
 
     private function processCheckIn(User $user, StoreAttendanceRequest $request, $matchedOffice, Carbon $now, string $today)
@@ -103,11 +118,21 @@ class AttendanceController extends Controller
         return $this->successResponse($attendance, $message);
     }
 
+    private function resolveAttendanceType(StoreAttendanceRequest $request): string
+    {
+        if ($request->attendance_type === 'dinas_luar') {
+            return 'dinas_luar';
+        }
+        if ($request->attendance_type === 'wfh') {
+            return 'wfh';
+        }
+        return 'office';
+    }
+
     private function buildMobileAttendanceData(User $user, StoreAttendanceRequest $request, $matchedOffice, string $status, ?string $imageName, Carbon $now): array
     {
         $isDinasLuar = $request->attendance_type === 'dinas_luar';
-        $isWfa = $request->attendance_type === 'wfh';
-        $resolvedAttendanceType = $isDinasLuar ? 'dinas_luar' : ($isWfa ? 'wfh' : 'office');
+        $resolvedAttendanceType = $this->resolveAttendanceType($request);
         $isBypass = $request->boolean('bypass_face_recognition');
         $isAutoValidated = $user->isWebAttendanceAutoValidated();
 
@@ -127,13 +152,7 @@ class AttendanceController extends Controller
         ];
 
         if ($isBypass) {
-            $bypassReason = $request->input('bypass_reason', self::DEFAULT_FACE_BYPASS_REASON);
-            $data['is_suspicious'] = ! $isAutoValidated;
-            $data['suspicious_reason'] = $isAutoValidated
-                ? "Auto-Validated: Tanpa verifikasi wajah ({$bypassReason})"
-                : "Tanpa verifikasi wajah: {$bypassReason}";
-            $data['web_approval_status'] = $isAutoValidated ? 'valid' : 'pending';
-            $data['web_approved_at'] = $isAutoValidated ? $now : null;
+            $this->applyFaceBypassData($data, $request, $isAutoValidated, $now);
         }
 
         if ($isDinasLuar) {
@@ -149,6 +168,17 @@ class AttendanceController extends Controller
         }
 
         return $data;
+    }
+
+    private function applyFaceBypassData(array &$data, StoreAttendanceRequest $request, bool $isAutoValidated, Carbon $now): void
+    {
+        $bypassReason = $request->input('bypass_reason', self::DEFAULT_FACE_BYPASS_REASON);
+        $data['is_suspicious'] = ! $isAutoValidated;
+        $data['suspicious_reason'] = $isAutoValidated
+            ? "Auto-Validated: Tanpa verifikasi wajah ({$bypassReason})"
+            : "Tanpa verifikasi wajah: {$bypassReason}";
+        $data['web_approval_status'] = $isAutoValidated ? 'valid' : 'pending';
+        $data['web_approved_at'] = $isAutoValidated ? $now : null;
     }
 
     private function recordCheckInEmployeeTrack(User $user, StoreAttendanceRequest $request, Carbon $now): void

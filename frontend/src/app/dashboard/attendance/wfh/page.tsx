@@ -51,6 +51,170 @@ interface PaginationData {
 
 type WfaFilterTab = "all" | "active" | "scheduled" | "office";
 
+const formatDate = (dateString?: string) => {
+  if (!dateString) return "-";
+  return new Date(dateString).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
+};
+
+const getDaysRemaining = (endDate?: string, todayStr?: string) => {
+  if (!endDate) return null;
+  const end = new Date(endDate);
+  const today = new Date(todayStr || new Date().toISOString().split("T")[0]);
+  const diffTime = end.getTime() - today.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+
+function EmployeeWfaStatusBadge({ 
+  isDateActive, 
+  isScheduledFuture, 
+  isWfh 
+}: { 
+  isDateActive: boolean; 
+  isScheduledFuture: boolean; 
+  isWfh: boolean; 
+}) {
+  if (isDateActive) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tight bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        <span>🏡 WFA Aktif</span>
+      </span>
+    );
+  }
+
+  if (isScheduledFuture) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight bg-amber-50 text-amber-700 border border-amber-200">
+        <Clock size={11} />
+        <span>📅 Terjadwal</span>
+      </span>
+    );
+  }
+
+  if (isWfh) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight bg-gray-100 text-gray-500 border border-gray-200">
+        <span>Kedaluwarsa</span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight bg-slate-50 text-slate-500 border border-slate-200">
+      <Building2 size={11} className="text-slate-400" />
+      <span>Di Kantor</span>
+    </span>
+  );
+}
+
+function EmployeeWfaRow({
+  emp,
+  todayStr,
+  isSelected,
+  onToggleSelect,
+  onOpenModal,
+}: {
+  emp: Employee;
+  todayStr: string;
+  isSelected: boolean;
+  onToggleSelect: (id: number) => void;
+  onOpenModal: (emp: Employee) => void;
+}) {
+  const isDateActive = Boolean(
+    emp.is_wfh && 
+    emp.wfh_start_date && 
+    emp.wfh_end_date && 
+    todayStr >= emp.wfh_start_date && 
+    todayStr <= emp.wfh_end_date
+  );
+
+  const isScheduledFuture = Boolean(
+    emp.is_wfh && 
+    emp.wfh_start_date && 
+    todayStr < emp.wfh_start_date
+  );
+
+  const remainingDays = isDateActive ? getDaysRemaining(emp.wfh_end_date, todayStr) : null;
+
+  return (
+    <tr 
+      key={emp.id} 
+      className={`hover:bg-indigo-50/20 transition-colors ${isSelected ? "bg-indigo-50/40" : ""}`}
+    >
+      <td className="px-4 py-3 text-center">
+        <input 
+          type="checkbox" 
+          checked={isSelected}
+          onChange={() => onToggleSelect(emp.id)}
+          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+        />
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-3">
+          <Avatar className="size-9 border border-gray-100 shadow-2xs">
+            <AvatarImage src={emp.profile_photo_url} alt={emp.name} />
+            <AvatarFallback className="bg-indigo-100 text-indigo-700 font-black text-xs">
+              {emp.name.substring(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col min-w-0">
+            <span className="font-bold text-gray-900 truncate">{emp.name}</span>
+            <span className="text-[11px] text-gray-400 truncate">{emp.email}</span>
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-[11px] font-semibold">
+          {emp.role?.name || "Karyawan"}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-center">
+        <EmployeeWfaStatusBadge 
+          isDateActive={isDateActive} 
+          isScheduledFuture={isScheduledFuture} 
+          isWfh={Boolean(emp.is_wfh)} 
+        />
+      </td>
+      <td className="px-4 py-3">
+        {emp.is_wfh && emp.wfh_start_date ? (
+          <div className="flex flex-col">
+            <span className="font-semibold text-gray-800 text-[11px]">
+              {formatDate(emp.wfh_start_date)} - {formatDate(emp.wfh_end_date)}
+            </span>
+            {isDateActive && remainingDays !== null && (
+              <span className="text-[10px] text-emerald-600 font-bold">
+                {remainingDays === 0 ? "Berakhir hari ini" : `Sisa ${remainingDays} hari`}
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-gray-400 text-[11px] italic">Presensi kantor normal</span>
+        )}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <PermissionGuard slug="manage-wfh">
+          <button
+            type="button"
+            onClick={() => onOpenModal(emp)}
+            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              isDateActive
+                ? "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/80"
+                : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200/80"
+            }`}
+          >
+            <Settings2 size={13} />
+            <span>{isDateActive ? "Ubah / Stop" : "Atur WFA"}</span>
+          </button>
+        </PermissionGuard>
+      </td>
+    </tr>
+  );
+}
+
 function WFHContent() {
   const searchParams = useSearchParams();
   const initialSearch = searchParams.get("search") || "";
@@ -206,24 +370,6 @@ function WFHContent() {
     }
   };
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "short",
-      year: "numeric"
-    });
-  };
-
-  const getDaysRemaining = (endDate?: string) => {
-    if (!endDate) return null;
-    const end = new Date(endDate);
-    const today = new Date(todayStr);
-    const diffTime = end.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
-
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Top Banner / Header */}
@@ -235,7 +381,7 @@ function WFHContent() {
             <span>Fitur Khusus Super Admin & HR</span>
           </div>
           <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white flex items-center gap-2.5">
-            Manajemen WFA
+            <span>Manajemen WFA</span>
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
               Work From Anywhere
             </span>
@@ -298,7 +444,7 @@ function WFHContent() {
             }`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            WFA Aktif
+            <span>WFA Aktif</span>
           </button>
           <button
             onClick={() => setFilterTab("scheduled")}
@@ -309,7 +455,7 @@ function WFHContent() {
             }`}
           >
             <Clock size={12} />
-            Terjadwal
+            <span>Terjadwal</span>
           </button>
           <button
             onClick={() => setFilterTab("office")}
@@ -320,7 +466,7 @@ function WFHContent() {
             }`}
           >
             <Building2 size={12} />
-            Di Kantor (Normal)
+            <span>Di Kantor (Normal)</span>
           </button>
         </div>
 
@@ -339,11 +485,13 @@ function WFHContent() {
 
       {/* Main Table */}
       <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/40 overflow-hidden">
-        {loading ? (
+        {loading && (
           <div className="p-8">
             <TableSkeleton rows={6} cols={5} />
           </div>
-        ) : employees.length === 0 ? (
+        )}
+
+        {!loading && employees.length === 0 && (
           <div className="py-16 px-4 text-center space-y-3">
             <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center mx-auto">
               <Home size={26} />
@@ -353,7 +501,9 @@ function WFHContent() {
               {searchQuery ? `Tidak ada hasil untuk pencarian "${searchQuery}". Coba kata kunci lain.` : "Belum ada karyawan pada filter ini."}
             </p>
           </div>
-        ) : (
+        )}
+
+        {!loading && employees.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[760px]">
               <thead>
@@ -384,114 +534,16 @@ function WFHContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs">
-                {employees.map((emp) => {
-                  const isDateActive = !!(
-                    emp.is_wfh && 
-                    emp.wfh_start_date && 
-                    emp.wfh_end_date && 
-                    todayStr >= emp.wfh_start_date && 
-                    todayStr <= emp.wfh_end_date
-                  );
-
-                  const isScheduledFuture = !!(
-                    emp.is_wfh && 
-                    emp.wfh_start_date && 
-                    todayStr < emp.wfh_start_date
-                  );
-
-                  const remainingDays = isDateActive ? getDaysRemaining(emp.wfh_end_date) : null;
-
-                  return (
-                    <tr 
-                      key={emp.id} 
-                      className={`hover:bg-indigo-50/20 transition-colors ${
-                        selectedIds.includes(emp.id) ? "bg-indigo-50/40" : ""
-                      }`}
-                    >
-                      <td className="px-4 py-3 text-center">
-                        <input 
-                          type="checkbox" 
-                          checked={selectedIds.includes(emp.id)}
-                          onChange={() => handleSelectRow(emp.id)}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="size-9 border border-gray-100 shadow-2xs">
-                            <AvatarImage src={emp.profile_photo_url} alt={emp.name} />
-                            <AvatarFallback className="bg-indigo-100 text-indigo-700 font-black text-xs">
-                              {emp.name.substring(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex flex-col min-w-0">
-                            <span className="font-bold text-gray-900 truncate">{emp.name}</span>
-                            <span className="text-[11px] text-gray-400 truncate">{emp.email}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-[11px] font-semibold">
-                          {emp.role?.name || "Karyawan"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {isDateActive ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tight bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            🏡 WFA Aktif
-                          </span>
-                        ) : isScheduledFuture ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight bg-amber-50 text-amber-700 border border-amber-200">
-                            <Clock size={11} />
-                            📅 Terjadwal
-                          </span>
-                        ) : emp.is_wfh ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight bg-gray-100 text-gray-500 border border-gray-200">
-                            Kedaluwarsa
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight bg-slate-50 text-slate-500 border border-slate-200">
-                            <Building2 size={11} className="text-slate-400" />
-                            Di Kantor
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {emp.is_wfh && emp.wfh_start_date ? (
-                          <div className="flex flex-col">
-                            <span className="font-semibold text-gray-800 text-[11px]">
-                              {formatDate(emp.wfh_start_date)} - {formatDate(emp.wfh_end_date)}
-                            </span>
-                            {isDateActive && remainingDays !== null && (
-                              <span className="text-[10px] text-emerald-600 font-bold">
-                                {remainingDays === 0 ? "Berakhir hari ini" : `Sisa ${remainingDays} hari`}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 text-[11px] italic">Presensi kantor normal</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <PermissionGuard slug="manage-wfh">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenSingleModal(emp)}
-                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                              isDateActive
-                                ? "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/80"
-                                : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200/80"
-                            }`}
-                          >
-                            <Settings2 size={13} />
-                            {isDateActive ? "Ubah / Stop" : "Atur WFA"}
-                          </button>
-                        </PermissionGuard>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {employees.map((emp) => (
+                  <EmployeeWfaRow
+                    key={emp.id}
+                    emp={emp}
+                    todayStr={todayStr}
+                    isSelected={selectedIds.includes(emp.id)}
+                    onToggleSelect={handleSelectRow}
+                    onOpenModal={handleOpenSingleModal}
+                  />
+                ))}
               </tbody>
             </table>
           </div>

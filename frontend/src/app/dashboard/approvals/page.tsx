@@ -131,15 +131,19 @@ interface ApprovalItem {
   current_step_info?: Record<string, any>;
 }
 
+type CoordinateValue = number | string | null;
+
 interface TeamMemberAttendance {
-  id: number;
-  attendance_id?: number | null;
+  id: number | string;
   name: string;
   role: string;
-  photo_url?: string;
-  status: string;
+  avatar?: string;
+  photo_url?: string | null;
+  shift?: string;
   check_in?: string | null;
   check_out?: string | null;
+  status: "Hadir" | "Terlambat" | "Belum Masuk" | "Selesai" | "Alpha" | "Izin" | "Cuti" | "Dinas Luar";
+  attendance_id?: number | null;
   check_in_full?: string | null;
   check_out_full?: string | null;
   attendance_type?: string;
@@ -152,10 +156,10 @@ interface TeamMemberAttendance {
   image_out?: string | null;
   image_in_url?: string | null;
   image_out_url?: string | null;
-  latitude_in?: number | string | null;
-  longitude_in?: number | string | null;
-  latitude_out?: number | string | null;
-  longitude_out?: number | string | null;
+  latitude_in?: CoordinateValue;
+  longitude_in?: CoordinateValue;
+  latitude_out?: CoordinateValue;
+  longitude_out?: CoordinateValue;
   location_label?: string | null;
   work_pattern?: "office_hour" | "shift" | "flexible";
   user_attendance_type?: string;
@@ -521,25 +525,35 @@ const renderMemberStatusBadge = (member: TeamMemberAttendance) => {
     );
   }
 
-  return (
-    <div className="flex flex-col items-end gap-1.5">
-      {/* 3-Label Location Badge: Di Kantor, Dinas Luar, WFA */}
-      {isDinasLuar ? (
+  const renderLocationBadge = (isDl?: boolean, isWf?: boolean) => {
+    if (isDl) {
+      return (
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200 shadow-xs">
           <MapPin size={10} className="text-rose-600 shrink-0" />
           <span>Dinas Luar</span>
         </span>
-      ) : isWfa ? (
+      );
+    }
+    if (isWf) {
+      return (
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-xs">
           <Laptop size={10} className="text-indigo-600 shrink-0" />
           <span>WFA</span>
         </span>
-      ) : (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200">
-          <Building2 size={10} className="text-slate-500 shrink-0" />
-          <span>Di Kantor</span>
-        </span>
-      )}
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200">
+        <Building2 size={10} className="text-slate-500 shrink-0" />
+        <span>Di Kantor</span>
+      </span>
+    );
+  };
+
+  return (
+    <div className="flex flex-col items-end gap-1.5">
+      {/* 3-Label Location Badge: Di Kantor, Dinas Luar, WFA */}
+      {renderLocationBadge(isDinasLuar, isWfa)}
 
       {/* Main Status Badge */}
       {member.status === "Hadir" ? (
@@ -1368,16 +1382,20 @@ export default function ApprovalsPage() {
       );
     }
 
+    const getTeamMemberCardClass = (m: TeamMemberAttendance) => {
+      if (m.is_dinas_luar || m.attendance_type === "dinas_luar") {
+        return "border-rose-200/90 bg-gradient-to-b from-rose-50/20 to-white";
+      }
+      if (m.is_wfa || m.attendance_type === "wfh") {
+        return "border-indigo-200/90 bg-gradient-to-b from-indigo-50/20 to-white";
+      }
+      return "border-slate-200";
+    };
+
     return filteredTeam.map((member) => (
       <div
         key={member.id}
-        className={`bg-white rounded-2xl border p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-4 ${
-          member.is_dinas_luar || member.attendance_type === "dinas_luar"
-            ? "border-rose-200/90 bg-gradient-to-b from-rose-50/20 to-white"
-            : (member.is_wfa || member.attendance_type === "wfh"
-                ? "border-indigo-200/90 bg-gradient-to-b from-indigo-50/20 to-white"
-                : "border-slate-200")
-        }`}
+        className={`bg-white rounded-2xl border p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-4 ${getTeamMemberCardClass(member)}`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -2814,9 +2832,12 @@ export default function ApprovalsPage() {
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700">
                   <span className="text-[10px] uppercase text-slate-400 font-extrabold tracking-wider">Status:</span>
                   <span className={
-                    teamStatusFilter === "di_kantor" ? "text-emerald-700" :
-                    teamStatusFilter === "dinas_luar" ? "text-rose-700" :
-                    teamStatusFilter === "finished" ? "text-blue-700" : "text-amber-700"
+                    (() => {
+                      if (teamStatusFilter === "di_kantor") return "text-emerald-700";
+                      if (teamStatusFilter === "dinas_luar") return "text-rose-700";
+                      if (teamStatusFilter === "finished") return "text-blue-700";
+                      return "text-amber-700";
+                    })()
                   }>
                     {teamStatusFilter === "di_kantor" && "Di Kantor"}
                     {teamStatusFilter === "dinas_luar" && "Dinas Luar"}
@@ -3463,13 +3484,29 @@ export default function ApprovalsPage() {
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Waktu Masuk</span>
                   <span className="text-sm font-black text-slate-800 mt-0.5 block">
-                    {selectedTeamDetail.check_in_full ? new Date(selectedTeamDetail.check_in_full).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WIB" : (selectedTeamDetail.check_in ? selectedTeamDetail.check_in + " WIB" : "-- : --")}
+                    {(() => {
+                      if (selectedTeamDetail.check_in_full) {
+                        return new Date(selectedTeamDetail.check_in_full).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WIB";
+                      }
+                      if (selectedTeamDetail.check_in) {
+                        return selectedTeamDetail.check_in + " WIB";
+                      }
+                      return "-- : --";
+                    })()}
                   </span>
                 </div>
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Waktu Pulang</span>
                   <span className="text-sm font-black text-slate-800 mt-0.5 block">
-                    {selectedTeamDetail.check_out_full ? new Date(selectedTeamDetail.check_out_full).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WIB" : (selectedTeamDetail.check_out ? selectedTeamDetail.check_out + " WIB" : "Belum Check-Out")}
+                    {(() => {
+                      if (selectedTeamDetail.check_out_full) {
+                        return new Date(selectedTeamDetail.check_out_full).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WIB";
+                      }
+                      if (selectedTeamDetail.check_out) {
+                        return selectedTeamDetail.check_out + " WIB";
+                      }
+                      return "Belum Check-Out";
+                    })()}
                   </span>
                 </div>
               </div>
@@ -3486,8 +3523,10 @@ export default function ApprovalsPage() {
                   <div className="rounded-2xl border border-slate-200 p-3 bg-slate-50 flex flex-col items-center">
                     <span className="text-[11px] font-bold text-slate-600 mb-2">Foto Selfie Check-In</span>
                     {selectedTeamDetail.image_in_url || selectedTeamDetail.image_in ? (
-                      <div
-                        className="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white aspect-[4/3] w-full flex items-center justify-center"
+                      <button
+                        type="button"
+                        aria-label="Perbesar Foto Masuk"
+                        className="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white aspect-[4/3] w-full flex items-center justify-center p-0 text-left"
                         onClick={() => {
                           const url = selectedTeamDetail.image_in_url || getStorageUrl(selectedTeamDetail.image_in || "");
                           setPreviewImage({ url, title: `Foto Masuk: ${selectedTeamDetail.name}` });
@@ -3505,7 +3544,7 @@ export default function ApprovalsPage() {
                           <Eye size={16} />
                           <span>Perbesar</span>
                         </div>
-                      </div>
+                      </button>
                     ) : (
                       <div className="w-full aspect-[4/3] rounded-xl border border-dashed border-slate-200 bg-white flex flex-col items-center justify-center text-slate-300 p-4 text-center">
                         <Camera size={24} className="mb-1" />
@@ -3518,8 +3557,10 @@ export default function ApprovalsPage() {
                   <div className="rounded-2xl border border-slate-200 p-3 bg-slate-50 flex flex-col items-center">
                     <span className="text-[11px] font-bold text-slate-600 mb-2">Foto Selfie Check-Out</span>
                     {selectedTeamDetail.image_out_url || selectedTeamDetail.image_out ? (
-                      <div
-                        className="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white aspect-[4/3] w-full flex items-center justify-center"
+                      <button
+                        type="button"
+                        aria-label="Perbesar Foto Pulang"
+                        className="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white aspect-[4/3] w-full flex items-center justify-center p-0 text-left"
                         onClick={() => {
                           const url = selectedTeamDetail.image_out_url || getStorageUrl(selectedTeamDetail.image_out || "");
                           setPreviewImage({ url, title: `Foto Pulang: ${selectedTeamDetail.name}` });
@@ -3537,7 +3578,7 @@ export default function ApprovalsPage() {
                           <Eye size={16} />
                           <span>Perbesar</span>
                         </div>
-                      </div>
+                      </button>
                     ) : (
                       <div className="w-full aspect-[4/3] rounded-xl border border-dashed border-slate-200 bg-white flex flex-col items-center justify-center text-slate-300 p-4 text-center">
                         <Camera size={24} className="mb-1" />
