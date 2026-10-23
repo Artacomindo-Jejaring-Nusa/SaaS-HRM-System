@@ -23,8 +23,6 @@ class AttendanceController extends Controller
 {
     use \App\Traits\HandlesAttendanceDinasLuar, \App\Traits\HandlesAttendanceProcessing, \App\Traits\HandlesAttendanceSecurity, \App\Traits\HandlesWebAttendance, Notifiable;
 
-    private const DEFAULT_FACE_BYPASS_REASON = 'Verifikasi wajah gagal';
-
     public function checkIn(StoreAttendanceRequest $request)
     {
         $user = $request->user();
