@@ -69,4 +69,7 @@ face-recog-ArcFace/venv/
 .agents/
 .claude/
 skills-lock.json
-
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
